@@ -989,6 +989,714 @@ def dashboard(period: Optional[str] = None, db: Session = Depends(get_db)):
     }
 
 
+# ==================== AI 智能助手对话引擎 ====================
+import uuid
+import re
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+
+sessions: dict = {}  # { session_id: { "intent": str, "step": int, "data": dict, "updated": float } }
+
+def get_session(sid: str):
+    if sid not in sessions:
+        sessions[sid] = {"intent": None, "step": 0, "data": {}, "updated": 0}
+    return sessions[sid]
+
+def intent_from_text(msg: str) -> str:
+    """从消息中识别意图"""
+    msg_lower = msg.strip().lower()
+    # 凭证类
+    if re.search(r"录[入记]凭证|做[一笔]?[账分]?[录项]|记账|填制凭证|nova.*voucher", msg_lower):
+        return "create_voucher"
+    if re.search(r"查[看询]?凭证|凭证列[表出]|voucher.*list", msg_lower):
+        return "list_vouchers"
+    # 客户
+    if re.search(r"新[增添加][客]|录入客户|添加客户|new.*customer|create.*customer", msg_lower):
+        return "create_customer"
+    if re.search(r"查[看询]?客户|客户列[表出]", msg_lower):
+        return "list_customers"
+    # 供应商
+    if re.search(r"新[增添加]供应商|录入供应商|添加供应商|new.*supplier", msg_lower):
+        return "create_supplier"
+    if re.search(r"查[看询]?供应商|供应商列[表出]", msg_lower):
+        return "list_suppliers"
+    # 人员员工
+    if re.search(r"新[增添加](员工|人员|职员)|录入(员工|人员)|添加(员工|人员)|new.*employee", msg_lower):
+        return "create_employee"
+    if re.search(r"查[看询]?(员工|人员|职员)|(员工|人员)列[表出]", msg_lower):
+        return "list_employees"
+    # 报表
+    if re.search(r"利润表|损益表|profit|loss", msg_lower):
+        return "query_profit_loss"
+    if re.search(r"资产负债表|balance.*sheet", msg_lower):
+        return "query_balance_sheet"
+    if re.search(r"总账|general.*ledger", msg_lower):
+        return "query_general_ledger"
+    if re.search(r"明细账|detail.*ledger", msg_lower):
+        return "query_detail_ledger"
+    # 公司
+    if re.search(r"(公司|企业)信息|设置公司|录入公司", msg_lower):
+        return "company_info"
+    # 科目
+    if re.search(r"科[目录]|account.*list", msg_lower):
+        return "list_accounts"
+    # 看板
+    if re.search(r"看板|dashboard|数据概览|统计", msg_lower):
+        return "dashboard"
+    # 帮助
+    if re.search(r"帮助|help|能做什么|会什么|功能|指令|命令", msg_lower):
+        return "help"
+    # 取消
+    if re.search(r"取消|退出|算了|不要了|返回", msg_lower):
+        return "cancel"
+    return None
+
+# 从自由文本中提取日期
+def extract_date(text: str) -> Optional[str]:
+    m = re.search(r"(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})[日号]?", text)
+    if m:
+        raw = m.group(1)
+        raw = raw.replace("年", "-").replace("月", "-").replace("/", "-")
+        parts = raw.split("-")
+        if len(parts) == 3:
+            return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+    # 仅年月
+    m = re.search(r"(\d{4})[-/年](\d{1,2})[月]?", text)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-01"
+    return None
+
+# 从文本中提取金额
+def extract_amount(text: str) -> Optional[float]:
+    m = re.search(r"(\d+\.?\d*)\s*(万|万元|元|块|块钱)?", text)
+    if m:
+        amt = float(m.group(1))
+        if m.group(2) in ("万", "万元"):
+            amt *= 10000
+        return round(amt, 2)
+    return None
+
+# 提取数字
+def extract_number(text: str) -> Optional[int]:
+    m = re.search(r"(\d+)", text)
+    return int(m.group(1)) if m else None
+
+
+@app.post("/api/chat")
+def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)):
+    """AI 助手对话接口"""
+    message = payload.message.strip()
+    sid = payload.session_id or str(uuid.uuid4())
+    sess = get_session(sid)
+
+    if not message:
+        return {"reply": "请说点什么吧 😊", "session_id": sid, "action": None}
+
+    # 取消当前流程
+    if re.search(r"^(取消|退出|算了|不要了|返回)$", message):
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {"reply": "好的，已取消当前操作。你可以随时开始新的任务。\n\n💡 试试这些：\n• 录入凭证\n• 新增客户\n• 查看利润表\n• 公司信息", "session_id": sid, "action": None}
+
+    intent = intent_from_text(message)
+
+    # 如果在流程中
+    if sess["intent"]:
+        intent = sess["intent"]
+    elif intent == "cancel":
+        sess["intent"] = None
+        return {"reply": "当前没有进行中的任务。有什么我可以帮你的？", "session_id": sid, "action": None}
+
+    # ────────────── 录入凭证 ──────────────
+    if intent == "create_voucher":
+        return handle_create_voucher(sess, message, db, sid)
+
+    # ────────────── 新增客户 ──────────────
+    if intent == "create_customer":
+        return handle_create_customer(sess, message, db, sid)
+
+    # ────────────── 新增供应商 ──────────────
+    if intent == "create_supplier":
+        return handle_create_supplier(sess, message, db, sid)
+
+    # ────────────── 新增员工 ──────────────
+    if intent == "create_employee":
+        return handle_create_employee(sess, message, db, sid)
+
+    # ────────────── 查询类 ──────────────
+    if intent == "query_profit_loss":
+        sess["intent"] = None
+        today = date.today().strftime("%Y-%m")
+        return {"reply": f"📅 请告诉我你要查询的期间范围，例如：\n• `{today}` → 查 {today} 月\n• `2026-01 到 2026-05` → 查1-5月", "session_id": sid, "action": None}
+
+    if intent == "query_balance_sheet":
+        sess["intent"] = None
+        today = date.today().strftime("%Y-%m")
+        return {"reply": f"📅 请告诉我你要查询的截止期间，例如：\n• `{today}` → 截止 {today} 月", "session_id": sid, "action": None}
+
+    if intent == "query_general_ledger":
+        return handle_query_general(sess, message, db, sid)
+
+    if intent == "query_detail_ledger":
+        return handle_query_detail(sess, message, db, sid)
+
+    if intent == "list_vouchers":
+        sess["intent"] = None
+        return handle_list_vouchers(message, db, sid)
+
+    if intent in ("list_customers", "list_suppliers", "list_employees", "list_accounts"):
+        sess["intent"] = None
+        return {"reply": f"✅ 请打开侧边栏的对应页面查看。\n💡 提示：你可以说「新增客户」来快捷录入。", "session_id": sid, "action": {"type": "navigate", "page": intent.replace("list_", "")}}
+
+    if intent == "company_info":
+        sess["intent"] = None
+        return {"reply": "🏢 请打开侧边栏「公司信息」页面填写。\n你也可以直接告诉我：\n• 公司名称\n• 统一社会信用代码\n• 法定代表人\n• 地址电话等\n\n我会帮你一次性填好！", "session_id": sid, "action": None}
+
+    if intent == "dashboard":
+        sess["intent"] = None
+        return {"reply": "📊 请打开侧边栏「数据看板」查看统计。", "session_id": sid, "action": {"type": "navigate", "page": "dashboard"}}
+
+    if intent == "help":
+        sess["intent"] = None
+        return {
+            "reply": "🤖 **我能帮你做什么？**\n\n"
+                     "**📝 录入数据**\n"
+                     "• 「录入凭证」— 智能引导填制记账凭证\n"
+                     "• 「新增客户」— 添加客户档案\n"
+                     "• 「新增供应商」— 添加供应商档案\n"
+                     "• 「新增员工」— 添加员工信息\n\n"
+                     "**📊 查询报表**\n"
+                     "• 「查看利润表」— 查询损益表\n"
+                     "• 「查看资产负债表」— 查询资产负债表\n"
+                     "• 「总账」— 查询总账\n"
+                     "• 「明细账」— 查询明细账\n\n"
+                     "**💬 自然对话**\n"
+                     "直接告诉我你要做什么，我会引导你一步步完成。\n"
+                     "例如：「录入一笔采购原材料的凭证，5月28日，金额32000元」\n\n"
+                     "输入「取消」可随时退出当前流程。",
+            "session_id": sid,
+            "action": None
+        }
+
+    # 未识别意图 → 尝试从文本中提取操作
+    sess["intent"] = None
+    return {
+        "reply": "抱歉，我没完全理解你的意思 🤔\n\n"
+                 "你可以试试这些：\n"
+                 "• **录入凭证** — 开始填制记账凭证\n"
+                 "• **新增客户 / 供应商 / 员工**\n"
+                 "• **查看利润表 / 资产负债表**\n"
+                 "• **帮助** — 查看我能做什么\n\n"
+                 "或者直接描述你的需求，我会尽量理解 😊",
+        "session_id": sid,
+        "action": None
+    }
+
+
+# ──── 凭证录入流程 ────
+
+def handle_create_voucher(sess, msg, db, sid):
+    step = sess["step"]
+    data = sess["data"]
+
+    if step == 0:
+        sess["intent"] = "create_voucher"
+        sess["step"] = 1
+        dd = extract_date(msg)
+        if dd:
+            data["voucher_date"] = dd
+            summary = re.sub(r"录[入记]凭证|记账|做[一]?[笔]?", "", msg).strip("，。,.").strip()
+            if summary and len(summary) > 1:
+                data["summary"] = summary
+            else:
+                data["summary"] = None
+            sess["step"] = 2
+            sess["data"] = data
+            if data["summary"]:
+                return {"reply": f"📅 日期：**{dd}**\n📝 摘要：**{data['summary']}**\n\n接下来录入分录明细。请按格式告诉我：\n\n`科目 借方金额 贷方金额`\n\n例如：\n`原材料 50000 0`（借原材料5万）\n`银行存款 0 50000`（贷银行5万）", "session_id": sid, "action": None}
+            else:
+                return {"reply": f"📅 日期已识别：**{dd}**\n\n请输入凭证摘要（这笔业务的内容），例如：\n「采购原材料一批」", "session_id": sid, "action": None}
+        else:
+            return {"reply": "📅 好的，开始录入凭证。\n\n请先告诉我**凭证日期**，例如：\n• `2026-05-28`\n• `5月28日`", "session_id": sid, "action": None}
+
+    elif step == 1:
+        # 补填摘要
+        data["summary"] = msg.strip()
+        sess["step"] = 2
+        sess["data"] = data
+        return {"reply": f"📝 摘要：**{data['summary']}**\n\n接下来录入分录明细。请按格式告诉我：\n\n`科目 借方金额 贷方金额`\n\n例如：\n`原材料 50000 0`（借原材料5万）\n`银行存款 0 50000`（贷银行5万）\n\n输完一行后可以继续输下一行，输「完成」结束录入。", "session_id": sid, "action": None}
+
+    elif step >= 2:
+        # 录入明细行
+        if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
+            return finalize_voucher(sess, db, sid)
+
+        # 解析 "科目 借方 贷方"
+        parts = msg.strip().split()
+        if len(parts) >= 2:
+            account = parts[0]
+            debit = 0.0
+            credit = 0.0
+            try:
+                if len(parts) >= 2:
+                    debit = float(parts[1].replace(",", ""))
+                if len(parts) >= 3:
+                    credit = float(parts[2].replace(",", ""))
+            except ValueError:
+                return {"reply": "金额格式不对，请重新输入。格式：`科目 借方金额 贷方金额`", "session_id": sid, "action": None}
+
+            # 模糊匹配科目
+            acc = db.query(Account).filter(
+                or_(Account.code == account, Account.name.contains(account))
+            ).first()
+            if not acc:
+                # 列出可选科目
+                accounts = db.query(Account).filter(Account.is_active == True).order_by(Account.code).all()
+                return {
+                    "reply": f"⚠️ 未找到科目「{account}」。\n\n请使用科目编码或名称，例如：\n• `1001` 库存现金\n• `1403` 原材料\n• `1002` 银行存款\n• `5001` 生产成本\n\n要查看全部科目请打开侧边栏「会计科目」。",
+                    "session_id": sid,
+                    "action": None
+                }
+
+            if "details" not in data:
+                data["details"] = []
+            detail_summary = data.get("summary", "") + (f"（{acc.name}）" if acc.name != account else "")
+            data["details"].append({
+                "account_code": acc.code,
+                "account_name": acc.name,
+                "debit_amount": debit,
+                "credit_amount": credit,
+                "summary": detail_summary
+            })
+            sess["data"] = data
+            sess["step"] = 2
+
+            debit_total = sum(d["debit_amount"] for d in data["details"])
+            credit_total = sum(d["credit_amount"] for d in data["details"])
+
+            lines_text = "\n".join([
+                f"  {d['account_code']} {d['account_name']} | 借 {d['debit_amount']:,.2f} | 贷 {d['credit_amount']:,.2f}"
+                for d in data["details"]
+            ])
+            return {
+                "reply": f"✅ 已添加第 {len(data['details'])} 行分录。\n\n当前分录：\n{lines_text}\n\n📊 借方合计：**{debit_total:,.2f}** | 贷方合计：**{credit_total:,.2f}**\n\n继续输入下一行，或说「**完成**」保存凭证。",
+                "session_id": sid,
+                "action": None
+            }
+        else:
+            return {"reply": "请按格式输入：`科目 借方金额 贷方金额`\n例如：`原材料 50000 0`", "session_id": sid, "action": None}
+
+    return {"reply": "请继续...", "session_id": sid, "action": None}
+
+
+def finalize_voucher(sess, db, sid):
+    data = sess["data"]
+    details = data.get("details", [])
+
+    if not details:
+        return {"reply": "还没有录入任何分录，请先添加明细行。", "session_id": sid, "action": None}
+
+    debit_total = sum(d["debit_amount"] for d in details)
+    credit_total = sum(d["credit_amount"] for d in details)
+
+    if abs(debit_total - credit_total) < 0.01:
+        # 借贷平衡，直接保存
+        try:
+            voucher_date = date.fromisoformat(data.get("voucher_date", date.today().isoformat()))
+            period = voucher_date.strftime("%Y-%m")
+            
+            # ensure period exists
+            existing_period = db.query(Period).filter(Period.period == period).first()
+            if not existing_period:
+                db.add(Period(period=period))
+                db.flush()
+            
+            count = db.query(Voucher).filter(Voucher.period == period).count()
+            voucher_no = f"记-{period.replace('-', '')}-{str(count + 1).zfill(4)}"
+
+            voucher = Voucher(
+                voucher_no=voucher_no,
+                voucher_date=voucher_date,
+                summary=data.get("summary", "业务凭证"),
+                total_debit=debit_total,
+                total_credit=credit_total,
+                creator="AI助手",
+                period=period,
+                status="草稿"
+            )
+            db.add(voucher)
+            db.flush()
+
+            for i, d in enumerate(details):
+                detail = VoucherDetail(
+                    voucher_id=voucher.id,
+                    line_no=i + 1,
+                    summary=d.get("summary", ""),
+                    account_code=d["account_code"],
+                    debit_amount=d["debit_amount"],
+                    credit_amount=d["credit_amount"]
+                )
+                db.add(detail)
+            db.commit()
+
+            lines_text = "\n".join([
+                f"  {d['account_code']} {d['account_name']} | 借 {d['debit_amount']:,.2f} | 贷 {d['credit_amount']:,.2f}"
+                for d in details
+            ])
+            sess["intent"] = None
+            sess["step"] = 0
+            sess["data"] = {}
+            return {
+                "reply": f"🎉 **凭证保存成功！**\n\n"
+                         f"📋 凭证号：**{voucher_no}**\n"
+                         f"📅 日期：{voucher_date}\n"
+                         f"📝 摘要：{data.get('summary', '')}\n\n"
+                         f"分录明细：\n{lines_text}\n\n"
+                         f"借方 **{debit_total:,.2f}** = 贷方 **{credit_total:,.2f}** ✅\n\n"
+                         f"💡 接下来你可以：\n"
+                         f"• 继续「录入凭证」\n"
+                         f"• 「查看凭证」看看刚才录入的\n"
+                         f"• 「查看利润表」看看报表",
+                "session_id": sid,
+                "action": {"type": "reload", "page": "vouchers"}
+            }
+        except Exception as e:
+            return {"reply": f"❌ 保存失败：{str(e)}", "session_id": sid, "action": None}
+    else:
+        return {
+            "reply": f"⚠️ **借贷不平！** 借方 {debit_total:,.2f} ≠ 贷方 {credit_total:,.2f}\n\n"
+                     f"请检查并修正，继续输入行或重新报数。",
+            "session_id": sid,
+            "action": None
+        }
+
+
+# ──── 客户录入流程 ────
+
+def handle_create_customer(sess, msg, db, sid):
+    step = sess["step"]
+    data = sess["data"]
+
+    if step == 0:
+        sess["intent"] = "create_customer"
+        sess["step"] = 1
+        # 尝试一次性提取信息
+        # 格式: "客户名 编码 XXX 联系人 XXX"
+        parts = msg.strip()
+        # 简单：仅名称
+        code_match = re.search(r"编码[：:]*\s*(\S+)", msg)
+        name_match = re.sub(r"新[增添加]客户|录入客户|添加客户", "", msg).strip("，。,.").strip()
+        if name_match:
+            data["name"] = name_match
+        if code_match:
+            data["code"] = code_match.group(1)
+
+        if data.get("name"):
+            if not data.get("code"):
+                data["code"] = f"KH{db.query(Customer).count() + 1:03d}"
+            sess["data"] = data
+            sess["step"] = 2
+            return {"reply": f"👤 客户名称：**{data['name']}**\n📋 编码：**{data['code']}**\n\n还需要添加其他信息吗？可以直接告诉我：\n• 联系人\n• 电话\n• 信用额度\n\n或说「**完成**」直接保存。", "session_id": sid, "action": None}
+
+        return {"reply": "👤 好的，新增客户。\n\n请告诉我**客户名称**和**编码**（可选），例如：\n• 「广州钢材贸易有限公司」\n• 「编码 KH001 广州钢材贸易有限公司」", "session_id": sid, "action": None}
+
+    elif step == 1:
+        # 补充名称
+        data["name"] = msg.strip()
+        if not data.get("code"):
+            data["code"] = f"KH{db.query(Customer).count() + 1:03d}"
+        sess["data"] = data
+        sess["step"] = 2
+        return {"reply": f"👤 客户名称：**{data['name']}**\n📋 编码：**{data['code']}**\n\n还需要添加其他信息吗？可以告诉我联系人、电话、地址等。\n或说「**完成**」直接保存。", "session_id": sid, "action": None}
+
+    elif step >= 2:
+        if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
+            return save_customer(data, db, sess, sid)
+        # 尝试提取联系方式
+        contact_m = re.search(r"联系人[：:]*\s*(\S+)", msg)
+        phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
+        addr_m = re.search(r"地址[：:]*\s*(.+?)(?:$|电话|联系人)", msg)
+        credit_m = re.search(r"额度[：:]*\s*(\d+\.?\d*)", msg)
+        if contact_m: data["contact"] = contact_m.group(1)
+        if phone_m: data["phone"] = phone_m.group(1)
+        if addr_m: data["address"] = addr_m.group(1).strip()
+        if credit_m: data["credit_limit"] = float(credit_m.group(1))
+        # 兜底：整行当联系人+电话
+        if not contact_m and not phone_m and not addr_m and not credit_m:
+            pt = msg.strip().split()
+            if len(pt) >= 1 and not data.get("contact"):
+                data["contact"] = pt[0]
+            if len(pt) >= 2 and not data.get("phone"):
+                data["phone"] = pt[1]
+
+        sess["data"] = data
+        info_lines = []
+        for k, label in [("name", "名称"), ("code", "编码"), ("contact", "联系人"), ("phone", "电话"), ("address", "地址"), ("credit_limit", "信用额度")]:
+            if data.get(k):
+                info_lines.append(f"  {label}：{data[k]}")
+        return {"reply": f"已更新客户信息：\n" + "\n".join(info_lines) + "\n\n说「**完成**」保存，或继续补充信息。", "session_id": sid, "action": None}
+
+    return {"reply": "请继续...", "session_id": sid, "action": None}
+
+
+def save_customer(data, db, sess, sid):
+    try:
+        existing = db.query(Customer).filter(Customer.code == data.get("code", "")).first()
+        if existing:
+            return {"reply": f"⚠️ 编码 {data['code']} 已存在，请换一个编码。", "session_id": sid, "action": None}
+        c = Customer(
+            code=data.get("code", ""),
+            name=data.get("name", "未命名客户"),
+            contact=data.get("contact"),
+            phone=data.get("phone"),
+            address=data.get("address"),
+            credit_limit=data.get("credit_limit", 0.0)
+        )
+        db.add(c)
+        db.commit()
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {"reply": f"🎉 客户 **{c.name}**（{c.code}）添加成功！\n\n💡 接下来可以「新增客户」继续添加，或「查看利润表」查询报表。", "session_id": sid, "action": {"type": "reload", "page": "customers"}}
+    except Exception as e:
+        return {"reply": f"❌ 保存失败：{str(e)}", "session_id": sid, "action": None}
+
+
+# ──── 供应商录入流程 ────
+
+def handle_create_supplier(sess, msg, db, sid):
+    step = sess["step"]
+    data = sess["data"]
+
+    if step == 0:
+        sess["intent"] = "create_supplier"
+        sess["step"] = 1
+        name_match = re.sub(r"新[增添加]供应商|录入供应商|添加供应商", "", msg).strip("，。,.").strip()
+        code_match = re.search(r"编码[：:]*\s*(\S+)", msg)
+        if name_match: data["name"] = name_match
+        if code_match: data["code"] = code_match.group(1)
+        if data.get("name"):
+            if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).count() + 1:03d}"
+            sess["data"] = data; sess["step"] = 2
+            return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充联系人、电话、地址吗？或说「**完成**」直接保存。", "session_id": sid, "action": None}
+        return {"reply": "📦 新增供应商。请告诉我**供应商名称**，例如：\n「广州钢铁供应链有限公司」", "session_id": sid, "action": None}
+
+    elif step == 1:
+        data["name"] = msg.strip()
+        if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).count() + 1:03d}"
+        sess["data"] = data; sess["step"] = 2
+        return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充其他信息吗？或说「**完成**」保存。", "session_id": sid, "action": None}
+
+    elif step >= 2:
+        if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
+            return save_supplier(data, db, sess, sid)
+        contact_m = re.search(r"联系人[：:]*\s*(\S+)", msg)
+        phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
+        if contact_m: data["contact"] = contact_m.group(1)
+        if phone_m: data["phone"] = phone_m.group(1)
+        if not contact_m and not phone_m:
+            pt = msg.strip().split()
+            if len(pt) >= 1 and not data.get("contact"): data["contact"] = pt[0]
+            if len(pt) >= 2 and not data.get("phone"): data["phone"] = pt[1]
+        sess["data"] = data
+        lines = [f"  {k}：{v}" for k, v in data.items() if v and k in ("name", "code", "contact", "phone")]
+        return {"reply": "已更新：\n" + "\n".join(lines) + "\n\n说「**完成**」保存。", "session_id": sid, "action": None}
+
+    return {"reply": "请继续...", "session_id": sid, "action": None}
+
+
+def save_supplier(data, db, sess, sid):
+    try:
+        if db.query(Supplier).filter(Supplier.code == data.get("code", "")).first():
+            return {"reply": f"⚠️ 编码 {data['code']} 已存在。", "session_id": sid, "action": None}
+        s = Supplier(code=data.get("code", ""), name=data.get("name", ""), contact=data.get("contact"), phone=data.get("phone"))
+        db.add(s); db.commit()
+        sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
+        return {"reply": f"🎉 供应商 **{s.name}**（{s.code}）添加成功！", "session_id": sid, "action": {"type": "reload", "page": "suppliers"}}
+    except Exception as e:
+        return {"reply": f"❌ {e}", "session_id": sid, "action": None}
+
+
+# ──── 员工录入流程 ────
+
+def handle_create_employee(sess, msg, db, sid):
+    step = sess["step"]
+    data = sess["data"]
+
+    if step == 0:
+        sess["intent"] = "create_employee"
+        sess["step"] = 1
+        name_match = re.sub(r"新[增添加](员工|人员|职员)|录入(员工|人员)|添加(员工|人员)", "", msg).strip("，。,.").strip()
+        dept_m = re.search(r"部门[：:]*\s*(\S+)", msg)
+        if name_match: data["name"] = name_match
+        if dept_m: data["department_name"] = dept_m.group(1)
+        if data.get("name"):
+            if not data.get("code"): data["code"] = f"YG{db.query(Employee).count() + 1:03d}"
+            sess["data"] = data; sess["step"] = 2
+            return {"reply": f"👤 员工：**{data['name']}**（{data['code']}）\n\n还需要补充部门、职位、电话吗？或说「**完成**」保存。", "session_id": sid, "action": None}
+        return {"reply": "👤 新增员工。请告诉我**姓名**，例如：「张三」", "session_id": sid, "action": None}
+
+    elif step == 1:
+        data["name"] = msg.strip()
+        if not data.get("code"): data["code"] = f"YG{db.query(Employee).count() + 1:03d}"
+        sess["data"] = data; sess["step"] = 2
+        return {"reply": f"👤 员工：**{data['name']}**\n\n需要补充部门、职位、电话吗？或说「**完成**」保存。", "session_id": sid, "action": None}
+
+    elif step >= 2:
+        if re.search(r"^(完成|好了|结束|确认|ok|done)$", msg.strip(), re.IGNORECASE):
+            return save_employee(data, db, sess, sid)
+        dept_m = re.search(r"部门[：:]*\s*(\S+)", msg)
+        pos_m = re.search(r"职位[：:]*\s*(\S+)", msg)
+        phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
+        if dept_m: data["department_name"] = dept_m.group(1)
+        if pos_m: data["position"] = pos_m.group(1)
+        if phone_m: data["phone"] = phone_m.group(1)
+        sess["data"] = data
+        lines = [f"  {k}：{v}" for k, v in data.items() if v and k in ("name", "code", "department_name", "position", "phone")]
+        return {"reply": "已更新：\n" + "\n".join(lines) + "\n\n说「**完成**」保存。", "session_id": sid, "action": None}
+
+    return {"reply": "请继续...", "session_id": sid, "action": None}
+
+
+def save_employee(data, db, sess, sid):
+    try:
+        dept_code = None
+        if data.get("department_name"):
+            d = db.query(Department).filter(Department.name.contains(data["department_name"])).first()
+            if d: dept_code = d.code
+        if db.query(Employee).filter(Employee.code == data.get("code", "")).first():
+            return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
+        e = Employee(code=data.get("code", ""), name=data.get("name", ""), department_code=dept_code, position=data.get("position"), phone=data.get("phone"))
+        db.add(e); db.commit()
+        sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
+        return {"reply": f"🎉 员工 **{e.name}** 添加成功！", "session_id": sid, "action": {"type": "reload", "page": "employees"}}
+    except Exception as e:
+        return {"reply": f"❌ {e}", "session_id": sid, "action": None}
+
+
+# ──── 总账查询 ────
+
+def handle_query_general(sess, msg, db, sid):
+    periods_match = re.findall(r"(\d{4}-\d{2})", msg)
+    if len(periods_match) >= 2:
+        p_from, p_to = periods_match[0], periods_match[1]
+    elif len(periods_match) == 1:
+        p_from = p_to = periods_match[0]
+    else:
+        today = date.today().strftime("%Y-%m")
+        p_from = p_to = today
+
+    results = db.query(
+        VoucherDetail.account_code,
+        Account.name.label("account_name"),
+        Account.balance_direction,
+        func.sum(VoucherDetail.debit_amount).label("d"),
+        func.sum(VoucherDetail.credit_amount).label("c")
+    ).join(Account).join(Voucher).filter(
+        Voucher.period >= p_from, Voucher.period <= p_to
+    ).group_by(VoucherDetail.account_code, Account.name, Account.balance_direction).all()
+
+    if not results:
+        sess["intent"] = None
+        return {"reply": f"📒 {p_from} 至 {p_to} 期间暂无总账数据。\n\n💡 先「录入凭证」试试？", "session_id": sid, "action": None}
+
+    rows = []
+    for r in results[:15]:
+        net = r.d - r.c
+        bal = net if r.balance_direction == "借" else -net
+        rows.append(f"  {r.account_code} {r.account_name} | 借 {r.d:,.2f} | 贷 {r.c:,.2f} | 余额 {bal:,.2f}")
+
+    sess["intent"] = None
+    return {
+        "reply": f"📒 **总账**（{p_from} ~ {p_to}）\n\n" + "\n".join(rows) + (
+            f"\n\n... 仅显示前 15 个科目。查看完整总账请打开侧边栏。"
+            if len(results) > 15 else ""
+        ),
+        "session_id": sid,
+        "action": None
+    }
+
+
+# ──── 明细账查询 ────
+
+def handle_query_detail(sess, msg, db, sid):
+    # 提取科目
+    acc_match = re.search(r"(科目|account)[：:]*\s*(\S+)", msg, re.IGNORECASE)
+    if acc_match:
+        account = acc_match.group(2)
+    else:
+        words = msg.strip().split()
+        # 排除常见词
+        skip = {"明细账", "明细", "查看", "查询", "查"}
+        account = next((w for w in words if w not in skip), None)
+
+    if not account:
+        sess["intent"] = "query_detail_ledger"
+        sess["step"] = 1
+        return {"reply": "📄 请告诉我你要查哪个科目的明细账，例如：\n• `1002 银行存款`\n• 科目 1403\n\n或说「取消」返回。", "session_id": sid, "action": None}
+
+    acc = db.query(Account).filter(
+        or_(Account.code == account, Account.name.contains(account))
+    ).first()
+    if not acc:
+        return {"reply": f"⚠️ 未找到科目「{account}」，请重试。", "session_id": sid, "action": None}
+
+    today = date.today().strftime("%Y-%m")
+    p_from = p_to = today
+    periods = re.findall(r"(\d{4}-\d{2})", msg)
+    if len(periods) >= 2: p_from, p_to = periods[0], periods[1]
+    elif len(periods) == 1: p_from = p_to = periods[0]
+
+    results = db.query(
+        Voucher.voucher_date, Voucher.voucher_no, VoucherDetail.summary,
+        VoucherDetail.debit_amount, VoucherDetail.credit_amount
+    ).join(VoucherDetail).filter(
+        VoucherDetail.account_code == acc.code,
+        Voucher.period >= p_from, Voucher.period <= p_to
+    ).order_by(Voucher.voucher_date, Voucher.voucher_no).all()
+
+    if not results:
+        sess["intent"] = None
+        return {"reply": f"📄 {acc.code} {acc.name} 在 {p_from}~{p_to} 期间无明细。", "session_id": sid, "action": None}
+
+    bal = 0.0
+    rows = []
+    for r in results[:10]:
+        if acc.balance_direction == "借":
+            bal += r.debit_amount - r.credit_amount
+        else:
+            bal += r.credit_amount - r.debit_amount
+        rows.append(f"  {r.voucher_date} {r.voucher_no} | 借 {r.debit_amount:,.2f} | 贷 {r.credit_amount:,.2f} | 余额 {bal:,.2f}")
+
+    sess["intent"] = None
+    return {
+        "reply": f"📄 **{acc.code} {acc.name}** 明细账\n\n" + "\n".join(rows) + (
+            f"\n\n... 仅显示前 10 笔。" if len(results) > 10 else ""
+        ),
+        "session_id": sid,
+        "action": None
+    }
+
+
+# ──── 凭证列表 ────
+
+def handle_list_vouchers(msg, db, sid):
+    period = date.today().strftime("%Y-%m")
+    periods = re.findall(r"(\d{4}-\d{2})", msg)
+    if periods: period = periods[0]
+    vouchers = db.query(Voucher).filter(Voucher.period == period).order_by(Voucher.voucher_date.desc()).limit(10).all()
+    if not vouchers:
+        return {"reply": f"📋 {period} 期间暂无凭证。试试「录入凭证」？", "session_id": sid, "action": None}
+    lines = "\n".join([
+        f"  {v.voucher_no} {v.voucher_date} {v.summary[:20]} | ¥{v.total_debit:,.2f} | {v.status}"
+        for v in vouchers
+    ])
+    return {"reply": f"📋 **{period} 凭证列表**\n\n{lines}\n\n💡 打开侧边栏「记账凭证」查看完整列表。", "session_id": sid, "action": None}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -188,6 +188,32 @@
     /* 科目缩进 */
     .indent-1 { padding-left: 8px; }
     .indent-2 { padding-left: 24px; font-size: 12px; color: var(--gray-500); }
+
+    /* ====== AI 助手聊天 ====== */
+    .chat-wrapper { display: flex; flex-direction: column; height: calc(100vh - 120px); background: #fff; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    .chat-header { padding: 16px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+    .chat-header h3 { margin: 0 0 4px; font-size: 16px; }
+    .chat-header p { margin: 0; font-size: 12px; opacity: 0.85; }
+    .chat-body { flex: 1; overflow-y: auto; padding: 16px; background: #f8fafc; display: flex; flex-direction: column; gap: 12px; }
+    .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.6; word-break: break-word; animation: fadeInUp 0.3s ease; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .chat-bubble.user { align-self: flex-end; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-bottom-right-radius: 4px; }
+    .chat-bubble.ai { align-self: flex-start; background: #fff; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+    .chat-bubble.ai strong { color: #4f46e5; }
+    .chat-input-area { display: flex; gap: 8px; padding: 12px 16px; background: #fff; border-top: 1px solid #e2e8f0; }
+    .chat-input-area input { flex: 1; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 24px; font-size: 13px; outline: none; transition: border 0.15s; }
+    .chat-input-area input:focus { border-color: #667eea; }
+    .chat-input-area button { padding: 10px 20px; border: none; border-radius: 24px; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .chat-input-area button:hover { opacity: 0.9; }
+    .chat-input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; background: #fff; border-top: 1px solid #f1f5f9; }
+    .chat-chip { padding: 4px 12px; border: 1px solid #e2e8f0; border-radius: 16px; font-size: 11px; background: #fff; color: #475569; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .chat-chip:hover { background: #f1f5f9; border-color: #667eea; color: #667eea; }
+    .typing-indicator { display: flex; gap: 4px; padding: 8px 12px; }
+    .typing-indicator span { width: 6px; height: 6px; background: #94a3b8; border-radius: 50%; animation: bounce 1.2s infinite; }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
   </style>
 </head>
 <body>
@@ -200,6 +226,9 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-group-title">总览</div>
+    <div class="nav-item" data-page="chat" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 8px; margin: 0 4px 6px; padding: 10px 14px;">
+      <span class="icon">🤖</span>AI 助手
+    </div>
     <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>数据看板</div>
 
     <div class="nav-group-title">凭证管理</div>
@@ -250,6 +279,7 @@ let allAccounts = [];
 let voucherPage = 1;
 
 const pages = {
+  'chat': 'AI 助手',
   'dashboard': '数据看板',
   'company': '公司信息',
   'departments': '部门档案',
@@ -302,6 +332,7 @@ function navigateTo(page) {
   content.innerHTML = '';
 
   switch (page) {
+    case 'chat': renderChat(); break;
     case 'dashboard': renderDashboard(); break;
     case 'vouchers': renderVouchers(); break;
     case 'voucher-new': renderVoucherForm(); break;
@@ -1542,6 +1573,117 @@ async function deleteSupp(id) {
     toast('删除成功', 'success');
     renderSuppliers();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== AI 助手对话 ====================
+let chatSessionId = null;
+let chatMessages = [];
+let chatLoading = false;
+
+async function renderChat() {
+  if (!chatSessionId) {
+    chatSessionId = 'sess_' + Date.now();
+    chatMessages = [{
+      role: 'ai',
+      text: '👋 你好！我是**存勤账务助手**，你的 AI 会计搭档。\n\n直接告诉我你要做什么，例如：\n• 「录入凭证」— 我带你一步步填\n• 「新增客户」— 快速录入客户档案\n• 「查看利润表 2026-05」— 马上出报表\n\n输入「**帮助**」了解全部功能。'
+    }];
+  }
+
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="chat-wrapper">
+      <div class="chat-header">
+        <h3>🤖 AI 智能助手</h3>
+        <p>直接描述需求，我帮你搞定 — 录入凭证 / 新增客户 / 查报表</p>
+      </div>
+      <div class="chat-quick-actions" id="quick-actions">
+        <span class="chat-chip" data-cmd="录入凭证">📝 录入凭证</span>
+        <span class="chat-chip" data-cmd="新增客户">👤 新增客户</span>
+        <span class="chat-chip" data-cmd="新增供应商">📦 新增供应商</span>
+        <span class="chat-chip" data-cmd="新增员工">🧑 新增员工</span>
+        <span class="chat-chip" data-cmd="查看利润表">📈 利润表</span>
+        <span class="chat-chip" data-cmd="查看资产负债表">⚖️ 资产负债表</span>
+        <span class="chat-chip" data-cmd="总账">📒 总账</span>
+        <span class="chat-chip" data-cmd="帮助">❓ 帮助</span>
+      </div>
+      <div class="chat-body" id="chat-body">
+        ${renderMessages()}
+      </div>
+      <div class="chat-input-area">
+        <input id="chat-input" type="text" placeholder="输入你的需求，例如：录入凭证 5月28日 采购原材料" 
+               onkeypress="if(event.key==='Enter') sendChat()" autofocus>
+        <button onclick="sendChat()" id="chat-send-btn">发送</button>
+      </div>
+    </div>
+  `;
+
+  // 绑定快捷操作
+  document.querySelectorAll('.chat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.getElementById('chat-input').value = chip.dataset.cmd;
+      sendChat();
+    });
+  });
+
+  // 滚动到底部
+  scrollChatBottom();
+}
+
+function renderMessages() {
+  return chatMessages.map((m, i) => {
+    const cls = m.role === 'user' ? 'user' : 'ai';
+    // 简单 markdown 渲染：**粗体** 和换行
+    let text = m.text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+    return `<div class="chat-bubble ${cls}">${text}</div>`;
+  }).join('') + (chatLoading ? '<div class="chat-bubble ai"><div class="typing-indicator"><span></span><span></span><span></span></div></div>' : '');
+}
+
+function scrollChatBottom() {
+  setTimeout(() => {
+    const body = document.getElementById('chat-body');
+    if (body) body.scrollTop = body.scrollHeight;
+  }, 100);
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const btn = document.getElementById('chat-send-btn');
+  const msg = input.value.trim();
+  if (!msg || chatLoading) return;
+
+  input.value = '';
+  chatMessages.push({ role: 'user', text: msg });
+  chatLoading = true;
+  btn.disabled = true;
+  document.getElementById('chat-body').innerHTML = renderMessages();
+  scrollChatBottom();
+
+  try {
+    const res = await api('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: msg, session_id: chatSessionId })
+    });
+    chatMessages.push({ role: 'ai', text: res.reply });
+    
+    // 处理 action
+    if (res.action) {
+      if (res.action.type === 'navigate') {
+        setTimeout(() => navigateTo(res.action.page), 500);
+      } else if (res.action.type === 'reload') {
+        // 提示用户刷新页面
+      }
+    }
+  } catch (e) {
+    chatMessages.push({ role: 'ai', text: '❌ 出错了：' + e.message + '\n\n请刷新页面重试。' });
+  }
+
+  chatLoading = false;
+  btn.disabled = false;
+  document.getElementById('chat-body').innerHTML = renderMessages();
+  scrollChatBottom();
+  document.getElementById('chat-input').focus();
 }
 
 // HTML 转义
