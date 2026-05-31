@@ -3067,25 +3067,29 @@ async def analyze_file_headers(
         # 获取已知的列映射模板
         field_groups = {}
         if module == "sales-invoice":
+            # 严格按开具发票表头26列顺序分组
             field_groups = {
-                "发票信息": ["invoice_code", "invoice_no", "digital_invoice_no", "invoice_date", "invoice_category", "status", "is_positive", "invoice_risk_level", "invoice_source"],
-                "销方信息": ["seller_tax_no", "seller_name"],
-                "购方信息": ["buyer_tax_no", "buyer_name"],
-                "分类": ["tax_category_code", "specific_business_type"],
-                "货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
-                "金额": ["amount", "tax_rate", "tax_amount", "total_amount"],
-                "其他": ["issuer", "remark"]
+                "① 发票基本信息": ["invoice_code", "invoice_no", "digital_invoice_no"],
+                "② 销方信息": ["seller_tax_no", "seller_name"],
+                "③ 购方信息": ["buyer_tax_no", "buyer_name"],
+                "④ 开票日期与分类": ["invoice_date", "tax_category_code", "specific_business_type"],
+                "⑤ 货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
+                "⑥ 金额信息": ["amount", "tax_rate", "tax_amount", "total_amount"],
+                "⑦ 发票属性": ["invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level"],
+                "⑧ 其他": ["issuer", "remark"]
             }
         elif module == "purchase-invoice":
+            # 严格按取得发票表头26列顺序分组 + 认证信息
             field_groups = {
-                "发票信息": ["invoice_code", "invoice_no", "digital_invoice_no", "invoice_date", "invoice_category", "status", "is_positive", "invoice_risk_level", "invoice_source"],
-                "销方信息": ["seller_tax_no", "seller_name"],
-                "购方信息": ["buyer_tax_no", "buyer_name"],
-                "分类": ["tax_category_code", "specific_business_type"],
-                "货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
-                "金额": ["amount", "tax_rate", "tax_amount", "total_amount"],
-                "认证信息": ["certification_status", "certification_date", "deduction_period"],
-                "其他": ["issuer", "remark"]
+                "① 发票基本信息": ["invoice_code", "invoice_no", "digital_invoice_no"],
+                "② 销方信息": ["seller_tax_no", "seller_name"],
+                "③ 购方信息": ["buyer_tax_no", "buyer_name"],
+                "④ 开票日期与分类": ["invoice_date", "tax_category_code", "specific_business_type"],
+                "⑤ 货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
+                "⑥ 金额信息": ["amount", "tax_rate", "tax_amount", "total_amount"],
+                "⑦ 发票属性": ["invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level"],
+                "⑧ 认证信息": ["certification_status", "certification_date", "deduction_period"],
+                "⑨ 其他": ["issuer", "remark"]
             }
         elif module == "bank-transaction":
             field_groups = {

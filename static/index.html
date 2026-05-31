@@ -4109,7 +4109,7 @@ async function showSalesDetail(id) {
     // 货物明细
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
     html += '<div class="form-grid-2">';
-    html += '<div><b>货物名称：</b>' + (i.goods_name || '-') + '</div>';
+    html += '<div><b>货物或应税劳务名称：</b>' + (i.goods_name || '-') + '</div>';
     html += '<div><b>规格型号：</b>' + (i.spec || '-') + '</div>';
     html += '<div><b>单位：</b>' + (i.unit || '-') + '</div>';
     html += '<div><b>数量：</b>' + i.quantity + '</div>';
@@ -4484,7 +4484,7 @@ async function showPurchaseDetail(id) {
     // 货物明细
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
     html += '<div class="form-grid-2">';
-    html += '<div><b>货物名称：</b>' + (i.goods_name || '-') + '</div>';
+    html += '<div><b>货物或应税劳务名称：</b>' + (i.goods_name || '-') + '</div>';
     html += '<div><b>规格型号：</b>' + (i.spec || '-') + '</div>';
     html += '<div><b>单位：</b>' + (i.unit || '-') + '</div>';
     html += '<div><b>数量：</b>' + i.quantity + '</div>';
@@ -5068,7 +5068,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'buyer_tax_no': '购方识别号', 'buyer_name': '购买方名称',
     'invoice_date': '开票日期', 'tax_category_code': '税收分类编码',
     'specific_business_type': '特定业务类型',
-    'goods_name': '货物名称', 'spec': '规格型号', 'unit': '单位',
+    'goods_name': '货物或应税劳务名称', 'spec': '规格型号', 'unit': '单位',
     'quantity': '数量', 'unit_price': '单价',
     'tax_rate': '税率', 'tax_amount': '税额', 'total_amount': '价税合计',
     'invoice_source': '发票来源', 'invoice_category': '发票票种', 'status': '发票状态',
@@ -5111,6 +5111,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'reference_no': ['流水号', '参考号', 'ref'],
           'invoice_no': ['发票号码', 'inv_no'],
           'invoice_code': ['发票代码', 'inv_code'],
+          'invoice_date': ['开票日期', 'inv_date', '发票日期'],
           'digital_invoice_no': ['数电', '全电'],
           'seller_tax_no': ['销方识别号', '销方税号', 'seller_tax'],
           'seller_name': ['销方名称', 'seller_name'],
