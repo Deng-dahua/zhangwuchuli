@@ -1844,8 +1844,11 @@ def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_
 # ==================== 付款管理 ====================
 
 class PaymentCreate(BaseModel):
+    payment_type: str = "外部支付"
     payment_no: str
     payment_date: date
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
     supplier_id: Optional[int] = None
     supplier_name: Optional[str] = None
     contract_id: Optional[int] = None
@@ -1861,6 +1864,9 @@ class PaymentCreate(BaseModel):
 
 
 class PaymentUpdate(BaseModel):
+    payment_type: Optional[str] = None
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
     supplier_id: Optional[int] = None
     supplier_name: Optional[str] = None
     contract_id: Optional[int] = None
@@ -1880,12 +1886,15 @@ class PaymentUpdate(BaseModel):
 @app.get("/api/payments")
 def list_payments(
     company_id: int = Query(1),
+    payment_type: Optional[str] = None,
     status: Optional[str] = None,
     supplier_id: Optional[int] = None,
     keyword: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     q = db.query(Payment).filter(Payment.company_id == company_id)
+    if payment_type:
+        q = q.filter(Payment.payment_type == payment_type)
     if status:
         q = q.filter(Payment.status == status)
     if supplier_id:
@@ -1894,13 +1903,16 @@ def list_payments(
         q = q.filter(or_(
             Payment.payment_no.contains(keyword),
             Payment.supplier_name.contains(keyword),
+            Payment.employee_name.contains(keyword),
             Payment.payee.contains(keyword),
             Payment.purpose.contains(keyword)
         ))
     payments = q.order_by(Payment.payment_date.desc()).all()
     return [{
-        "id": p.id, "payment_no": p.payment_no,
+        "id": p.id, "payment_type": p.payment_type,
+        "payment_no": p.payment_no,
         "payment_date": str(p.payment_date) if p.payment_date else "",
+        "employee_id": p.employee_id, "employee_name": p.employee_name or "",
         "supplier_id": p.supplier_id, "supplier_name": p.supplier_name or "",
         "contract_id": p.contract_id, "contract_no": p.contract_no or "",
         "amount": p.amount, "payment_method": p.payment_method,
@@ -1932,6 +1944,16 @@ def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     base = db.query(Payment).filter(Payment.company_id == company_id)
     total_count = base.count()
     total_amount = base.with_entities(func.sum(Payment.amount)).scalar() or 0
+    
+    # 按类型统计
+    expense_base = base.filter(Payment.payment_type == "内部报销")
+    expense_count = expense_base.count()
+    expense_amount = expense_base.with_entities(func.sum(Payment.amount)).scalar() or 0
+    
+    external_base = base.filter(Payment.payment_type == "外部支付")
+    external_count = external_base.count()
+    external_amount = external_base.with_entities(func.sum(Payment.amount)).scalar() or 0
+    
     pending_count = base.filter(Payment.status == "待审批").count()
     pending_amount = base.filter(Payment.status == "待审批").with_entities(func.sum(Payment.amount)).scalar() or 0
     approved_count = base.filter(Payment.status == "已审批").count()
@@ -1939,6 +1961,8 @@ def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     paid_amount = base.filter(Payment.status == "已付款").with_entities(func.sum(Payment.amount)).scalar() or 0
     return {
         "total_count": total_count, "total_amount": total_amount,
+        "expense_count": expense_count, "expense_amount": expense_amount,
+        "external_count": external_count, "external_amount": external_amount,
         "pending_count": pending_count, "pending_amount": pending_amount,
         "approved_count": approved_count, "paid_count": paid_count,
         "paid_amount": paid_amount
