@@ -5248,7 +5248,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   formData.append('file', file);
   formData.append('module', module);
   formData.append('column_mapping', JSON.stringify(mapping));
-  formData.append('company_id', window.currentCompanyId || 1);
+  formData.append('company_id', currentCompanyId);
   if (bankConfigId) formData.append('bank_config_id', bankConfigId);
 
   document.getElementById('upload-progress').style.display = 'block';
