@@ -2332,6 +2332,16 @@ def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
     return {"message": "删除成功"}
 
 
+@app.post("/api/sales-invoices/batch-delete")
+def batch_delete_sales_invoices(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.id.in_(ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
+
+
 # ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoiceCreate(BaseModel):
@@ -2553,6 +2563,16 @@ def delete_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Ses
     db.delete(inv)
     db.commit()
     return {"message": "删除成功"}
+
+
+@app.post("/api/purchase-invoices/batch-delete")
+def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
 
 import json
