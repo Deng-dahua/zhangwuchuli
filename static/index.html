@@ -339,7 +339,6 @@
     <div class="reg-header">
       <div class="logo">🏢</div>
       <h1>公司建档</h1>
-      <p>填写完整公司信息，用于税务风险六员比对</p>
     </div>
     <div class="reg-card">
       <form class="reg-form" id="reg-form" onsubmit="handleCompanyRegister(event)">
@@ -354,10 +353,6 @@
           <div class="form-group">
             <label>统一社会信用代码 <span class="req">*</span></label>
             <input type="text" id="reg-uscc" placeholder="91XXXXXXXXXXXXXXXXXX" required>
-          </div>
-          <div class="form-group">
-            <label>纳税人识别号 <span class="req">*</span></label>
-            <input type="text" id="reg-tax-no" placeholder="纳税人识别号" required>
           </div>
         </div>
         <div class="form-group">
@@ -405,9 +400,15 @@
         <button type="button" class="add-btn" onclick="addSupervisorRow()">＋ 添加监事</button>
 
         <!-- 财务负责人信息 -->
-        <h2 style="margin-top:28px;">💰 财务负责人 <span style="font-size:13px;font-weight:400;color:#6b7280;">（可添加多人）</span></h2>
-        <div id="finance-list"></div>
-        <button type="button" class="add-btn" onclick="addFinanceRow()">＋ 添加财务负责人</button>
+        <h2 style="margin-top:28px;">💰 财务负责人</h2>
+        <div id="finance-list">
+          <div class="person-row">
+            <div class="person-row-inner">
+              <input class="fn-name" placeholder="财务负责人姓名">
+              <input class="fn-id" placeholder="身份证号">
+            </div>
+          </div>
+        </div>
 
         <button type="submit" id="reg-submit-btn" style="margin-top:28px;">✅ 创建账套，进入系统</button>
         <div class="reg-hint" id="reg-back-hint" style="display:none;">
@@ -670,7 +671,6 @@ async function handleCompanyRegister(e) {
   const body = {
     name: name,
     uscc: document.getElementById('reg-uscc').value.trim() || null,
-    tax_no: document.getElementById('reg-tax-no').value.trim() || null,
     address: document.getElementById('reg-address').value.trim() || null,
     legal_representative: document.getElementById('reg-legal-person').value.trim() || null,
     legal_representative_id: document.getElementById('reg-legal-person-id').value.trim() || null,
@@ -2333,7 +2333,6 @@ async function showCompanyForm(companyId) {
   const fields = [
     ['name', '\u516c\u53f8\u540d\u79f0', 'text', 'required'],
     ['uscc', '\u7edf\u4e00\u793e\u4f1a\u4fe1\u7528\u4ee3\u7801', 'text', ''],
-    ['tax_no', '\u7a0e\u53f7', 'text', ''],
     ['address', '\u5730\u5740', 'text', ''],
     ['phone', '\u7535\u8bdd', 'text', ''],
     ['bank_name', '\u5f00\u6237\u94f6\u884c', 'text', ''],
