@@ -9,7 +9,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./zhangwu.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./accounting.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
@@ -571,6 +571,25 @@ def migrate_schema(db):
                     db.commit()
         except Exception:
             db.rollback()
+
+    # ── 5. 给 companies 表补充新字段（六员比对） ──
+    company_extra = {
+        "legal_representative_id": "ALTER TABLE companies ADD COLUMN legal_representative_id VARCHAR(50)",
+        "registered_capital":       "ALTER TABLE companies ADD COLUMN registered_capital VARCHAR(50)",
+        "business_scope":           "ALTER TABLE companies ADD COLUMN business_scope TEXT",
+        "established_date":          "ALTER TABLE companies ADD COLUMN established_date DATE",
+    }
+    if "companies" in inspector.get_table_names():
+        existing = {c["name"] for c in inspector.get_columns("companies")}
+        for col, sql in company_extra.items():
+            if col not in existing:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 companies 添加字段: {col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"companies 添加字段 {col} 失败（可能已存在）: {e}")
 
 
 # 基础科目数据模板（中小制造业标准科目表）
