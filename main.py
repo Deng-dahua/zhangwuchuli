@@ -222,6 +222,7 @@ def update_company(data: CompanyUpdate, company_id: int = Query(1), db: Session 
 @app.get("/api/departments")
 def list_departments(
     keyword: Optional[str] = None,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Department).filter(Department.company_id == company_id)
@@ -279,6 +280,7 @@ def list_employees(
     keyword: Optional[str] = None,
     department_code: Optional[str] = None,
     is_active: Optional[bool] = None,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Employee).filter(Employee.company_id == company_id)
@@ -349,6 +351,7 @@ def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depen
 def list_customers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Customer).filter(Customer.company_id == company_id)
@@ -420,6 +423,7 @@ def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depe
 def list_suppliers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Supplier).filter(Supplier.company_id == company_id)
