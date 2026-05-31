@@ -2320,11 +2320,16 @@ def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
 # ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoiceCreate(BaseModel):
-    invoice_no: str
     invoice_code: Optional[str] = None
-    invoice_date: date
-    seller_name: Optional[str] = None
+    invoice_no: str
+    digital_invoice_no: Optional[str] = None
     seller_tax_no: Optional[str] = None
+    seller_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    buyer_name: Optional[str] = None
+    invoice_date: date
+    tax_category_code: Optional[str] = None
+    specific_business_type: Optional[str] = None
     goods_name: Optional[str] = None
     spec: Optional[str] = None
     unit: Optional[str] = None
@@ -2334,20 +2339,28 @@ class PurchaseInvoiceCreate(BaseModel):
     tax_rate: Optional[float] = 0.0
     tax_amount: Optional[float] = 0.0
     total_amount: Optional[float] = 0.0
-    invoice_type: str = "增值税专用发票"
+    invoice_source: Optional[str] = None
+    invoice_category: str = "增值税专用发票"
+    status: str = "正常"
+    is_positive: Optional[bool] = True
+    invoice_risk_level: Optional[str] = None
+    issuer: Optional[str] = None
     certification_status: str = "未认证"
     certification_date: Optional[date] = None
     deduction_period: Optional[str] = None
-    status: str = "正常"
-    voucher_no: Optional[str] = None
     remark: Optional[str] = None
 
 
 class PurchaseInvoiceUpdate(BaseModel):
     invoice_code: Optional[str] = None
-    invoice_date: Optional[date] = None
-    seller_name: Optional[str] = None
+    digital_invoice_no: Optional[str] = None
     seller_tax_no: Optional[str] = None
+    seller_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    buyer_name: Optional[str] = None
+    invoice_date: Optional[date] = None
+    tax_category_code: Optional[str] = None
+    specific_business_type: Optional[str] = None
     goods_name: Optional[str] = None
     spec: Optional[str] = None
     unit: Optional[str] = None
@@ -2357,19 +2370,22 @@ class PurchaseInvoiceUpdate(BaseModel):
     tax_rate: Optional[float] = None
     tax_amount: Optional[float] = None
     total_amount: Optional[float] = None
-    invoice_type: Optional[str] = None
+    invoice_source: Optional[str] = None
+    invoice_category: Optional[str] = None
+    status: Optional[str] = None
+    is_positive: Optional[bool] = None
+    invoice_risk_level: Optional[str] = None
+    issuer: Optional[str] = None
     certification_status: Optional[str] = None
     certification_date: Optional[date] = None
     deduction_period: Optional[str] = None
-    status: Optional[str] = None
-    voucher_no: Optional[str] = None
     remark: Optional[str] = None
 
 
 @app.get("/api/purchase-invoices")
 def list_purchase_invoices(
     company_id: int = Query(1),
-    invoice_type: Optional[str] = None,
+    invoice_category: Optional[str] = None,
     certification_status: Optional[str] = None,
     status: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -2378,8 +2394,8 @@ def list_purchase_invoices(
     db: Session = Depends(get_db)
 ):
     q = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
-    if invoice_type:
-        q = q.filter(PurchaseInvoice.invoice_type == invoice_type)
+    if invoice_category:
+        q = q.filter(PurchaseInvoice.invoice_category == invoice_category)
     if certification_status:
         q = q.filter(PurchaseInvoice.certification_status == certification_status)
     if status:
@@ -2391,24 +2407,42 @@ def list_purchase_invoices(
     if keyword:
         q = q.filter(or_(
             PurchaseInvoice.invoice_no.contains(keyword),
+            PurchaseInvoice.invoice_code.contains(keyword),
+            PurchaseInvoice.digital_invoice_no.contains(keyword),
             PurchaseInvoice.seller_name.contains(keyword),
             PurchaseInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).all()
     return [{
-        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "id": inv.id,
+        "invoice_code": inv.invoice_code or "",
+        "invoice_no": inv.invoice_no,
+        "digital_invoice_no": inv.digital_invoice_no or "",
+        "seller_tax_no": inv.seller_tax_no or "",
+        "seller_name": inv.seller_name or "",
+        "buyer_tax_no": inv.buyer_tax_no or "",
+        "buyer_name": inv.buyer_name or "",
         "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
-        "seller_name": inv.seller_name or "", "seller_tax_no": inv.seller_tax_no or "",
-        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
-        "unit": inv.unit or "", "quantity": inv.quantity or 0,
-        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
-        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "tax_category_code": inv.tax_category_code or "",
+        "specific_business_type": inv.specific_business_type or "",
+        "goods_name": inv.goods_name or "",
+        "spec": inv.spec or "",
+        "unit": inv.unit or "",
+        "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0,
+        "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0,
+        "tax_amount": inv.tax_amount or 0,
         "total_amount": inv.total_amount or 0,
-        "invoice_type": inv.invoice_type,
+        "invoice_source": inv.invoice_source or "",
+        "invoice_category": inv.invoice_category or "增值税专用发票",
+        "status": inv.status,
+        "is_positive": inv.is_positive if inv.is_positive is not None else True,
+        "invoice_risk_level": inv.invoice_risk_level or "",
+        "issuer": inv.issuer or "",
         "certification_status": inv.certification_status,
         "certification_date": str(inv.certification_date) if inv.certification_date else "",
         "deduction_period": inv.deduction_period or "",
-        "status": inv.status, "voucher_no": inv.voucher_no or "",
         "remark": inv.remark or "",
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
@@ -2449,19 +2483,35 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
     if not inv:
         raise HTTPException(404, detail="发票不存在")
     return {
-        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "id": inv.id,
+        "invoice_code": inv.invoice_code or "",
+        "invoice_no": inv.invoice_no,
+        "digital_invoice_no": inv.digital_invoice_no or "",
+        "seller_tax_no": inv.seller_tax_no or "",
+        "seller_name": inv.seller_name or "",
+        "buyer_tax_no": inv.buyer_tax_no or "",
+        "buyer_name": inv.buyer_name or "",
         "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
-        "seller_name": inv.seller_name or "", "seller_tax_no": inv.seller_tax_no or "",
-        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
-        "unit": inv.unit or "", "quantity": inv.quantity or 0,
-        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
-        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "tax_category_code": inv.tax_category_code or "",
+        "specific_business_type": inv.specific_business_type or "",
+        "goods_name": inv.goods_name or "",
+        "spec": inv.spec or "",
+        "unit": inv.unit or "",
+        "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0,
+        "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0,
+        "tax_amount": inv.tax_amount or 0,
         "total_amount": inv.total_amount or 0,
-        "invoice_type": inv.invoice_type,
+        "invoice_source": inv.invoice_source or "",
+        "invoice_category": inv.invoice_category or "增值税专用发票",
+        "status": inv.status,
+        "is_positive": inv.is_positive if inv.is_positive is not None else True,
+        "invoice_risk_level": inv.invoice_risk_level or "",
+        "issuer": inv.issuer or "",
         "certification_status": inv.certification_status,
         "certification_date": str(inv.certification_date) if inv.certification_date else "",
         "deduction_period": inv.deduction_period or "",
-        "status": inv.status, "voucher_no": inv.voucher_no or "",
         "remark": inv.remark or "",
         "created_at": str(inv.created_at) if inv.created_at else "",
         "updated_at": str(inv.updated_at) if inv.updated_at else ""
@@ -3014,12 +3064,14 @@ async def analyze_file_headers(
             }
         elif module == "purchase-invoice":
             field_groups = {
-                "发票信息": ["invoice_no", "invoice_code", "invoice_date", "invoice_type", "status"],
-                "销方信息": ["seller_name", "seller_tax_no"],
+                "发票信息": ["invoice_code", "invoice_no", "digital_invoice_no", "invoice_date", "invoice_category", "status", "is_positive", "invoice_risk_level", "invoice_source"],
+                "销方信息": ["seller_tax_no", "seller_name"],
+                "购方信息": ["buyer_tax_no", "buyer_name"],
+                "分类": ["tax_category_code", "specific_business_type"],
                 "货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
                 "金额": ["amount", "tax_rate", "tax_amount", "total_amount"],
                 "认证信息": ["certification_status", "certification_date", "deduction_period"],
-                "其他": ["voucher_no", "remark"]
+                "其他": ["issuer", "remark"]
             }
         elif module == "bank-transaction":
             field_groups = {
@@ -3218,21 +3270,40 @@ async def import_file_with_mapping(
                         if existing:
                             errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
                             continue
+                        cert_date = None
+                        cert_date_str = mapped.get("certification_date", "")
+                        if cert_date_str:
+                            for cfmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+                                try:
+                                    cert_date = datetime.strptime(cert_date_str, cfmt).date()
+                                    break
+                                except: pass
                         inv = PurchaseInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
-                            invoice_date=inv_date,
-                            seller_name=mapped.get("seller_name", ""),
+                            digital_invoice_no=mapped.get("digital_invoice_no", ""),
                             seller_tax_no=mapped.get("seller_tax_no", ""),
+                            seller_name=mapped.get("seller_name", ""),
+                            buyer_tax_no=mapped.get("buyer_tax_no", ""),
+                            buyer_name=mapped.get("buyer_name", ""),
+                            invoice_date=inv_date,
+                            tax_category_code=mapped.get("tax_category_code", ""),
+                            specific_business_type=mapped.get("specific_business_type", ""),
                             goods_name=mapped.get("goods_name", ""),
                             spec=mapped.get("spec", ""),
                             unit=mapped.get("unit", ""),
                             quantity=qty, unit_price=uprice,
                             amount=amt, tax_rate=tr, tax_amount=tax_amt,
                             total_amount=total,
-                            invoice_type=mapped.get("invoice_type", "增值税专用发票"),
+                            invoice_source=mapped.get("invoice_source", ""),
+                            invoice_category=mapped.get("invoice_category", "增值税专用发票"),
                             status=mapped.get("status", "正常"),
-                            voucher_no=mapped.get("voucher_no", ""),
+                            is_positive=mapped.get("is_positive", "是") in ("是", "true", "True", "1", True),
+                            invoice_risk_level=mapped.get("invoice_risk_level", ""),
+                            issuer=mapped.get("issuer", ""),
+                            certification_status=mapped.get("certification_status", "未认证"),
+                            certification_date=cert_date,
+                            deduction_period=mapped.get("deduction_period", ""),
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)

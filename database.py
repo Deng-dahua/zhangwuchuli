@@ -595,26 +595,43 @@ class PurchaseInvoice(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
-    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    digital_invoice_no = Column(String(50), comment="数电发票号码")
+    # 销方信息
+    seller_tax_no = Column(String(50), comment="销方识别号")
     seller_name = Column(String(100), comment="销方名称")
-    seller_tax_no = Column(String(50), comment="销方税号")
+    # 购方信息
+    buyer_tax_no = Column(String(50), comment="购方识别号")
+    buyer_name = Column(String(100), comment="购买方名称")
+    # 发票日期与分类
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    tax_category_code = Column(String(30), comment="税收分类编码")
+    specific_business_type = Column(String(50), comment="特定业务类型")
+    # 货物明细
     goods_name = Column(String(200), comment="货物或应税劳务名称")
     spec = Column(String(100), comment="规格型号")
     unit = Column(String(10), comment="单位")
     quantity = Column(Float, default=0, comment="数量")
     unit_price = Column(Float, default=0, comment="单价")
+    # 金额信息
     amount = Column(Float, default=0.0, comment="金额（不含税）")
     tax_rate = Column(Float, default=0.0, comment="税率（%）")
     tax_amount = Column(Float, default=0.0, comment="税额")
     total_amount = Column(Float, default=0.0, comment="价税合计")
-    invoice_type = Column(String(20), default="增值税专用发票", comment="发票类型")
+    # 发票属性
+    invoice_source = Column(String(20), comment="发票来源")
+    invoice_category = Column(String(20), default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
+    status = Column(String(20), default="正常", comment="发票状态：正常/作废/红冲")
+    is_positive = Column(Boolean, default=True, comment="是否正数发票")
+    invoice_risk_level = Column(String(10), comment="发票风险等级")
+    # 认证信息
     certification_status = Column(String(20), default="未认证", comment="认证状态：未认证/已认证/已抵扣")
     certification_date = Column(Date, comment="认证日期")
     deduction_period = Column(String(7), comment="抵扣期间 YYYY-MM")
-    status = Column(String(20), default="正常", comment="状态：正常/作废")
-    voucher_no = Column(String(30), comment="关联凭证号")
+    # 其他
+    issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -873,6 +890,39 @@ def migrate_schema(db):
                 db.execute(TextClause("UPDATE sales_invoices SET invoice_category = invoice_type WHERE invoice_category IS NULL"))
                 db.commit()
                 print("已迁移 sales_invoices.invoice_type → invoice_category")
+            except Exception as e:
+                db.rollback()
+
+    # ── 8. 取得发票字段扩展（数电发票、购方、风险等级等） ──
+    if "purchase_invoices" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("purchase_invoices")}
+        new_pi_cols = {
+            "digital_invoice_no": "ALTER TABLE purchase_invoices ADD COLUMN digital_invoice_no VARCHAR(50)",
+            "buyer_tax_no": "ALTER TABLE purchase_invoices ADD COLUMN buyer_tax_no VARCHAR(50)",
+            "buyer_name": "ALTER TABLE purchase_invoices ADD COLUMN buyer_name VARCHAR(100)",
+            "tax_category_code": "ALTER TABLE purchase_invoices ADD COLUMN tax_category_code VARCHAR(30)",
+            "specific_business_type": "ALTER TABLE purchase_invoices ADD COLUMN specific_business_type VARCHAR(50)",
+            "invoice_source": "ALTER TABLE purchase_invoices ADD COLUMN invoice_source VARCHAR(20)",
+            "is_positive": "ALTER TABLE purchase_invoices ADD COLUMN is_positive BOOLEAN DEFAULT 1",
+            "invoice_risk_level": "ALTER TABLE purchase_invoices ADD COLUMN invoice_risk_level VARCHAR(10)",
+            "issuer": "ALTER TABLE purchase_invoices ADD COLUMN issuer VARCHAR(30)",
+            "invoice_category": "ALTER TABLE purchase_invoices ADD COLUMN invoice_category VARCHAR(20)",
+        }
+        for col, sql in new_pi_cols.items():
+            if col not in existing_cols:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 purchase_invoices 添加字段: {col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"purchase_invoices 添加字段 {col} 失败（可能已存在）: {e}")
+        # 将旧 invoice_type 数据迁移到 invoice_category
+        if "invoice_type" in existing_cols:
+            try:
+                db.execute(TextClause("UPDATE purchase_invoices SET invoice_category = invoice_type WHERE invoice_category IS NULL"))
+                db.commit()
+                print("已迁移 purchase_invoices.invoice_type → invoice_category")
             except Exception as e:
                 db.rollback()
 
