@@ -3146,7 +3146,7 @@ async function deletePayment(contractId, paymentId) {
 
 // ==================== 付款管理 ====================
 
-let currentPaymentTab = 'expense'; // 'expense' = 内部报销, 'external' = 外部支付
+let currentPaymentTab = 'internal'; // 'internal' = 内部人员, 'external' = 外部单位
 
 async function renderPayments() {
   const el = document.getElementById('content-area');
@@ -3155,19 +3155,19 @@ async function renderPayments() {
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
         '<div style="font-size:16px;font-weight:700;color:#1f2937">💰 付款管理</div>' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-primary" id="btn-add-expense" onclick="switchPaymentTab(\'expense\');showPaymentForm()">＋ 新增报销</button>' +
-          '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">＋ 新增付款</button>' +
+          '<button class="btn btn-primary" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">＋ 新增内部人员</button>' +
+          '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">＋ 新增外部单位</button>' +
         '</div>' +
       '</div>' +
 
       // Tab bar
       '<div class="payment-tab-bar">' +
-        '<div class="payment-tab active" id="tab-expense" onclick="switchPaymentTab(\'expense\')">' +
-          '<span class="tab-icon">🧾</span> 内部报销' +
-          '<span class="tab-count" id="tab-expense-count">0</span>' +
+        '<div class="payment-tab active" id="tab-internal" onclick="switchPaymentTab(\'internal\')">' +
+          '<span class="tab-icon">👤</span> 内部人员' +
+          '<span class="tab-count" id="tab-internal-count">0</span>' +
         '</div>' +
         '<div class="payment-tab" id="tab-external" onclick="switchPaymentTab(\'external\')">' +
-          '<span class="tab-icon">🏦</span> 外部支付' +
+          '<span class="tab-icon">🏢</span> 外部单位' +
           '<span class="tab-count" id="tab-external-count">0</span>' +
         '</div>' +
       '</div>' +
@@ -3222,8 +3222,15 @@ function injectPaymentStyles() {
     .payment-stat-item .psi-sub { font-size:12px; color:var(--gray-400); }
 
     .payment-type-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
-    .payment-type-badge.expense { background:#fef3c7; color:#92400e; }
+    .payment-type-badge.internal { background:#fef3c7; color:#92400e; }
     .payment-type-badge.external { background:#dbeafe; color:#1e40af; }
+
+    .scenario-badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; margin-left:6px; }
+    .scenario-badge.scenario-internal-备用金 { background:#fce4ec; color:#880e4f; }
+    .scenario-badge.scenario-internal-报销 { background:#e8f5e9; color:#1b5e20; }
+    .scenario-badge.scenario-internal-借支 { background:#fff3e0; color:#e65100; }
+    .scenario-badge.scenario-external-预付款 { background:#ede7f6; color:#4a148c; }
+    .scenario-badge.scenario-external-应付款 { background:#e3f2fd; color:#0d47a1; }
 
     .payment-form-section { background:var(--gray-50); border-radius:10px; padding:16px; margin-bottom:16px; border:1px solid var(--gray-200); }
     .payment-form-section-title { font-size:13px; font-weight:700; color:var(--gray-700); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gray-200); display:flex;align-items:center;gap:6px; }
@@ -3233,9 +3240,9 @@ function injectPaymentStyles() {
 
 async function switchPaymentTab(tab) {
   currentPaymentTab = tab;
-  document.getElementById('tab-expense').classList.toggle('active', tab === 'expense');
+  document.getElementById('tab-internal').classList.toggle('active', tab === 'internal');
   document.getElementById('tab-external').classList.toggle('active', tab === 'external');
-  document.getElementById('btn-add-expense').style.display = tab === 'expense' ? '' : 'none';
+  document.getElementById('btn-add-internal').style.display = tab === 'internal' ? '' : 'none';
   document.getElementById('btn-add-external').style.display = tab === 'external' ? '' : 'none';
   await loadPaymentStats();
   await loadPayments();
@@ -3244,39 +3251,43 @@ async function switchPaymentTab(tab) {
 async function loadPaymentStats() {
   try {
     const s = await api('/api/payments/stats');
-    document.getElementById('tab-expense-count').textContent = s.expense_count || 0;
+    document.getElementById('tab-internal-count').textContent = s.internal_count || 0;
     document.getElementById('tab-external-count').textContent = s.external_count || 0;
     document.getElementById('payment-stats').innerHTML =
       '<div class="payment-stat-item"><div class="psi-label">待审批</div><div class="psi-value" style="color:#c27803">' + (s.pending_count||0) + '</div><div class="psi-sub">¥' + fmt(s.pending_amount||0) + '</div></div>' +
       '<div class="payment-stat-item"><div class="psi-label">已审批</div><div class="psi-value" style="color:#1a56db">' + (s.approved_count||0) + '</div><div class="psi-sub">待付款项</div></div>' +
       '<div class="payment-stat-item"><div class="psi-label">已付款</div><div class="psi-value" style="color:#0e9f6e">' + (s.paid_count||0) + '</div><div class="psi-sub">¥' + fmt(s.paid_amount||0) + '</div></div>' +
-      '<div class="payment-stat-item"><div class="psi-label">' + (currentPaymentTab==='expense'?'报销总额':'付款总额') + '</div><div class="psi-value">' + (s.total_count||0) + '</div><div class="psi-sub">¥' + fmt(currentPaymentTab==='expense'?(s.expense_amount||0):(s.external_amount||0)) + '</div></div>';
+      '<div class="payment-stat-item"><div class="psi-label">' + (currentPaymentTab==='internal'?'内部总额':'外部总额') + '</div><div class="psi-value">' + (s.total_count||0) + '</div><div class="psi-sub">¥' + fmt(currentPaymentTab==='internal'?(s.internal_amount||0):(s.external_amount||0)) + '</div></div>';
   } catch (e) {}
 }
 
 async function loadPayments() {
   const status = document.getElementById('payment-status-filter')?.value || '';
   const keyword = document.getElementById('payment-keyword-filter')?.value || '';
-  let url = '/api/payments?payment_type=' + encodeURIComponent(currentPaymentTab === 'expense' ? '内部报销' : '外部支付') + '&';
+  let url = '/api/payments?payment_type=' + encodeURIComponent(currentPaymentTab === 'internal' ? '内部人员' : '外部单位') + '&';
   if (status) url += 'status=' + encodeURIComponent(status) + '&';
   if (keyword) url += 'keyword=' + encodeURIComponent(keyword) + '&';
   try {
     const data = await api(url);
-    const isExpense = currentPaymentTab === 'expense';
+    const isInternal = currentPaymentTab === 'internal';
     let tbody = '';
     for (const p of data) {
-      const typeBadge = p.payment_type === '内部报销'
-        ? '<span class="payment-type-badge expense">🧾 内部报销</span>'
-        : '<span class="payment-type-badge external">🏦 外部支付</span>';
-      const personCol = isExpense
+      const typeBadge = p.payment_type === '内部人员'
+        ? '<span class="payment-type-badge internal">👤 内部人员</span>'
+        : '<span class="payment-type-badge external">🏢 外部单位</span>';
+      const scenarioBadge = p.scenario
+        ? '<span class="scenario-badge scenario-' + (isInternal ? 'internal-' : 'external-') + p.scenario + '">' + p.scenario + '</span>'
+        : '-';
+      const personCol = isInternal
         ? '<td>' + (p.employee_name || '-') + '</td>'
         : '<td>' + (p.supplier_name || '-') + '</td>';
-      const payeeCol = isExpense
+      const payeeCol = isInternal
         ? '<td>' + (p.payee || p.employee_name || '-') + '</td>'
         : '<td>' + (p.payee || p.supplier_name || '-') + '</td>';
       tbody += '<tr>' +
         '<td><a href="#" onclick="showPaymentDetail(' + p.id + ');return false" style="color:var(--primary);font-weight:500">' + p.payment_no + '</a></td>' +
         '<td>' + typeBadge + '</td>' +
+        '<td>' + scenarioBadge + '</td>' +
         '<td>' + (p.payment_date || '') + '</td>' +
         personCol +
         '<td class="num">¥' + fmt(p.amount) + '</td>' +
@@ -3290,11 +3301,11 @@ async function loadPayments() {
         '</td>' +
       '</tr>';
     }
-    const headerCol = isExpense ? '报销人' : '供应商';
-    const emptyMsg = isExpense ? '暂无报销记录' : '暂无付款记录';
+    const headerCol = isInternal ? '人员' : '单位';
+    const emptyMsg = isInternal ? '暂无内部人员记录' : '暂无外部单位记录';
     document.getElementById('payment-table').innerHTML = '<table>' +
-      '<thead><tr><th>单号</th><th>类型</th><th>日期</th><th>' + headerCol + '</th><th class="num">金额</th><th>方式</th><th>部门</th><th>状态</th><th>操作</th></tr></thead>' +
-      '<tbody>' + (tbody || '<tr><td colspan="9"><div class="empty-state"><p>' + emptyMsg + '</p></div></td></tr>') + '</tbody>' +
+      '<thead><tr><th>单号</th><th>类型</th><th>情形</th><th>日期</th><th>' + headerCol + '</th><th class="num">金额</th><th>方式</th><th>部门</th><th>状态</th><th>操作</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="10"><div class="empty-state"><p>' + emptyMsg + '</p></div></td></tr>') + '</tbody>' +
       '</table>';
   } catch (e) {
     document.getElementById('payment-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
@@ -3315,9 +3326,9 @@ async function showPaymentForm(paymentId) {
   if (isEdit) {
     const data = await api('/api/payments?');
     payment = data.find(p => p.id === paymentId);
-    if (payment) currentPaymentTab = payment.payment_type === '内部报销' ? 'expense' : 'external';
+    if (payment) currentPaymentTab = payment.payment_type === '内部人员' ? 'internal' : 'external';
   }
-  const isExpense = currentPaymentTab === 'expense';
+  const isInternal = currentPaymentTab === 'internal';
 
   // 加载供应商列表
   let suppOptions = '<option value="">选择供应商</option>';
@@ -3346,21 +3357,31 @@ async function showPaymentForm(paymentId) {
     }
   } catch (e) {}
 
-  const title = isExpense ? '🧾 ' + (isEdit ? '编辑报销单' : '新增报销单') : '🏦 ' + (isEdit ? '编辑付款单' : '新增付款单');
-  const defaultNo = (isExpense ? 'BX' : 'FK') + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
+  const title = isInternal ? '👤 ' + (isEdit ? '编辑内部人员记录' : '新增内部人员记录') : '🏢 ' + (isEdit ? '编辑外部单位记录' : '新增外部单位记录');
+  const defaultNo = (isInternal ? 'NR' : 'DW') + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
+
+  // 情形选项
+  const internalScenarios = ['备用金', '报销', '借支'];
+  const externalScenarios = ['预付款', '应付款'];
+  const scenarios = isInternal ? internalScenarios : externalScenarios;
+  let scenarioOptions = '<option value="">选择情形</option>';
+  for (const sc of scenarios) {
+    scenarioOptions += '<option value="' + sc + '"' + (payment && payment.scenario === sc ? ' selected' : '') + '>' + sc + '</option>';
+  }
 
   let basicSection = '';
-  if (isExpense) {
+  if (isInternal) {
     basicSection =
       '<div class="payment-form-section">' +
-        '<div class="payment-form-section-title">📋 报销信息</div>' +
+        '<div class="payment-form-section-title">📋 内部人员信息</div>' +
         '<div class="form-grid-2" style="gap:12px">' +
-          '<div><label class="form-label">报销单号 <span style="color:var(--danger)">*</span></label><input class="form-control" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
-          '<div><label class="form-label">报销日期 <span style="color:var(--danger)">*</span></label><input class="form-control" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
-          '<div><label class="form-label">报销人 <span style="color:var(--danger)">*</span></label><select class="form-control" name="employee_id" onchange="updatePaymentEmployee()">' + empOptions + '</select></div>' +
+          '<div><label class="form-label">单号 <span style="color:var(--danger)">*</span></label><input class="form-control" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
+          '<div><label class="form-label">日期 <span style="color:var(--danger)">*</span></label><input class="form-control" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
+          '<div><label class="form-label">情形 <span style="color:var(--danger)">*</span></label><select class="form-control" name="scenario">' + scenarioOptions + '</select></div>' +
+          '<div><label class="form-label">人员 <span style="color:var(--danger)">*</span></label><select class="form-control" name="employee_id" onchange="updatePaymentEmployee()">' + empOptions + '</select></div>' +
           '<div><label class="form-label">所属部门</label><input class="form-control" name="department" value="' + (payment ? payment.department || '' : '') + '"></div>' +
-          '<div><label class="form-label">报销金额 <span style="color:var(--danger)">*</span></label><input class="form-control" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" style="font-size:16px;font-weight:600"></div>' +
-          '<div><label class="form-label">收款方</label><input class="form-control" name="payee" placeholder="报销款转入账户名" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
+          '<div><label class="form-label">金额 <span style="color:var(--danger)">*</span></label><input class="form-control" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" style="font-size:16px;font-weight:600"></div>' +
+          '<div><label class="form-label">收款方</label><input class="form-control" name="payee" placeholder="款项转入账户名" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
           '<div><label class="form-label">收款账号</label><input class="form-control" name="payee_account" placeholder="银行卡号" value="' + (payment ? payment.payee_account || '' : '') + '"></div>' +
           '<div><label class="form-label">付款方式</label>' +
             '<select class="form-control" name="payment_method">' +
@@ -3380,6 +3401,7 @@ async function showPaymentForm(paymentId) {
         '<div class="form-grid-2" style="gap:12px">' +
           '<div><label class="form-label">付款单号 <span style="color:var(--danger)">*</span></label><input class="form-control" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
           '<div><label class="form-label">付款日期 <span style="color:var(--danger)">*</span></label><input class="form-control" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
+          '<div><label class="form-label">情形 <span style="color:var(--danger)">*</span></label><select class="form-control" name="scenario">' + scenarioOptions + '</select></div>' +
           '<div><label class="form-label">供应商</label><select class="form-control" name="supplier_id" onchange="updatePaymentSupplier()">' + suppOptions + '</select></div>' +
           '<div><label class="form-label">关联合同</label><select class="form-control" name="contract_id" onchange="updatePaymentContract()">' + contractOptions + '</select></div>' +
           '<div><label class="form-label">付款金额 <span style="color:var(--danger)">*</span></label><input class="form-control" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" style="font-size:16px;font-weight:600"></div>' +
@@ -3410,7 +3432,7 @@ async function showPaymentForm(paymentId) {
 
   const html = '<div style="font-size:16px;font-weight:700;margin-bottom:20px;color:#1f2937">' + title + '</div>' +
     '<form id="payment-form">' +
-      '<input type="hidden" name="payment_type" value="' + (isExpense ? '内部报销' : '外部支付') + '">' +
+      '<input type="hidden" name="payment_type" value="' + (isInternal ? '内部人员' : '外部单位') + '">' +
       basicSection +
     '</form>' +
     '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200)">' +
@@ -3508,21 +3530,23 @@ async function showPaymentDetail(paymentId) {
     const data = await api('/api/payments?');
     const p = data.find(x => x.id === paymentId);
     if (!p) { toast('记录不存在', 'error'); return; }
-    const isExpense = p.payment_type === '内部报销';
-    const typeBadge = isExpense
-      ? '<span class="payment-type-badge expense">🧾 内部报销</span>'
-      : '<span class="payment-type-badge external">🏦 外部支付</span>';
-    let html = '<div style="font-size:16px;font-weight:700;margin-bottom:20px;color:#1f2937">' + (isExpense ? '🧾 报销单详情' : '🏦 付款单详情') + ' - ' + p.payment_no + '</div>';
-    html += '<div style="margin-bottom:20px">' + typeBadge + ' ' + paymentStatusBadge(p.status) + '</div>';
+    const isInternal = p.payment_type === '内部人员';
+    const typeBadge = isInternal
+      ? '<span class="payment-type-badge internal">👤 内部人员</span>'
+      : '<span class="payment-type-badge external">🏢 外部单位</span>';
+    const scenarioText = p.scenario ? '<span class="scenario-badge scenario-' + (isInternal ? 'internal-' : 'external-') + p.scenario + '">' + p.scenario + '</span>' : '';
+    let html = '<div style="font-size:16px;font-weight:700;margin-bottom:20px;color:#1f2937">' + (isInternal ? '👤 内部人员详情' : '🏢 外部单位详情') + ' - ' + p.payment_no + '</div>';
+    html += '<div style="margin-bottom:20px">' + typeBadge + ' ' + scenarioText + ' ' + paymentStatusBadge(p.status) + '</div>';
 
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2" style="gap:10px;font-size:13px">';
     html += '<div><b>日期：</b>' + p.payment_date + '</div>';
+    html += '<div><b>情形：</b>' + (p.scenario || '-') + '</div>';
     html += '<div><b>金额：</b><span style="font-size:16px;font-weight:700;color:var(--primary)">¥' + fmt(p.amount) + '</span></div>';
     html += '<div><b>部门：</b>' + (p.department || '-') + '</div>';
     html += '<div><b>方式：</b>' + p.payment_method + '</div>';
-    if (isExpense) {
-      html += '<div><b>报销人：</b>' + (p.employee_name || '-') + '</div>';
+    if (isInternal) {
+      html += '<div><b>人员：</b>' + (p.employee_name || '-') + '</div>';
       html += '<div><b>收款方：</b>' + (p.payee || '-') + '</div>';
       html += '<div><b>收款账号：</b>' + (p.payee_account || '-') + '</div>';
     } else {

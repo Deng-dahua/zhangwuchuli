@@ -1844,7 +1844,8 @@ def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_
 # ==================== 付款管理 ====================
 
 class PaymentCreate(BaseModel):
-    payment_type: str = "外部支付"
+    payment_type: str = "外部单位"
+    scenario: Optional[str] = None
     payment_no: str
     payment_date: date
     employee_id: Optional[int] = None
@@ -1865,6 +1866,7 @@ class PaymentCreate(BaseModel):
 
 class PaymentUpdate(BaseModel):
     payment_type: Optional[str] = None
+    scenario: Optional[str] = None
     employee_id: Optional[int] = None
     employee_name: Optional[str] = None
     supplier_id: Optional[int] = None
@@ -1909,7 +1911,7 @@ def list_payments(
         ))
     payments = q.order_by(Payment.payment_date.desc()).all()
     return [{
-        "id": p.id, "payment_type": p.payment_type,
+        "id": p.id, "payment_type": p.payment_type, "scenario": p.scenario or "",
         "payment_no": p.payment_no,
         "payment_date": str(p.payment_date) if p.payment_date else "",
         "employee_id": p.employee_id, "employee_name": p.employee_name or "",
@@ -1946,11 +1948,11 @@ def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     total_amount = base.with_entities(func.sum(Payment.amount)).scalar() or 0
     
     # 按类型统计
-    expense_base = base.filter(Payment.payment_type == "内部报销")
-    expense_count = expense_base.count()
-    expense_amount = expense_base.with_entities(func.sum(Payment.amount)).scalar() or 0
+    internal_base = base.filter(Payment.payment_type == "内部人员")
+    internal_count = internal_base.count()
+    internal_amount = internal_base.with_entities(func.sum(Payment.amount)).scalar() or 0
     
-    external_base = base.filter(Payment.payment_type == "外部支付")
+    external_base = base.filter(Payment.payment_type == "外部单位")
     external_count = external_base.count()
     external_amount = external_base.with_entities(func.sum(Payment.amount)).scalar() or 0
     
@@ -1961,7 +1963,7 @@ def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     paid_amount = base.filter(Payment.status == "已付款").with_entities(func.sum(Payment.amount)).scalar() or 0
     return {
         "total_count": total_count, "total_amount": total_amount,
-        "expense_count": expense_count, "expense_amount": expense_amount,
+        "internal_count": internal_count, "internal_amount": internal_amount,
         "external_count": external_count, "external_amount": external_amount,
         "pending_count": pending_count, "pending_amount": pending_amount,
         "approved_count": approved_count, "paid_count": paid_count,

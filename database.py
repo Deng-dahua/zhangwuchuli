@@ -505,12 +505,13 @@ class Payment(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
-    payment_type = Column(String(10), nullable=False, default="外部支付", comment="类型：内部报销/外部支付")
+    payment_type = Column(String(10), nullable=False, default="外部单位", comment="类型：内部人员/外部单位")
+    scenario = Column(String(20), comment="情形：备用金/报销/借支（内部人员）或 预付款/应付款（外部单位）")
     payment_no = Column(String(50), nullable=False, comment="付款单号")
     payment_date = Column(Date, nullable=False, comment="付款日期")
-    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True, comment="报销人ID（内部报销）")
-    employee_name = Column(String(50), comment="报销人姓名")
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, comment="供应商ID（外部支付）")
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True, comment="内部人员ID")
+    employee_name = Column(String(50), comment="内部人员姓名")
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, comment="供应商ID（外部单位）")
     supplier_name = Column(String(100), comment="供应商名称")
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True, comment="关联合同ID")
     contract_no = Column(String(50), comment="关联合同编号")
@@ -627,6 +628,31 @@ def migrate_schema(db):
                 except Exception as e:
                     db.rollback()
                     print(f"companies 添加字段 {col} 失败（可能已存在）: {e}")
+
+    # ── 6. 付款管理：重命名 payment_type 值 + 添加 scenario 列 ──
+    if "payments" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("payments")}
+        # 添加 scenario 列
+        if "scenario" not in existing_cols:
+            try:
+                db.execute(TextClause("ALTER TABLE payments ADD COLUMN scenario VARCHAR(20)"))
+                db.commit()
+                print("已为 payments 添加 scenario 列")
+            except Exception as e:
+                db.rollback()
+                print(f"payments 添加 scenario 列失败: {e}")
+        # 重命名内部报销 → 内部人员
+        try:
+            db.execute(TextClause("UPDATE payments SET payment_type = '内部人员' WHERE payment_type = '内部报销'"))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+        # 重命名外部支付 → 外部单位
+        try:
+            db.execute(TextClause("UPDATE payments SET payment_type = '外部单位' WHERE payment_type = '外部支付'"))
+            db.commit()
+        except Exception as e:
+            db.rollback()
 
 
 # 基础科目数据模板（中小制造业标准科目表）
