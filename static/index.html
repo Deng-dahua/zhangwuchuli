@@ -87,6 +87,8 @@
     .btn-secondary:hover { background: var(--gray-200); }
     .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
     .btn-danger:hover { background: #fee2e2; }
+    .btn-exit-company { background: #fff; color: var(--gray-500); border: 1px solid var(--gray-300); }
+    .btn-exit-company:hover { background: var(--gray-100); color: var(--gray-700); }
     .btn-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
@@ -489,6 +491,7 @@
   <div class="topbar">
     <div class="topbar-title" id="page-title">数据看板</div>
     <div class="topbar-right">
+      <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
       <div class="period-badge" id="current-period-badge" onclick="showPeriodSelector()">
         📅 当前期间：<span id="current-period">加载中...</span>
       </div>
@@ -595,6 +598,18 @@ async function enterApp(companyId, companyName) {
   await loadAllAccounts();
   const lastPage = localStorage.getItem('lastPage') || 'dashboard';
   navigateTo(lastPage);
+}
+
+async function exitCompany() {
+  // 清除记录的账套信息，返回公司选择页
+  localStorage.removeItem('lastCompanyId');
+  localStorage.removeItem('lastCompanyName');
+  localStorage.removeItem('lastPage');
+  currentCompanyId = 1;
+  currentCompanyName = '';
+  const companies = await loadCompaniesRaw();
+  window._companiesForPick = companies || [];
+  showCompanyPick(companies);
 }
 
 async function handleCompanyRegister(e) {
