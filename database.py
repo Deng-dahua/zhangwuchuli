@@ -633,21 +633,15 @@ def init_company_data(db, company_id: int):
 
 
 def init_db():
-    """初始化数据库：建表 → 迁移 → 种子数据"""
+    """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据"""
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
     try:
         migrate_schema(db)
 
-        # 确保至少有一家公司
+        # 为已有公司初始化基础数据（不再自动创建默认公司，由注册页负责）
         companies = db.query(Company).filter(Company.is_active == True).all()
-        if not companies:
-            db.add(Company(name="默认公司"))
-            db.commit()
-            companies = db.query(Company).filter(Company.is_active == True).all()
-
-        # 为每家公司初始化基础数据
         for company in companies:
             init_company_data(db, company.id)
 

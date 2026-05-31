@@ -240,15 +240,137 @@
     .badge-signed   { background: #dbeafe; color: #1e40af; }
     .badge-executed { background: #dcfce7; color: #166534; }
     .badge-overdue   { background: #fee2e2; color: #991b1b; }
+
+    /* ====== 注册/建档页面 ====== */
+    #registration-view { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #registration-view.hidden { display: none; }
+    #app-view { display: flex; min-height: 100vh; }
+    #app-view.hidden { display: none; }
+
+    .reg-container { width: 100%; max-width: 520px; padding: 0 20px; }
+    .reg-header { text-align: center; margin-bottom: 32px; }
+    .reg-header .logo { font-size: 48px; margin-bottom: 12px; }
+    .reg-header h1 { font-size: 24px; color: #1a1a2e; margin: 0 0 8px; font-weight: 700; }
+    .reg-header p { font-size: 14px; color: #6b7280; margin: 0; }
+
+    .reg-card { background: #fff; border-radius: 16px; padding: 36px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    .reg-card h2 { font-size: 18px; color: #1a1a2e; margin: 0 0 24px; text-align: center; }
+
+    .reg-form .form-group { margin-bottom: 18px; }
+    .reg-form label { display: block; font-size: 13px; color: #4b5563; margin-bottom: 6px; font-weight: 500; }
+    .reg-form label .req { color: #ef4444; margin-left: 2px; }
+    .reg-form input { width: 100%; padding: 11px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; color: #1a1a2e; background: #fafbfc; outline: none; box-sizing: border-box; transition: border-color 0.15s; }
+    .reg-form input:focus { border-color: #1a56db; background: #fff; box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+    .reg-form input::placeholder { color: #c4c4c4; }
+    .reg-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .reg-form button { width: 100%; padding: 13px; background: #1a56db; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
+    .reg-form button:hover { background: #1546b8; }
+    .reg-form button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    .reg-hint { text-align: center; margin-top: 16px; font-size: 12px; color: #9ca3af; }
+    .reg-hint a { color: #1a56db; cursor: pointer; text-decoration: none; }
+    .reg-hint a:hover { text-decoration: underline; }
+
+    /* 公司列表选择页 */
+    #company-pick-view { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #company-pick-view.hidden { display: none; }
+    .pick-container { width: 100%; max-width: 480px; padding: 0 20px; }
+    .pick-card { background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    .pick-card h2 { font-size: 18px; color: #1a1a2e; margin: 0 0 8px; text-align: center; }
+    .pick-card .sub { font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; }
+    .pick-list { list-style: none; padding: 0; margin: 0 0 20px; }
+    .pick-list li { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 12px; }
+    .pick-list li:hover { border-color: #1a56db; background: #eff6ff; }
+    .pick-list li .av { width: 40px; height: 40px; border-radius: 50%; background: #1a56db; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; }
+    .pick-list li .info { flex: 1; }
+    .pick-list li .info .cn { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+    .pick-list li .info .us { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .pick-list li .arr { color: #d1d5db; font-size: 14px; }
+    .pick-list li:hover .arr { color: #1a56db; }
+    .pick-new-btn { width: 100%; padding: 13px; background: #fff; color: #1a56db; border: 2px dashed #d1d5db; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .pick-new-btn:hover { border-color: #1a56db; background: #eff6ff; }
   </style>
 </head>
 <body>
+
+<!-- ====== 注册/建档页面 ====== -->
+<div id="registration-view" class="hidden">
+  <div class="reg-container">
+    <div class="reg-header">
+      <div class="logo">🏢</div>
+      <h1>公司建档</h1>
+      <p>填写公司基本信息，建立独立账套</p>
+    </div>
+    <div class="reg-card">
+      <h2>📋 公司信息</h2>
+      <form class="reg-form" id="reg-form" onsubmit="handleCompanyRegister(event)">
+        <div class="form-group">
+          <label>公司全称 <span class="req">*</span></label>
+          <input type="text" id="reg-name" placeholder="例如：广州存勤法税咨询有限公司" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>统一社会信用代码</label>
+            <input type="text" id="reg-uscc" placeholder="18位代码">
+          </div>
+          <div class="form-group">
+            <label>纳税人识别号</label>
+            <input type="text" id="reg-tax-no" placeholder="纳税人识别号">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>公司地址</label>
+          <input type="text" id="reg-address" placeholder="例如：广州市天河区XX路XX号">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>联系电话</label>
+            <input type="text" id="reg-phone" placeholder="联系电话">
+          </div>
+          <div class="form-group">
+            <label>法定代表人</label>
+            <input type="text" id="reg-legal-person" placeholder="法定代表人姓名">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>注册资本（万元）</label>
+          <input type="number" id="reg-capital" placeholder="例如：100" step="0.01" min="0">
+        </div>
+        <button type="submit" id="reg-submit-btn">✅ 创建账套，进入系统</button>
+        <div class="reg-hint" id="reg-back-hint" style="display:none;">
+          已有公司？<a onclick="showCompanyPick()">返回选择公司</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 公司选择页面 ====== -->
+<div id="company-pick-view" class="hidden">
+  <div class="reg-container">
+    <div class="reg-header">
+      <div class="logo">⚙️</div>
+      <h1>账务处理系统</h1>
+      <p>财税系统中小企业版</p>
+    </div>
+    <div class="pick-card">
+      <h2>选择公司账套</h2>
+      <p class="sub">请选择要进入的公司账套</p>
+      <ul class="pick-list" id="pick-list"></ul>
+      <button class="pick-new-btn" onclick="showRegistration()">＋ 创建新公司</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 主应用 ====== -->
+<div id="app-view">
 
 <!-- 侧边栏 -->
 <nav id="sidebar">
   <div class="sidebar-logo">
     ⚙️ 账务处理系统
-    <span>中小制造业版 v1.0</span>
+    <span>财税系统中小企业版 v1.0</span>
   </div>
   <div class="sidebar-nav">
     <div class="nav-group-title">总览</div>
@@ -339,10 +461,93 @@ const pages = {
 
 // ==================== 初始化（多公司版本） ====================
 async function init() {
+  const companies = await loadCompaniesRaw();
+  window._companiesForPick = companies || [];
+  if (!companies || companies.length === 0) {
+    showRegistration();
+  } else {
+    showCompanyPick(companies);
+  }
+}
+
+async function loadCompaniesRaw() {
+  try {
+    return await fetch('/api/companies').then(r => r.json());
+  } catch (e) {
+    return [];
+  }
+}
+
+function showRegistration() {
+  document.getElementById('registration-view').classList.remove('hidden');
+  document.getElementById('company-pick-view').classList.add('hidden');
+  document.getElementById('app-view').classList.add('hidden');
+  // 如果有已有公司，显示"返回选择"链接
+  const hasExisting = (window._companiesForPick && window._companiesForPick.length > 0);
+  document.getElementById('reg-back-hint').style.display = hasExisting ? '' : 'none';
+}
+
+function showCompanyPick(companies) {
+  const list = document.getElementById('pick-list');
+  list.innerHTML = (companies || []).map(c => {
+    const initial = c.name ? c.name.charAt(0) : '公';
+    return '<li onclick="enterApp(' + c.id + ', \'' + escapeHtml(c.name) + '\')">'
+      + '<div class="av">' + initial + '</div>'
+      + '<div class="info"><div class="cn">' + escapeHtml(c.name) + '</div>'
+      + (c.uscc ? '<div class="us">' + escapeHtml(c.uscc) + '</div>' : '')
+      + '</div><div class="arr">→</div></li>';
+  }).join('');
+  document.getElementById('registration-view').classList.add('hidden');
+  document.getElementById('company-pick-view').classList.remove('hidden');
+  document.getElementById('app-view').classList.add('hidden');
+}
+
+async function enterApp(companyId, companyName) {
+  currentCompanyId = companyId;
+  currentCompanyName = companyName;
+  document.getElementById('registration-view').classList.add('hidden');
+  document.getElementById('company-pick-view').classList.add('hidden');
+  document.getElementById('app-view').classList.remove('hidden');
   await loadCompanies();
   await loadCurrentPeriod();
   await loadAllAccounts();
   navigateTo('dashboard');
+}
+
+async function handleCompanyRegister(e) {
+  e.preventDefault();
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 正在创建...';
+  const name = document.getElementById('reg-name').value.trim();
+  if (!name) { toast('请输入公司全称', 'error'); btn.disabled = false; btn.textContent = '✅ 创建账套，进入系统'; return; }
+  const body = {
+    name: name,
+    uscc: document.getElementById('reg-uscc').value.trim() || null,
+    tax_no: document.getElementById('reg-tax-no').value.trim() || null,
+    address: document.getElementById('reg-address').value.trim() || null,
+    phone: document.getElementById('reg-phone').value.trim() || null,
+    legal_person: document.getElementById('reg-legal-person').value.trim() || null,
+    registered_capital: document.getElementById('reg-capital').value ? parseFloat(document.getElementById('reg-capital').value) : null
+  };
+  try {
+    const data = await fetch('/api/companies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => { if (!r.ok) return r.json().then(err => { throw new Error(err.detail || '创建失败'); }); return r.json(); });
+    toast('公司「' + data.name + '」创建成功，正在进入系统...', 'success');
+    setTimeout(() => enterApp(data.id, data.name), 600);
+  } catch (err) {
+    toast('创建失败：' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '✅ 创建账套，进入系统';
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function loadCurrentPeriod() {
@@ -2735,5 +2940,7 @@ async function deletePayment(contractId, paymentId) {
 }
 
 </script>
+</div><!-- /#app-view -->
+
 </body>
 </html>

@@ -1,0 +1,19 @@
+Read 85028 chars
+  'CompanyInfo' found 2 times
+  'department_code' found 16 times
+  OK: 'q = db.query(Department)' x1
+  OK: 'q = db.query(Employee)' x1
+  OK: 'q = db.query(Customer)' x1
+  OK: 'q = db.query(Supplier)' x1
+  OK: 'q = db.query(Account)' x1
+  OK: 'q = db.query(Voucher)' x1
+  OK: 'db.query(Department).filter(Department.' x7 occurrences
+  OK: 'db.query(Employee).filter(Employee.' x6 occurrences
+  OK: 'db.query(Customer).filter(Customer.' x5 occurrences
+  OK: 'db.query(Supplier).filter(Supplier.' x5 occurrences
+  OK: 'db.query(Account).filter(Account.' x10 occurrences
+  OK: '.join(Voucher, VoucherDetail.voucher_id == Voucher.id) ' x6 occurrences
+  OK: 'join(Voucher, VoucherDetail.voucher_id == Voucher.id) \' x6 occurrences
+
+Wrote 87057 chars back to main.py
+BATCH EDIT COMPLETE
