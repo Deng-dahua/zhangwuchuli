@@ -3927,11 +3927,11 @@ async function showSalesInvoiceForm(id) {
   html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="si-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label><input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
   html += '</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="si-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="si-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期</label><input type="date" class="form-input" id="si-invoice-date" value="' + (data.invoice_date || '') + '"></div>';
   html += '</div></div>';
 
   // ── 销方信息 ──
@@ -4069,7 +4069,6 @@ async function saveSalesInvoice(id) {
       issuer: document.getElementById('si-issuer').value.trim(),
       remark: document.getElementById('si-remark').value.trim()
     };
-    if (!body.invoice_no || !body.invoice_date) { toast('发票号码和开票日期必填', 'error'); return; }
     let result;
     if (id) {
       result = await api('/api/sales-invoices/' + id, { method: 'PUT', body });
@@ -4334,11 +4333,11 @@ async function showPurchaseInvoiceForm(id) {
   html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="pi-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label><input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
   html += '</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="pi-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="pi-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期</label><input type="date" class="form-input" id="pi-invoice-date" value="' + (data.invoice_date || '') + '"></div>';
   html += '</div></div>';
 
   // ── 销方信息 ──
@@ -4492,7 +4491,6 @@ async function savePurchaseInvoice(id) {
       deduction_period: document.getElementById('pi-deduct-period').value.trim() || null,
       remark: document.getElementById('pi-remark').value.trim()
     };
-    if (!body.invoice_no || !body.invoice_date) { toast('发票号码和开票日期必填', 'error'); return; }
     let result;
     if (id) {
       result = await api('/api/purchase-invoices/' + id, { method: 'PUT', body });

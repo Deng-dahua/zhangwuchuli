@@ -2129,13 +2129,13 @@ def delete_payment(payment_id: int, company_id: int = Query(1), db: Session = De
 
 class SalesInvoiceCreate(BaseModel):
     invoice_code: Optional[str] = None
-    invoice_no: str
+    invoice_no: Optional[str] = None
     digital_invoice_no: Optional[str] = None
     seller_tax_no: Optional[str] = None
     seller_name: Optional[str] = None
     buyer_tax_no: Optional[str] = None
     buyer_name: Optional[str] = None
-    invoice_date: date
+    invoice_date: Optional[date] = None
     tax_category_code: Optional[str] = None
     specific_business_type: Optional[str] = None
     goods_name: Optional[str] = None
@@ -2346,13 +2346,13 @@ def batch_delete_sales_invoices(ids: list[int], company_id: int = Query(1), db: 
 
 class PurchaseInvoiceCreate(BaseModel):
     invoice_code: Optional[str] = None
-    invoice_no: str
+    invoice_no: Optional[str] = None
     digital_invoice_no: Optional[str] = None
     seller_tax_no: Optional[str] = None
     seller_name: Optional[str] = None
     buyer_tax_no: Optional[str] = None
     buyer_name: Optional[str] = None
-    invoice_date: date
+    invoice_date: Optional[date] = None
     tax_category_code: Optional[str] = None
     specific_business_type: Optional[str] = None
     goods_name: Optional[str] = None
