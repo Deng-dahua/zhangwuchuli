@@ -3141,7 +3141,23 @@ async def import_file_with_mapping(
                 row_dict = {}
                 for col in range(1, ws.max_column + 1):
                     cell = ws.cell(row=row, column=col)
-                    row_dict[headers_file[col - 1]] = str(cell.value) if cell.value is not None else ""
+                    if cell.value is None:
+                        row_dict[headers_file[col - 1]] = ""
+                    elif isinstance(cell.value, datetime):
+                        row_dict[headers_file[col - 1]] = cell.value.strftime("%Y-%m-%d %H:%M:%S")
+                    elif isinstance(cell.value, (int, float)):
+                        # Excel 日期序列号（1899-12-30 为起点）
+                        val = float(cell.value)
+                        if 1 <= val <= 100000:
+                            from datetime import timedelta
+                            dt = datetime(1899, 12, 30) + timedelta(days=int(val))
+                            secs = int((val - int(val)) * 86400)
+                            dt = dt + timedelta(seconds=secs)
+                            row_dict[headers_file[col - 1]] = dt.strftime("%Y-%m-%d %H:%M:%S")
+                        else:
+                            row_dict[headers_file[col - 1]] = str(cell.value)
+                    else:
+                        row_dict[headers_file[col - 1]] = str(cell.value).strip()
                 # 跳过完全空行
                 if any(v.strip() for v in row_dict.values()):
                     rows_data.append(row_dict)
