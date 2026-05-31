@@ -2246,7 +2246,7 @@ def list_sales_invoices(
 
 @app.post("/api/sales-invoices")
 def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
-    if db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.invoice_no == data.invoice_no).first():
+    if data.invoice_no and db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.invoice_no == data.invoice_no).first():
         raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = SalesInvoice(company_id=company_id, **data.model_dump())
     db.add(inv)
@@ -2475,7 +2475,7 @@ def list_purchase_invoices(
 
 @app.post("/api/purchase-invoices")
 def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
-    if db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.invoice_no == data.invoice_no).first():
+    if data.invoice_no and db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.invoice_no == data.invoice_no).first():
         raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
     db.add(inv)
@@ -3272,20 +3272,16 @@ async def import_file_with_mapping(
                                 inv_date = datetime.strptime(date_str, fmt).date()
                                 break
                             except: pass
-                    if not inv_date:
-                        errors.append(f"第{i+2}行: 无法解析开票日期")
-                        continue
 
-                    inv_no = mapped.get("invoice_no", "")
-                    if not inv_no:
-                        errors.append(f"第{i+2}行: 缺少发票号码")
-                        continue
+                    # 空值保留为 None，不拦截
+                    inv_no = mapped.get("invoice_no", "") or None
 
-                    # 同批次去重：避免两行映射到同一号码导致 UNIQUE 冲突
-                    batch_key = (company_id, inv_no)
-                    if batch_key in used_invoice_nos:
-                        errors.append(f"第{i+2}行: 发票号码 {inv_no} 与本批次重复，跳过")
-                        continue
+                    # 同批次去重：仅对非空发票号码做去重，空值允许多条
+                    if inv_no:
+                        batch_key = (company_id, inv_no)
+                        if batch_key in used_invoice_nos:
+                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 与本批次重复，跳过")
+                            continue
 
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
                     # nullable=True 时源文件为空则返回 None，保留空白不填 0
@@ -3306,13 +3302,15 @@ async def import_file_with_mapping(
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
-                        existing = db.query(SalesInvoice).filter(
-                            SalesInvoice.company_id == company_id,
-                            SalesInvoice.invoice_no == inv_no
-                        ).first()
-                        if existing:
-                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
-                            continue
+                        # 仅对非空发票号码做数据库查重
+                        if inv_no:
+                            existing = db.query(SalesInvoice).filter(
+                                SalesInvoice.company_id == company_id,
+                                SalesInvoice.invoice_no == inv_no
+                            ).first()
+                            if existing:
+                                errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
+                                continue
                         inv = SalesInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
@@ -3339,15 +3337,18 @@ async def import_file_with_mapping(
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
-                        used_invoice_nos.add(batch_key)
+                        if inv_no:
+                            used_invoice_nos.add(batch_key)
                     else:
-                        existing = db.query(PurchaseInvoice).filter(
-                            PurchaseInvoice.company_id == company_id,
-                            PurchaseInvoice.invoice_no == inv_no
-                        ).first()
-                        if existing:
-                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
-                            continue
+                        # 仅对非空发票号码做数据库查重
+                        if inv_no:
+                            existing = db.query(PurchaseInvoice).filter(
+                                PurchaseInvoice.company_id == company_id,
+                                PurchaseInvoice.invoice_no == inv_no
+                            ).first()
+                            if existing:
+                                errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
+                                continue
                         cert_date = None
                         cert_date_str = mapped.get("certification_date", "")
                         if cert_date_str:
@@ -3385,7 +3386,8 @@ async def import_file_with_mapping(
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
-                        used_invoice_nos.add(batch_key)
+                        if inv_no:
+                            used_invoice_nos.add(batch_key)
 
                 imported += 1
             except Exception as e:

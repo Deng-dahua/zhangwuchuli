@@ -546,7 +546,7 @@ class SalesInvoice(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    invoice_no = Column(String(30), nullable=True, comment="发票号码")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
     # 销方信息
     seller_tax_no = Column(String(50), comment="销方识别号")
@@ -555,7 +555,7 @@ class SalesInvoice(Base):
     buyer_tax_no = Column(String(50), comment="购方识别号")
     buyer_name = Column(String(100), comment="购买方名称")
     # 发票日期与分类
-    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    invoice_date = Column(Date, nullable=True, comment="开票日期")
     tax_category_code = Column(String(30), comment="税收分类编码")
     specific_business_type = Column(String(50), comment="特定业务类型")
     # 货物明细
@@ -597,7 +597,7 @@ class PurchaseInvoice(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    invoice_no = Column(String(30), nullable=True, comment="发票号码")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
     # 销方信息
     seller_tax_no = Column(String(50), comment="销方识别号")
@@ -606,7 +606,7 @@ class PurchaseInvoice(Base):
     buyer_tax_no = Column(String(50), comment="购方识别号")
     buyer_name = Column(String(100), comment="购买方名称")
     # 发票日期与分类
-    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    invoice_date = Column(Date, nullable=True, comment="开票日期")
     tax_category_code = Column(String(30), comment="税收分类编码")
     specific_business_type = Column(String(50), comment="特定业务类型")
     # 货物明细
@@ -925,6 +925,34 @@ def migrate_schema(db):
                 print("已迁移 purchase_invoices.invoice_type → invoice_category")
             except Exception as e:
                 db.rollback()
+
+    # ── 9. 发票号码和开票日期改为可空 ──
+    for table_name in ("sales_invoices", "purchase_invoices"):
+        if table_name in inspector.get_table_names():
+            cols = {c["name"]: c for c in inspector.get_columns(table_name)}
+            need_fix = False
+            if "invoice_no" in cols and cols["invoice_no"].get("nullable") is False:
+                need_fix = True
+            if "invoice_date" in cols and cols["invoice_date"].get("nullable") is False:
+                need_fix = True
+            if need_fix:
+                try:
+                    all_cols = inspector.get_columns(table_name)
+                    col_names = [c["name"] for c in all_cols]
+                    col_names_str = ", ".join(col_names)
+                    backup_table = f"{table_name}_bk"
+                    # 备份 → 删除 → 重建（新 schema）→ 恢复数据
+                    db.execute(TextClause(f"ALTER TABLE {table_name} RENAME TO {backup_table}"))
+                    Base.metadata.create_all(bind=engine, tables=[Base.metadata.tables[table_name]])
+                    # 迁移前将空字符串发票号码转为 NULL（避免 UNIQUE 约束冲突）
+                    db.execute(TextClause(f"UPDATE {backup_table} SET invoice_no = NULL WHERE invoice_no = ''"))
+                    db.execute(TextClause(f"INSERT INTO {table_name} ({col_names_str}) SELECT {col_names_str} FROM {backup_table}"))
+                    db.execute(TextClause(f"DROP TABLE {backup_table}"))
+                    db.commit()
+                    print(f"已重建 {table_name} 表（发票号码和开票日期改为可空）")
+                except Exception as e:
+                    db.rollback()
+                    print(f"重建 {table_name} 表失败: {e}")
 
 
 # 基础科目数据模板（中小制造业标准科目表）
