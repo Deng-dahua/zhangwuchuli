@@ -3243,7 +3243,9 @@ async def import_file_with_mapping(
                     inv_date = None
                     date_str = mapped.get("invoice_date", "")
                     if date_str:
-                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"]:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d",
+                                    "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S",
+                                    "%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M"]:
                             try:
                                 inv_date = datetime.strptime(date_str, fmt).date()
                                 break
