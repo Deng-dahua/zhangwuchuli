@@ -176,6 +176,15 @@ def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
         return {"company_name": "", "uscc": "", "tax_no": "", "address": "", "phone": "",
                 "bank_name": "", "bank_account": "", "legal_representative": "",
                 "registered_capital": "", "established_date": None, "business_scope": ""}
+    # 股东
+    shareholders = db.query(CompanyShareholder).filter(CompanyShareholder.company_id == company_id).all()
+    # 董事
+    directors = db.query(CompanyDirector).filter(CompanyDirector.company_id == company_id).all()
+    # 监事
+    supervisors = db.query(CompanySupervisor).filter(CompanySupervisor.company_id == company_id).all()
+    # 财务负责人
+    finance_contacts = db.query(CompanyFinanceContact).filter(CompanyFinanceContact.company_id == company_id).all()
+
     return {
         "id": info.id,
         "uscc": info.uscc or "",
@@ -186,9 +195,14 @@ def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
         "bank_name": info.bank_name,
         "bank_account": info.bank_account,
         "legal_representative": info.legal_representative,
+        "legal_representative_id": info.legal_representative_id or "",
         "registered_capital": info.registered_capital,
         "established_date": str(info.established_date) if info.established_date else None,
         "business_scope": info.business_scope,
+        "shareholders": [{"id": s.id, "name": s.name, "id_number": s.id_number or "", "type": s.shareholder_type or "自然人", "share_ratio": s.share_ratio or 0} for s in shareholders],
+        "directors": [{"id": d.id, "name": d.name, "id_number": d.id_number or ""} for d in directors],
+        "supervisors": [{"id": s.id, "name": s.name, "id_number": s.id_number or ""} for s in supervisors],
+        "finance_contacts": [{"id": f.id, "name": f.name, "id_number": f.id_number or ""} for f in finance_contacts],
     }
 
 @app.put("/api/company")
@@ -214,6 +228,98 @@ def update_company(data: CompanyUpdate, company_id: int = Query(1), db: Session 
         else:
             setattr(info, k, v)
     info.updated_at = datetime.now()
+    db.commit()
+    return {"message": "保存成功"}
+
+
+class CompanyFullUpdate(BaseModel):
+    company_name: Optional[str] = None
+    uscc: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    legal_representative: Optional[str] = None
+    legal_representative_id: Optional[str] = None
+    registered_capital: Optional[str] = None
+    established_date: Optional[str] = None
+    business_scope: Optional[str] = None
+    shareholders: Optional[list] = None
+    directors: Optional[list] = None
+    supervisors: Optional[list] = None
+    finance_contacts: Optional[list] = None
+
+
+@app.put("/api/company/full")
+def update_company_full(data: CompanyFullUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    """保存公司完整信息，包括股东/董事/监事/财务负责人"""
+    info = db.query(Company).filter(Company.id == company_id).first()
+    if not info:
+        info = Company(id=company_id, name=data.company_name or "")
+        db.add(info)
+        db.flush()
+
+    # 更新基本信息
+    for k, v in data.model_dump(exclude_unset=True).items():
+        if k in ('shareholders', 'directors', 'supervisors', 'finance_contacts'):
+            continue
+        if k == 'established_date' and v:
+            try:
+                v = date.fromisoformat(v)
+            except ValueError:
+                v = None
+        if k == 'company_name':
+            info.name = v
+        elif v is not None:
+            setattr(info, k, v)
+    info.updated_at = datetime.now()
+
+    # 更新股东
+    if data.shareholders is not None:
+        db.query(CompanyShareholder).filter(CompanyShareholder.company_id == company_id).delete()
+        for s in data.shareholders:
+            if s.get("name"):
+                db.add(CompanyShareholder(
+                    company_id=company_id,
+                    name=s["name"],
+                    id_number=s.get("id_number", ""),
+                    shareholder_type=s.get("type", "自然人"),
+                    share_ratio=s.get("share_ratio", 0)
+                ))
+
+    # 更新董事
+    if data.directors is not None:
+        db.query(CompanyDirector).filter(CompanyDirector.company_id == company_id).delete()
+        for d in data.directors:
+            if d.get("name"):
+                db.add(CompanyDirector(
+                    company_id=company_id,
+                    name=d["name"],
+                    id_number=d.get("id_number", "")
+                ))
+
+    # 更新监事
+    if data.supervisors is not None:
+        db.query(CompanySupervisor).filter(CompanySupervisor.company_id == company_id).delete()
+        for s in data.supervisors:
+            if s.get("name"):
+                db.add(CompanySupervisor(
+                    company_id=company_id,
+                    name=s["name"],
+                    id_number=s.get("id_number", "")
+                ))
+
+    # 更新财务负责人
+    if data.finance_contacts is not None:
+        db.query(CompanyFinanceContact).filter(CompanyFinanceContact.company_id == company_id).delete()
+        for f in data.finance_contacts:
+            if f.get("name"):
+                db.add(CompanyFinanceContact(
+                    company_id=company_id,
+                    name=f["name"],
+                    id_number=f.get("id_number", "")
+                ))
+
     db.commit()
     return {"message": "保存成功"}
 
