@@ -3167,16 +3167,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     elif isinstance(cell.value, datetime):
                         row_dict[headers_file[col - 1]] = cell.value.strftime("%Y-%m-%d %H:%M:%S")
                     elif isinstance(cell.value, (int, float)):
-                        # Excel 日期序列号（1899-12-30 为起点）
-                        val = float(cell.value)
-                        if 1 <= val <= 100000:
-                            from datetime import timedelta
-                            dt = datetime(1899, 12, 30) + timedelta(days=int(val))
-                            secs = int((val - int(val)) * 86400)
-                            dt = dt + timedelta(seconds=secs)
-                            row_dict[headers_file[col - 1]] = dt.strftime("%Y-%m-%d %H:%M:%S")
-                        else:
-                            row_dict[headers_file[col - 1]] = str(cell.value)
+                        # 数字直接转字符串（openpyxl data_only=True 已自动把真正的日期转 datetime，
+                        # 此处 int/float 就是纯数字如金额、数量，误当日期序列号会销毁金额数据）
+                        row_dict[headers_file[col - 1]] = str(cell.value)
                     else:
                         row_dict[headers_file[col - 1]] = str(cell.value).strip()
                 # 跳过完全空行
