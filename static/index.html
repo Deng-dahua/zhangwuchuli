@@ -535,9 +535,19 @@ async function init() {
   window._companiesForPick = companies || [];
   if (!companies || companies.length === 0) {
     showRegistration();
-  } else {
-    showCompanyPick(companies);
+    return;
   }
+  // 记住上次选择的公司，刷新直接进入
+  const lastCompanyId = localStorage.getItem('lastCompanyId');
+  const lastCompanyName = localStorage.getItem('lastCompanyName');
+  if (lastCompanyId && lastCompanyName) {
+    const exists = companies.some(c => String(c.id) === String(lastCompanyId));
+    if (exists) {
+      await enterApp(parseInt(lastCompanyId), lastCompanyName);
+      return;
+    }
+  }
+  showCompanyPick(companies);
 }
 
 async function loadCompaniesRaw() {
@@ -575,6 +585,8 @@ function showCompanyPick(companies) {
 async function enterApp(companyId, companyName) {
   currentCompanyId = companyId;
   currentCompanyName = companyName;
+  localStorage.setItem('lastCompanyId', companyId);
+  localStorage.setItem('lastCompanyName', companyName);
   document.getElementById('registration-view').classList.add('hidden');
   document.getElementById('company-pick-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
