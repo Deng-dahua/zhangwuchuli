@@ -5087,39 +5087,59 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'certification_status': '认证状态', 'certification_date': '认证日期', 'deduction_period': '抵扣期间'
   };
 
-  const groups = result.field_groups || {};
+  const fieldOrder = result.field_order; // 发票模块用平铺列表
+  const groups = result.field_groups || {};  // 其他模块用分组
+
   let mappingHtml = '<div style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
   mappingHtml += '<h4 style="margin:0;">列映射配置</h4>';
   mappingHtml += `<span style="font-size:12px;color:var(--gray-500);">${result.file_name} | ${result.total_rows} 行 | ${result.headers.length} 列</span></div>`;
-  mappingHtml += '<div class="mapping-grid">';
 
-  for (const [groupName, fields] of Object.entries(groups)) {
-    const isFull = fields.length <= 2 && groupName.includes('⑧') || groupName.includes('⑨'); // 小组合并列
-    mappingHtml += `<div class="mapping-card ${isFull ? '' : ''}">`;
-    mappingHtml += `<div class="mapping-card-header">${groupName}</div>`;
-    mappingHtml += '<div class="mapping-card-body">';
-    for (const field of fields) {
+  if (fieldOrder) {
+    // 发票模块：26字段严格按顺序，3列网格平铺
+    mappingHtml += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 12px;max-height:60vh;overflow-y:auto;padding:2px;">';
+    fieldOrder.forEach((field, idx) => {
       const label = fieldLabels[field] || field;
-      mappingHtml += `<div class="mapping-row">
-        <span class="mapping-row-label">${label}</span>
-        <select id="map-${field}">
+      mappingHtml += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--gray-100);">
+        <span style="color:var(--gray-400);min-width:20px;text-align:right;flex-shrink:0;">${idx + 1}.</span>
+        <span style="width:90px;color:var(--gray-700);flex-shrink:0;white-space:nowrap;">${label}</span>
+        <select id="map-${field}" style="flex:1;padding:3px 6px;border:1px solid var(--gray-300);border-radius:4px;font-size:11px;background:#fff;min-width:0;">
           <option value="">-- 不映射 --</option>
           ${result.headers.map(h => `<option value="${h}">${h}</option>`).join('')}
         </select>
       </div>`;
+    });
+    mappingHtml += '</div>';
+  } else {
+    // 其他模块：分组卡片
+    mappingHtml += '<div class="mapping-grid">';
+    for (const [groupName, fields] of Object.entries(groups)) {
+      mappingHtml += `<div class="mapping-card">`;
+      mappingHtml += `<div class="mapping-card-header">${groupName}</div>`;
+      mappingHtml += '<div class="mapping-card-body">';
+      for (const field of fields) {
+        const label = fieldLabels[field] || field;
+        mappingHtml += `<div class="mapping-row">
+          <span class="mapping-row-label">${label}</span>
+          <select id="map-${field}">
+            <option value="">-- 不映射 --</option>
+            ${result.headers.map(h => `<option value="${h}">${h}</option>`).join('')}
+          </select>
+        </div>`;
+      }
+      mappingHtml += '</div></div>';
     }
-    mappingHtml += '</div></div>';
+    mappingHtml += '</div>';
   }
-  mappingHtml += '</div>';
 
   // 自动猜测映射
   const autoGuess = {};
-  for (const [groupName, fields] of Object.entries(groups)) {
-    for (const field of fields) {
-      for (const h of result.headers) {
-        const hl = h.toLowerCase();
-        const fl = field.toLowerCase();
-        const km = {
+  const allFields = fieldOrder || [].concat(...Object.values(groups));
+  for (const field of allFields) {
+    for (const h of result.headers) {
+      const hl = h.toLowerCase();
+      const fl = field.toLowerCase();
+      const km = {
+
           'amount': ['金额', 'amt', '不含税'],
           'transaction_date': ['日期', 'date', '时间'],
           'counterparty_name': ['对方', '户名'],
@@ -5162,7 +5182,6 @@ function buildMappingUI(result, module, file, bankConfigId) {
           break;
         }
       }
-    }
   }
 
   mappingHtml += `

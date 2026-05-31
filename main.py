@@ -3066,31 +3066,32 @@ async def analyze_file_headers(
 
         # 获取已知的列映射模板
         field_groups = {}
+        field_order = None
         if module == "sales-invoice":
-            # 严格按开具发票表头26列顺序分组
-            field_groups = {
-                "① 发票基本信息": ["invoice_code", "invoice_no", "digital_invoice_no"],
-                "② 销方信息": ["seller_tax_no", "seller_name"],
-                "③ 购方信息": ["buyer_tax_no", "buyer_name"],
-                "④ 开票日期与分类": ["invoice_date", "tax_category_code", "specific_business_type"],
-                "⑤ 货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
-                "⑥ 金额信息": ["amount", "tax_rate", "tax_amount", "total_amount"],
-                "⑦ 发票属性": ["invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level"],
-                "⑧ 其他": ["issuer", "remark"]
-            }
+            # 严格按开具发票表头26列顺序，一一平铺
+            field_order = [
+                "invoice_code", "invoice_no", "digital_invoice_no",
+                "seller_tax_no", "seller_name",
+                "buyer_tax_no", "buyer_name",
+                "invoice_date", "tax_category_code", "specific_business_type",
+                "goods_name", "spec", "unit", "quantity", "unit_price",
+                "amount", "tax_rate", "tax_amount", "total_amount",
+                "invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level",
+                "issuer", "remark"
+            ]
         elif module == "purchase-invoice":
-            # 严格按取得发票表头26列顺序分组 + 认证信息
-            field_groups = {
-                "① 发票基本信息": ["invoice_code", "invoice_no", "digital_invoice_no"],
-                "② 销方信息": ["seller_tax_no", "seller_name"],
-                "③ 购方信息": ["buyer_tax_no", "buyer_name"],
-                "④ 开票日期与分类": ["invoice_date", "tax_category_code", "specific_business_type"],
-                "⑤ 货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
-                "⑥ 金额信息": ["amount", "tax_rate", "tax_amount", "total_amount"],
-                "⑦ 发票属性": ["invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level"],
-                "⑧ 认证信息": ["certification_status", "certification_date", "deduction_period"],
-                "⑨ 其他": ["issuer", "remark"]
-            }
+            # 取得发票26列 + 认证3项
+            field_order = [
+                "invoice_code", "invoice_no", "digital_invoice_no",
+                "seller_tax_no", "seller_name",
+                "buyer_tax_no", "buyer_name",
+                "invoice_date", "tax_category_code", "specific_business_type",
+                "goods_name", "spec", "unit", "quantity", "unit_price",
+                "amount", "tax_rate", "tax_amount", "total_amount",
+                "invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level",
+                "issuer", "remark",
+                "certification_status", "certification_date", "deduction_period"
+            ]
         elif module == "bank-transaction":
             field_groups = {
                 "核心字段": ["transaction_date", "amount", "balance", "summary", "transaction_type"],
@@ -3105,7 +3106,8 @@ async def analyze_file_headers(
             "preview_rows": preview_rows,
             "total_rows": total_rows,
             "module": module,
-            "field_groups": field_groups
+            "field_groups": field_groups,
+            "field_order": field_order
         }
     except Exception as e:
         return {"error": f"文件分析失败：{str(e)}"}
