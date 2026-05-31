@@ -2422,6 +2422,21 @@ function closeModal() {
   document.getElementById('modal-overlay')?.remove();
 }
 
+function createModal(title, body) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal modal-lg" style="padding:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--gray-200);">
+      <h3 style="margin:0;font-size:16px;">${title}</h3>
+      <button onclick="closeModal()" style="position:static;background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray-500);">&times;</button>
+    </div>
+    <div style="padding:16px 20px;">${body}</div>
+  </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  return overlay;
+}
+
 function showPeriodSelector() {
   // 简单点击切换期间
   const newPeriod = prompt('输入要切换的会计期间 (格式 YYYY-MM):', currentPeriod);
