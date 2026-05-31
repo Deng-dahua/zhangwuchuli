@@ -3838,9 +3838,6 @@ async function renderSalesInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
-    html += '</div>';
-    html += '<div class="toolbar-left" style="flex:1 1 100%;justify-content:flex-start;">';
-    html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增开具发票</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()" style="display:none">🗑 批量删除</button>';
     html += '<div class="tab-btn-group">';
@@ -3852,7 +3849,7 @@ async function renderSalesInvoices() {
 
     // 过滤
     let items = inv;
-    if (siTab !== 'all') items = items.filter(i => i.status === siTab);
+    if (siTab !== 'all') items = items.filter(i => i.status && i.status.includes(siTab));
     // 日期筛选：统一转成 YYYY-MM-DD 字符串比较
     if (siFilter.dateFrom) {
       const dFrom = siFilter.dateFrom.length === 10 && siFilter.dateFrom.includes('/') ? siFilter.dateFrom.replace(/\//g, '-') : siFilter.dateFrom;
