@@ -1013,6 +1013,11 @@ def get_session(sid: str):
 def intent_from_text(msg: str) -> str:
     """从消息中识别意图"""
     msg_lower = msg.strip().lower()
+
+    # 文件上传 — 最高优先级，先于所有其他意图
+    if msg_lower.startswith("[上传文件]"):
+        return "file_upload"
+
     # 凭证类
     if re.search(r"录[入记]凭证|做[一笔]?[账分]?[录项]|记账|填制凭证|nova.*voucher", msg_lower):
         return "create_voucher"
@@ -1291,6 +1296,14 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)):
             "action": None
         }
 
+    # ────────────── 文件上传 ──────────────
+    if intent == "file_upload":
+        return handle_file_upload(sess, message, db, sid)
+
+    # ────────────── 文件确认后续 ──────────────
+    if intent == "file_confirm":
+        return handle_file_confirm(sess, message, db, sid)
+
     # 未识别意图 → 尝试从文本中提取操作
     sess["intent"] = None
     return {
@@ -1301,6 +1314,330 @@ def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)):
                  "• **查看利润表 / 资产负债表**\n"
                  "• **帮助** — 查看我能做什么\n\n"
                  "或者直接描述你的需求，我会尽量理解 😊",
+        "session_id": sid,
+        "action": None
+    }
+
+
+# ──── 文件上传智能分析 ────
+
+# 已知数据模式的列名关键词
+DATA_PATTERNS = {
+    "voucher": {
+        "name": "记账凭证",
+        "keywords": ["日期", "摘要", "科目", "借方", "贷方", "金额", "凭证", "voucher", "date", "account", "debit", "credit"],
+        "min_match": 3,
+        "action_hint": "我可以帮你**逐笔录入凭证**，你只需要确认每一笔即可。"
+    },
+    "customer": {
+        "name": "客户档案",
+        "keywords": ["客户", "名称", "联系人", "电话", "手机", "地址", "税号", "customer", "phone", "contact", "address"],
+        "min_match": 2,
+        "action_hint": "我可以帮你**批量导入客户档案**，请确认以下信息无误。"
+    },
+    "supplier": {
+        "name": "供应商档案",
+        "keywords": ["供应商", "厂家", "供货", "supplier", "采购"],
+        "min_match": 2,
+        "action_hint": "我可以帮你**批量导入供应商档案**，请确认以下信息无误。"
+    },
+    "employee": {
+        "name": "员工花名册",
+        "keywords": ["员工", "人员", "职员", "部门", "职位", "入职", "身份证", "employee", "department", "position"],
+        "min_match": 2,
+        "action_hint": "我可以帮你**批量导入员工信息**，请确认以下信息无误。"
+    },
+    "account": {
+        "name": "会计科目",
+        "keywords": ["科目编码", "科目名称", "科目类别", "余额方向", "account_code", "account_name"],
+        "min_match": 2,
+        "action_hint": "我可以帮你**批量导入会计科目**，请确认后处理。"
+    },
+}
+
+
+def analyze_file_columns(headers: List[str]) -> dict:
+    """分析文件列名，猜测数据类型"""
+    headers_lower = [h.strip().lower() for h in headers]
+    best_type = None
+    best_score = 0
+
+    for ptype, pattern in DATA_PATTERNS.items():
+        score = 0
+        for kw in pattern["keywords"]:
+            for h in headers_lower:
+                if kw in h:
+                    score += 1
+                    break
+        if score >= pattern["min_match"] and score > best_score:
+            best_score = score
+            best_type = ptype
+
+    return {
+        "detected_type": best_type,
+        "confidence": best_score,
+        "pattern": DATA_PATTERNS.get(best_type) if best_type else None
+    }
+
+
+def handle_file_upload(sess, message: str, db, sid: str):
+    """处理文件上传：分析内容 → 提问确认 → 等待用户指令"""
+    # 解析消息格式: "[上传文件] filename\n\n文件内容如下，请帮我处理：\n\n[格式] filename\n..."
+    lines = message.split("\n")
+    file_name = ""
+    content_start = 0
+
+    # 提取文件名
+    m = re.match(r"\[上传文件\]\s*(.+)", lines[0])
+    if m:
+        file_name = m.group(1).strip()
+
+    # 找到内容起始位置（跳过 "文件内容如下，请帮我处理："）
+    for i, line in enumerate(lines):
+        if line.strip().startswith("[Excel]") or line.strip().startswith("[CSV]") or \
+           line.strip().startswith("[PDF]") or line.strip().startswith("[文本]") or \
+           line.strip().startswith("[图片]"):
+            content_start = i
+            break
+
+    # 提取格式标签
+    format_label = ""
+    if content_start < len(lines):
+        format_label = lines[content_start].strip()
+        # 从格式标签提取纯文本 "文件名"
+        fm = re.match(r"\[(\w+)\]\s*(.+)", format_label)
+        if fm and not file_name:
+            file_name = fm.group(2).strip()
+
+    # 提取列名（第二行，即第一个 | 分隔的行）
+    headers = []
+    data_rows = 0
+    for line in lines[content_start:]:
+        stripped = line.strip()
+        if " | " in stripped and not stripped.startswith("---"):
+            parts = [p.strip() for p in stripped.split(" | ")]
+            if not headers:
+                headers = parts
+            else:
+                data_rows += 1
+        # 检测 "共 X 行数据"
+        rm = re.search(r"共\s*(\d+)\s*行", stripped)
+        if rm:
+            data_rows = max(data_rows, int(rm.group(1)))
+
+    # ──── 无法解析列 → 直接提问 ────
+    if not headers:
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {
+            "reply": f"📎 已收到文件 **{file_name}**。\n\n"
+                     f"我暂时无法自动识别这个文件的列结构。\n\n"
+                     f"🤔 **请告诉我：**\n"
+                     f"• 这个文件包含什么数据？（凭证 / 客户 / 供应商 / 员工 / 科目 / 其他）\n"
+                     f"• 你希望我怎么处理？（录入系统 / 仅查看 / 导入到对应模块）\n\n"
+                     f"也可以点击左侧菜单进入对应页面手动操作。",
+            "session_id": sid,
+            "action": None
+        }
+
+    # ──── 分析列名 ────
+    analysis = analyze_file_columns(headers)
+    detected = analysis["detected_type"]
+    confidence = analysis["confidence"]
+    pattern = analysis["pattern"]
+
+    # 构建列名展示
+    cols_display = "、".join(headers[:8])
+    if len(headers) > 8:
+        cols_display += f" ... 共 {len(headers)} 列"
+
+    # ──── 不确定的情况 ────
+    if not detected or confidence < 2:
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {
+            "reply": f"📎 已收到文件 **{file_name}**（约 {data_rows} 行数据）\n\n"
+                     f"📋 识别到的列：{cols_display}\n\n"
+                     f"⚠️ 我无法确定这是什么类型的数据。\n\n"
+                     f"🤔 **请确认：**\n"
+                     f"1️⃣ 这是**凭证数据**？→ 回复「凭证」\n"
+                     f"2️⃣ 这是**客户名单**？→ 回复「客户」\n"
+                     f"3️⃣ 这是**供应商名单**？→ 回复「供应商」\n"
+                     f"4️⃣ 这是**员工信息**？→ 回复「员工」\n"
+                     f"5️⃣ 这是**会计科目**？→ 回复「科目」\n"
+                     f"6️⃣ 只是给你看看，不做处理？→ 回复「不用」\n\n"
+                     f"💡 也可以直接描述，例如：「把这些客户信息录入系统」",
+            "session_id": sid,
+            "action": None
+        }
+
+    # ──── 已识别，但需要确认 ────
+    sess["intent"] = "file_confirm"
+    sess["step"] = 0
+    sess["data"] = {
+        "file_name": file_name,
+        "detected_type": detected,
+        "headers": headers,
+        "data_rows": data_rows,
+        "raw_content": message
+    }
+
+    # 预览前几行数据
+    preview_lines = []
+    preview_count = 0
+    for line in lines[content_start:]:
+        stripped = line.strip()
+        if " | " in stripped and not stripped.startswith("---") and not stripped.startswith("[") and preview_count < 3:
+            # 跳过表头行（已提取为 headers）
+            parts = [p.strip() for p in stripped.split(" | ")]
+            if parts != headers:
+                preview_lines.append(" | ".join(parts))
+                preview_count += 1
+
+    preview_text = ""
+    if preview_lines:
+        preview_text = "\n\n📋 **数据预览（前3行）：**\n" + "\n".join(f"  `{p}`" for p in preview_lines)
+
+    return {
+        "reply": f"📎 已收到文件 **{file_name}**（约 {data_rows} 行数据）\n\n"
+                 f"🔍 我识别到这可能是一份 **{pattern['name']}** 数据。\n"
+                 f"📋 包含列：{cols_display}"
+                 f"{preview_text}\n\n"
+                 f"⚠️ **请确认：**\n"
+                 f"• 回复「**是**」或「**确认**」→ {pattern['action_hint']}\n"
+                 f"• 回复「**不是**」→ 告诉我这是什么数据\n"
+                 f"• 回复「**不用**」→ 仅查看，不做处理\n"
+                 f"• 回复「**取消**」→ 放弃本次上传",
+        "session_id": sid,
+        "action": None
+    }
+
+
+def handle_file_confirm(sess, message: str, db, sid: str):
+    """处理文件确认后的用户回应"""
+    msg = message.strip()
+    msg_lower = msg.lower()
+    data = sess.get("data", {})
+    detected_type = data.get("detected_type", "")
+    file_name = data.get("file_name", "未知文件")
+
+    # 用户确认 → 跳转到对应的录入流程
+    if re.search(r"^(是|对|确认|好|可以|行|ok|yes|没错|是的|对的)$", msg_lower):
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        if detected_type == "voucher":
+            return {
+                "reply": f"✅ 好的！我将根据 **{file_name}** 的数据逐笔录入凭证。\n\n"
+                         f"📝 请回复「**录入凭证**」开始，我会引导你一步步操作。\n\n"
+                         f"💡 提示：你可以把文件中每一行的数据逐条告诉我，我来填。",
+                "session_id": sid,
+                "action": None
+            }
+        elif detected_type == "customer":
+            return {
+                "reply": f"✅ 好的！我将把 **{file_name}** 中的客户信息录入系统。\n\n"
+                         f"请回复「**新增客户**」开始逐条录入。\n\n"
+                         f"💡 提示：也可以告诉我「批量导入所有客户」，我会遍历每一行。",
+                "session_id": sid,
+                "action": None
+            }
+        elif detected_type == "supplier":
+            return {
+                "reply": f"✅ 好的！我将把 **{file_name}** 中的供应商信息录入系统。\n\n"
+                         f"请回复「**新增供应商**」开始逐条录入。\n\n"
+                         f"💡 提示：也可以告诉我「批量导入所有供应商」，我会遍历每一行。",
+                "session_id": sid,
+                "action": None
+            }
+        elif detected_type == "employee":
+            return {
+                "reply": f"✅ 好的！我将把 **{file_name}** 中的员工信息录入系统。\n\n"
+                         f"请回复「**新增员工**」开始逐条录入。\n\n"
+                         f"💡 提示：也可以告诉我「批量导入所有员工」，我会遍历每一行。",
+                "session_id": sid,
+                "action": None
+            }
+        else:
+            return {
+                "reply": f"✅ 好的！请告诉我具体要怎么处理 **{file_name}** 的数据？",
+                "session_id": sid,
+                "action": None
+            }
+
+    # 用户否认 → 重新提问
+    if re.search(r"^(不是|不对|错了|不对的|no|不对哦)$", msg_lower):
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {
+            "reply": f"🤔 抱歉识别错了！\n\n"
+                     f"请告诉我 **{file_name}** 里是什么数据：\n"
+                     f"• 回复「**凭证**」→ 记账凭证\n"
+                     f"• 回复「**客户**」→ 客户档案\n"
+                     f"• 回复「**供应商**」→ 供应商档案\n"
+                     f"• 回复「**员工**」→ 员工信息\n"
+                     f"• 回复「**科目**」→ 会计科目\n"
+                     f"• 或直接描述你要做什么",
+            "session_id": sid,
+            "action": None
+        }
+
+    # 用户说不用
+    if re.search(r"^(不用|算了|不需要|看看就行|仅查看|只是看看)$", msg_lower):
+        sess["intent"] = None
+        sess["step"] = 0
+        sess["data"] = {}
+        return {
+            "reply": f"👌 好的，**{file_name}** 的数据仅供查看，不做录入处理。\n\n"
+                     f"如果后续需要处理，随时告诉我！\n\n"
+                     f"💡 你可以继续上传其他文件，或告诉我其他需求。",
+            "session_id": sid,
+            "action": None
+        }
+
+    # 用户说了其他内容 → 尝试理解
+    sess["intent"] = None
+    sess["step"] = 0
+    sess["data"] = {}
+
+    # 尝试从回复中识别数据类型
+    type_hint = None
+    if re.search(r"凭证|voucher|记账", msg_lower):
+        type_hint = "voucher"
+    elif re.search(r"客户|customer", msg_lower):
+        type_hint = "customer"
+    elif re.search(r"供应商|supplier", msg_lower):
+        type_hint = "supplier"
+    elif re.search(r"员工|人员|职员|employee", msg_lower):
+        type_hint = "employee"
+    elif re.search(r"科目|account", msg_lower):
+        type_hint = "account"
+
+    if type_hint:
+        pattern = DATA_PATTERNS.get(type_hint, {})
+        sess["intent"] = "file_confirm"
+        sess["step"] = 0
+        sess["data"] = {**data, "detected_type": type_hint}
+        return {
+            "reply": f"🔍 收到，你指定为 **{pattern.get('name', type_hint)}** 数据。\n\n"
+                     f"⚠️ **再次确认：**\n"
+                     f"• 回复「**是**」→ {pattern.get('action_hint', '开始处理')}\n"
+                     f"• 回复「**不是**」→ 重新指定",
+            "session_id": sid,
+            "action": None
+        }
+
+    return {
+        "reply": f"🤔 收到你的回复：「{msg}」\n\n"
+                 f"关于 **{file_name}** 的数据处理，请明确告诉我：\n"
+                 f"• 回复「**是**」→ 确认按识别类型处理\n"
+                 f"• 回复「**不是**」→ 重新指定数据类型\n"
+                 f"• 回复「**不用**」→ 仅查看\n"
+                 f"• 回复「**取消**」→ 放弃\n\n"
+                 f"💡 也可以直接说数据类型如「凭证」「客户」等。",
         "session_id": sid,
         "action": None
     }
