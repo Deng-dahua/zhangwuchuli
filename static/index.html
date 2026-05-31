@@ -5242,7 +5242,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'balance': ['余额', 'bal'],
           'summary': ['摘要', '用途', '说明'],
           'reference_no': ['流水号', '参考号', 'ref'],
-          'invoice_no': ['发票号码', 'inv_no', '数电发票号码', '全电发票号码'],
+          'invoice_no': ['发票号码', 'inv_no'],
           'invoice_code': ['发票代码', 'inv_code'],
           'invoice_date': ['开票日期', 'inv_date', '发票日期'],
           'digital_invoice_no': ['数电', '全电'],
@@ -5252,7 +5252,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'buyer_name': ['购买方', '购方名称', 'buyer_name'],
           'tax_category_code': ['税收分类', '分类编码', 'tax_category'],
           'specific_business_type': ['特定业务', '业务类型', 'specific'],
-          'goods_name': ['货物', 'goods', '名称'],
+          'goods_name': ['货物或应税劳务', '货物', 'goods_name', 'goods'],
           'spec': ['规格', 'spec'],
           'unit': ['单位', 'unit'],
           'quantity': ['数量', 'qty', 'quantity'],
@@ -5278,22 +5278,6 @@ function buildMappingUI(result, module, file, bankConfigId) {
           break;
         }
       }
-  }
-
-  // 智能检测：发票号码列全空时，自动改用数电发票号码列
-  if (autoGuess['invoice_no'] && result.preview_rows && result.preview_rows.length > 0) {
-    const invNoCol = autoGuess['invoice_no'];
-    const allEmpty = result.preview_rows.every(row => {
-      const val = String(row[invNoCol] || '').trim();
-      return val === '';
-    });
-    if (allEmpty && autoGuess['digital_invoice_no']) {
-      const digCol = autoGuess['digital_invoice_no'];
-      const digHasVal = result.preview_rows.some(row => String(row[digCol] || '').trim() !== '');
-      if (digHasVal) {
-        autoGuess['invoice_no'] = digCol;
-      }
-    }
   }
 
   mappingHtml += `
