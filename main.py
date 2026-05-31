@@ -3135,7 +3135,7 @@ async def analyze_file_headers(
 
 
 @app.post("/api/file/import-with-mapping")
-async def import_file_with_mapping(
+async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
     file: UploadFile = File(...),
     module: str = Form("bank-transaction"),
     bank_config_id: Optional[int] = Form(None),
