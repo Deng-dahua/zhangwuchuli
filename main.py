@@ -3273,20 +3273,21 @@ async def import_file_with_mapping(
                         continue
 
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
-                    def safe_float(val, default=0.0):
+                    # nullable=True 时源文件为空则返回 None，保留空白不填 0
+                    def safe_float(val, default=0.0, nullable=False):
                         if val is None or str(val).strip() == "":
-                            return default
+                            return None if nullable else default
                         s = str(val).strip().replace(",", "").replace("%", "").replace("￥", "").replace("¥", "").replace("元", "").replace(" ", "")
                         try:
                             return float(s)
                         except:
-                            return default
+                            return None if nullable else default
 
                     amt = safe_float(mapped.get("amount"))
                     tax_amt = safe_float(mapped.get("tax_amount"))
                     total = safe_float(mapped.get("total_amount"))
-                    qty = safe_float(mapped.get("quantity"), 0)
-                    uprice = safe_float(mapped.get("unit_price"), 0)
+                    qty = safe_float(mapped.get("quantity"), 0, nullable=True)
+                    uprice = safe_float(mapped.get("unit_price"), 0, nullable=True)
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
