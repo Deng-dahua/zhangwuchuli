@@ -3296,7 +3296,12 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
 
                     amt = safe_float(mapped.get("amount"))
                     tax_amt = safe_float(mapped.get("tax_amount"))
-                    total = safe_float(mapped.get("total_amount"))
+                    total = safe_float(mapped.get("total_amount"), nullable=True)
+                    # 价税合计为空时，自动用 金额+税额 计算
+                    if total is None and amt is not None and tax_amt is not None:
+                        total = round(amt + tax_amt, 2)
+                    elif total is None:
+                        total = 0.0
                     qty = safe_float(mapped.get("quantity"), 0, nullable=True)
                     uprice = safe_float(mapped.get("unit_price"), 0, nullable=True)
                     tr = safe_float(mapped.get("tax_rate"))
