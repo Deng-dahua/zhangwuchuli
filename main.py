@@ -280,7 +280,7 @@ def list_employees(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Employee).filter(Employee.company_id == company_id).filter(Employee.company_id == company_id)
+    q = db.query(Employee).filter(Employee.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Employee.code.contains(keyword),
@@ -350,7 +350,7 @@ def list_customers(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Customer).filter(Customer.company_id == company_id).filter(Customer.company_id == company_id)
+    q = db.query(Customer).filter(Customer.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Customer.code.contains(keyword),
@@ -421,7 +421,7 @@ def list_suppliers(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Supplier).filter(Supplier.company_id == company_id).filter(Supplier.company_id == company_id)
+    q = db.query(Supplier).filter(Supplier.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Supplier.code.contains(keyword),
@@ -492,7 +492,7 @@ def list_accounts(
     level: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Account).filter(Account.company_id == company_id).filter(Account.company_id == company_id)
+    q = db.query(Account).filter(Account.company_id == company_id)
     if category:
         q = q.filter(Account.category == category)
     if keyword:
@@ -732,9 +732,9 @@ def general_ledger(
     ).join(Account, VoucherDetail.account_code == Account.code) \
      .join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
      .filter(
         Voucher.period >= period_from,
         Voucher.period <= period_to
@@ -820,9 +820,9 @@ def profit_loss_report(period_from: str, period_to: str, company_id: int = Query
                 func.sum(VoucherDetail.credit_amount).label("c")
             ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
              .join(Account, VoucherDetail.account_code == Account.code) \
              .filter(
                 VoucherDetail.account_code.startswith(code),
@@ -841,9 +841,9 @@ def profit_loss_report(period_from: str, period_to: str, company_id: int = Query
                 func.sum(VoucherDetail.credit_amount).label("c")
             ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
              .filter(
                 VoucherDetail.account_code.startswith(code),
                 Voucher.period >= period_from,
@@ -900,9 +900,9 @@ def balance_sheet(period: str, company_id: int = Query(1), db: Session = Depends
             func.sum(VoucherDetail.credit_amount).label("c")
         ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(
             VoucherDetail.account_code.startswith(code_prefix),
             Voucher.period <= period
@@ -989,9 +989,9 @@ def account_balance(period: str, company_id: int = Query(1), db: Session = Depen
             func.sum(VoucherDetail.credit_amount).label("c")
         ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(
             VoucherDetail.account_code.startswith(acc_code),
             Voucher.period <= up_to_period,
@@ -1012,9 +1012,9 @@ def account_balance(period: str, company_id: int = Query(1), db: Session = Depen
             func.sum(VoucherDetail.credit_amount).label("c")
         ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(Voucher.company_id == company_id) \
-     .filter(Voucher.company_id == company_id) \\
+     .filter(Voucher.company_id == company_id) \
          .filter(
             VoucherDetail.account_code.startswith(acc_code),
             Voucher.period == period_str,
