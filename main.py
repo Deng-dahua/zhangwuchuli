@@ -3264,12 +3264,22 @@ async def import_file_with_mapping(
                         errors.append(f"第{i+2}行: 缺少发票号码")
                         continue
 
-                    amt = float(mapped.get("amount", "0").replace(",", "")) if mapped.get("amount") else 0.0
-                    tax_amt = float(mapped.get("tax_amount", "0").replace(",", "")) if mapped.get("tax_amount") else 0.0
-                    total = float(mapped.get("total_amount", "0").replace(",", "")) if mapped.get("total_amount") else 0.0
-                    qty = float(mapped.get("quantity", "0").replace(",", "")) if mapped.get("quantity") else 0
-                    uprice = float(mapped.get("unit_price", "0").replace(",", "")) if mapped.get("unit_price") else 0
-                    tr = float(mapped.get("tax_rate", "0").replace(",", "")) if mapped.get("tax_rate") else 0.0
+                    # 安全转浮点数——兼容千分位/百分号/空值/文本
+                    def safe_float(val, default=0.0):
+                        if val is None or str(val).strip() == "":
+                            return default
+                        s = str(val).strip().replace(",", "").replace("%", "").replace("￥", "").replace("¥", "").replace("元", "").replace(" ", "")
+                        try:
+                            return float(s)
+                        except:
+                            return default
+
+                    amt = safe_float(mapped.get("amount"))
+                    tax_amt = safe_float(mapped.get("tax_amount"))
+                    total = safe_float(mapped.get("total_amount"))
+                    qty = safe_float(mapped.get("quantity"), 0)
+                    uprice = safe_float(mapped.get("unit_price"), 0)
+                    tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
                         existing = db.query(SalesInvoice).filter(
