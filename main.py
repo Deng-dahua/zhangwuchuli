@@ -115,10 +115,16 @@ class CustomerCreate(BaseModel):
 class CustomerUpdate(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
+    tax_no: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     credit_limit: Optional[float] = None
+    payment_terms: Optional[int] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
     is_active: Optional[bool] = None
+    remark: Optional[str] = None
 
 # 供应商
 class SupplierCreate(BaseModel):
@@ -138,10 +144,16 @@ class SupplierCreate(BaseModel):
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
+    tax_no: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     credit_limit: Optional[float] = None
+    payment_terms: Optional[int] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
     is_active: Optional[bool] = None
+    remark: Optional[str] = None
 
 # 凭证（原有）
 class VoucherDetailIn(BaseModel):
@@ -413,8 +425,10 @@ def list_employees(
             "id": e.id, "code": e.code, "name": e.name,
             "department_code": e.department_code,
             "department_name": e.department.name if e.department else "",
-            "position": e.position, "phone": e.phone,
-            "email": e.email, "salary": e.salary,
+            "position": e.position,
+            "id_card": e.id_card or "",
+            "phone": e.phone,
+            "email": e.email or "", "salary": e.salary or 0,
             "entry_date": str(e.entry_date) if e.entry_date else "",
             "is_active": e.is_active
         } for e in emps

@@ -1895,21 +1895,22 @@ async function renderEmployees() {
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>职位</th><th>电话</th><th>入职日期</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>职位</th><th>身份证号</th><th>电话</th><th>入职日期</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
-                const dept = depts.find(d => d.id === e.department_id);
+              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
+                const dept = depts.find(d => d.code === e.department_code);
                 return `
                 <tr>
                   <td>${e.code}</td>
                   <td>${e.name}</td>
                   <td>${dept?.name || '-'}</td>
                   <td>${e.position || '-'}</td>
+                  <td>${e.id_card || '-'}</td>
                   <td>${e.phone || '-'}</td>
-                  <td>${e.hire_date || '-'}</td>
+                  <td>${e.entry_date || '-'}</td>
                   <td><span class="badge ${e.is_active ? 'badge-audited' : 'badge-draft'}">${e.is_active ? '在职' : '离职'}</span></td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}',${e.department_id},'${esc(e.position||'')}','${esc(e.phone||'')}','${e.hire_date||''}',${e.is_active})">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.department_code||'')}','${esc(e.position||'')}','${esc(e.id_card||'')}','${esc(e.phone||'')}','${esc(e.email||'')}',${e.salary||0},'${e.entry_date||''}',${e.is_active})">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteEmp(${e.id})">删除</button>
                   </td>
                 </tr>
@@ -1924,17 +1925,20 @@ async function renderEmployees() {
   }
 }
 
-function showEmpForm(id, code, name, deptId, position, phone, hireDate, isActive) {
+function showEmpForm(id, code, name, deptCode, position, idCard, phone, email, salary, entryDate, isActive) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}人员</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-field"><label>工号 <span style="color:red">*</span></label><input id="emp-code" value="${code||''}"></div>
       <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
+      <div class="form-field"><label>身份证号</label><input id="emp-idcard" value="${idCard||''}" placeholder="18位身份证号"></div>
       <div class="form-field"><label>部门</label><select id="emp-dept"><option value="">--选择部门--</option></select></div>
       <div class="form-field"><label>职位</label><input id="emp-position" value="${position||''}"></div>
       <div class="form-field"><label>电话</label><input id="emp-phone" value="${phone||''}"></div>
-      <div class="form-field"><label>入职日期</label><input id="emp-hire-date" type="date" value="${hireDate||''}"></div>
+      <div class="form-field"><label>邮箱</label><input id="emp-email" value="${email||''}" placeholder="email@example.com"></div>
+      <div class="form-field"><label>基本工资</label><input id="emp-salary" type="number" step="0.01" value="${salary||0}"></div>
+      <div class="form-field"><label>入职日期</label><input id="emp-entry-date" type="date" value="${entryDate||''}"></div>
       ${isEdit ? `<div class="form-field"><label>状态</label><select id="emp-active"><option value="1" ${isActive?'selected':''}>在职</option><option value="0" ${!isActive?'selected':''}>离职</option></select></div>` : ''}
     </div>
     <div style="margin-top:12px">
@@ -1943,19 +1947,19 @@ function showEmpForm(id, code, name, deptId, position, phone, hireDate, isActive
     </div>
   `);
   // 加载部门下拉
-  loadDeptSelect('emp-dept', deptId);
+  loadDeptSelect('emp-dept', deptCode);
 }
 
-async function loadDeptSelect(selectId, selectedId) {
+async function loadDeptSelect(selectId, selectedCode) {
   try {
     const depts = await api('/api/departments');
     const sel = document.getElementById(selectId);
     if (sel) {
       depts.forEach(d => {
         const opt = document.createElement('option');
-        opt.value = d.id;
+        opt.value = d.code;
         opt.textContent = d.name;
-        if (d.id === selectedId) opt.selected = true;
+        if (d.code === selectedCode) opt.selected = true;
         sel.appendChild(opt);
       });
     }
@@ -1966,10 +1970,13 @@ async function saveEmp(id) {
   const body = {
     code: document.getElementById('emp-code').value.trim(),
     name: document.getElementById('emp-name').value.trim(),
-    department_id: parseInt(document.getElementById('emp-dept').value) || null,
+    id_card: document.getElementById('emp-idcard')?.value.trim() || null,
+    department_code: document.getElementById('emp-dept').value || null,
     position: document.getElementById('emp-position').value.trim(),
     phone: document.getElementById('emp-phone').value.trim(),
-    hire_date: document.getElementById('emp-hire-date').value || null
+    email: document.getElementById('emp-email')?.value.trim() || null,
+    salary: parseFloat(document.getElementById('emp-salary')?.value) || 0,
+    entry_date: document.getElementById('emp-entry-date')?.value || null
   };
   if (id) {
     const activeEl = document.getElementById('emp-active');
@@ -2008,19 +2015,20 @@ async function renderCustomers() {
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>客户名称</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <thead><tr><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
+              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
                 <tr>
                   <td>${c.code}</td>
                   <td>${c.name}</td>
+                  <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
                   <td>${c.contact || '-'}</td>
                   <td>${c.phone || '-'}</td>
                   <td class="num">¥${fmt(c.credit_limit)}</td>
-                  <td>${c.payment_days || 0}</td>
+                  <td>${c.payment_terms || 0}</td>
                   <td>${c.address || '-'}</td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${c.code}','${esc(c.name)}','${esc(c.contact||'')}','${esc(c.phone||'')}',${c.credit_limit||0},${c.payment_days||0},'${esc(c.address||'')}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${c.code}','${esc(c.name)}','${esc(c.uscc||'')}','${esc(c.contact||'')}','${esc(c.phone||'')}',${c.credit_limit||0},${c.payment_terms||0},'${esc(c.address||'')}')">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>
                   </td>
                 </tr>
@@ -2035,17 +2043,18 @@ async function renderCustomers() {
   }
 }
 
-function showCustForm(id, code, name, contact, phone, creditLimit, paymentDays, address) {
+function showCustForm(id, code, name, uscc, contact, phone, creditLimit, paymentTerms, address) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}客户</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="cust-code" value="${code||''}" placeholder="如：KH001"></div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
+      <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
       <div class="form-field"><label>联系人</label><input id="cust-contact" value="${contact||''}"></div>
       <div class="form-field"><label>电话</label><input id="cust-phone" value="${phone||''}"></div>
       <div class="form-field"><label>信用额度</label><input id="cust-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
-      <div class="form-field"><label>账期(天)</label><input id="cust-days" type="number" value="${paymentDays||0}"></div>
+      <div class="form-field"><label>账期(天)</label><input id="cust-days" type="number" value="${paymentTerms||0}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="cust-addr" value="${address||''}"></div>
     </div>
     <div style="margin-top:12px">
@@ -2059,10 +2068,11 @@ async function saveCust(id) {
   const body = {
     code: document.getElementById('cust-code').value.trim(),
     name: document.getElementById('cust-name').value.trim(),
+    uscc: document.getElementById('cust-uscc')?.value.trim() || null,
     contact: document.getElementById('cust-contact').value.trim(),
     phone: document.getElementById('cust-phone').value.trim(),
     credit_limit: parseFloat(document.getElementById('cust-credit').value) || 0,
-    payment_days: parseInt(document.getElementById('cust-days').value) || 0,
+    payment_terms: parseInt(document.getElementById('cust-days').value) || 0,
     address: document.getElementById('cust-addr').value.trim()
   };
   if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
@@ -2098,19 +2108,20 @@ async function renderSuppliers() {
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>供应商名称</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <thead><tr><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
+              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
                 <tr>
                   <td>${s.code}</td>
                   <td>${s.name}</td>
+                  <td style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
                   <td>${s.contact || '-'}</td>
                   <td>${s.phone || '-'}</td>
                   <td class="num">¥${fmt(s.credit_limit)}</td>
-                  <td>${s.payment_days || 0}</td>
+                  <td>${s.payment_terms || 0}</td>
                   <td>${s.address || '-'}</td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.contact||'')}','${esc(s.phone||'')}',${s.credit_limit||0},${s.payment_days||0},'${esc(s.address||'')}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}','${esc(s.contact||'')}','${esc(s.phone||'')}',${s.credit_limit||0},${s.payment_terms||0},'${esc(s.address||'')}')">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteSupp(${s.id})">删除</button>
                   </td>
                 </tr>
@@ -2125,17 +2136,18 @@ async function renderSuppliers() {
   }
 }
 
-function showSuppForm(id, code, name, contact, phone, creditLimit, paymentDays, address) {
+function showSuppForm(id, code, name, uscc, contact, phone, creditLimit, paymentTerms, address) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}供应商</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="supp-code" value="${code||''}" placeholder="如：GYS001"></div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
+      <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
       <div class="form-field"><label>联系人</label><input id="supp-contact" value="${contact||''}"></div>
       <div class="form-field"><label>电话</label><input id="supp-phone" value="${phone||''}"></div>
       <div class="form-field"><label>信用额度</label><input id="supp-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
-      <div class="form-field"><label>账期(天)</label><input id="supp-days" type="number" value="${paymentDays||0}"></div>
+      <div class="form-field"><label>账期(天)</label><input id="supp-days" type="number" value="${paymentTerms||0}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="supp-addr" value="${address||''}"></div>
     </div>
     <div style="margin-top:12px">
@@ -2149,10 +2161,11 @@ async function saveSupp(id) {
   const body = {
     code: document.getElementById('supp-code').value.trim(),
     name: document.getElementById('supp-name').value.trim(),
+    uscc: document.getElementById('supp-uscc')?.value.trim() || null,
     contact: document.getElementById('supp-contact').value.trim(),
     phone: document.getElementById('supp-phone').value.trim(),
     credit_limit: parseFloat(document.getElementById('supp-credit').value) || 0,
-    payment_days: parseInt(document.getElementById('supp-days').value) || 0,
+    payment_terms: parseInt(document.getElementById('supp-days').value) || 0,
     address: document.getElementById('supp-addr').value.trim()
   };
   if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
@@ -3386,6 +3399,19 @@ function injectPaymentStyles() {
 
     .payment-form-section { background:var(--gray-50); border-radius:10px; padding:16px; margin-bottom:16px; border:1px solid var(--gray-200); }
     .payment-form-section-title { font-size:13px; font-weight:700; color:var(--gray-700); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gray-200); display:flex;align-items:center;gap:6px; }
+
+    /* 现代付款表单样式 */
+    .modern-section { background:#fff; border-radius:12px; margin-bottom:20px; border:1px solid #e5e7eb; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    .modern-section-header { display:flex; align-items:center; gap:10px; padding:14px 20px; font-size:15px; font-weight:700; color:#1f2937; background:linear-gradient(135deg,#f9fafb,#f3f4f6); border-left:4px solid var(--primary); border-bottom:1px solid #e5e7eb; }
+    .modern-section-icon { font-size:18px; }
+    .modern-section-body { padding:20px; }
+    .modern-label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
+    .modern-input { width:100%; padding:9px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; color:#1f2937; background:#fff; box-sizing:border-box; transition:border-color .15s,box-shadow .15s; outline:none; font-family:inherit; }
+    .modern-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(29,78,216,.1); }
+    select.modern-input { cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+    .modern-input-amount { font-size:22px; font-weight:700; text-align:right; background:linear-gradient(135deg,#fef9c3,#fef3c7); border-color:#f59e0b; color:#b45309; letter-spacing:1px; }
+    .modern-input-amount:focus { border-color:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.15); }
+    .modern-textarea { resize:vertical; min-height:70px; padding:10px 12px; }
   `;
   document.head.appendChild(style);
 }
@@ -3521,61 +3547,65 @@ async function showPaymentForm(paymentId) {
     scenarioOptions += '<option value="' + sc + '"' + (payment && payment.scenario === sc ? ' selected' : '') + '>' + sc + '</option>';
   }
 
+  const gf = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px';
   let basicSection = '';
   if (isInternal) {
     basicSection =
-      '<div class="payment-form-section">' +
-        '<div class="payment-form-section-title">📋 内部人员信息</div>' +
-        '<div class="form-grid-2" style="gap:12px">' +
-          '<div><label class="form-label">单号 <span style="color:var(--danger)">*</span></label><input class="form-control" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
-          '<div><label class="form-label">日期 <span style="color:var(--danger)">*</span></label><input class="form-control" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
-          '<div><label class="form-label">情形 <span style="color:var(--danger)">*</span></label><select class="form-control" name="scenario">' + scenarioOptions + '</select></div>' +
-          '<div><label class="form-label">人员 <span style="color:var(--danger)">*</span></label><select class="form-control" name="employee_id" onchange="updatePaymentEmployee()">' + empOptions + '</select></div>' +
-          '<div><label class="form-label">所属部门</label><input class="form-control" name="department" value="' + (payment ? payment.department || '' : '') + '"></div>' +
-          '<div><label class="form-label">金额 <span style="color:var(--danger)">*</span></label><input class="form-control" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" style="font-size:16px;font-weight:600"></div>' +
-          '<div><label class="form-label">收款方</label><input class="form-control" name="payee" placeholder="款项转入账户名" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
-          '<div><label class="form-label">收款账号</label><input class="form-control" name="payee_account" placeholder="银行卡号" value="' + (payment ? payment.payee_account || '' : '') + '"></div>' +
-          '<div><label class="form-label">付款方式</label>' +
-            '<select class="form-control" name="payment_method">' +
-              '<option value="银行转账"' + (payment && payment.payment_method === '银行转账' ? ' selected' : '') + '>银行转账</option>' +
-              '<option value="现金"' + (payment && payment.payment_method === '现金' ? ' selected' : '') + '>现金</option>' +
-              '<option value="其他"' + (payment && payment.payment_method === '其他' ? ' selected' : '') + '>其他</option>' +
-            '</select></div>' +
-          '<div style="grid-column:1/-1"><label class="form-label">用途说明</label><input class="form-control" name="purpose" placeholder="如：差旅费报销、办公用品采购..." value="' + (payment ? payment.purpose || '' : '') + '"></div>' +
-          '<div style="grid-column:1/-1"><label class="form-label">备注</label><textarea class="form-control" name="remark" rows="2">' + (payment ? payment.remark || '' : '') + '</textarea></div>' +
+      '<div class="modern-section">' +
+        '<div class="modern-section-header"><span class="modern-section-icon">👤</span>内部人员信息</div>' +
+        '<div class="modern-section-body">' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">单号 <span style="color:#e02424">*</span></label><input class="modern-input" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
+            '<div><label class="modern-label">日期 <span style="color:#e02424">*</span></label><input class="modern-input" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
+            '<div><label class="modern-label">情形 <span style="color:#e02424">*</span></label><select class="modern-input" name="scenario">' + scenarioOptions + '</select></div>' +
+          '</div>' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">人员 <span style="color:#e02424">*</span></label><select class="modern-input" name="employee_id" onchange="updatePaymentEmployee()">' + empOptions + '</select></div>' +
+            '<div><label class="modern-label">所属部门</label><input class="modern-input" name="department" value="' + (payment ? payment.department || '' : '') + '"></div>' +
+            '<div><label class="modern-label">金额 <span style="color:#e02424">*</span></label><input class="modern-input modern-input-amount" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" placeholder="0.00"></div>' +
+          '</div>' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">收款方</label><input class="modern-input" name="payee" placeholder="款项转入账户名" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
+            '<div><label class="modern-label">收款账号</label><input class="modern-input" name="payee_account" placeholder="银行卡号" value="' + (payment ? payment.payee_account || '' : '') + '"></div>' +
+            '<div><label class="modern-label">付款方式</label><select class="modern-input" name="payment_method"><option value="银行转账"' + (payment && payment.payment_method === '银行转账' ? ' selected' : '') + '>银行转账</option><option value="现金"' + (payment && payment.payment_method === '现金' ? ' selected' : '') + '>现金</option><option value="其他"' + (payment && payment.payment_method === '其他' ? ' selected' : '') + '>其他</option></select></div>' +
+          '</div>' +
+          '<div style="margin-bottom:16px"><label class="modern-label">用途说明</label><input class="modern-input" name="purpose" placeholder="如：差旅费报销、办公用品采购..." value="' + (payment ? payment.purpose || '' : '') + '"></div>' +
+          '<div><label class="modern-label">备注</label><textarea class="modern-input modern-textarea" name="remark" rows="2" placeholder="其他需要说明的信息">' + (payment ? payment.remark || '' : '') + '</textarea></div>' +
           '<input type="hidden" name="employee_name" id="payment-employee-name" value="' + (payment ? payment.employee_name || '' : '') + '">' +
         '</div>' +
       '</div>';
   } else {
     basicSection =
-      '<div class="payment-form-section">' +
-        '<div class="payment-form-section-title">📋 付款信息</div>' +
-        '<div class="form-grid-2" style="gap:12px">' +
-          '<div><label class="form-label">付款单号 <span style="color:var(--danger)">*</span></label><input class="form-control" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
-          '<div><label class="form-label">付款日期 <span style="color:var(--danger)">*</span></label><input class="form-control" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
-          '<div><label class="form-label">情形 <span style="color:var(--danger)">*</span></label><select class="form-control" name="scenario">' + scenarioOptions + '</select></div>' +
-          '<div><label class="form-label">供应商</label><select class="form-control" name="supplier_id" onchange="updatePaymentSupplier()">' + suppOptions + '</select></div>' +
-          '<div><label class="form-label">关联合同</label><select class="form-control" name="contract_id" onchange="updatePaymentContract()">' + contractOptions + '</select></div>' +
-          '<div><label class="form-label">付款金额 <span style="color:var(--danger)">*</span></label><input class="form-control" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" style="font-size:16px;font-weight:600"></div>' +
-          '<div><label class="form-label">付款方式</label>' +
-            '<select class="form-control" name="payment_method">' +
-              '<option value="银行转账"' + (payment && payment.payment_method === '银行转账' ? ' selected' : '') + '>银行转账</option>' +
-              '<option value="现金"' + (payment && payment.payment_method === '现金' ? ' selected' : '') + '>现金</option>' +
-              '<option value="支票"' + (payment && payment.payment_method === '支票' ? ' selected' : '') + '>支票</option>' +
-              '<option value="其他"' + (payment && payment.payment_method === '其他' ? ' selected' : '') + '>其他</option>' +
-            '</select></div>' +
+      '<div class="modern-section">' +
+        '<div class="modern-section-header"><span class="modern-section-icon">📋</span>付款信息</div>' +
+        '<div class="modern-section-body">' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">付款单号 <span style="color:#e02424">*</span></label><input class="modern-input" name="payment_no" required value="' + (payment ? payment.payment_no : defaultNo) + '"></div>' +
+            '<div><label class="modern-label">付款日期 <span style="color:#e02424">*</span></label><input class="modern-input" type="date" name="payment_date" required value="' + (payment ? payment.payment_date : new Date().toISOString().slice(0,10)) + '"></div>' +
+            '<div><label class="modern-label">情形 <span style="color:#e02424">*</span></label><select class="modern-input" name="scenario">' + scenarioOptions + '</select></div>' +
+          '</div>' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">供应商</label><select class="modern-input" name="supplier_id" onchange="updatePaymentSupplier()">' + suppOptions + '</select></div>' +
+            '<div><label class="modern-label">关联合同</label><select class="modern-input" name="contract_id" onchange="updatePaymentContract()">' + contractOptions + '</select></div>' +
+            '<div><label class="modern-label">付款金额 <span style="color:#e02424">*</span></label><input class="modern-input modern-input-amount" type="number" step="0.01" name="amount" required value="' + (payment ? payment.amount : '') + '" placeholder="0.00"></div>' +
+          '</div>' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">付款方式</label><select class="modern-input" name="payment_method"><option value="银行转账"' + (payment && payment.payment_method === '银行转账' ? ' selected' : '') + '>银行转账</option><option value="现金"' + (payment && payment.payment_method === '现金' ? ' selected' : '') + '>现金</option><option value="支票"' + (payment && payment.payment_method === '支票' ? ' selected' : '') + '>支票</option><option value="其他"' + (payment && payment.payment_method === '其他' ? ' selected' : '') + '>其他</option></select></div>' +
+            '<div><label class="modern-label">所属部门</label><input class="modern-input" name="department" value="' + (payment ? payment.department || '' : '') + '"></div>' +
+            '<div></div>' +
+          '</div>' +
+          '<div><label class="modern-label">用途说明</label><input class="modern-input" name="purpose" placeholder="采购款、工程款、服务费..." value="' + (payment ? payment.purpose || '' : '') + '"></div>' +
         '</div>' +
       '</div>' +
-
-      '<div class="payment-form-section">' +
-        '<div class="payment-form-section-title">🏦 收款信息</div>' +
-        '<div class="form-grid-2" style="gap:12px">' +
-          '<div><label class="form-label">收款方</label><input class="form-control" name="payee" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
-          '<div><label class="form-label">收款银行</label><input class="form-control" name="payee_bank" value="' + (payment ? payment.payee_bank || '' : '') + '"></div>' +
-          '<div><label class="form-label">收款账号</label><input class="form-control" name="payee_account" value="' + (payment ? payment.payee_account || '' : '') + '"></div>' +
-          '<div><label class="form-label">所属部门</label><input class="form-control" name="department" value="' + (payment ? payment.department || '' : '') + '"></div>' +
-          '<div style="grid-column:1/-1"><label class="form-label">用途说明</label><input class="form-control" name="purpose" placeholder="采购款、服务费..." value="' + (payment ? payment.purpose || '' : '') + '"></div>' +
-          '<div style="grid-column:1/-1"><label class="form-label">备注</label><textarea class="form-control" name="remark" rows="2">' + (payment ? payment.remark || '' : '') + '</textarea></div>' +
+      '<div class="modern-section">' +
+        '<div class="modern-section-header"><span class="modern-section-icon">🏦</span>收款信息</div>' +
+        '<div class="modern-section-body">' +
+          '<div style="' + gf + '">' +
+            '<div><label class="modern-label">收款方</label><input class="modern-input" name="payee" value="' + (payment ? payment.payee || '' : '') + '"></div>' +
+            '<div><label class="modern-label">收款银行</label><input class="modern-input" name="payee_bank" value="' + (payment ? payment.payee_bank || '' : '') + '"></div>' +
+            '<div><label class="modern-label">收款账号</label><input class="modern-input" name="payee_account" value="' + (payment ? payment.payee_account || '' : '') + '"></div>' +
+          '</div>' +
+          '<div><label class="modern-label">备注</label><textarea class="modern-input modern-textarea" name="remark" rows="2" placeholder="其他需要说明的信息">' + (payment ? payment.remark || '' : '') + '</textarea></div>' +
           '<input type="hidden" name="supplier_name" id="payment-supplier-name" value="' + (payment ? payment.supplier_name || '' : '') + '">' +
           '<input type="hidden" name="contract_no" id="payment-contract-no" value="' + (payment ? payment.contract_no || '' : '') + '">' +
         '</div>' +
