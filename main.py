@@ -1286,7 +1286,7 @@ def list_companies(db: Session = Depends(get_db)):
 @app.post("/api/companies")
 def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
     """创建新公司/账套"""
-    if db.query(Company).filter(Company.name == data.name).first():
+    if db.query(Company).filter(Company.name == data.name, Company.is_active == True).first():
         raise HTTPException(400, detail=f"公司 '{data.name}' 已存在")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
