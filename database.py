@@ -24,6 +24,103 @@ def get_db():
         db.close()
 
 
+# ==================== 公司信息 ====================
+
+class CompanyInfo(Base):
+    __tablename__ = "company_info"
+    id = Column(Integer, primary_key=True)
+    company_name = Column(String(100), nullable=False, comment="公司名称")
+    tax_no = Column(String(50), comment="纳税人识别号")
+    address = Column(String(200), comment="注册地址")
+    phone = Column(String(30), comment="电话")
+    bank_name = Column(String(100), comment="开户银行")
+    bank_account = Column(String(50), comment="银行账号")
+    legal_representative = Column(String(50), comment="法定代表人")
+    registered_capital = Column(String(50), comment="注册资本")
+    established_date = Column(Date, nullable=True, comment="成立日期")
+    business_scope = Column(Text, comment="经营范围")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ==================== 部门档案 ====================
+
+class Department(Base):
+    __tablename__ = "departments"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, nullable=False, comment="部门编码")
+    name = Column(String(50), nullable=False, comment="部门名称")
+    parent_code = Column(String(20), nullable=True, comment="上级部门编码")
+    manager = Column(String(50), comment="部门负责人")
+    description = Column(String(200), comment="部门说明")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    employees = relationship("Employee", back_populates="department")
+
+
+# ==================== 人员档案 ====================
+
+class Employee(Base):
+    __tablename__ = "employees"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, nullable=False, comment="工号")
+    name = Column(String(50), nullable=False, comment="姓名")
+    department_code = Column(String(20), ForeignKey("departments.code"), nullable=True)
+    position = Column(String(50), comment="职位")
+    id_card = Column(String(30), comment="身份证号")
+    phone = Column(String(30), comment="联系电话")
+    email = Column(String(100), comment="邮箱")
+    salary = Column(Float, default=0.0, comment="基本工资")
+    entry_date = Column(Date, comment="入职日期")
+    leave_date = Column(Date, comment="离职日期")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    department = relationship("Department", back_populates="employees")
+
+
+# ==================== 客户档案 ====================
+
+class Customer(Base):
+    __tablename__ = "customers"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, nullable=False, comment="客户编码")
+    name = Column(String(100), nullable=False, comment="客户名称")
+    tax_no = Column(String(50), comment="税号")
+    contact = Column(String(50), comment="联系人")
+    phone = Column(String(30), comment="联系电话")
+    address = Column(String(200), comment="地址")
+    credit_limit = Column(Float, default=0.0, comment="信用额度")
+    payment_terms = Column(Integer, default=30, comment="账期（天）")
+    bank_name = Column(String(100), comment="开户银行")
+    bank_account = Column(String(50), comment="银行账号")
+    is_active = Column(Boolean, default=True)
+    remark = Column(String(200), comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 供应商档案 ====================
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, nullable=False, comment="供应商编码")
+    name = Column(String(100), nullable=False, comment="供应商名称")
+    tax_no = Column(String(50), comment="税号")
+    contact = Column(String(50), comment="联系人")
+    phone = Column(String(30), comment="联系电话")
+    address = Column(String(200), comment="地址")
+    credit_limit = Column(Float, default=0.0, comment="信用额度")
+    payment_terms = Column(Integer, default=30, comment="账期（天）")
+    bank_name = Column(String(100), comment="开户银行")
+    bank_account = Column(String(50), comment="银行账号")
+    is_active = Column(Boolean, default=True)
+    remark = Column(String(200), comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 会计科目（原样保留） ====================
+
 class Account(Base):
     """会计科目"""
     __tablename__ = "accounts"
@@ -40,6 +137,8 @@ class Account(Base):
 
     voucher_details = relationship("VoucherDetail", back_populates="account")
 
+
+# ==================== 记账凭证（原样保留） ====================
 
 class Voucher(Base):
     """记账凭证"""
@@ -72,10 +171,16 @@ class VoucherDetail(Base):
     account_code = Column(String(20), ForeignKey("accounts.code"), nullable=False)
     debit_amount = Column(Float, default=0.0, comment="借方金额")
     credit_amount = Column(Float, default=0.0, comment="贷方金额")
+    # 辅助核算字段
+    department_code = Column(String(20), comment="部门辅助核算")
+    customer_code = Column(String(20), comment="客户辅助核算")
+    supplier_code = Column(String(20), comment="供应商辅助核算")
 
     voucher = relationship("Voucher", back_populates="details")
     account = relationship("Account", back_populates="voucher_details")
 
+
+# ==================== 会计期间（原样保留） ====================
 
 class Period(Base):
     """会计期间"""
@@ -87,8 +192,10 @@ class Period(Base):
     closed_at = Column(DateTime, nullable=True)
 
 
+# ==================== 初始化数据 ====================
+
 def init_db():
-    """初始化数据库，并插入基础科目"""
+    """初始化数据库，并插入基础数据"""
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
@@ -174,6 +281,22 @@ def init_db():
         )
         db.add(acc)
 
+    # 初始化默认部门（典型制造业10个部门）
+    departments_data = [
+        ("BM01", "总经办"),
+        ("BM02", "生产部"),
+        ("BM03", "技术部"),
+        ("BM04", "质检部"),
+        ("BM05", "采购部"),
+        ("BM06", "销售部"),
+        ("BM07", "仓储部"),
+        ("BM08", "财务部"),
+        ("BM09", "行政部"),
+        ("BM10", "人事部"),
+    ]
+    for code, name in departments_data:
+        db.add(Department(code=code, name=name))
+
     # 初始化当前期间
     from datetime import date
     current_period = date.today().strftime("%Y-%m")
@@ -181,4 +304,4 @@ def init_db():
 
     db.commit()
     db.close()
-    print("数据库初始化完成")
+    print("数据库初始化完成（含科目+部门）")

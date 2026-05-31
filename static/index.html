@@ -115,6 +115,16 @@
     }
     .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
     select.form-control { cursor: pointer; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; }
+    .form-field label { font-size: 12px; font-weight: 500; color: var(--gray-700); }
+    .form-field input, .form-field select, .form-field textarea {
+      padding: 8px 12px; border: 1px solid var(--gray-300); border-radius: 7px;
+      font-size: 13px; outline: none; background: #fff; transition: border 0.15s;
+    }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+      border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1);
+    }
+    .form-field select { cursor: pointer; }
 
     /* 搜索栏 */
     .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -204,6 +214,13 @@
     <div class="nav-item" data-page="profit-loss"><span class="icon">📈</span>利润表</div>
     <div class="nav-item" data-page="balance-sheet"><span class="icon">⚖️</span>资产负债表</div>
 
+    <div class="nav-group-title">基础档案</div>
+    <div class="nav-item" data-page="company"><span class="icon">🏢</span>公司信息</div>
+    <div class="nav-item" data-page="departments"><span class="icon">🏬</span>部门档案</div>
+    <div class="nav-item" data-page="employees"><span class="icon">👥</span>人员档案</div>
+    <div class="nav-item" data-page="customers"><span class="icon">🤝</span>客户档案</div>
+    <div class="nav-item" data-page="suppliers"><span class="icon">📦</span>供应商档案</div>
+
     <div class="nav-group-title">基础设置</div>
     <div class="nav-item" data-page="accounts"><span class="icon">🗂️</span>会计科目</div>
     <div class="nav-item" data-page="periods"><span class="icon">📅</span>期间管理</div>
@@ -234,6 +251,11 @@ let voucherPage = 1;
 
 const pages = {
   'dashboard': '数据看板',
+  'company': '公司信息',
+  'departments': '部门档案',
+  'employees': '人员档案',
+  'customers': '客户档案',
+  'suppliers': '供应商档案',
   'vouchers': '记账凭证',
   'voucher-new': '填制凭证',
   'general-ledger': '总账',
@@ -289,6 +311,11 @@ function navigateTo(page) {
     case 'balance-sheet': renderBalanceSheet(); break;
     case 'accounts': renderAccounts(); break;
     case 'periods': renderPeriods(); break;
+    case 'company': renderCompany(); break;
+    case 'departments': renderDepartments(); break;
+    case 'employees': renderEmployees(); break;
+    case 'customers': renderCustomers(); break;
+    case 'suppliers': renderSuppliers(); break;
   }
 }
 
@@ -1063,7 +1090,465 @@ async function closePeriod(period) {
   }
 }
 
-// ==================== 模态框 ====================
+// ==================== 公司信息 ====================
+async function renderCompany() {
+  const el = document.getElementById('content-area');
+  try {
+    const data = await api('/api/company');
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">🏢 公司基本信息</div>
+        <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:800px">
+          <div class="form-field" style="grid-column:1/-1">
+            <label>公司全称 <span style="color:red">*</span></label>
+            <input id="comp-name" value="${esc(data?.company_name||'')}" placeholder="如：XX机械制造有限公司">
+          </div>
+          <div class="form-field">
+            <label>统一社会信用代码</label>
+            <input id="comp-taxno" value="${esc(data?.tax_no||'')}" placeholder="18位统一社会信用代码">
+          </div>
+          <div class="form-field">
+            <label>法定代表人</label>
+            <input id="comp-legal-rep" value="${esc(data?.legal_representative||'')}">
+          </div>
+          <div class="form-field">
+            <label>联系电话</label>
+            <input id="comp-phone" value="${esc(data?.phone||'')}">
+          </div>
+          <div class="form-field">
+            <label>注册资本</label>
+            <input id="comp-capital" value="${esc(data?.registered_capital||'')}" placeholder="如：500万元">
+          </div>
+          <div class="form-field">
+            <label>成立日期</label>
+            <input id="comp-est-date" type="date" value="${data?.established_date||''}">
+          </div>
+          <div class="form-field" style="grid-column:1/-1">
+            <label>注册地址</label>
+            <input id="comp-address" value="${esc(data?.address||'')}">
+          </div>
+          <div class="form-field">
+            <label>开户银行</label>
+            <input id="comp-bank" value="${esc(data?.bank_name||'')}">
+          </div>
+          <div class="form-field">
+            <label>银行账号</label>
+            <input id="comp-bank-account" value="${esc(data?.bank_account||'')}">
+          </div>
+          <div class="form-field" style="grid-column:1/-1">
+            <label>经营范围</label>
+            <textarea id="comp-scope" rows="3" style="width:100%;border:1px solid var(--gray-300);border-radius:6px;padding:8px">${esc(data?.business_scope||'')}</textarea>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn btn-primary" onclick="saveCompany()">💾 保存公司信息</button>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+async function saveCompany() {
+  const body = {
+    company_name: document.getElementById('comp-name').value.trim(),
+    tax_no: document.getElementById('comp-taxno').value.trim(),
+    legal_representative: document.getElementById('comp-legal-rep').value.trim(),
+    phone: document.getElementById('comp-phone').value.trim(),
+    registered_capital: document.getElementById('comp-capital').value.trim(),
+    established_date: document.getElementById('comp-est-date').value || null,
+    address: document.getElementById('comp-address').value.trim(),
+    bank_name: document.getElementById('comp-bank').value.trim(),
+    bank_account: document.getElementById('comp-bank-account').value.trim(),
+    business_scope: document.getElementById('comp-scope').value.trim()
+  };
+  if (!body.company_name) { toast('请填写公司全称', 'error'); return; }
+  try {
+    await api('/api/company', { method: 'PUT', body: JSON.stringify(body) });
+    toast('公司信息保存成功', 'success');
+    renderCompany();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== 部门档案 ====================
+async function renderDepartments() {
+  const el = document.getElementById('content-area');
+  try {
+    const data = await api('/api/departments');
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">🏬 部门档案</div>
+        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>编码</th><th>部门名称</th><th>负责人</th><th>电话</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+              ${data.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
+                <tr>
+                  <td>${d.code}</td>
+                  <td>${d.name}</td>
+                  <td>${d.manager || '-'}</td>
+                  <td>${d.phone || '-'}</td>
+                  <td>${d.created_at?.slice(0,10) || ''}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}','${esc(d.manager||'')}','${esc(d.phone||'')}')">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteDept(${d.id})">删除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function showDeptForm(id, code, name, manager, phone) {
+  const isEdit = !!id;
+  showModal(`
+    <h3>${isEdit ? '编辑' : '新增'}部门</h3>
+    <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="dept-code" value="${code||''}" placeholder="如：SC"></div>
+    <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="dept-name" value="${name||''}" placeholder="如：生产部"></div>
+    <div class="form-field"><label>负责人</label><input id="dept-manager" value="${manager||''}"></div>
+    <div class="form-field"><label>电话</label><input id="dept-phone" value="${phone||''}"></div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="saveDept(${id||0})">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  `);
+}
+
+async function saveDept(id) {
+  const body = {
+    code: document.getElementById('dept-code').value.trim(),
+    name: document.getElementById('dept-name').value.trim(),
+    manager: document.getElementById('dept-manager').value.trim(),
+    phone: document.getElementById('dept-phone').value.trim()
+  };
+  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  try {
+    if (id) {
+      await api(`/api/departments/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/departments', { method: 'POST', body: JSON.stringify(body) });
+    }
+    toast('保存成功', 'success');
+    closeModal();
+    renderDepartments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteDept(id) {
+  if (!confirm('确认删除该部门？')) return;
+  try {
+    await api(`/api/departments/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    renderDepartments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== 人员档案 ====================
+async function renderEmployees() {
+  const el = document.getElementById('content-area');
+  try {
+    const [data, depts] = await Promise.all([api('/api/employees'), api('/api/departments')]);
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">👥 人员档案</div>
+        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>职位</th><th>电话</th><th>入职日期</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
+                const dept = depts.find(d => d.id === e.department_id);
+                return `
+                <tr>
+                  <td>${e.code}</td>
+                  <td>${e.name}</td>
+                  <td>${dept?.name || '-'}</td>
+                  <td>${e.position || '-'}</td>
+                  <td>${e.phone || '-'}</td>
+                  <td>${e.hire_date || '-'}</td>
+                  <td><span class="badge ${e.is_active ? 'badge-audited' : 'badge-draft'}">${e.is_active ? '在职' : '离职'}</span></td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}',${e.department_id},'${esc(e.position||'')}','${esc(e.phone||'')}','${e.hire_date||''}',${e.is_active})">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteEmp(${e.id})">删除</button>
+                  </td>
+                </tr>
+              `}).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function showEmpForm(id, code, name, deptId, position, phone, hireDate, isActive) {
+  const isEdit = !!id;
+  showModal(`
+    <h3>${isEdit ? '编辑' : '新增'}人员</h3>
+    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-field"><label>工号 <span style="color:red">*</span></label><input id="emp-code" value="${code||''}"></div>
+      <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
+      <div class="form-field"><label>部门</label><select id="emp-dept"><option value="">--选择部门--</option></select></div>
+      <div class="form-field"><label>职位</label><input id="emp-position" value="${position||''}"></div>
+      <div class="form-field"><label>电话</label><input id="emp-phone" value="${phone||''}"></div>
+      <div class="form-field"><label>入职日期</label><input id="emp-hire-date" type="date" value="${hireDate||''}"></div>
+      ${isEdit ? `<div class="form-field"><label>状态</label><select id="emp-active"><option value="1" ${isActive?'selected':''}>在职</option><option value="0" ${!isActive?'selected':''}>离职</option></select></div>` : ''}
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="saveEmp(${id||0})">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  `);
+  // 加载部门下拉
+  loadDeptSelect('emp-dept', deptId);
+}
+
+async function loadDeptSelect(selectId, selectedId) {
+  try {
+    const depts = await api('/api/departments');
+    const sel = document.getElementById(selectId);
+    if (sel) {
+      depts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.name;
+        if (d.id === selectedId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) {}
+}
+
+async function saveEmp(id) {
+  const body = {
+    code: document.getElementById('emp-code').value.trim(),
+    name: document.getElementById('emp-name').value.trim(),
+    department_id: parseInt(document.getElementById('emp-dept').value) || null,
+    position: document.getElementById('emp-position').value.trim(),
+    phone: document.getElementById('emp-phone').value.trim(),
+    hire_date: document.getElementById('emp-hire-date').value || null
+  };
+  if (id) {
+    const activeEl = document.getElementById('emp-active');
+    if (activeEl) body.is_active = activeEl.value === '1';
+  }
+  if (!body.code || !body.name) { toast('请填写工号和姓名', 'error'); return; }
+  try {
+    if (id) {
+      await api(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/employees', { method: 'POST', body: JSON.stringify(body) });
+    }
+    toast('保存成功', 'success');
+    closeModal();
+    renderEmployees();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteEmp(id) {
+  if (!confirm('确认删除该人员？')) return;
+  try {
+    await api(`/api/employees/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    renderEmployees();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== 客户档案 ====================
+async function renderCustomers() {
+  const el = document.getElementById('content-area');
+  try {
+    const data = await api('/api/customers');
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">🤝 客户档案</div>
+        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>编码</th><th>客户名称</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <tbody>
+              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
+                <tr>
+                  <td>${c.code}</td>
+                  <td>${c.name}</td>
+                  <td>${c.contact || '-'}</td>
+                  <td>${c.phone || '-'}</td>
+                  <td class="num">¥${fmt(c.credit_limit)}</td>
+                  <td>${c.payment_days || 0}</td>
+                  <td>${c.address || '-'}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${c.code}','${esc(c.name)}','${esc(c.contact||'')}','${esc(c.phone||'')}',${c.credit_limit||0},${c.payment_days||0},'${esc(c.address||'')}')">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function showCustForm(id, code, name, contact, phone, creditLimit, paymentDays, address) {
+  const isEdit = !!id;
+  showModal(`
+    <h3>${isEdit ? '编辑' : '新增'}客户</h3>
+    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="cust-code" value="${code||''}" placeholder="如：KH001"></div>
+      <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
+      <div class="form-field"><label>联系人</label><input id="cust-contact" value="${contact||''}"></div>
+      <div class="form-field"><label>电话</label><input id="cust-phone" value="${phone||''}"></div>
+      <div class="form-field"><label>信用额度</label><input id="cust-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
+      <div class="form-field"><label>账期(天)</label><input id="cust-days" type="number" value="${paymentDays||0}"></div>
+      <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="cust-addr" value="${address||''}"></div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="saveCust(${id||0})">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  `);
+}
+
+async function saveCust(id) {
+  const body = {
+    code: document.getElementById('cust-code').value.trim(),
+    name: document.getElementById('cust-name').value.trim(),
+    contact: document.getElementById('cust-contact').value.trim(),
+    phone: document.getElementById('cust-phone').value.trim(),
+    credit_limit: parseFloat(document.getElementById('cust-credit').value) || 0,
+    payment_days: parseInt(document.getElementById('cust-days').value) || 0,
+    address: document.getElementById('cust-addr').value.trim()
+  };
+  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  try {
+    if (id) {
+      await api(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/customers', { method: 'POST', body: JSON.stringify(body) });
+    }
+    toast('保存成功', 'success');
+    closeModal();
+    renderCustomers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteCust(id) {
+  if (!confirm('确认删除该客户？')) return;
+  try {
+    await api(`/api/customers/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    renderCustomers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== 供应商档案 ====================
+async function renderSuppliers() {
+  const el = document.getElementById('content-area');
+  try {
+    const data = await api('/api/suppliers');
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">📦 供应商档案</div>
+        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>编码</th><th>供应商名称</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <tbody>
+              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
+                <tr>
+                  <td>${s.code}</td>
+                  <td>${s.name}</td>
+                  <td>${s.contact || '-'}</td>
+                  <td>${s.phone || '-'}</td>
+                  <td class="num">¥${fmt(s.credit_limit)}</td>
+                  <td>${s.payment_days || 0}</td>
+                  <td>${s.address || '-'}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.contact||'')}','${esc(s.phone||'')}',${s.credit_limit||0},${s.payment_days||0},'${esc(s.address||'')}')">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSupp(${s.id})">删除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function showSuppForm(id, code, name, contact, phone, creditLimit, paymentDays, address) {
+  const isEdit = !!id;
+  showModal(`
+    <h3>${isEdit ? '编辑' : '新增'}供应商</h3>
+    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="supp-code" value="${code||''}" placeholder="如：GYS001"></div>
+      <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
+      <div class="form-field"><label>联系人</label><input id="supp-contact" value="${contact||''}"></div>
+      <div class="form-field"><label>电话</label><input id="supp-phone" value="${phone||''}"></div>
+      <div class="form-field"><label>信用额度</label><input id="supp-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
+      <div class="form-field"><label>账期(天)</label><input id="supp-days" type="number" value="${paymentDays||0}"></div>
+      <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="supp-addr" value="${address||''}"></div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="saveSupp(${id||0})">保存</button>
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  `);
+}
+
+async function saveSupp(id) {
+  const body = {
+    code: document.getElementById('supp-code').value.trim(),
+    name: document.getElementById('supp-name').value.trim(),
+    contact: document.getElementById('supp-contact').value.trim(),
+    phone: document.getElementById('supp-phone').value.trim(),
+    credit_limit: parseFloat(document.getElementById('supp-credit').value) || 0,
+    payment_days: parseInt(document.getElementById('supp-days').value) || 0,
+    address: document.getElementById('supp-addr').value.trim()
+  };
+  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  try {
+    if (id) {
+      await api(`/api/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/suppliers', { method: 'POST', body: JSON.stringify(body) });
+    }
+    toast('保存成功', 'success');
+    closeModal();
+    renderSuppliers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteSupp(id) {
+  if (!confirm('确认删除该供应商？')) return;
+  try {
+    await api(`/api/suppliers/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    renderSuppliers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// HTML 转义
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function showModal(html) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
