@@ -284,6 +284,11 @@
     .person-row .form-group { flex: 1; margin-bottom: 0; }
     .person-row .form-group label { font-size: 12px; }
     .person-row .form-group input, .person-row .form-group select { padding: 8px 10px; font-size: 13px; }
+    .person-row-inner { display: flex; gap: 10px; align-items: flex-end; flex: 1; }
+    .person-row-inner input { flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid var(--gray-300); border-radius: 8px; outline: none; min-width: 0; }
+    .person-row-inner input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+    .person-row-inner select { padding: 8px 10px; font-size: 13px; border: 1px solid var(--gray-300); border-radius: 8px; outline: none; background: #fff; min-width: 0; }
+    .person-row-inner select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
     .person-row .del-btn {
       flex-shrink: 0; width: 32px; height: 32px;
       background: #fee2e2; color: #dc2626; border: none;
@@ -660,7 +665,13 @@ function addShareholderRow() {
   const list = document.getElementById('shareholders-list');
   const row = document.createElement('div');
   row.className = 'person-row shareholder-row';
-  row.innerHTML = ;
+  row.innerHTML = '<div class="person-row-inner">' +
+    '<input class="sh-name" placeholder="股东姓名">' +
+    '<input class="sh-id" placeholder="身份证号">' +
+    '<select class="sh-type"><option value="自然人">自然人</option><option value="企业法人">企业法人</option></select>' +
+    '<input class="sh-ratio" type="number" step="0.01" min="0" max="100" placeholder="持股比例(%)" style="width:120px">' +
+    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
+    '</div>';
   list.appendChild(row);
 }
 
@@ -668,7 +679,11 @@ function addDirectorRow() {
   const list = document.getElementById('directors-list');
   const row = document.createElement('div');
   row.className = 'person-row';
-  row.innerHTML = ;
+  row.innerHTML = '<div class="person-row-inner">' +
+    '<input class="dr-name" placeholder="董事姓名">' +
+    '<input class="dr-id" placeholder="身份证号">' +
+    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
+    '</div>';
   list.appendChild(row);
 }
 
@@ -676,7 +691,11 @@ function addSupervisorRow() {
   const list = document.getElementById('supervisors-list');
   const row = document.createElement('div');
   row.className = 'person-row';
-  row.innerHTML = ;
+  row.innerHTML = '<div class="person-row-inner">' +
+    '<input class="sv-name" placeholder="监事姓名">' +
+    '<input class="sv-id" placeholder="身份证号">' +
+    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
+    '</div>';
   list.appendChild(row);
 }
 
@@ -684,7 +703,11 @@ function addFinanceRow() {
   const list = document.getElementById('finance-list');
   const row = document.createElement('div');
   row.className = 'person-row';
-  row.innerHTML = ;
+  row.innerHTML = '<div class="person-row-inner">' +
+    '<input class="fn-name" placeholder="财务负责人姓名">' +
+    '<input class="fn-id" placeholder="身份证号">' +
+    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
+    '</div>';
   list.appendChild(row);
 }
 
