@@ -18,9 +18,13 @@ import openpyxl
 from pypdf import PdfReader
 
 from database import (
-    get_db, init_db,
-    CompanyInfo, Department, Employee, Customer, Supplier,
-    Account, Voucher, VoucherDetail, Period
+    get_db, init_db, init_company_data,
+    Company, Department, Employee, Customer, Supplier,
+    Account, Voucher, VoucherDetail, Period,
+    FixedAsset, FixedAssetDepreciation,
+    IntangibleAsset, IntangibleAssetAmortization,
+    InventoryItem, InventoryTransaction, InventoryBalance,
+    Contract, ContractPayment
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -37,7 +41,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ==================== Pydantic 模型 ====================
 
 # 公司信息
-class CompanyInfoUpdate(BaseModel):
+class CompanyUpdate(BaseModel):
+    uscc: Optional[str] = None
     company_name: Optional[str] = None
     tax_no: Optional[str] = None
     address: Optional[str] = None
@@ -88,6 +93,7 @@ class EmployeeUpdate(BaseModel):
 class CustomerCreate(BaseModel):
     code: str
     name: str
+    uscc: Optional[str] = None
     tax_no: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
@@ -100,6 +106,7 @@ class CustomerCreate(BaseModel):
 
 class CustomerUpdate(BaseModel):
     name: Optional[str] = None
+    uscc: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
     credit_limit: Optional[float] = None
@@ -109,6 +116,7 @@ class CustomerUpdate(BaseModel):
 class SupplierCreate(BaseModel):
     code: str
     name: str
+    uscc: Optional[str] = None
     tax_no: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
@@ -121,6 +129,7 @@ class SupplierCreate(BaseModel):
 
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
+    uscc: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
     credit_limit: Optional[float] = None
@@ -159,15 +168,16 @@ async def index():
 # ==================== 公司信息 ====================
 
 @app.get("/api/company")
-def get_company(db: Session = Depends(get_db)):
-    info = db.query(CompanyInfo).first()
+def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
+    info = db.query(Company).filter(Company.id == company_id).first()
     if not info:
-        return {"company_name": "", "tax_no": "", "address": "", "phone": "",
+        return {"company_name": "", "uscc": "", "tax_no": "", "address": "", "phone": "",
                 "bank_name": "", "bank_account": "", "legal_representative": "",
                 "registered_capital": "", "established_date": None, "business_scope": ""}
     return {
         "id": info.id,
-        "company_name": info.company_name,
+        "uscc": info.uscc or "",
+        "company_name": info.name,
         "tax_no": info.tax_no,
         "address": info.address,
         "phone": info.phone,
@@ -180,19 +190,27 @@ def get_company(db: Session = Depends(get_db)):
     }
 
 @app.put("/api/company")
-def update_company(data: CompanyInfoUpdate, db: Session = Depends(get_db)):
-    info = db.query(CompanyInfo).first()
+def update_company(data: CompanyUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    info = db.query(Company).filter(Company.id == company_id).first()
     if not info:
-        info = CompanyInfo(company_name=data.company_name or "")
+        info = Company(id=company_id, name=data.company_name or "")
         db.add(info)
         db.flush()
+    # 校验统一社会信用代码
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"公司统一社会信用代码：{msg}")
     for k, v in data.model_dump(exclude_unset=True).items():
         if k == 'established_date' and v:
             try:
                 v = date.fromisoformat(v)
             except ValueError:
                 v = None
-        setattr(info, k, v)
+        if k == 'company_name':
+            info.name = v
+        else:
+            setattr(info, k, v)
     info.updated_at = datetime.now()
     db.commit()
     return {"message": "保存成功"}
@@ -205,7 +223,7 @@ def list_departments(
     keyword: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Department)
+    q = db.query(Department).filter(Department.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Department.code.contains(keyword),
@@ -221,8 +239,8 @@ def list_departments(
     ]
 
 @app.post("/api/departments")
-def create_department(data: DepartmentCreate, db: Session = Depends(get_db)):
-    if db.query(Department).filter(Department.code == data.code).first():
+def create_department(data: DepartmentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Department).filter(Department.company_id == company_id, Department.code == data.code).first():
         raise HTTPException(400, detail=f"部门编码 {data.code} 已存在")
     d = Department(**data.model_dump())
     db.add(d)
@@ -230,8 +248,8 @@ def create_department(data: DepartmentCreate, db: Session = Depends(get_db)):
     return {"message": "新增成功"}
 
 @app.put("/api/departments/{dept_id}")
-def update_department(dept_id: int, data: DepartmentUpdate, db: Session = Depends(get_db)):
-    d = db.query(Department).filter(Department.id == dept_id).first()
+def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
     for k, v in data.model_dump(exclude_unset=True).items():
@@ -240,12 +258,12 @@ def update_department(dept_id: int, data: DepartmentUpdate, db: Session = Depend
     return {"message": "更新成功"}
 
 @app.delete("/api/departments/{dept_id}")
-def delete_department(dept_id: int, db: Session = Depends(get_db)):
-    d = db.query(Department).filter(Department.id == dept_id).first()
+def delete_department(dept_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
     # 检查是否有员工关联
-    emp = db.query(Employee).filter(Employee.department_code == d.code).first()
+    emp = db.query(Employee).filter(Employee.company_id == company_id, Employee.department_code == d.code).first()
     if emp:
         raise HTTPException(400, detail="该部门下有员工，请先迁移员工后再删除")
     db.delete(d)
@@ -262,7 +280,7 @@ def list_employees(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Employee)
+    q = db.query(Employee).filter(Employee.company_id == company_id).filter(Employee.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Employee.code.contains(keyword),
@@ -287,12 +305,12 @@ def list_employees(
     ]
 
 @app.post("/api/employees")
-def create_employee(data: EmployeeCreate, db: Session = Depends(get_db)):
-    if db.query(Employee).filter(Employee.code == data.code).first():
+def create_employee(data: EmployeeCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.code).first():
         raise HTTPException(400, detail=f"工号 {data.code} 已存在")
     # 校验部门是否存在
     if data.department_code:
-        dept = db.query(Department).filter(Department.code == data.department_code).first()
+        dept = db.query(Department).filter(Department.company_id == company_id, Department.code == data.department_code).first()
         if not dept:
             raise HTTPException(400, detail=f"部门 {data.department_code} 不存在")
     e = Employee(**data.model_dump())
@@ -301,12 +319,12 @@ def create_employee(data: EmployeeCreate, db: Session = Depends(get_db)):
     return {"message": "新增成功"}
 
 @app.put("/api/employees/{emp_id}")
-def update_employee(emp_id: int, data: EmployeeUpdate, db: Session = Depends(get_db)):
-    e = db.query(Employee).filter(Employee.id == emp_id).first()
+def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
     if data.department_code:
-        dept = db.query(Department).filter(Department.code == data.department_code).first()
+        dept = db.query(Department).filter(Department.company_id == company_id, Department.code == data.department_code).first()
         if not dept:
             raise HTTPException(400, detail=f"部门 {data.department_code} 不存在")
     for k, v in data.model_dump(exclude_unset=True).items():
@@ -315,8 +333,8 @@ def update_employee(emp_id: int, data: EmployeeUpdate, db: Session = Depends(get
     return {"message": "更新成功"}
 
 @app.delete("/api/employees/{emp_id}")
-def delete_employee(emp_id: int, db: Session = Depends(get_db)):
-    e = db.query(Employee).filter(Employee.id == emp_id).first()
+def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
     db.delete(e)
@@ -332,7 +350,7 @@ def list_customers(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Customer)
+    q = db.query(Customer).filter(Customer.company_id == company_id).filter(Customer.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Customer.code.contains(keyword),
@@ -345,6 +363,7 @@ def list_customers(
     return [
         {
             "id": c.id, "code": c.code, "name": c.name,
+            "uscc": c.uscc or "",  # ← 新增
             "tax_no": c.tax_no, "contact": c.contact,
             "phone": c.phone, "address": c.address,
             "credit_limit": c.credit_limit,
@@ -357,27 +376,36 @@ def list_customers(
     ]
 
 @app.post("/api/customers")
-def create_customer(data: CustomerCreate, db: Session = Depends(get_db)):
-    if db.query(Customer).filter(Customer.code == data.code).first():
+def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Customer).filter(Customer.company_id == company_id, Customer.code == data.code).first():
         raise HTTPException(400, detail=f"客户编码 {data.code} 已存在")
+    # 校验统一社会信用代码
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     c = Customer(**data.model_dump())
     db.add(c)
     db.commit()
     return {"message": "新增成功"}
 
 @app.put("/api/customers/{cust_id}")
-def update_customer(cust_id: int, data: CustomerUpdate, db: Session = Depends(get_db)):
-    c = db.query(Customer).filter(Customer.id == cust_id).first()
+def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(c, k, v)
     db.commit()
     return {"message": "更新成功"}
 
 @app.delete("/api/customers/{cust_id}")
-def delete_customer(cust_id: int, db: Session = Depends(get_db)):
-    c = db.query(Customer).filter(Customer.id == cust_id).first()
+def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
     db.delete(c)
@@ -393,7 +421,7 @@ def list_suppliers(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Supplier)
+    q = db.query(Supplier).filter(Supplier.company_id == company_id).filter(Supplier.company_id == company_id)
     if keyword:
         q = q.filter(or_(
             Supplier.code.contains(keyword),
@@ -406,6 +434,7 @@ def list_suppliers(
     return [
         {
             "id": s.id, "code": s.code, "name": s.name,
+            "uscc": s.uscc or "",  # ← 新增
             "tax_no": s.tax_no, "contact": s.contact,
             "phone": s.phone, "address": s.address,
             "credit_limit": s.credit_limit,
@@ -418,27 +447,35 @@ def list_suppliers(
     ]
 
 @app.post("/api/suppliers")
-def create_supplier(data: SupplierCreate, db: Session = Depends(get_db)):
-    if db.query(Supplier).filter(Supplier.code == data.code).first():
+def create_supplier(data: SupplierCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == data.code).first():
         raise HTTPException(400, detail=f"供应商编码 {data.code} 已存在")
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"供应商统一社会信用代码：{msg}")
     s = Supplier(**data.model_dump())
     db.add(s)
     db.commit()
     return {"message": "新增成功"}
 
 @app.put("/api/suppliers/{supp_id}")
-def update_supplier(supp_id: int, data: SupplierUpdate, db: Session = Depends(get_db)):
-    s = db.query(Supplier).filter(Supplier.id == supp_id).first()
+def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"供应商统一社会信用代码：{msg}")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(s, k, v)
     db.commit()
     return {"message": "更新成功"}
 
 @app.delete("/api/suppliers/{supp_id}")
-def delete_supplier(supp_id: int, db: Session = Depends(get_db)):
-    s = db.query(Supplier).filter(Supplier.id == supp_id).first()
+def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
     db.delete(s)
@@ -455,7 +492,7 @@ def list_accounts(
     level: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Account)
+    q = db.query(Account).filter(Account.company_id == company_id).filter(Account.company_id == company_id)
     if category:
         q = q.filter(Account.category == category)
     if keyword:
@@ -477,7 +514,7 @@ def list_accounts(
 
 
 @app.post("/api/accounts")
-def create_account(data: dict, db: Session = Depends(get_db)):
+def create_account(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
     from pydantic import ValidationError
     code = data.get("code")
     name = data.get("name")
@@ -487,7 +524,7 @@ def create_account(data: dict, db: Session = Depends(get_db)):
     parent_code = data.get("parent_code")
     if not code or not name:
         raise HTTPException(400, detail="科目编码和名称不能为空")
-    if db.query(Account).filter(Account.code == code).first():
+    if db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
         raise HTTPException(400, detail=f"科目编码 {code} 已存在")
     acc = Account(code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code)
@@ -498,8 +535,8 @@ def create_account(data: dict, db: Session = Depends(get_db)):
 
 
 @app.put("/api/accounts/{account_id}")
-def update_account(account_id: int, data: dict, db: Session = Depends(get_db)):
-    acc = db.query(Account).filter(Account.id == account_id).first()
+def update_account(account_id: int, data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+    acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     if "name" in data and data["name"] is not None:
@@ -511,8 +548,8 @@ def update_account(account_id: int, data: dict, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/accounts/{account_id}")
-def delete_account(account_id: int, db: Session = Depends(get_db)):
-    acc = db.query(Account).filter(Account.id == account_id).first()
+def delete_account(account_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     used = db.query(VoucherDetail).filter(VoucherDetail.account_code == acc.code).first()
@@ -534,7 +571,7 @@ def list_vouchers(
     page_size: int = 20,
     db: Session = Depends(get_db)
 ):
-    q = db.query(Voucher)
+    q = db.query(Voucher).filter(Voucher.company_id == company_id)
     if period:
         q = q.filter(Voucher.period == period)
     if status:
@@ -570,7 +607,7 @@ def list_vouchers(
 
 
 @app.get("/api/vouchers/{voucher_id}")
-def get_voucher(voucher_id: int, db: Session = Depends(get_db)):
+def get_voucher(voucher_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
     v = db.query(Voucher).filter(Voucher.id == voucher_id).first()
     if not v:
         raise HTTPException(404, detail="凭证不存在")
@@ -601,7 +638,7 @@ def get_voucher(voucher_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/vouchers")
-def create_voucher(data: VoucherCreate, db: Session = Depends(get_db)):
+def create_voucher(data: VoucherCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     # 校验借贷平衡
     total_debit = sum(d.debit_amount for d in data.details)
     total_credit = sum(d.credit_amount for d in data.details)
@@ -617,7 +654,7 @@ def create_voucher(data: VoucherCreate, db: Session = Depends(get_db)):
 
     # 校验科目存在
     for d in data.details:
-        acc = db.query(Account).filter(Account.code == d.account_code).first()
+        acc = db.query(Account).filter(Account.company_id == company_id, Account.code == d.account_code).first()
         if not acc:
             raise HTTPException(400, detail=f"科目 {d.account_code} 不存在")
 
@@ -652,7 +689,7 @@ def create_voucher(data: VoucherCreate, db: Session = Depends(get_db)):
 
 
 @app.put("/api/vouchers/{voucher_id}/audit")
-def audit_voucher(voucher_id: int, checker: str = "审核员", db: Session = Depends(get_db)):
+def audit_voucher(voucher_id: int, checker: str = "审核员", company_id: int = Query(1), db: Session = Depends(get_db)):
     v = db.query(Voucher).filter(Voucher.id == voucher_id).first()
     if not v:
         raise HTTPException(404, detail="凭证不存在")
@@ -665,7 +702,7 @@ def audit_voucher(voucher_id: int, checker: str = "审核员", db: Session = Dep
 
 
 @app.delete("/api/vouchers/{voucher_id}")
-def delete_voucher(voucher_id: int, db: Session = Depends(get_db)):
+def delete_voucher(voucher_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
     v = db.query(Voucher).filter(Voucher.id == voucher_id).first()
     if not v:
         raise HTTPException(404, detail="凭证不存在")
@@ -694,6 +731,10 @@ def general_ledger(
         func.sum(VoucherDetail.credit_amount).label("total_credit")
     ).join(Account, VoucherDetail.account_code == Account.code) \
      .join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
      .filter(
         Voucher.period >= period_from,
         Voucher.period <= period_to
@@ -742,7 +783,7 @@ def detail_ledger(
         Voucher.period <= period_to
     ).order_by(Voucher.voucher_date, Voucher.voucher_no).all()
 
-    acc = db.query(Account).filter(Account.code == account_code).first()
+    acc = db.query(Account).filter(Account.company_id == company_id, Account.code == account_code).first()
     balance = 0.0
     rows = []
     for r in results:
@@ -769,7 +810,7 @@ def detail_ledger(
 # ==================== 财务报表（原有，保留）====================
 
 @app.get("/api/reports/profit-loss")
-def profit_loss_report(period_from: str, period_to: str, db: Session = Depends(get_db)):
+def profit_loss_report(period_from: str, period_to: str, company_id: int = Query(1), db: Session = Depends(get_db)):
     """利润表"""
     def get_amount(codes_prefix: list):
         total = 0.0
@@ -778,6 +819,10 @@ def profit_loss_report(period_from: str, period_to: str, db: Session = Depends(g
                 func.sum(VoucherDetail.debit_amount).label("d"),
                 func.sum(VoucherDetail.credit_amount).label("c")
             ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
              .join(Account, VoucherDetail.account_code == Account.code) \
              .filter(
                 VoucherDetail.account_code.startswith(code),
@@ -795,6 +840,10 @@ def profit_loss_report(period_from: str, period_to: str, db: Session = Depends(g
                 func.sum(VoucherDetail.debit_amount).label("d"),
                 func.sum(VoucherDetail.credit_amount).label("c")
             ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
              .filter(
                 VoucherDetail.account_code.startswith(code),
                 Voucher.period >= period_from,
@@ -843,13 +892,17 @@ def profit_loss_report(period_from: str, period_to: str, db: Session = Depends(g
 
 
 @app.get("/api/reports/balance-sheet")
-def balance_sheet(period: str, db: Session = Depends(get_db)):
+def balance_sheet(period: str, company_id: int = Query(1), db: Session = Depends(get_db)):
     """资产负债表"""
     def get_balance(code_prefix: str, direction: str):
         r = db.query(
             func.sum(VoucherDetail.debit_amount).label("d"),
             func.sum(VoucherDetail.credit_amount).label("c")
         ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
          .filter(
             VoucherDetail.account_code.startswith(code_prefix),
             Voucher.period <= period
@@ -921,16 +974,96 @@ def balance_sheet(period: str, db: Session = Depends(get_db)):
     }
 
 
+# ==================== 科目余额表 ====================
+
+@app.get("/api/reports/account-balance")
+def account_balance(period: str, company_id: int = Query(1), db: Session = Depends(get_db)):
+    """科目余额表（所有科目，含期初/本期/期末）"""
+    # 取所有激活科目
+    accounts = db.query(Account).filter(Account.company_id == company_id, Account.is_active == True).order_by(Account.code).all()
+    # 期初 = 截至上期的余额
+    # 本期 = 当期的借/贷发生额
+    def calc_balance(acc_code: str, up_to_period: str):
+        r = db.query(
+            func.sum(VoucherDetail.debit_amount).label("d"),
+            func.sum(VoucherDetail.credit_amount).label("c")
+        ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(
+            VoucherDetail.account_code.startswith(acc_code),
+            Voucher.period <= up_to_period,
+            Voucher.status.in_(["已审核", "已过账"])
+        ).first()
+        d = r.d or 0
+        c = r.c or 0
+        acc = db.query(Account).filter(Account.company_id == company_id, Account.code == acc_code).first()
+        direction = acc.balance_direction if acc else "借"
+        if direction == "借":
+            return round(d - c, 2)
+        else:
+            return round(c - d, 2)
+
+    def calc_period(acc_code: str, period_str: str):
+        r = db.query(
+            func.sum(VoucherDetail.debit_amount).label("d"),
+            func.sum(VoucherDetail.credit_amount).label("c")
+        ).join(Voucher, VoucherDetail.voucher_id == Voucher.id) \
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(Voucher.company_id == company_id) \
+     .filter(Voucher.company_id == company_id) \\
+         .filter(
+            VoucherDetail.account_code.startswith(acc_code),
+            Voucher.period == period_str,
+            Voucher.status.in_(["已审核", "已过账"])
+        ).first()
+        return (r.d or 0, r.c or 0)
+
+    rows = []
+    for acc in accounts:
+        # 上级科目跳过（由明细科目汇总）
+        has_child = db.query(Account).filter(Account.company_id == company_id, Account.parent_code == acc.code).first()
+        if has_child:
+            continue
+        direction = acc.balance_direction
+        # 期初余额
+        prev_period = period
+        y, m = int(period[:4]), int(period[5:7])
+        if m == 1:
+            prev_period = f"{y-1}-12"
+        else:
+            prev_period = f"{y}-{str(m-1).zfill(2)}"
+        begin_bal = calc_balance(acc.code, prev_period)
+        # 本期发生额
+        debit_amt, credit_amt = calc_period(acc.code, period)
+        # 期末余额
+        end_bal = calc_balance(acc.code, period)
+        rows.append({
+            "code": acc.code,
+            "name": acc.name,
+            "direction": direction,
+            "begin_balance": begin_bal,
+            "debit_amount": round(debit_amt, 2),
+            "credit_amount": round(credit_amt, 2),
+            "end_balance": end_bal,
+        })
+
+    return {"period": period, "rows": rows}
+
+
 # ==================== 期间管理（原有，保留）====================
 
 @app.get("/api/periods")
-def list_periods(db: Session = Depends(get_db)):
+def list_periods(company_id: int = Query(1), db: Session = Depends(get_db)):
     periods = db.query(Period).order_by(Period.period.desc()).all()
     return [{"period": p.period, "status": p.status} for p in periods]
 
 
 @app.post("/api/periods/{period}/close")
-def close_period(period: str, db: Session = Depends(get_db)):
+def close_period(period: str, company_id: int = Query(1), db: Session = Depends(get_db)):
     p = db.query(Period).filter(Period.period == period).first()
     if not p:
         raise HTTPException(404, detail="期间不存在")
@@ -963,7 +1096,7 @@ def close_period(period: str, db: Session = Depends(get_db)):
 # ==================== 统计看板（原有，保留）====================
 
 @app.get("/api/dashboard")
-def dashboard(period: Optional[str] = None, db: Session = Depends(get_db)):
+def dashboard(period: Optional[str] = None, company_id: int = Query(1), db: Session = Depends(get_db)):
     if not period:
         from datetime import date
         period = date.today().strftime("%Y-%m")
@@ -993,6 +1126,664 @@ def dashboard(period: Optional[str] = None, db: Session = Depends(get_db)):
             } for v in recent
         ]
     }
+
+
+# ==================== 公司账套管理 ====================
+
+class CompanyCreate(BaseModel):
+    name: str
+    uscc: Optional[str] = None
+    tax_no: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    legal_representative: Optional[str] = None
+
+class CompanyUpdateModel(BaseModel):
+    name: Optional[str] = None
+    uscc: Optional[str] = None
+    tax_no: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    legal_representative: Optional[str] = None
+    registered_capital: Optional[str] = None
+    established_date: Optional[str] = None
+    business_scope: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@app.get("/api/companies")
+def list_companies(db: Session = Depends(get_db)):
+    """获取公司列表（账套选择）"""
+    companies = db.query(Company).filter(Company.is_active == True).order_by(Company.id).all()
+    return [{"id": c.id, "name": c.name, "uscc": c.uscc or "", "created_at": str(c.created_at.date()) if c.created_at else ""} for c in companies]
+
+
+@app.post("/api/companies")
+def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
+    """创建新公司/账套"""
+    if db.query(Company).filter(Company.name == data.name).first():
+        raise HTTPException(400, detail=f"公司 '{data.name}' 已存在")
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"统一社会信用代码：{msg}")
+
+    company = Company(
+        name=data.name, uscc=data.uscc, tax_no=data.tax_no,
+        address=data.address, phone=data.phone,
+        legal_representative=data.legal_representative
+    )
+    db.add(company)
+    db.flush()
+
+    # 初始化公司基础数据（科目表、部门、期间）
+    init_company_data(db, company.id)
+    db.commit()
+    db.refresh(company)
+
+    return {"id": company.id, "name": company.name, "message": f"公司 '{company.name}' 创建成功，已初始化科目表和基础档案"}
+
+
+@app.put("/api/companies/{company_id}")
+def update_company_detail(company_id: int, data: CompanyUpdateModel, db: Session = Depends(get_db)):
+    """更新公司信息"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, detail="公司不存在")
+    if data.uscc:
+        ok, msg = validate_uscc(data.uscc)
+        if not ok:
+            raise HTTPException(400, detail=f"统一社会信用代码：{msg}")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        if k == 'established_date' and v:
+            try:
+                v = date.fromisoformat(v)
+            except ValueError:
+                v = None
+        setattr(company, k, v)
+    company.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/companies/{company_id}")
+def delete_company(company_id: int, db: Session = Depends(get_db)):
+    """删除公司（软删除）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, detail="公司不存在")
+    company.is_active = False
+    db.commit()
+    return {"message": f"公司 '{company.name}' 已停用"}
+
+
+# ==================== 固定资产 ====================
+
+class FixedAssetCreate(BaseModel):
+    code: str
+    name: str
+    category: str = "机器设备"
+    spec: Optional[str] = None
+    unit: Optional[str] = "台"
+    dept_code: Optional[str] = None
+    location: Optional[str] = None
+    purchase_date: Optional[date] = None
+    original_value: float = 0.0
+    residual_value: float = 0.0
+    useful_life_months: int = 60
+    depreciation_method: str = "直线法"
+    supplier: Optional[str] = None
+    warranty_expiry: Optional[date] = None
+    remark: Optional[str] = None
+
+
+class FixedAssetUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    dept_code: Optional[str] = None
+    location: Optional[str] = None
+    original_value: Optional[float] = None
+    residual_value: Optional[float] = None
+    useful_life_months: Optional[int] = None
+    depreciation_method: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/fixed-assets")
+def list_fixed_assets(
+    company_id: int = Query(1),
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(FixedAsset).filter(FixedAsset.company_id == company_id)
+    if category:
+        q = q.filter(FixedAsset.category == category)
+    if status:
+        q = q.filter(FixedAsset.status == status)
+    if keyword:
+        q = q.filter(or_(FixedAsset.code.contains(keyword), FixedAsset.name.contains(keyword)))
+    assets = q.order_by(FixedAsset.code).all()
+    return [{
+        "id": a.id, "code": a.code, "name": a.name, "category": a.category,
+        "spec": a.spec, "unit": a.unit, "dept_code": a.dept_code,
+        "location": a.location, "purchase_date": str(a.purchase_date) if a.purchase_date else "",
+        "original_value": a.original_value, "residual_value": a.residual_value,
+        "useful_life_months": a.useful_life_months,
+        "accumulated_depreciation": a.accumulated_depreciation,
+        "monthly_depreciation": a.monthly_depreciation,
+        "depreciation_method": a.depreciation_method,
+        "status": a.status, "supplier": a.supplier,
+        "net_value": round(a.original_value - a.accumulated_depreciation, 2),
+        "net_rate": round((a.original_value - a.accumulated_depreciation) / a.original_value * 100, 1) if a.original_value > 0 else 0,
+        "remark": a.remark
+    } for a in assets]
+
+
+@app.post("/api/fixed-assets")
+def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.code == data.code).first():
+        raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
+    # 计算月折旧额（直线法）
+    monthly = 0.0
+    if data.useful_life_months > 0:
+        monthly = round((data.original_value - data.residual_value) / data.useful_life_months, 2)
+    fa = FixedAsset(
+        company_id=company_id, code=data.code, name=data.name,
+        category=data.category, spec=data.spec, unit=data.unit,
+        dept_code=data.dept_code, location=data.location,
+        purchase_date=data.purchase_date, original_value=data.original_value,
+        residual_value=data.residual_value, useful_life_months=data.useful_life_months,
+        monthly_depreciation=monthly, depreciation_method=data.depreciation_method,
+        supplier=data.supplier, warranty_expiry=data.warranty_expiry,
+        remark=data.remark
+    )
+    db.add(fa)
+    db.commit()
+    db.refresh(fa)
+    return {"id": fa.id, "code": fa.code, "message": "固定资产新增成功"}
+
+
+@app.put("/api/fixed-assets/{fa_id}")
+def update_fixed_asset(fa_id: int, data: FixedAssetUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
+    if not fa:
+        raise HTTPException(404, detail="资产不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(fa, k, v)
+    # 重新计算月折旧额
+    if data.original_value is not None or data.residual_value is not None or data.useful_life_months is not None:
+        if fa.useful_life_months > 0:
+            fa.monthly_depreciation = round((fa.original_value - fa.residual_value) / fa.useful_life_months, 2)
+    fa.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.post("/api/fixed-assets/{fa_id}/depreciate")
+def depreciate_asset(fa_id: int, period: str = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+    """计提单月折旧"""
+    fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
+    if not fa:
+        raise HTTPException(404, detail="资产不存在")
+    if fa.status != "在用":
+        raise HTTPException(400, detail=f"资产状态为'{fa.status}'，不能计提折旧")
+    # 检查是否已折旧
+    existing = db.query(FixedAssetDepreciation).filter(
+        FixedAssetDepreciation.company_id == company_id,
+        FixedAssetDepreciation.asset_id == fa_id,
+        FixedAssetDepreciation.period == period
+    ).first()
+    if existing:
+        raise HTTPException(400, detail=f"该资产在 {period} 期间已计提折旧")
+    # 累计折旧不能超过（原值-残值）
+    if fa.accumulated_depreciation + fa.monthly_depreciation > fa.original_value - fa.residual_value:
+        dep_amount = fa.original_value - fa.residual_value - fa.accumulated_depreciation
+    else:
+        dep_amount = fa.monthly_depreciation
+    if dep_amount <= 0:
+        raise HTTPException(400, detail="该资产已提足折旧")
+    acc_before = fa.accumulated_depreciation
+    fa.accumulated_depreciation += dep_amount
+    fa.updated_at = datetime.now()
+    rec = FixedAssetDepreciation(
+        company_id=company_id, asset_id=fa_id, period=period,
+        depreciation_amount=dep_amount, accumulated_before=acc_before,
+        accumulated_after=fa.accumulated_depreciation,
+        net_value=round(fa.original_value - fa.accumulated_depreciation, 2)
+    )
+    db.add(rec)
+    db.commit()
+    return {"message": f"计提折旧 ¥{dep_amount:.2f}，累计折旧 ¥{fa.accumulated_depreciation:.2f}"}
+
+
+@app.get("/api/fixed-assets/{fa_id}/depreciations")
+def get_asset_depreciations(fa_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    recs = db.query(FixedAssetDepreciation).filter(
+        FixedAssetDepreciation.company_id == company_id,
+        FixedAssetDepreciation.asset_id == fa_id
+    ).order_by(FixedAssetDepreciation.period).all()
+    return [{
+        "id": r.id, "period": r.period, "depreciation_amount": r.depreciation_amount,
+        "accumulated_before": r.accumulated_before, "accumulated_after": r.accumulated_after,
+        "net_value": r.net_value
+    } for r in recs]
+
+
+@app.delete("/api/fixed-assets/{fa_id}")
+def delete_fixed_asset(fa_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
+    if not fa:
+        raise HTTPException(404, detail="资产不存在")
+    if fa.status == "在用":
+        raise HTTPException(400, detail="在用资产不能删除，请先变更为闲置或报废")
+    db.delete(fa)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 无形资产 ====================
+
+class IntangibleAssetCreate(BaseModel):
+    code: str
+    name: str
+    category: str = "专利权"
+    purchase_date: Optional[date] = None
+    original_value: float = 0.0
+    useful_life_months: int = 120
+    residual_value: float = 0.0
+    remark: Optional[str] = None
+
+
+class IntangibleAssetUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    original_value: Optional[float] = None
+    residual_value: Optional[float] = None
+    useful_life_months: Optional[int] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/intangible-assets")
+def list_intangible_assets(
+    company_id: int = Query(1),
+    category: Optional[str] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id)
+    if category:
+        q = q.filter(IntangibleAsset.category == category)
+    if keyword:
+        q = q.filter(or_(IntangibleAsset.code.contains(keyword), IntangibleAsset.name.contains(keyword)))
+    assets = q.order_by(IntangibleAsset.code).all()
+    return [{
+        "id": a.id, "code": a.code, "name": a.name, "category": a.category,
+        "purchase_date": str(a.purchase_date) if a.purchase_date else "",
+        "original_value": a.original_value, "residual_value": a.residual_value,
+        "useful_life_months": a.useful_life_months,
+        "accumulated_amortization": a.accumulated_amortization,
+        "monthly_amortization": a.monthly_amortization,
+        "status": a.status,
+        "net_value": round(a.original_value - a.accumulated_amortization, 2),
+        "remark": a.remark
+    } for a in assets]
+
+
+@app.post("/api/intangible-assets")
+def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.code == data.code).first():
+        raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
+    monthly = round((data.original_value - data.residual_value) / data.useful_life_months, 2) if data.useful_life_months > 0 else 0
+    ia = IntangibleAsset(
+        company_id=company_id, code=data.code, name=data.name,
+        category=data.category, purchase_date=data.purchase_date,
+        original_value=data.original_value, useful_life_months=data.useful_life_months,
+        residual_value=data.residual_value, monthly_amortization=monthly,
+        remark=data.remark
+    )
+    db.add(ia)
+    db.commit()
+    db.refresh(ia)
+    return {"id": ia.id, "code": ia.code, "message": "无形资产新增成功"}
+
+
+@app.put("/api/intangible-assets/{ia_id}")
+def update_intangible_asset(ia_id: int, data: IntangibleAssetUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
+    if not ia:
+        raise HTTPException(404, detail="资产不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(ia, k, v)
+    if ia.useful_life_months > 0:
+        ia.monthly_amortization = round((ia.original_value - ia.residual_value) / ia.useful_life_months, 2)
+    ia.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.post("/api/intangible-assets/{ia_id}/amortize")
+def amortize_asset(ia_id: int, period: str = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+    """计提单月摊销"""
+    ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
+    if not ia:
+        raise HTTPException(404, detail="资产不存在")
+    if ia.status != "在用":
+        raise HTTPException(400, detail=f"资产状态为'{ia.status}'，不能摊销")
+    existing = db.query(IntangibleAssetAmortization).filter(
+        IntangibleAssetAmortization.company_id == company_id,
+        IntangibleAssetAmortization.asset_id == ia_id,
+        IntangibleAssetAmortization.period == period
+    ).first()
+    if existing:
+        raise HTTPException(400, detail=f"该资产在 {period} 期间已摊销")
+    if ia.accumulated_amortization + ia.monthly_amortization > ia.original_value - ia.residual_value:
+        amt = ia.original_value - ia.residual_value - ia.accumulated_amortization
+    else:
+        amt = ia.monthly_amortization
+    if amt <= 0:
+        raise HTTPException(400, detail="该资产已摊销完毕")
+    acc_before = ia.accumulated_amortization
+    ia.accumulated_amortization += amt
+    ia.updated_at = datetime.now()
+    rec = IntangibleAssetAmortization(
+        company_id=company_id, asset_id=ia_id, period=period,
+        amortization_amount=amt, accumulated_before=acc_before,
+        accumulated_after=ia.accumulated_amortization,
+        net_value=round(ia.original_value - ia.accumulated_amortization, 2)
+    )
+    db.add(rec)
+    db.commit()
+    return {"message": f"摊销 ¥{amt:.2f}，累计摊销 ¥{ia.accumulated_amortization:.2f}"}
+
+
+@app.delete("/api/intangible-assets/{ia_id}")
+def delete_intangible_asset(ia_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
+    if not ia:
+        raise HTTPException(404, detail="资产不存在")
+    db.delete(ia)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 库存管理 ====================
+
+class InventoryItemCreate(BaseModel):
+    code: str
+    name: str
+    spec: Optional[str] = None
+    unit: Optional[str] = "个"
+    category: Optional[str] = "原材料"
+    warehouse: Optional[str] = None
+    safety_stock: float = 0.0
+    cost_price: float = 0.0
+    sale_price: float = 0.0
+    account_code: Optional[str] = None
+    remark: Optional[str] = None
+
+class InventoryItemUpdate(BaseModel):
+    name: Optional[str] = None
+    spec: Optional[str] = None
+    category: Optional[str] = None
+    warehouse: Optional[str] = None
+    safety_stock: Optional[float] = None
+    cost_price: Optional[float] = None
+    sale_price: Optional[float] = None
+    is_active: Optional[bool] = None
+    remark: Optional[str] = None
+
+class InventoryTransactionCreate(BaseModel):
+    transaction_date: date
+    trans_type: str  # 入库/出库/调拨入/调拨出/盘盈/盘亏/其他
+    item_code: str
+    quantity: float
+    unit_price: float = 0.0
+    warehouse: Optional[str] = None
+    warehouse_to: Optional[str] = None
+    voucher_no: Optional[str] = None
+    reference_no: Optional[str] = None
+    operator: Optional[str] = "管理员"
+    remark: Optional[str] = None
+
+
+@app.get("/api/inventory-items")
+def list_inventory_items(
+    company_id: int = Query(1),
+    category: Optional[str] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.is_active == True)
+    if category:
+        q = q.filter(InventoryItem.category == category)
+    if keyword:
+        q = q.filter(or_(InventoryItem.code.contains(keyword), InventoryItem.name.contains(keyword)))
+    items = q.order_by(InventoryItem.code).all()
+    return [{
+        "id": i.id, "code": i.code, "name": i.name, "spec": i.spec,
+        "unit": i.unit, "category": i.category, "warehouse": i.warehouse,
+        "safety_stock": i.safety_stock, "current_stock": i.current_stock,
+        "cost_price": i.cost_price, "sale_price": i.sale_price,
+        "stock_value": round(i.current_stock * i.cost_price, 2),
+        "account_code": i.account_code, "remark": i.remark
+    } for i in items]
+
+
+@app.post("/api/inventory-items")
+def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == data.code).first():
+        raise HTTPException(400, detail=f"商品编码 {data.code} 已存在")
+    item = InventoryItem(company_id=company_id, **data.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "code": item.code, "message": "新增成功"}
+
+
+@app.put("/api/inventory-items/{item_id}")
+def update_inventory_item(item_id: int, data: InventoryItemUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, detail="商品不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(item, k, v)
+    item.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.get("/api/inventory-transactions")
+def list_inventory_transactions(
+    company_id: int = Query(1),
+    item_code: Optional[str] = None,
+    trans_type: Optional[str] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    q = db.query(InventoryTransaction).filter(InventoryTransaction.company_id == company_id)
+    if item_code:
+        q = q.filter(InventoryTransaction.item_code == item_code)
+    if trans_type:
+        q = q.filter(InventoryTransaction.trans_type == trans_type)
+    items = q.order_by(InventoryTransaction.transaction_date.desc(), InventoryTransaction.id.desc()).limit(limit).all()
+    return [{
+        "id": t.id, "item_code": t.item_code, "transaction_date": str(t.transaction_date),
+        "trans_type": t.trans_type, "quantity": t.quantity, "unit_price": t.unit_price,
+        "total_amount": t.total_amount, "warehouse": t.warehouse, "warehouse_to": t.warehouse_to,
+        "voucher_no": t.voucher_no, "reference_no": t.reference_no,
+        "operator": t.operator, "remark": t.remark, "created_at": str(t.created_at.date()) if t.created_at else ""
+    } for t in items]
+
+
+@app.post("/api/inventory-transactions")
+def create_inventory_transaction(data: InventoryTransactionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    # 校验商品存在
+    item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == data.item_code).first()
+    if not item:
+        raise HTTPException(400, detail=f"商品 {data.item_code} 不存在")
+    qty = data.quantity
+    total = round(abs(qty) * data.unit_price, 2)
+    trans = InventoryTransaction(
+        company_id=company_id, item_code=data.item_code,
+        transaction_date=data.transaction_date, trans_type=data.trans_type,
+        quantity=qty, unit_price=data.unit_price, total_amount=total,
+        warehouse=data.warehouse, warehouse_to=data.warehouse_to,
+        voucher_no=data.voucher_no, reference_no=data.reference_no,
+        operator=data.operator, remark=data.remark
+    )
+    db.add(trans)
+    # 更新库存
+    if data.trans_type in ("入库", "调拨入", "盘盈", "其他"):
+        item.current_stock += qty
+    elif data.trans_type in ("出库", "调拨出", "盘亏"):
+        item.current_stock -= qty
+        if item.current_stock < 0:
+            item.current_stock += qty
+            raise HTTPException(400, detail=f"库存不足，当前库存: {item.current_stock}")
+    item.updated_at = datetime.now()
+    db.commit()
+    db.refresh(trans)
+    return {"id": trans.id, "message": f"{data.trans_type}成功，当前库存: {item.current_stock}"}
+
+
+# ==================== 合同管理 ====================
+
+class ContractCreate(BaseModel):
+    contract_no: str
+    name: str
+    contract_type: str
+    party_a: Optional[str] = None
+    party_b: Optional[str] = None
+    amount: float = 0.0
+    signing_date: Optional[date] = None
+    effective_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    status: str = "起草中"
+    responsible_person: Optional[str] = None
+    dept_code: Optional[str] = None
+    content_summary: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class ContractUpdate(BaseModel):
+    name: Optional[str] = None
+    contract_type: Optional[str] = None
+    party_a: Optional[str] = None
+    party_b: Optional[str] = None
+    amount: Optional[float] = None
+    signing_date: Optional[date] = None
+    effective_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    status: Optional[str] = None
+    responsible_person: Optional[str] = None
+    content_summary: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class ContractPaymentCreate(BaseModel):
+    payment_no: int = 1
+    payment_type: str
+    amount: float
+    due_date: Optional[date] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/contracts")
+def list_contracts(
+    company_id: int = Query(1),
+    contract_type: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(Contract).filter(Contract.company_id == company_id)
+    if contract_type:
+        q = q.filter(Contract.contract_type == contract_type)
+    if status:
+        q = q.filter(Contract.status == status)
+    if keyword:
+        q = q.filter(or_(Contract.contract_no.contains(keyword), Contract.name.contains(keyword)))
+    contracts = q.order_by(Contract.signing_date.desc()).all()
+    return [{
+        "id": c.id, "contract_no": c.contract_no, "name": c.name,
+        "contract_type": c.contract_type, "party_a": c.party_a, "party_b": c.party_b,
+        "amount": c.amount, "signing_date": str(c.signing_date) if c.signing_date else "",
+        "effective_date": str(c.effective_date) if c.effective_date else "",
+        "expiry_date": str(c.expiry_date) if c.expiry_date else "",
+        "status": c.status, "responsible_person": c.responsible_person,
+        "dept_code": c.dept_code, "content_summary": c.content_summary, "remark": c.remark
+    } for c in contracts]
+
+
+@app.post("/api/contracts")
+def create_contract(data: ContractCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Contract).filter(Contract.company_id == company_id, Contract.contract_no == data.contract_no).first():
+        raise HTTPException(400, detail=f"合同编号 {data.contract_no} 已存在")
+    contract = Contract(company_id=company_id, **data.model_dump())
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return {"id": contract.id, "contract_no": contract.contract_no, "message": "合同创建成功"}
+
+
+@app.put("/api/contracts/{contract_id}")
+def update_contract(contract_id: int, data: ContractUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
+    if not c:
+        raise HTTPException(404, detail="合同不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(c, k, v)
+    c.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/contracts/{contract_id}")
+def delete_contract(contract_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
+    if not c:
+        raise HTTPException(404, detail="合同不存在")
+    if c.status in ("履行中", "已签署"):
+        raise HTTPException(400, detail=f"合同状态为'{c.status}'，不能删除")
+    db.delete(c)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+@app.get("/api/contracts/{contract_id}/payments")
+def get_contract_payments(contract_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    payments = db.query(ContractPayment).filter(
+        ContractPayment.company_id == company_id,
+        ContractPayment.contract_id == contract_id
+    ).order_by(ContractPayment.payment_no).all()
+    return [{
+        "id": p.id, "payment_no": p.payment_no, "payment_type": p.payment_type,
+        "amount": p.amount, "due_date": str(p.due_date) if p.due_date else "",
+        "paid_date": str(p.paid_date) if p.paid_date else "",
+        "paid_amount": p.paid_amount, "status": p.status, "remark": p.remark
+    } for p in payments]
+
+
+@app.post("/api/contracts/{contract_id}/payments")
+def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
+    if not c:
+        raise HTTPException(404, detail="合同不存在")
+    payment = ContractPayment(
+        company_id=company_id, contract_id=contract_id,
+        payment_no=data.payment_no, payment_type=data.payment_type,
+        amount=data.amount, due_date=data.due_date, remark=data.remark
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    return {"id": payment.id, "message": "付款计划添加成功"}
 
 
 # ==================== AI 智能助手对话引擎 ====================
@@ -1093,6 +1884,52 @@ def extract_amount(text: str) -> Optional[float]:
 def extract_number(text: str) -> Optional[int]:
     m = re.search(r"(\d+)", text)
     return int(m.group(1)) if m else None
+
+
+# ==================== 信息真实性校验 ====================
+
+def validate_uscc(code: str) -> tuple:
+    """校验统一社会信用代码 (GB 32100-2015)"""
+    if not code or not code.strip():
+        return True, ""
+    code = code.strip().upper()
+    if len(code) != 18:
+        return False, "统一社会信用代码必须为18位"
+    if not re.match(r'^[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}$', code):
+        return False, "统一社会信用代码格式不正确（应为：2位登记管理机关+6位组织机构代码+9位主体标识码+1位校验码）"
+    char_map = '0123456789ABCDEFGHJKLMNPQRTUWXY'
+    weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28]
+    total = sum(char_map.index(code[i]) * weights[i] for i in range(17))
+    check_idx = (31 - total % 31) % 31
+    expected = char_map[check_idx]
+    if code[17] != expected:
+        return False, f"校验码不正确，应为 '{expected}'"
+    return True, ""
+
+
+def validate_id_card(card_no: str) -> tuple:
+    """校验中国居民身份证号码 (GB 11643-1999)"""
+    if not card_no or not card_no.strip():
+        return True, ""
+    card_no = card_no.strip().upper()
+    if len(card_no) != 18:
+        return False, "身份证号码必须为18位"
+    if not re.match(r'^\d{17}[\dX]$', card_no):
+        return False, "身份证号码前17位必须为数字，第18位为数字或X"
+    try:
+        birth_str = card_no[6:14]
+        birth = date(int(birth_str[0:4]), int(birth_str[4:6]), int(birth_str[6:8]))
+        if birth >= date.today():
+            return False, "身份证号码中的出生日期不能晚于当前日期"
+    except ValueError:
+        return False, "身份证号码中的出生日期无效（应为YYYYMMDD格式）"
+    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+    check_chars = '10X98765432'
+    total = sum(int(card_no[i]) * weights[i] for i in range(17))
+    expected = check_chars[total % 11]
+    if card_no[17] != expected:
+        return False, f"身份证校验码不正确，应为 '{expected}'"
+    return True, ""
 
 
 # ==================== 文件上传 ====================
@@ -1200,7 +2037,7 @@ async def upload_file(
 
 
 @app.post("/api/chat")
-def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)):
+def chat_endpoint(payload: ChatRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
     """AI 助手对话接口"""
     message = payload.message.strip()
     sid = payload.session_id or str(uuid.uuid4())
@@ -1701,7 +2538,7 @@ def handle_create_voucher(sess, msg, db, sid):
             ).first()
             if not acc:
                 # 列出可选科目
-                accounts = db.query(Account).filter(Account.is_active == True).order_by(Account.code).all()
+                accounts = db.query(Account).filter(Account.company_id == company_id, Account.is_active == True).order_by(Account.code).all()
                 return {
                     "reply": f"⚠️ 未找到科目「{account}」。\n\n请使用科目编码或名称，例如：\n• `1001` 库存现金\n• `1403` 原材料\n• `1002` 银行存款\n• `5001` 生产成本\n\n要查看全部科目请打开侧边栏「会计科目」。",
                     "session_id": sid,
@@ -1891,7 +2728,7 @@ def handle_create_customer(sess, msg, db, sid):
 
 def save_customer(data, db, sess, sid):
     try:
-        existing = db.query(Customer).filter(Customer.code == data.get("code", "")).first()
+        existing = db.query(Customer).filter(Customer.company_id == company_id, Customer.code == data.get("code", "")).first()
         if existing:
             return {"reply": f"⚠️ 编码 {data['code']} 已存在，请换一个编码。", "session_id": sid, "action": None}
         c = Customer(
@@ -1957,7 +2794,7 @@ def handle_create_supplier(sess, msg, db, sid):
 
 def save_supplier(data, db, sess, sid):
     try:
-        if db.query(Supplier).filter(Supplier.code == data.get("code", "")).first():
+        if db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == data.get("code", "")).first():
             return {"reply": f"⚠️ 编码 {data['code']} 已存在。", "session_id": sid, "action": None}
         s = Supplier(code=data.get("code", ""), name=data.get("name", ""), contact=data.get("contact"), phone=data.get("phone"))
         db.add(s); db.commit()
@@ -2012,9 +2849,9 @@ def save_employee(data, db, sess, sid):
     try:
         dept_code = None
         if data.get("department_name"):
-            d = db.query(Department).filter(Department.name.contains(data["department_name"])).first()
+            d = db.query(Department).filter(Department.company_id == company_id, Department.name.contains(data["department_name"])).first()
             if d: dept_code = d.code
-        if db.query(Employee).filter(Employee.code == data.get("code", "")).first():
+        if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.get("code", "")).first():
             return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
         e = Employee(code=data.get("code", ""), name=data.get("name", ""), department_code=dept_code, position=data.get("position"), phone=data.get("phone"))
         db.add(e); db.commit()

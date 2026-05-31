@@ -227,6 +227,19 @@
     .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
     .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+    /* ====== 公司选择器 & 新模块样式 ====== */
+    .company-selector { display: flex; align-items: center; gap: 8px; margin-right: 16px; }
+    .company-selector select {
+      padding: 5px 10px; border: 1px solid var(--gray-300); border-radius: 6px;
+      font-size: 13px; background: #fff; cursor: pointer; color: var(--gray-900);
+    }
+    .company-selector .label { font-size: 12px; color: var(--gray-500); }
+
+    .badge-active   { background: #dcfce7; color: #166534; }
+    .badge-deprecated { background: var(--gray-100); color: var(--gray-500); }
+    .badge-signed   { background: #dbeafe; color: #1e40af; }
+    .badge-executed { background: #dcfce7; color: #166534; }
+    .badge-overdue   { background: #fee2e2; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -255,6 +268,7 @@
     <div class="nav-group-title">财务报表</div>
     <div class="nav-item" data-page="profit-loss"><span class="icon">📈</span>利润表</div>
     <div class="nav-item" data-page="balance-sheet"><span class="icon">⚖️</span>资产负债表</div>
+    <div class="nav-item" data-page="account-balance"><span class="icon">📒</span>科目余额表</div>
 
     <div class="nav-group-title">基础档案</div>
     <div class="nav-item" data-page="company"><span class="icon">🏢</span>公司信息</div>
@@ -266,6 +280,15 @@
     <div class="nav-group-title">基础设置</div>
     <div class="nav-item" data-page="accounts"><span class="icon">🗂️</span>会计科目</div>
     <div class="nav-item" data-page="periods"><span class="icon">📅</span>期间管理</div>
+    <div class="nav-group-title">资产管理</div>
+    <div class="nav-item" data-page="fixed-assets"><span class="icon">🏭</span>固定资产</div>
+    <div class="nav-item" data-page="intangible-assets"><span class="icon">📑</span>无形资产</div>
+
+    <div class="nav-group-title">库存管理</div>
+    <div class="nav-item" data-page="inventory"><span class="icon">📦</span>库存管理</div>
+
+    <div class="nav-group-title">合同管理</div>
+    <div class="nav-item" data-page="contracts"><span class="icon">📝</span>合同管理</div>
   </div>
 </nav>
 
@@ -305,12 +328,18 @@ const pages = {
   'detail-ledger': '明细账',
   'profit-loss': '利润表',
   'balance-sheet': '资产负债表',
+  'account-balance': '科目余额表',
   'accounts': '会计科目',
-  'periods': '期间管理'
+  'periods': '期间管理',
+  'fixed-assets': '固定资产',
+  'intangible-assets': '无形资产',
+  'inventory': '库存管理',
+  'contracts': '合同管理'
 };
 
-// ==================== 初始化 ====================
+// ==================== 初始化（多公司版本） ====================
 async function init() {
+  await loadCompanies();
   await loadCurrentPeriod();
   await loadAllAccounts();
   navigateTo('dashboard');
@@ -355,11 +384,15 @@ function navigateTo(page) {
     case 'balance-sheet': renderBalanceSheet(); break;
     case 'accounts': renderAccounts(); break;
     case 'periods': renderPeriods(); break;
-    case 'company': renderCompany(); break;
+    case 'company': showCompanyManager(); break;
     case 'departments': renderDepartments(); break;
     case 'employees': renderEmployees(); break;
     case 'customers': renderCustomers(); break;
     case 'suppliers': renderSuppliers(); break;
+    case 'fixed-assets': renderFixedAssets(); break;
+    case 'intangible-assets': renderIntangibleAssets(); break;
+    case 'inventory': renderInventory(); break;
+    case 'contracts': renderContracts(); break;
   }
 }
 
@@ -367,8 +400,13 @@ document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => navigateTo(el.dataset.page));
 });
 
-// ==================== API 工具 ====================
+// ==================== API 工具（多公司版本） ====================
 async function api(url, options = {}) {
+  // 自动附加 company_id 参数（/api/companies 自身除外）
+  if (url.includes('/api/') && !url.includes('company_id=') && !url.startsWith('/api/companies')) {
+    const sep = url.includes('?') ? '&' : '?';
+    url = url + sep + 'company_id=' + currentCompanyId;
+  }
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options
@@ -1817,6 +1855,885 @@ function showPeriodSelector() {
 
 // ==================== 启动 ====================
 init();
+
+// ==================== 多公司支持 ====================
+let currentCompanyId = 1;
+let currentCompanyName = '';
+let allCompanies = [];
+
+async function loadCompanies() {
+  try {
+    allCompanies = await fetch('/api/companies').then(r => r.json());
+    const sel = document.getElementById('company-select');
+    sel.innerHTML = allCompanies.map(c =>
+      '<option value="' + c.id + '" ' + (c.id === currentCompanyId ? 'selected' : '') + '>' + c.name + '</option>'
+    ).join('');
+    if (allCompanies.length > 0) {
+      const cur = allCompanies.find(c => c.id === currentCompanyId) || allCompanies[0];
+      currentCompanyName = cur.name;
+    }
+  } catch (e) {
+    console.error('加载公司列表失败', e);
+  }
+}
+
+async function switchCompany() {
+  const sel = document.getElementById('company-select');
+  currentCompanyId = parseInt(sel.value);
+  const cur = allCompanies.find(c => c.id === currentCompanyId);
+  currentCompanyName = cur ? cur.name : '';
+  toast('已切换到：' + currentCompanyName, 'success');
+  navigateTo(currentPage);
+}
+
+// ==================== 公司账套管理 ====================
+async function showCompanyManager() {
+  try {
+    const companies = await fetch('/api/companies').then(r => r.json());
+    let html = '<div class="card-title">\U0001f3e2 公司账套管理</div>';
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+    html += '<button class="btn btn-primary" onclick="showCompanyForm()">\uff0b 新增公司</button>';
+    html += '<button class="btn btn-secondary" onclick="showCompanyForm()">\uff0b 新建账套</button>';
+    html += '</div>';
+    html += '<div class="table-wrap"><table><thead><tr><th>ID</th><th>公司名称</th><th>统一社会信用代码</th><th>税号</th><th>操作</th></tr></thead><tbody>';
+    for (const c of companies) {
+      html += '<tr>' +
+        '<td>' + c.id + '</td>' +
+        '<td>' + c.name + '</td>' +
+        '<td>' + (c.uscc || '') + '</td>' +
+        '<td>' + (c.tax_no || '') + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm btn-secondary" onclick="showCompanyForm(' + c.id + ')">\u7f16\u8f91</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteCompany(' + c.id + ')">\u5220\u9664</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    html += '</tbody></table></div>';
+    document.getElementById('content-area').innerHTML = html;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showCompanyForm(companyId) {
+  companyId = companyId || null;
+  let html = '<div class="modal-title">' + (companyId ? '\u7f16\u8f91\u516c\u53f8' : '\u65b0\u589e\u516c\u53f8') + '</div>';
+  html += '<form id="company-form" class="form-grid">';
+  const fields = [
+    ['name', '\u516c\u53f8\u540d\u79f0', 'text', 'required'],
+    ['uscc', '\u7edf\u4e00\u793e\u4f1a\u4fe1\u7528\u4ee3\u7801', 'text', ''],
+    ['tax_no', '\u7a0e\u53f7', 'text', ''],
+    ['address', '\u5730\u5740', 'text', ''],
+    ['phone', '\u7535\u8bdd', 'text', ''],
+    ['bank_name', '\u5f00\u6237\u94f6\u884c', 'text', ''],
+    ['bank_account', '\u94f6\u884c\u8d26\u53f7', 'text', ''],
+  ];
+  for (const f of fields) {
+    html += '<div class="form-group"><label>' + f[1] + '</label>';
+    html += '<input type="' + f[2] + '" class="form-control" name="' + f[0] + '" ' + f[3] + '>';
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveCompany(' + (companyId || 'null') + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+  if (companyId) {
+    try {
+      const c = await fetch('/api/companies/' + companyId).then(r => r.json());
+      for (const f of fields) {
+        const el = document.querySelector('#company-form [name="' + f[0] + '"]');
+        if (el) el.value = c[f[0]] || '';
+      }
+    } catch (e) {}
+  }
+}
+
+async function saveCompany(id) {
+  const form = document.getElementById('company-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) { if (v) body[k] = v; });
+  try {
+    if (id && id !== 'null') {
+      await fetch('/api/companies/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    } else {
+      const res = await fetch('/api/companies', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      currentCompanyId = data.id;
+    }
+    closeModal();
+    toast('\u4fdd\u5b58\u6210\u529f', 'success');
+    await loadCompanies();
+    showCompanyManager();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteCompany(id) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u516c\u53f8\u8d26\u5957\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u6062\u590d\uff01')) return;
+  try {
+    await fetch('/api/companies/' + id, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await loadCompanies();
+    showCompanyManager();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 固定资产 ====================
+async function renderFixedAssets() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div class="card" style="margin-bottom:0">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+      '<div style="font-size:15px;font-weight:600">\U0001f3ed 固定资产</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-success" onclick="depreciateAll()">\U0001f4c9 计提本月折旧</button>' +
+        '<button class="btn btn-primary" onclick="showFixedAssetForm()">\uff0b 新增资产</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="table-wrap" id="fa-table">\u52a0\u8f7d\u4e2d...</div>' +
+  '</div>';
+  await loadFixedAssets();
+}
+
+async function loadFixedAssets() {
+  try {
+    const data = await api('/api/fixed-assets');
+    let tbody = '';
+    for (const a of data) {
+      const statusBadge = a.usage_status === 'active'
+        ? '<span class="badge badge-active">\u5728\u7528</span>'
+        : '<span class="badge badge-deprecated">\u505c\u7528</span>';
+      tbody += '<tr>' +
+        '<td>' + a.asset_code + '</td>' +
+        '<td>' + a.asset_name + '</td>' +
+        '<td>' + (a.category || '') + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.original_value) + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.accumulated_depreciation) + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.net_value) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm btn-secondary" onclick="showFixedAssetForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteFixedAsset(' + a.id + ')">\u5220\u9664</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    document.getElementById('fa-table').innerHTML = '<table>' +
+      '<thead><tr><th>\u8d44\u4ea7\u7f16\u7801</th><th>\u8d44\u4ea7\u540d\u79f0</th><th>\u7c7b\u522b</th><th class="num">\u539f\u503c</th><th class="num">\u7d2f\u8ba1\u6298\u65e7</th><th class="num">\u51c0\u503c</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="8"><div class="empty-state"><p>\u6682\u65e0\u56fa\u5b9a\u8d44\u4ea7</p></div></td></tr>') + '</tbody>' +
+      '</table>';
+  } catch (e) {
+    document.getElementById('fa-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+  }
+}
+
+async function showFixedAssetForm(assetId) {
+  assetId = assetId || null;
+  let html = '<div class="modal-title">' + (assetId ? '\u7f16\u8f91\u56fa\u5b9a\u8d44\u4ea7' : '\u65b0\u589e\u56fa\u5b9a\u8d44\u4ea7') + '</div>';
+  html += '<form id="fa-form" class="form-grid">';
+  const faFields = [
+    ['asset_code', '\u8d44\u4ea7\u7f16\u7801', 'text', 'required'],
+    ['asset_name', '\u8d44\u4ea7\u540d\u79f0', 'text', 'required'],
+    ['category', '\u8d44\u4ea7\u7c7b\u522b', 'text', ''],
+    ['specification', '\u89c4\u683c\u578b\u53f7', 'text', ''],
+    ['location', '\u4f7f\u7528\u5730\u70b9', 'text', ''],
+    ['department', '\u4f7f\u7528\u90e8\u95e8', 'text', ''],
+    ['owner', '\u8d23\u4efb\u4eba', 'text', ''],
+    ['original_value', '\u539f\u503c', 'number', 'required step=0.01'],
+    ['residual_value_rate', '\u6b8b\u503c\u7387(%)', 'number', 'step=0.01', '5'],
+    ['depreciation_years', '\u6298\u65e7\u5e74\u9650', 'number', 'step=1', '5'],
+    ['depreciation_method', '\u6298\u65e7\u65b9\u6cd5', 'select', '["\u76f4\u7ebf\u6cd5","\u52a0\u901f\u6298\u65e7\u6cd5"]', '直线法'],
+    ['start_use_date', '\u5f00\u59cb\u4f7f\u7528\u65e5\u671f', 'date', 'required'],
+    ['usage_status', '\u4f7f\u7528\u72b6\u6001', 'select', '["active","deprecated"]', 'active'],
+  ];
+  for (const f of faFields) {
+    const [k, label, type, extra, def] = f;
+    html += '<div class="form-group"><label>' + (label || '') + '</label>';
+    if (type === 'select') {
+      const opts = JSON.parse(extra);
+      html += '<select class="form-control" name="' + k + '">';
+      for (const o of opts) {
+        html += '<option value="' + o + '"' + (def === o ? ' selected' : '') + '>' + o + '</option>';
+      }
+      html += '</select>';
+    } else if (type === 'number') {
+      html += '<input type="number" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    } else {
+      html += '<input type="' + type + '" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    }
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveFixedAsset(' + (assetId || 'null') + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+  if (assetId) {
+    try {
+      const a = await api('/api/fixed-assets/' + assetId);
+      for (const f of faFields) {
+        const el = document.querySelector('#fa-form [name="' + f[0] + '"]');
+        if (el) el.value = a[f[0]] != null ? a[f[0]] : '';
+      }
+    } catch (e) {}
+  }
+}
+
+async function saveFixedAsset(id) {
+  const form = document.getElementById('fa-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) {
+    if (v !== '' && v !== undefined) {
+      body[k] = (['original_value','residual_value_rate','depreciation_years'].includes(k)) ? parseFloat(v) : v;
+    }
+  });
+  try {
+    if (id && id !== 'null') {
+      await api('/api/fixed-assets/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/fixed-assets', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeModal();
+    toast('\u4fdd\u5b58\u6210\u529f', 'success');
+    await loadFixedAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteFixedAsset(id) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u56fa\u5b9a\u8d44\u4ea7\uff1f')) return;
+  try {
+    await api('/api/fixed-assets/' + id, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await loadFixedAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function depreciateAll() {
+  if (!confirm('\u786e\u8ba4\u5bf9\u5168\u90e8\u5728\u7528\u56fa\u5b9a\u8d44\u4ea7\u8ba1\u63d0\u672c\u6708\u6298\u65e7\uff1f')) return;
+  try {
+    const res = await api('/api/fixed-assets/depreciate', { method: 'POST', body: JSON.stringify({period: currentPeriod}) });
+    toast('\u6298\u65e7\u5b8c\u6210\uff0c\u5171\u5904\u7406 ' + (res.depreciated_count || 0) + ' \u9879\u8d44\u4ea7', 'success');
+    await loadFixedAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 无形资产 ====================
+async function renderIntangibleAssets() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div class="card" style="margin-bottom:0">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+      '<div style="font-size:15px;font-weight:600">\U0001f4d1 无形资产</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-success" onclick="amortizeAll()">\U0001f4c9 摊销本月</button>' +
+        '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">\uff0b 新增无形资产</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="table-wrap" id="ia-table">\u52a0\u8f7d\u4e2d...</div>' +
+  '</div>';
+  await loadIntangibleAssets();
+}
+
+async function loadIntangibleAssets() {
+  try {
+    const data = await api('/api/intangible-assets');
+    let tbody = '';
+    for (const a of data) {
+      const statusBadge = a.usage_status === 'active'
+        ? '<span class="badge badge-active">\u5728\u7528</span>'
+        : '<span class="badge badge-deprecated">\u505c\u7528</span>';
+      tbody += '<tr>' +
+        '<td>' + a.asset_code + '</td>' +
+        '<td>' + a.asset_name + '</td>' +
+        '<td>' + (a.category || '') + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.original_value) + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.accumulated_amortization) + '</td>' +
+        '<td class="num">\uffe5' + fmt(a.net_value) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm btn-secondary" onclick="showIntangibleAssetForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteIntangibleAsset(' + a.id + ')">\u5220\u9664</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    document.getElementById('ia-table').innerHTML = '<table>' +
+      '<thead><tr><th>\u8d44\u4ea7\u7f16\u7801</th><th>\u8d44\u4ea7\u540d\u79f0</th><th>\u7c7b\u522b</th><th class="num">\u539f\u503c</th><th class="num">\u7d2f\u8ba1\u644a\u9500</th><th class="num">\u51c0\u503c</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="8"><div class="empty-state"><p>\u6682\u65e0\u65e0\u5f62\u8d44\u4ea7</p></div></td></tr>') + '</tbody>' +
+      '</table>';
+  } catch (e) {
+    document.getElementById('ia-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+  }
+}
+
+async function showIntangibleAssetForm(assetId) {
+  assetId = assetId || null;
+  let html = '<div class="modal-title">' + (assetId ? '\u7f16\u8f91\u65e0\u5f62\u8d44\u4ea7' : '\u65b0\u589e\u65e0\u5f62\u8d44\u4ea7') + '</div>';
+  html += '<form id="ia-form" class="form-grid">';
+  const iaFields = [
+    ['asset_code', '\u8d44\u4ea7\u7f16\u7801', 'text', 'required'],
+    ['asset_name', '\u8d44\u4ea7\u540d\u79f0', 'text', 'required'],
+    ['category', '\u8d44\u4ea7\u7c7b\u522b', 'text', ''],
+    ['original_value', '\u539f\u503c', 'number', 'required step=0.01'],
+    ['residual_value_rate', '\u6b8b\u503c\u7387(%)', 'number', 'step=0.01', '5'],
+    ['amortization_years', '\u644a\u9500\u5e74\u9650', 'number', 'step=1', '5'],
+    ['amortization_method', '\u644a\u9500\u65b9\u6cd5', 'select', '["\u76f4\u7ebf\u6cd5"]', '直线法'],
+    ['start_use_date', '\u5f00\u59cb\u4f7f\u7528\u65e5\u671f', 'date', 'required'],
+    ['usage_status', '\u4f7f\u7528\u72b6\u6001', 'select', '["active","deprecated"]', 'active'],
+  ];
+  for (const f of iaFields) {
+    const [k, label, type, extra, def] = f;
+    html += '<div class="form-group"><label>' + label + '</label>';
+    if (type === 'select') {
+      const opts = JSON.parse(extra);
+      html += '<select class="form-control" name="' + k + '">';
+      for (const o of opts) {
+        html += '<option value="' + o + '"' + (def === o ? ' selected' : '') + '>' + o + '</option>';
+      }
+      html += '</select>';
+    } else if (type === 'number') {
+      html += '<input type="number" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    } else {
+      html += '<input type="' + type + '" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    }
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveIntangibleAsset(' + (assetId || 'null') + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+  if (assetId) {
+    try {
+      const a = await api('/api/intangible-assets/' + assetId);
+      for (const f of iaFields) {
+        const el = document.querySelector('#ia-form [name="' + f[0] + '"]');
+        if (el) el.value = a[f[0]] != null ? a[f[0]] : '';
+      }
+    } catch (e) {}
+  }
+}
+
+async function saveIntangibleAsset(id) {
+  const form = document.getElementById('ia-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) {
+    if (v !== '' && v !== undefined) {
+      body[k] = (['original_value','residual_value_rate','amortization_years'].includes(k)) ? parseFloat(v) : v;
+    }
+  });
+  try {
+    if (id && id !== 'null') {
+      await api('/api/intangible-assets/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/intangible-assets', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeModal();
+    toast('\u4fdd\u5b58\u6210\u529f', 'success');
+    await loadIntangibleAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteIntangibleAsset(id) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u65e0\u5f62\u8d44\u4ea7\uff1f')) return;
+  try {
+    await api('/api/intangible-assets/' + id, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await loadIntangibleAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function amortizeAll() {
+  if (!confirm('\u786e\u8ba4\u5bf9\u5168\u90e8\u5728\u7528\u65e0\u5f62\u8d44\u4ea7\u644a\u9500\u672c\u6708\uff1f')) return;
+  try {
+    const res = await api('/api/intangible-assets/amortize', { method: 'POST', body: JSON.stringify({period: currentPeriod}) });
+    toast('\u644a\u9500\u5b8c\u6210\uff0c\u5171\u5904\u7406 ' + (res.amortized_count || 0) + ' \u9879\u8d44\u4ea7', 'success');
+    await loadIntangibleAssets();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 库存管理 ====================
+let inventoryTxPage = 1;
+
+async function renderInventory() {
+  const el = document.getElementById('content-area');
+  el.innerHTML =
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+        '<div style="font-size:15px;font-weight:600">\U0001f4e6 库存管理</div>' +
+        '<div style="display:flex;gap:8px">' +
+          '<button class="btn btn-primary" onclick="showInventoryItemForm()">\uff0b 新增存货</button>' +
+          '<button class="btn btn-secondary" onclick="showInventoryTxForm()">\U0001f4dd 录入收发记录</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="table-wrap" id="inv-table">\u52a0\u8f7d\u4e2d...</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="card-title">\U0001f4cb 最近收发记录</div>' +
+      '<div class="table-wrap" id="inv-tx-table"></div>' +
+      '<div class="pagination" id="inv-tx-pagination"></div>' +
+    '</div>';
+  await Promise.all([loadInventoryItems(), loadInventoryTransactions()]);
+}
+
+async function loadInventoryItems() {
+  try {
+    const data = await api('/api/inventory-items');
+    let tbody = '';
+    for (const a of data) {
+      tbody += '<tr>' +
+        '<td>' + a.item_code + '</td>' +
+        '<td>' + a.item_name + '</td>' +
+        '<td>' + (a.specification || '') + '</td>' +
+        '<td>' + (a.unit || '') + '</td>' +
+        '<td class="num">' + (a.quantity_on_hand != null ? fmt(a.quantity_on_hand) : '-') + '</td>' +
+        '<td class="num">\uffe5' + (a.total_cost != null ? fmt(a.total_cost) : '-') + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm btn-secondary" onclick="showInventoryItemForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteInventoryItem(' + a.id + ')">\u5220\u9664</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    document.getElementById('inv-table').innerHTML = '<table>' +
+      '<thead><tr><th>\u5b58\u8d27\u7f16\u7801</th><th>\u540d\u79f0</th><th>\u89c4\u683c</th><th>\u5355\u4f4d</th><th class="num">\u7ed3\u5b58\u6570\u91cf</th><th class="num">\u7ed3\u5b58\u6210\u672c</th><th>\u64cd\u4f5c</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="7"><div class="empty-state"><p>\u6682\u65e0\u5b58\u8d27\u6863\u6848</p></div></td></tr>') + '</tbody>' +
+      '</table>';
+  } catch (e) {
+    document.getElementById('inv-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+  }
+}
+
+async function showInventoryItemForm(itemId) {
+  itemId = itemId || null;
+  let html = '<div class="modal-title">' + (itemId ? '\u7f16\u8f91\u5b58\u8d27' : '\u65b0\u589e\u5b58\u8d27') + '</div>';
+  html += '<form id="inv-form" class="form-grid">';
+  const invFields = [
+    ['item_code', '\u5b58\u8d27\u7f16\u7801', 'text', 'required'],
+    ['item_name', '\u5b58\u8d27\u540d\u79f0', 'text', 'required'],
+    ['specification', '\u89c4\u683c\u578b\u53f7', 'text', ''],
+    ['unit', '\u5355\u4f4d', 'text', ''],
+    ['category', '\u7c7b\u522b', 'text', ''],
+    ['warehouse', '\u4ed3\u5e93\u4f4d\u7f6e', 'text', ''],
+  ];
+  for (const f of invFields) {
+    html += '<div class="form-group"><label>' + f[1] + '</label>';
+    html += '<input type="text" class="form-control" name="' + f[0] + '" ' + f[3] + '>';
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveInventoryItem(' + (itemId || 'null') + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+  if (itemId) {
+    try {
+      const a = await api('/api/inventory-items/' + itemId);
+      for (const f of invFields) {
+        const el = document.querySelector('#inv-form [name="' + f[0] + '"]');
+        if (el) el.value = a[f[0]] || '';
+      }
+    } catch (e) {}
+  }
+}
+
+async function saveInventoryItem(id) {
+  const form = document.getElementById('inv-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) { if (v) body[k] = v; });
+  try {
+    if (id && id !== 'null') {
+      await api('/api/inventory-items/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/inventory-items', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeModal();
+    toast('\u4fdd\u5b58\u6210\u529f', 'success');
+    await loadInventoryItems();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteInventoryItem(id) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u5b58\u8d27\u6863\u6848\uff1f')) return;
+  try {
+    await api('/api/inventory-items/' + id, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await loadInventoryItems();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showInventoryTxForm() {
+  let items = [];
+  try { items = await api('/api/inventory-items'); } catch (e) {}
+  let html = '<div class="modal-title">\U0001f4dd 录入收发记录</div>';
+  html += '<form id="inv-tx-form" class="form-grid">';
+  html += '<div class="form-group"><label>\u5b58\u8d27*</label><select class="form-control" name="inventory_item_id" required><option value="">-- \u9009\u62e9\u5b58\u8d27 --</option>';
+  for (const it of items) {
+    html += '<option value="' + it.id + '">' + it.item_code + ' ' + it.item_name + '</option>';
+  }
+  html += '</select></div>';
+  const txFieldDefs = {
+    tx_type: ['\u7c7b\u578b', 'select', [["receipt","\u5165\u5e93"],["issue","\u51fa\u5e93"],["adjust","\u8c03\u6574"]]],
+    tx_date: ['\u65e5\u671f', 'date', null],
+    quantity: ['\u6570\u91cf', 'number', 'required step=0.01'],
+    unit_price: ['\u5355\u4ef7', 'number', 'step=0.01'],
+    reference_no: ['\u5355\u636e\u53f7', 'text', null],
+    warehouse: ['\u4ed3\u5e93', 'text', null],
+    notes: ['\u5907\u6ce8', 'text', null],
+  };
+  for (const [k, [label, type, extra]] of Object.entries(txFieldDefs)) {
+    html += '<div class="form-group"><label>' + label + '</label>';
+    if (type === 'select') {
+      html += '<select class="form-control" name="' + k + '" required>';
+      for (const [val, txt] of extra) {
+        html += '<option value="' + val + '">' + txt + '</option>';
+      }
+      html += '</select>';
+    } else if (type === 'number') {
+      html += '<input type="number" class="form-control" name="' + k + '" ' + (extra || '') + '>';
+    } else {
+      html += '<input type="' + type + '" class="form-control" name="' + k + '" ' + (extra || '') + '>';
+    }
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveInventoryTx()">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+}
+
+async function saveInventoryTx() {
+  const form = document.getElementById('inv-tx-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) {
+    if (v !== '' && v !== undefined) {
+      body[k] = (['quantity','unit_price'].includes(k)) ? parseFloat(v) : v;
+    }
+  });
+  try {
+    await api('/api/inventory-transactions', { method: 'POST', body: JSON.stringify(body) });
+    closeModal();
+    toast('\u6536\u53d1\u8bb0\u5f55\u5df2\u4fdd\u5b58', 'success');
+    await Promise.all([loadInventoryItems(), loadInventoryTransactions()]);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function loadInventoryTransactions(page) {
+  page = page || 1;
+  inventoryTxPage = page;
+  try {
+    const data = await api('/api/inventory-transactions?page=' + page + '&page_size=15');
+    const items = data.data || data;
+    const total = data.total || 0;
+    let tbody = '';
+    for (const t of items) {
+      let typeBadge;
+      if (t.tx_type === 'receipt') typeBadge = '<span class="badge badge-active">\u5165\u5e93</span>';
+      else if (t.tx_type === 'issue') typeBadge = '<span class="badge badge-pending">\u51fa\u5e93</span>';
+      else typeBadge = '<span class="badge badge-deprecated">\u8c03\u6574</span>';
+      tbody += '<tr>' +
+        '<td>' + (t.tx_date || '') + '</td>' +
+        '<td>' + typeBadge + '</td>' +
+        '<td>' + (t.item_code || '') + ' ' + (t.item_name || '') + '</td>' +
+        '<td class="num">' + (t.quantity != null ? fmt(t.quantity) : '-') + '</td>' +
+        '<td class="num">' + (t.unit_price != null ? fmt(t.unit_price) : '-') + '</td>' +
+        '<td class="num">' + (t.total_amount != null ? fmt(t.total_amount) : '-') + '</td>' +
+        '<td>' + (t.reference_no || '') + '</td>' +
+      '</tr>';
+    }
+    document.getElementById('inv-tx-table').innerHTML = '<table>' +
+      '<thead><tr><th>\u65e5\u671f</th><th>\u7c7b\u578b</th><th>\u5b58\u8d27</th><th class="num">\u6570\u91cf</th><th class="num">\u5355\u4ef7</th><th class="num">\u91d1\u989d</th><th>\u5355\u636e\u53f7</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="7"><div class="empty-state"><p>\u6682\u65e0\u6536\u53d1\u8bb0\u5f55</p></div></td></tr>') + '</tbody>' +
+      '</table>';
+    const totalPages = Math.ceil(total / 15);
+    if (totalPages > 1) {
+      let pages = '<span style="color:var(--gray-500)">\u5171 ' + total + ' \u6761</span>';
+      for (let i = 1; i <= totalPages; i++) {
+        pages += '<button class="page-btn ' + (i === page ? 'active' : '') + '" onclick="loadInventoryTransactions(' + i + ')">' + i + '</button>';
+      }
+      document.getElementById('inv-tx-pagination').innerHTML = pages;
+    }
+  } catch (e) {
+    document.getElementById('inv-tx-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+  }
+}
+
+// ==================== 合同管理 ====================
+async function renderContracts() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div class="card" style="margin-bottom:0">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+      '<div style="font-size:15px;font-weight:600">\U0001f4dd 合同管理</div>' +
+      '<button class="btn btn-primary" onclick="showContractForm()">\uff0b 新增合同</button>' +
+    '</div>' +
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="contract-status-filter" style="width:120px">' +
+        '<option value="">\u5168\u90e8\u72b6\u6001</option>' +
+        '<option value="\u8349\u7a3f">\u8349\u7a3f</option>' +
+        '<option value="\u6267\u884c\u4e2d">\u6267\u884c\u4e2d</option>' +
+        '<option value="\u5df2\u5b8c\u7ed3">\u5df2\u5b8c\u7ed3</option>' +
+        '<option value="\u5df2\u7ec8\u6b62">\u5df2\u7ec8\u6b62</option>' +
+      '</select>' +
+      '<button class="btn btn-primary" onclick="loadContracts()">\U0001f50d 查询</button>' +
+    '</div>' +
+    '<div class="table-wrap" id="contract-table">\u52a0\u8f7d\u4e2d...</div>' +
+  '</div>';
+  await loadContracts();
+}
+
+async function loadContracts() {
+  const status = document.getElementById('contract-status-filter')?.value || '';
+  let url = '/api/contracts';
+  if (status) url += '?status=' + encodeURIComponent(status);
+  try {
+    const data = await api(url);
+    let tbody = '';
+    for (const c of data) {
+      tbody += '<tr>' +
+        '<td><a href="#" onclick="showContractDetail(' + c.id + ');return false" style="color:var(--primary)">' + c.contract_no + '</a></td>' +
+        '<td>' + c.contract_name + '</td>' +
+        '<td>' + (c.party_a || '') + '</td>' +
+        '<td>' + (c.party_b || '') + '</td>' +
+        '<td>' + (c.contract_type || '') + '</td>' +
+        '<td class="num">\uffe5' + (c.amount != null ? fmt(c.amount) : '-') + '</td>' +
+        '<td>' + contractStatusBadge(c.status) + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm btn-secondary" onclick="showContractForm(' + c.id + ')">\u7f16\u8f91</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteContract(' + c.id + ')">\u5220\u9664</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    document.getElementById('contract-table').innerHTML = '<table>' +
+      '<thead><tr><th>\u5408\u540c\u7f16\u53f7</th><th>\u540d\u79f0</th><th>\u7532\u65b9</th><th>\u4e59\u65b9</th><th>\u7c7b\u578b</th><th class="num">\u91d1\u989d</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead>' +
+      '<tbody>' + (tbody || '<tr><td colspan="8"><div class="empty-state"><p>\u6682\u65e0\u5408\u540c</p></div></td></tr>') + '</tbody>' +
+      '</table>';
+  } catch (e) {
+    document.getElementById('contract-table').innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+  }
+}
+
+function contractStatusBadge(status) {
+  const map = {
+    '\u8349\u7a3f': 'badge-draft',
+    '\u6267\u884c\u4e2d': 'badge-signed',
+    '\u5df2\u5b8c\u7ed3': 'badge-closed',
+    '\u5df2\u7ec8\u6b62': 'badge-deprecated'
+  };
+  return '<span class="badge ' + (map[status] || '') + '">' + status + '</span>';
+}
+
+async function showContractForm(contractId) {
+  contractId = contractId || null;
+  let html = '<div class="modal-title">' + (contractId ? '\u7f16\u8f91\u5408\u540c' : '\u65b0\u589e\u5408\u540c') + '</div>';
+  html += '<form id="contract-form" class="form-grid">';
+  const ctFields = [
+    ['contract_no', '\u5408\u540c\u7f16\u53f7', 'text', 'required'],
+    ['contract_name', '\u5408\u540c\u540d\u79f0', 'text', 'required'],
+    ['contract_type', '\u5408\u540c\u7c7b\u578b', 'text', ''],
+    ['party_a', '\u7532\u65b9', 'text', ''],
+    ['party_b', '\u4e59\u65b9', 'text', ''],
+    ['sign_date', '\u7b7e\u8ba2\u65e5\u671f', 'date', ''],
+    ['effective_date', '\u751f\u6548\u65e5\u671f', 'date', ''],
+    ['expiry_date', '\u5230\u671f\u65e5\u671f', 'date', ''],
+    ['amount', '\u5408\u540c\u91d1\u989d', 'number', 'step=0.01'],
+    ['currency', '\u5e01\u79cd', 'text', '', 'CNY'],
+    ['status', '\u72b6\u6001', 'select', '["\u8349\u7a3f","\u6267\u884c\u4e2d","\u5df2\u5b8c\u7ed3","\u5df2\u7ec8\u6b62"]', '\u8349\u7a3f'],
+    ['notes', '\u5907\u6ce8', 'text', ''],
+  ];
+  for (const f of ctFields) {
+    const [k, label, type, extra, def] = f;
+    html += '<div class="form-group"><label>' + label + '</label>';
+    if (type === 'select') {
+      const opts = JSON.parse(extra);
+      html += '<select class="form-control" name="' + k + '">';
+      for (const o of opts) {
+        html += '<option value="' + o + '"' + (def === o ? ' selected' : '') + '>' + o + '</option>';
+      }
+      html += '</select>';
+    } else if (type === 'number') {
+      html += '<input type="number" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    } else {
+      html += '<input type="' + type + '" class="form-control" name="' + k + '" ' + (extra || '') + ' value="' + (def || '') + '">';
+    }
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="saveContract(' + (contractId || 'null') + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+  if (contractId) {
+    try {
+      const c = await api('/api/contracts/' + contractId);
+      for (const f of ctFields) {
+        const el = document.querySelector('#contract-form [name="' + f[0] + '"]');
+        if (el) el.value = c[f[0]] != null ? c[f[0]] : '';
+      }
+    } catch (e) {}
+  }
+}
+
+async function saveContract(id) {
+  const form = document.getElementById('contract-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) {
+    if (v !== '' && v !== undefined) body[k] = (k === 'amount') ? parseFloat(v) : v;
+  });
+  try {
+    if (id && id !== 'null') {
+      await api('/api/contracts/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/api/contracts', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeModal();
+    toast('\u4fdd\u5b58\u6210\u529f', 'success');
+    await loadContracts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteContract(id) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u5408\u540c\uff1f')) return;
+  try {
+    await api('/api/contracts/' + id, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await loadContracts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showContractDetail(contractId) {
+  try {
+    const c = await api('/api/contracts/' + contractId);
+    let html = '<div class="modal-title">\u5408\u540c\u8be6\u60c5 - ' + c.contract_no + '</div>';
+    html += '<div class="form-grid-3" style="margin-bottom:16px;font-size:13px">';
+    html += '<div><b>\u5408\u540c\u540d\u79f0\uff1a</b>' + c.contract_name + '</div>';
+    html += '<div><b>\u7c7b\u578b\uff1a</b>' + (c.contract_type || '-') + '</div>';
+    html += '<div><b>\u72b6\u6001\uff1a</b>' + contractStatusBadge(c.status) + '</div>';
+    html += '<div><b>\u7532\u65b9\uff1a</b>' + (c.party_a || '-') + '</div>';
+    html += '<div><b>\u4e59\u65b9\uff1a</b>' + (c.party_b || '-') + '</div>';
+    html += '<div><b>\u91d1\u989d\uff1a</b>\uffe5' + (c.amount != null ? fmt(c.amount) : '-') + '</div>';
+    html += '<div><b>\u7b7e\u8ba2\u65e5\u671f\uff1a</b>' + (c.sign_date || '-') + '</div>';
+    html += '<div><b>\u751f\u6548\u65e5\u671f\uff1a</b>' + (c.effective_date || '-') + '</div>';
+    html += '<div><b>\u5230\u671f\u65e5\u671f\uff1a</b>' + (c.expiry_date || '-') + '</div>';
+    html += '</div>';
+    if (c.notes) html += '<div style="margin-bottom:12px;font-size:13px"><b>\u5907\u6ce8\uff1a</b>' + c.notes + '</div>';
+
+    html += '<div class="card-title" style="margin-top:16px">\U0001f4b0 收付款计划</div>';
+    html += '<button class="btn btn-sm btn-primary" onclick="showPaymentForm(' + contractId + ')" style="margin-bottom:8px">\uff0b 添加收付款计划</button>';
+    if (c.payments && c.payments.length > 0) {
+      html += '<div class="table-wrap"><table><thead><tr><th>\u671f\u6b21</th><th>\u7c7b\u578b</th><th>\u8ba1\u5212\u65e5\u671f</th><th class="num">\u91d1\u989d</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody>';
+      for (const p of c.payments) {
+        let pStatus;
+        if (p.status === 'executed') pStatus = '<span class="badge badge-executed">\u5df2\u6267\u884c</span>';
+        else if (p.status === 'overdue') pStatus = '<span class="badge badge-overdue">\u903e\u671f</span>';
+        else pStatus = '<span class="badge badge-pending">\u5f85\u6267\u884c</span>';
+        html += '<tr>' +
+          '<td>' + (p.period_no || '') + '</td>' +
+          '<td>' + (p.payment_type === 'receipt' ? '\u6536\u6b3e' : '\u4ed8\u6b3e') + '</td>' +
+          '<td>' + (p.due_date || '') + '</td>' +
+          '<td class="num">\uffe5' + fmt(p.amount) + '</td>' +
+          '<td>' + pStatus + '</td>' +
+          '<td><button class="btn btn-sm btn-danger" onclick="deletePayment(' + contractId + ',' + p.id + ')">\u5220\u9664</button></td>' +
+        '</tr>';
+      }
+      html += '</tbody></table></div>';
+    } else {
+      html += '<div style="color:var(--gray-500);font-size:13px;padding:8px 0">\u6682\u65e0\u6536\u4ed8\u6b3e\u8ba1\u5212</div>';
+    }
+    showModal(html);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showPaymentForm(contractId) {
+  let html = '<div class="modal-title">\uff0b 添加收付款计划</div>';
+  html += '<form id="payment-form" class="form-grid">';
+  const pmFields = {
+    payment_type: ['\u7c7b\u578b', 'select', [["receipt","\u6536\u6b3e"],["payment","\u4ed8\u6b3e"]]],
+    period_no: ['\u671f\u6b21', 'text', null],
+    due_date: ['\u8ba1\u5212\u65e5\u671f', 'date', 'required'],
+    amount: ['\u91d1\u989d', 'number', 'required step=0.01'],
+    status: ['\u72b6\u6001', 'select', [["pending","\u5f85\u6267\u884c"],["executed","\u5df2\u6267\u884c"],["overdue","\u903e\u671f"]]],
+    notes: ['\u5907\u6ce8', 'text', null],
+  };
+  for (const [k, [label, type, extra]] of Object.entries(pmFields)) {
+    html += '<div class="form-group"><label>' + label + '</label>';
+    if (type === 'select') {
+      html += '<select class="form-control" name="' + k + '">';
+      for (const [val, txt] of extra) {
+        html += '<option value="' + val + '">' + txt + '</option>';
+      }
+      html += '</select>';
+    } else if (type === 'number') {
+      html += '<input type="number" class="form-control" name="' + k + '" ' + (extra || '') + '>';
+    } else {
+      html += '<input type="' + type + '" class="form-control" name="' + k + '" ' + (extra || '') + '>';
+    }
+    html += '</div>';
+  }
+  html += '</form>';
+  html += '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="closeModal()">\u53d6\u6d88</button>' +
+    '<button class="btn btn-primary" onclick="savePayment(' + contractId + ')">\u4fdd\u5b58</button>' +
+    '</div>';
+  showModal(html);
+}
+
+async function savePayment(contractId) {
+  const form = document.getElementById('payment-form');
+  const body = {};
+  new FormData(form).forEach(function(v, k) {
+    if (v !== '' && v !== undefined) body[k] = (k === 'amount') ? parseFloat(v) : v;
+  });
+  try {
+    await api('/api/contracts/' + contractId + '/payments', { method: 'POST', body: JSON.stringify(body) });
+    closeModal();
+    toast('\u6536\u4ed8\u6b3e\u8ba1\u5212\u5df2\u4fdd\u5b58', 'success');
+    await showContractDetail(contractId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deletePayment(contractId, paymentId) {
+  if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u6536\u4ed8\u6b3e\u8ba1\u5212\uff1f')) return;
+  try {
+    await api('/api/contracts/' + contractId + '/payments/' + paymentId, { method: 'DELETE' });
+    toast('\u5220\u9664\u6210\u529f', 'success');
+    await showContractDetail(contractId);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 </script>
 </body>
 </html>
