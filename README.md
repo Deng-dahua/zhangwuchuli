@@ -73,7 +73,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ## 目录结构
 
 ```
-zhangwuchuli/
+caishuixitong/
 ├── main.py           # FastAPI 主应用 & API 路由
 ├── database.py       # 数据库模型 & 初始化
 ├── requirements.txt  # Python 依赖
