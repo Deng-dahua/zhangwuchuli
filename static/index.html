@@ -3811,8 +3811,8 @@ async function renderSalesInvoices() {
     html += '</div>';
 
     // 工具栏
-    html += '<div class="toolbar">';
-    html += '<div class="toolbar-left">';
+    html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+    html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<select onchange="siFilter.category=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
     html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
     html += '<input placeholder="搜索发票号/代码/购方/货物..." oninput="siFilter.keyword=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px">';
@@ -3820,7 +3820,7 @@ async function renderSalesInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
-    html += '<div class="toolbar-right">';
+    html += '<div class="toolbar-left" style="flex:1 1 100%;justify-content:flex-start;">';
     html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增开具发票</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<div class="tab-btn-group">';
