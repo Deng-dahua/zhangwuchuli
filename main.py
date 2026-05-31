@@ -3255,6 +3255,11 @@ async def import_file_with_mapping(
                         continue
 
                     inv_no = mapped.get("invoice_no", "")
+                    digital_no = mapped.get("digital_invoice_no", "")
+                    # 数电发票场景：发票号码列可能为空，用数电发票号码代替
+                    if not inv_no and digital_no:
+                        inv_no = digital_no
+                        mapped["invoice_no"] = digital_no
                     if not inv_no:
                         errors.append(f"第{i+2}行: 缺少发票号码")
                         continue
