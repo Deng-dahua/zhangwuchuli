@@ -531,10 +531,10 @@ class Payment(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-# ==================== 销项发票（销售发票）====================
+# ==================== 开具发票（销售发票）====================
 
 class SalesInvoice(Base):
-    """销项发票 - 企业开出的销售发票"""
+    """开具发票 - 企业开出的销售发票"""
     __tablename__ = "sales_invoices"
     __table_args__ = (
         UniqueConstraint('company_id', 'invoice_no', name='uq_si_company_no'),
@@ -566,10 +566,10 @@ class SalesInvoice(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-# ==================== 进项发票（采购发票）====================
+# ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoice(Base):
-    """进项发票 - 企业收到的采购发票"""
+    """取得发票 - 企业收到的采购发票"""
     __tablename__ = "purchase_invoices"
     __table_args__ = (
         UniqueConstraint('company_id', 'invoice_no', name='uq_pi_company_no'),
@@ -652,7 +652,7 @@ class BankTransaction(Base):
 # ==================== 进项抵扣 ====================
 
 class InputVATDeduction(Base):
-    """进项抵扣管理 - 跟踪每张进项发票的认证抵扣"""
+    """进项抵扣管理 - 跟踪每张取得发票的认证抵扣"""
     __tablename__ = "input_vat_deductions"
     __table_args__ = (
         Index('idx_ivd_company_period', 'company_id', 'deduction_period'),
@@ -661,7 +661,7 @@ class InputVATDeduction(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
-    purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联进项发票ID")
+    purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联取得发票ID")
     invoice_no = Column(String(30), comment="发票号码")
     invoice_code = Column(String(30), comment="发票代码")
     invoice_date = Column(Date, comment="开票日期")

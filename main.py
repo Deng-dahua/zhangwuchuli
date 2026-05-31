@@ -2110,7 +2110,7 @@ def delete_payment(payment_id: int, company_id: int = Query(1), db: Session = De
     return {"message": "删除成功"}
 
 
-# ==================== 销项发票（销售发票）====================
+# ==================== 开具发票（销售发票）====================
 
 class SalesInvoiceCreate(BaseModel):
     invoice_no: str
@@ -2202,7 +2202,7 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
     db.add(inv)
     db.commit()
     db.refresh(inv)
-    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "销项发票创建成功"}
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "开具发票创建成功"}
 
 
 @app.get("/api/sales-invoices/stats")
@@ -2265,7 +2265,7 @@ def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
     return {"message": "删除成功"}
 
 
-# ==================== 进项发票（采购发票）====================
+# ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoiceCreate(BaseModel):
     invoice_no: str
@@ -2370,7 +2370,7 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
     db.add(inv)
     db.commit()
     db.refresh(inv)
-    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "进项发票创建成功"}
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "取得发票创建成功"}
 
 
 @app.get("/api/purchase-invoices/stats")

@@ -489,8 +489,8 @@
     <div class="nav-item" data-page="payments"><span class="icon">💰</span>付款管理</div>
 
     <div class="nav-group-title">发票管理</div>
-    <div class="nav-item" data-page="sales-invoices"><span class="icon">📤</span>销项发票</div>
-    <div class="nav-item" data-page="purchase-invoices"><span class="icon">📥</span>进项发票</div>
+    <div class="nav-item" data-page="sales-invoices"><span class="icon">📤</span>开具发票</div>
+    <div class="nav-item" data-page="purchase-invoices"><span class="icon">📥</span>取得发票</div>
     <div class="nav-item" data-page="input-vat-deductions"><span class="icon">🔍</span>进项抵扣</div>
 
     <div class="nav-group-title">资金管理</div>
@@ -543,8 +543,8 @@ const pages = {
   'inventory': '库存管理',
   'contracts': '合同管理',
   'payments': '付款管理',
-  'sales-invoices': '销项发票',
-  'purchase-invoices': '进项发票',
+  'sales-invoices': '开具发票',
+  'purchase-invoices': '取得发票',
   'input-vat-deductions': '进项抵扣',
   'bank-transactions': '银行流水'
 };
@@ -3725,7 +3725,7 @@ async function showPaymentDetail(paymentId) {
   }
 }
 
-// ==================== 销项发票 ====================
+// ==================== 开具发票 ====================
 
 let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { type: '', keyword: '', dateFrom: '', dateTo: '' };
@@ -3737,7 +3737,7 @@ async function renderSalesInvoices() {
       api('/api/sales-invoices/stats')
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="page-header"><h2>📤 销项发票</h2></div>';
+    let html = '<div class="page-header"><h2>📤 开具发票</h2></div>';
 
     // 统计卡片
     html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
@@ -3758,7 +3758,7 @@ async function renderSalesInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
-    html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增销项发票</button>';
+    html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增开具发票</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
     html += '</div>';
 
@@ -3783,7 +3783,7 @@ async function renderSalesInvoices() {
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:40px">暂无销项发票记录</td></tr>';
+      html += '<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const stCls = i.status === '正常' ? 'badge-green' : i.status === '红冲' ? 'badge-red' : 'badge-gray';
@@ -3816,7 +3816,7 @@ async function showSalesInvoiceForm(id) {
     data = await api('/api/sales-invoices/' + id);
   }
   const isEdit = !!id;
-  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑销项发票' : '新增销项发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑开具发票' : '新增开具发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
   html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
 
   html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label>';
@@ -3933,7 +3933,7 @@ async function saveSalesInvoice(id) {
 }
 
 async function deleteSalesInvoice(id) {
-  if (!confirm('确认删除该销项发票？')) return;
+  if (!confirm('确认删除该开具发票？')) return;
   try {
     const result = await api('/api/sales-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
@@ -3947,7 +3947,7 @@ async function showSalesDetail(id) {
   try {
     const i = await api('/api/sales-invoices/' + id);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="modal-header"><h3>销项发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+    let html = '<div class="modal-header"><h3>开具发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
     html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2">';
@@ -3993,7 +3993,7 @@ async function showSalesDetail(id) {
   }
 }
 
-// ==================== 进项发票 ====================
+// ==================== 取得发票 ====================
 
 let piTab = 'all';
 let piFilter = { type: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
@@ -4005,7 +4005,7 @@ async function renderPurchaseInvoices() {
       api('/api/purchase-invoices/stats')
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="page-header"><h2>📥 进项发票</h2></div>';
+    let html = '<div class="page-header"><h2>📥 取得发票</h2></div>';
 
     html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
@@ -4026,7 +4026,7 @@ async function renderPurchaseInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
-    html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增进项发票</button>';
+    html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增取得发票</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
     html += '</div>';
 
@@ -4049,7 +4049,7 @@ async function renderPurchaseInvoices() {
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:40px">暂无进项发票记录</td></tr>';
+      html += '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const certCls = i.certification_status === '已抵扣' ? 'badge-green' : i.certification_status === '已认证' ? 'badge-blue' : 'badge-gray';
@@ -4081,7 +4081,7 @@ async function showPurchaseInvoiceForm(id) {
     data = await api('/api/purchase-invoices/' + id);
   }
   const isEdit = !!id;
-  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑进项发票' : '新增进项发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑取得发票' : '新增取得发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
   html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
 
   html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label>';
@@ -4205,7 +4205,7 @@ async function savePurchaseInvoice(id) {
 }
 
 async function deletePurchaseInvoice(id) {
-  if (!confirm('确认删除该进项发票？')) return;
+  if (!confirm('确认删除该取得发票？')) return;
   try {
     const result = await api('/api/purchase-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
@@ -4219,7 +4219,7 @@ async function showPurchaseDetail(id) {
   try {
     const i = await api('/api/purchase-invoices/' + id);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="modal-header"><h3>进项发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+    let html = '<div class="modal-header"><h3>取得发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
     html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2">';
@@ -4752,7 +4752,7 @@ async function batchCertify() {
 // ==================== 文件导入 - 列映射 ====================
 
 function showUploadModal(module) {
-  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入销项发票', 'purchase-invoice': '导入进项发票' };
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票' };
   const modal = createModal(titles[module] || '导入文件', `
     <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
     <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
