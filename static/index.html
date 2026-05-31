@@ -586,8 +586,13 @@ function showRegistration() {
 
 function showCompanyPick(companies) {
   sessionStorage.removeItem('onRegistrationPage');
+  // 没有公司时直接跳建档页
+  if (!companies || companies.length === 0) {
+    showRegistration();
+    return;
+  }
   const list = document.getElementById('pick-list');
-  list.innerHTML = (companies || []).map(c => {
+  list.innerHTML = companies.map(c => {
     const initial = c.name ? c.name.charAt(0) : '公';
     return '<li onclick="enterApp(' + c.id + ', \'' + escapeHtml(c.name) + '\')">'
       + '<div class="av">' + initial + '</div>'
@@ -2504,6 +2509,18 @@ async function deleteCompany(id) {
   try {
     await fetch('/api/companies/' + id, { method: 'DELETE' });
     toast('\u5220\u9664\u6210\u529f', 'success');
+    // 如果删除的是当前账套，退出到公司选择页
+    if (id === currentCompanyId) {
+      localStorage.removeItem('lastCompanyId');
+      localStorage.removeItem('lastCompanyName');
+      localStorage.removeItem('lastPage');
+      currentCompanyId = 1;
+      currentCompanyName = '';
+      const companies = await loadCompaniesRaw();
+      window._companiesForPick = companies || [];
+      showCompanyPick(companies);
+      return;
+    }
     await loadCompanies();
     showCompanyManager();
   } catch (e) {
