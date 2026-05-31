@@ -2259,13 +2259,15 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
 def sales_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     base = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
     total_count = base.count()
+    total_amt = base.with_entities(func.sum(SalesInvoice.amount)).scalar() or 0
     total_amount = base.with_entities(func.sum(SalesInvoice.total_amount)).scalar() or 0
     total_tax = base.with_entities(func.sum(SalesInvoice.tax_amount)).scalar() or 0
     normal_count = base.filter(SalesInvoice.status == "正常").count()
     void_count = base.filter(SalesInvoice.status == "作废").count()
     red_count = base.filter(SalesInvoice.status == "红冲").count()
     return {
-        "total_count": total_count, "total_amount": round(total_amount, 2),
+        "total_count": total_count, "total_amt": round(total_amt, 2),
+        "total_amount": round(total_amount, 2),
         "total_tax": round(total_tax, 2),
         "normal_count": normal_count, "void_count": void_count,
         "red_count": red_count
@@ -2488,14 +2490,21 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
 def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     base = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
     total_count = base.count()
+    total_amt = base.with_entities(func.sum(PurchaseInvoice.amount)).scalar() or 0
     total_amount = base.with_entities(func.sum(PurchaseInvoice.total_amount)).scalar() or 0
     total_tax = base.with_entities(func.sum(PurchaseInvoice.tax_amount)).scalar() or 0
+    normal_count = base.filter(PurchaseInvoice.status == "正常").count()
+    void_count = base.filter(PurchaseInvoice.status == "作废").count()
+    red_count = base.filter(PurchaseInvoice.status == "红冲").count()
     uncertified_count = base.filter(PurchaseInvoice.certification_status == "未认证").count()
     certified_count = base.filter(PurchaseInvoice.certification_status == "已认证").count()
     deducted_count = base.filter(PurchaseInvoice.certification_status == "已抵扣").count()
     return {
-        "total_count": total_count, "total_amount": round(total_amount, 2),
+        "total_count": total_count, "total_amt": round(total_amt, 2),
+        "total_amount": round(total_amount, 2),
         "total_tax": round(total_tax, 2),
+        "normal_count": normal_count, "void_count": void_count,
+        "red_count": red_count,
         "uncertified_count": uncertified_count,
         "certified_count": certified_count,
         "deducted_count": deducted_count

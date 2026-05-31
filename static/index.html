@@ -3816,24 +3816,25 @@ async function renderSalesInvoices() {
     let html = '<div class="page-header"><h2>📤 开具发票</h2></div>';
 
     // 统计卡片
-    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">税额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">' + stats.normal_count + '</div><div class="stat-label">正常</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '/' + stats.red_count + '</div><div class="stat-label">作废/红冲</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '</div><div class="stat-label">作废</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.red_count + '</div><div class="stat-label">红冲</div></div>';
     html += '</div>';
 
     // 工具栏
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<select onchange="siFilter.category=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
-    html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
-    html += '<input id="siKeyword" placeholder="搜索发票号/代码/购方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (siFilter.keyword||'') + '" onkeydown="if(event.key===\'Enter\'){siFilter.keyword=this.value;renderSalesInvoices()}">';
+    html += '<input id="siKeyword" placeholder="搜索发票号/代码/购方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (siFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){siFilter.keyword=this.value;renderSalesInvoices()}">';
     html += '<button onclick="siFilter.keyword=document.getElementById(\'siKeyword\').value;renderSalesInvoices()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
     html += '<input type="date" value="' + (siFilter.dateFrom||'') + '" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '</div>';
     html += '<div class="toolbar-left" style="flex:1 1 100%;justify-content:flex-start;">';
     html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增开具发票</button>';
@@ -3849,7 +3850,6 @@ async function renderSalesInvoices() {
     // 过滤
     let items = inv;
     if (siTab !== 'all') items = items.filter(i => i.status === siTab);
-    if (siFilter.category) items = items.filter(i => i.invoice_category === siFilter.category);
     // 日期筛选：统一转成 YYYY-MM-DD 字符串比较
     if (siFilter.dateFrom) {
       const dFrom = siFilter.dateFrom.length === 10 && siFilter.dateFrom.includes('/') ? siFilter.dateFrom.replace(/\//g, '-') : siFilter.dateFrom;
@@ -3886,7 +3886,7 @@ async function renderSalesInvoices() {
         html += '<tr>';
         html += '<td><input type="checkbox" class="si-check" data-id="' + i.id + '" onchange="updateSiBatchBtn()"></td>';
         html += '<td>' + (i.invoice_code || '-') + '</td>';
-        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500" onclick="showSalesDetail(' + i.id + ')">' + i.invoice_no + '</a></td>';
+        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showSalesDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
         html += '<td>' + (i.seller_tax_no || '-') + '</td>';
         html += '<td>' + (i.seller_name || '-') + '</td>';
@@ -4148,9 +4148,9 @@ async function showSalesDetail(id) {
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2">';
     html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
-    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
+    html += '<div><b>发票号码：</b>' + (i.invoice_no || '-') + '</div>';
     html += '<div><b>数电发票号码：</b>' + (i.digital_invoice_no || '-') + '</div>';
-    html += '<div><b>开票日期：</b>' + i.invoice_date + '</div>';
+    html += '<div><b>开票日期：</b>' + (i.invoice_date || '-') + '</div>';
     html += '</div></div>';
 
     // 销方信息
@@ -4229,18 +4229,18 @@ async function renderPurchaseInvoices() {
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '<div class="page-header"><h2>📥 取得发票</h2></div>';
 
-    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">可抵扣税额</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.deducted_count + '</div><div class="stat-label">已抵扣</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.uncertified_count + '/' + stats.certified_count + '</div><div class="stat-label">未认证/已认证</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.normal_count + '</div><div class="stat-label">正常</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '</div><div class="stat-label">作废</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.red_count + '</div><div class="stat-label">红冲</div></div>';
     html += '</div>';
 
     html += '<div class="toolbar">';
     html += '<div class="toolbar-left">';
-    html += '<select onchange="piFilter.category=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
-    html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
     html += '<select onchange="piFilter.cert=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
     html += '<option value="">全部认证</option><option value="未认证">未认证</option><option value="已认证">已认证</option><option value="已抵扣">已抵扣</option></select>';
     html += '<input id="piKeyword" placeholder="搜索发票号/代码/销方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (piFilter.keyword||'') + '" onkeydown="if(event.key===\'Enter\'){piFilter.keyword=this.value;renderPurchaseInvoices()}">';
@@ -4248,6 +4248,7 @@ async function renderPurchaseInvoices() {
     html += '<input type="date" value="' + (piFilter.dateFrom||'') + '" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '</div>';
     html += '<div class="toolbar-right">';
     html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增取得发票</button>';
@@ -4262,7 +4263,6 @@ async function renderPurchaseInvoices() {
 
     let items = inv;
     if (piTab !== 'all') items = items.filter(i => i.certification_status === piTab);
-    if (piFilter.category) items = items.filter(i => i.invoice_category === piFilter.category);
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
       const dFrom = piFilter.dateFrom.length === 10 && piFilter.dateFrom.includes('/') ? piFilter.dateFrom.replace(/\//g, '-') : piFilter.dateFrom;
@@ -4298,7 +4298,7 @@ async function renderPurchaseInvoices() {
         html += '<tr>';
         html += '<td><input type="checkbox" class="pi-check" data-id="' + i.id + '" onchange="updatePiBatchBtn()"></td>';
         html += '<td>' + (i.invoice_code || '-') + '</td>';
-        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500" onclick="showPurchaseDetail(' + i.id + ')">' + i.invoice_no + '</a></td>';
+        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
         html += '<td>' + (i.seller_tax_no || '-') + '</td>';
         html += '<td>' + (i.seller_name || '-') + '</td>';
@@ -4576,9 +4576,9 @@ async function showPurchaseDetail(id) {
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2">';
     html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
-    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
+    html += '<div><b>发票号码：</b>' + (i.invoice_no || '-') + '</div>';
     html += '<div><b>数电发票号码：</b>' + (i.digital_invoice_no || '-') + '</div>';
-    html += '<div><b>开票日期：</b>' + i.invoice_date + '</div>';
+    html += '<div><b>开票日期：</b>' + (i.invoice_date || '-') + '</div>';
     html += '</div></div>';
 
     // 销方信息
