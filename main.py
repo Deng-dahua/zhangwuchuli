@@ -3179,7 +3179,7 @@ async def import_file_with_mapping(
                     tx_date = None
                     date_str = mapped.get("transaction_date", "")
                     if date_str:
-                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d", "%m/%d/%Y"]:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"]:
                             try:
                                 tx_date = datetime.strptime(date_str, fmt).date()
                                 break
@@ -3227,7 +3227,7 @@ async def import_file_with_mapping(
                     inv_date = None
                     date_str = mapped.get("invoice_date", "")
                     if date_str:
-                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"]:
                             try:
                                 inv_date = datetime.strptime(date_str, fmt).date()
                                 break
