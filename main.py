@@ -25,7 +25,8 @@ from database import (
     IntangibleAsset, IntangibleAssetAmortization,
     InventoryItem, InventoryTransaction, InventoryBalance,
     Contract, ContractPayment,
-    CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact
+    CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
+    Payment
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -1838,6 +1839,137 @@ def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_
     db.commit()
     db.refresh(payment)
     return {"id": payment.id, "message": "付款计划添加成功"}
+
+
+# ==================== 付款管理 ====================
+
+class PaymentCreate(BaseModel):
+    payment_no: str
+    payment_date: date
+    supplier_id: Optional[int] = None
+    supplier_name: Optional[str] = None
+    contract_id: Optional[int] = None
+    contract_no: Optional[str] = None
+    amount: float
+    payment_method: str = "银行转账"
+    payee: Optional[str] = None
+    payee_account: Optional[str] = None
+    payee_bank: Optional[str] = None
+    department: Optional[str] = None
+    purpose: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class PaymentUpdate(BaseModel):
+    supplier_id: Optional[int] = None
+    supplier_name: Optional[str] = None
+    contract_id: Optional[int] = None
+    contract_no: Optional[str] = None
+    amount: Optional[float] = None
+    payment_method: Optional[str] = None
+    payee: Optional[str] = None
+    payee_account: Optional[str] = None
+    payee_bank: Optional[str] = None
+    status: Optional[str] = None
+    approved_by: Optional[str] = None
+    department: Optional[str] = None
+    purpose: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/payments")
+def list_payments(
+    company_id: int = Query(1),
+    status: Optional[str] = None,
+    supplier_id: Optional[int] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(Payment).filter(Payment.company_id == company_id)
+    if status:
+        q = q.filter(Payment.status == status)
+    if supplier_id:
+        q = q.filter(Payment.supplier_id == supplier_id)
+    if keyword:
+        q = q.filter(or_(
+            Payment.payment_no.contains(keyword),
+            Payment.supplier_name.contains(keyword),
+            Payment.payee.contains(keyword),
+            Payment.purpose.contains(keyword)
+        ))
+    payments = q.order_by(Payment.payment_date.desc()).all()
+    return [{
+        "id": p.id, "payment_no": p.payment_no,
+        "payment_date": str(p.payment_date) if p.payment_date else "",
+        "supplier_id": p.supplier_id, "supplier_name": p.supplier_name or "",
+        "contract_id": p.contract_id, "contract_no": p.contract_no or "",
+        "amount": p.amount, "payment_method": p.payment_method,
+        "payee": p.payee or "", "payee_account": p.payee_account or "",
+        "payee_bank": p.payee_bank or "", "status": p.status,
+        "approved_by": p.approved_by or "",
+        "approved_at": str(p.approved_at) if p.approved_at else "",
+        "paid_at": str(p.paid_at) if p.paid_at else "",
+        "department": p.department or "", "purpose": p.purpose or "",
+        "remark": p.remark or "",
+        "created_at": str(p.created_at) if p.created_at else ""
+    } for p in payments]
+
+
+@app.post("/api/payments")
+def create_payment(data: PaymentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(Payment).filter(Payment.company_id == company_id, Payment.payment_no == data.payment_no).first():
+        raise HTTPException(400, detail=f"付款单号 {data.payment_no} 已存在")
+    payment = Payment(company_id=company_id, **data.model_dump())
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    return {"id": payment.id, "payment_no": payment.payment_no, "message": "付款单创建成功"}
+
+
+@app.get("/api/payments/stats")
+def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+    """付款统计"""
+    base = db.query(Payment).filter(Payment.company_id == company_id)
+    total_count = base.count()
+    total_amount = base.with_entities(func.sum(Payment.amount)).scalar() or 0
+    pending_count = base.filter(Payment.status == "待审批").count()
+    pending_amount = base.filter(Payment.status == "待审批").with_entities(func.sum(Payment.amount)).scalar() or 0
+    approved_count = base.filter(Payment.status == "已审批").count()
+    paid_count = base.filter(Payment.status == "已付款").count()
+    paid_amount = base.filter(Payment.status == "已付款").with_entities(func.sum(Payment.amount)).scalar() or 0
+    return {
+        "total_count": total_count, "total_amount": total_amount,
+        "pending_count": pending_count, "pending_amount": pending_amount,
+        "approved_count": approved_count, "paid_count": paid_count,
+        "paid_amount": paid_amount
+    }
+
+
+@app.put("/api/payments/{payment_id}")
+def update_payment(payment_id: int, data: PaymentUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    p = db.query(Payment).filter(Payment.company_id == company_id, Payment.id == payment_id).first()
+    if not p:
+        raise HTTPException(404, detail="付款单不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(p, k, v)
+    p.updated_at = datetime.now()
+    # 如果状态改为"已付款"，记录付款时间
+    if data.status == "已付款":
+        p.paid_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/payments/{payment_id}")
+def delete_payment(payment_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    p = db.query(Payment).filter(Payment.company_id == company_id, Payment.id == payment_id).first()
+    if not p:
+        raise HTTPException(404, detail="付款单不存在")
+    if p.status in ("已审批", "已付款"):
+        raise HTTPException(400, detail=f"付款单状态为'{p.status}'，不能删除")
+    db.delete(p)
+    db.commit()
+    return {"message": "删除成功"}
 
 
 # ==================== AI 智能助手对话引擎 ====================

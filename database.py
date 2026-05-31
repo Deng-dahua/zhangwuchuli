@@ -493,6 +493,40 @@ class ContractPayment(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+# ==================== 付款管理 ====================
+
+class Payment(Base):
+    """付款记录"""
+    __tablename__ = "payments"
+    __table_args__ = (
+        UniqueConstraint('company_id', 'payment_no', name='uq_payment_company_no'),
+        Index('idx_payment_company_status', 'company_id', 'status'),
+        Index('idx_payment_company_supplier', 'company_id', 'supplier_id'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    payment_no = Column(String(50), nullable=False, comment="付款单号")
+    payment_date = Column(Date, nullable=False, comment="付款日期")
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, comment="供应商ID")
+    supplier_name = Column(String(100), comment="供应商名称")
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True, comment="关联合同ID")
+    contract_no = Column(String(50), comment="关联合同编号")
+    amount = Column(Float, nullable=False, comment="付款金额")
+    payment_method = Column(String(20), nullable=False, default="银行转账", comment="付款方式：银行转账/现金/支票/其他")
+    payee = Column(String(100), comment="收款方")
+    payee_account = Column(String(50), comment="收款账号")
+    payee_bank = Column(String(100), comment="收款银行")
+    status = Column(String(20), default="待审批", comment="状态：待审批/已审批/已付款/已驳回")
+    approved_by = Column(String(50), comment="审批人")
+    approved_at = Column(DateTime, comment="审批时间")
+    paid_at = Column(DateTime, comment="实际付款时间")
+    department = Column(String(50), comment="所属部门")
+    purpose = Column(String(200), comment="用途说明")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # ==================== 数据库迁移与初始化 ====================
 
 def migrate_schema(db):
