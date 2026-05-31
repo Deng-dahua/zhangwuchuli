@@ -90,6 +90,8 @@
     .btn-exit-company { background: #fff; color: var(--gray-500); border: 1px solid var(--gray-300); }
     .btn-exit-company:hover { background: var(--gray-100); color: var(--gray-700); }
     .btn-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
+    .btn-outline { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+    .btn-outline:hover { background: var(--primary-light); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
     /* 表格 */
@@ -136,6 +138,20 @@
 
     /* 搜索栏 */
     .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    /* 工具栏 */
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .toolbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Tab 切换按钮 */
+    .tab-btn-group { display: flex; gap: 4px; background: #e5e7eb; border-radius: 8px; padding: 4px; }
+    .tab-btn {
+      padding: 6px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500;
+      cursor: pointer; background: transparent; color: #6b7280; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: #374151; }
+    .tab-btn.active { background: #fff; color: #1a56db; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600; }
 
     /* 凭证明细行 */
     .detail-table th, .detail-table td { padding: 7px 8px; }
@@ -3781,7 +3797,7 @@ async function renderSalesInvoices() {
 
     // 工具栏
     html += '<div class="toolbar">';
-    html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+    html += '<div class="toolbar-left">';
     html += '<select onchange="siFilter.category=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
     html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
     html += '<input placeholder="搜索发票号/代码/购方/货物..." oninput="siFilter.keyword=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px">';
@@ -3789,17 +3805,15 @@ async function renderSalesInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
+    html += '<div class="toolbar-right">';
     html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增开具发票</button>';
-    html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
-    html += '</div>';
-
-    // 状态 Tab
-    html += '<div class="tab-bar" style="margin-bottom:12px">';
-    const tabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
-    tabs.forEach(([t, label]) => {
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
+    html += '<div class="tab-btn-group">';
+    const salesTabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
+    salesTabs.forEach(([t, label]) => {
       html += '<button class="tab-btn ' + (siTab === t ? 'active' : '') + '" onclick="siTab=\'' + t + '\';renderSalesInvoices()">' + label + '</button>';
     });
-    html += '</div>';
+    html += '</div></div></div>';
 
     // 过滤
     let items = inv;
@@ -4141,7 +4155,7 @@ async function renderPurchaseInvoices() {
     html += '</div>';
 
     html += '<div class="toolbar">';
-    html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+    html += '<div class="toolbar-left">';
     html += '<select onchange="piFilter.category=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
     html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
     html += '<select onchange="piFilter.cert=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
@@ -4151,16 +4165,15 @@ async function renderPurchaseInvoices() {
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
+    html += '<div class="toolbar-right">';
     html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增取得发票</button>';
-    html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
-    html += '</div>';
-
-    html += '<div class="tab-bar" style="margin-bottom:12px">';
-    const tabs = [['all', '全部'], ['未认证', '未认证'], ['已认证', '已认证'], ['已抵扣', '已抵扣']];
-    tabs.forEach(([t, label]) => {
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
+    html += '<div class="tab-btn-group">';
+    const purchaseTabs = [['all', '全部'], ['未认证', '未认证'], ['已认证', '已认证'], ['已抵扣', '已抵扣']];
+    purchaseTabs.forEach(([t, label]) => {
       html += '<button class="tab-btn ' + (piTab === t ? 'active' : '') + '" onclick="piTab=\'' + t + '\';renderPurchaseInvoices()">' + label + '</button>';
     });
-    html += '</div>';
+    html += '</div></div></div>';
 
     let items = inv;
     if (piTab !== 'all') items = items.filter(i => i.certification_status === piTab);
