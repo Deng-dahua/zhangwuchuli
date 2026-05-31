@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>账务处理系统 - 中小制造业</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #1a56db;
+      --primary-dark: #1e429f;
+      --primary-light: #e8f0fe;
+      --success: #0e9f6e;
+      --warning: #c27803;
+      --danger: #e02424;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-500: #6b7280;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --sidebar-w: 220px;
+    }
+    body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--gray-50); color: var(--gray-900); display: flex; min-height: 100vh; }
+
+    /* 侧边栏 */
+    #sidebar {
+      width: var(--sidebar-w); background: #1e293b; color: #e2e8f0;
+      display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 20px 16px; font-size: 16px; font-weight: 700; color: #fff;
+      border-bottom: 1px solid #334155; line-height: 1.4;
+    }
+    .sidebar-logo span { display: block; font-size: 11px; font-weight: 400; color: #94a3b8; margin-top: 2px; }
+    .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .nav-group-title { padding: 12px 16px 4px; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+      cursor: pointer; transition: background 0.15s; font-size: 14px; color: #cbd5e1;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: #334155; color: #fff; }
+    .nav-item.active { background: #1e40af; color: #fff; border-left-color: #60a5fa; }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+    /* 主内容 */
+    #main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar {
+      background: #fff; border-bottom: 1px solid var(--gray-200); padding: 0 24px;
+      height: 56px; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .topbar-title { font-size: 16px; font-weight: 600; color: var(--gray-900); }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .period-badge {
+      background: var(--primary-light); color: var(--primary); border-radius: 6px;
+      padding: 4px 12px; font-size: 13px; font-weight: 500; cursor: pointer;
+    }
+    .content-area { flex: 1; padding: 24px; }
+
+    /* 卡片 */
+    .card { background: #fff; border-radius: 10px; border: 1px solid var(--gray-200); padding: 20px; margin-bottom: 16px; }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+    /* 统计卡片 */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .stat-card { background: #fff; border-radius: 10px; border: 1px solid var(--gray-200); padding: 16px 20px; }
+    .stat-label { font-size: 12px; color: var(--gray-500); margin-bottom: 6px; }
+    .stat-value { font-size: 26px; font-weight: 700; color: var(--gray-900); }
+    .stat-sub { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
+
+    /* 按钮 */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+      border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer;
+      border: none; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-300); }
+    .btn-secondary:hover { background: var(--gray-200); }
+    .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    .btn-danger:hover { background: #fee2e2; }
+    .btn-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* 表格 */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--gray-50); }
+    th { padding: 10px 12px; text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1px solid var(--gray-200); white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--gray-50); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* 状态标签 */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-draft { background: #fef9c3; color: #854d0e; }
+    .badge-audited { background: #dcfce7; color: #166534; }
+    .badge-posted { background: #dbeafe; color: #1e40af; }
+    .badge-open { background: #dcfce7; color: #166534; }
+    .badge-closed { background: var(--gray-100); color: var(--gray-500); }
+
+    /* 表单 */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 12px; font-weight: 500; color: var(--gray-700); }
+    .form-control {
+      padding: 8px 12px; border: 1px solid var(--gray-300); border-radius: 7px;
+      font-size: 13px; outline: none; background: #fff; transition: border 0.15s;
+    }
+    .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+    select.form-control { cursor: pointer; }
+
+    /* 搜索栏 */
+    .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    /* 凭证明细行 */
+    .detail-table th, .detail-table td { padding: 7px 8px; }
+    .detail-table input { width: 100%; padding: 4px 8px; border: 1px solid var(--gray-200); border-radius: 5px; font-size: 12px; }
+    .detail-table select { width: 100%; padding: 4px 8px; border: 1px solid var(--gray-200); border-radius: 5px; font-size: 12px; }
+
+    /* 模态框 */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal {
+      background: #fff; border-radius: 12px; padding: 24px; width: 90%;
+      max-width: 900px; max-height: 90vh; overflow-y: auto; position: relative;
+    }
+    .modal-lg { max-width: 1100px; }
+    .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
+    .modal-footer { margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray-500); }
+
+    /* 报表 */
+    .report-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .report-bold td { font-weight: 700; background: var(--gray-50); }
+    .report-highlight td { color: var(--primary); font-size: 15px; background: var(--primary-light); }
+
+    /* 分页 */
+    .pagination { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
+    .page-btn { padding: 4px 10px; border: 1px solid var(--gray-300); border-radius: 5px; cursor: pointer; background: #fff; }
+    .page-btn:hover { background: var(--gray-100); }
+    .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* 工具提示 */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+      background: #1e293b; color: #fff; border-radius: 8px; font-size: 13px;
+      z-index: 9999; animation: slideUp 0.3s ease; max-width: 320px;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* 空状态 */
+    .empty-state { text-align: center; padding: 48px; color: var(--gray-500); }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    /* 隐藏 */
+    .hidden { display: none !important; }
+
+    /* 分割线 */
+    hr.section { border: none; border-top: 1px solid var(--gray-200); margin: 20px 0; }
+
+    /* 科目缩进 */
+    .indent-1 { padding-left: 8px; }
+    .indent-2 { padding-left: 24px; font-size: 12px; color: var(--gray-500); }
+  </style>
+</head>
+<body>
+
+<!-- 侧边栏 -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    ⚙️ 账务处理系统
+    <span>中小制造业版 v1.0</span>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-group-title">总览</div>
+    <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>数据看板</div>
+
+    <div class="nav-group-title">凭证管理</div>
+    <div class="nav-item" data-page="vouchers"><span class="icon">📋</span>记账凭证</div>
+    <div class="nav-item" data-page="voucher-new"><span class="icon">✏️</span>填制凭证</div>
+
+    <div class="nav-group-title">账簿查询</div>
+    <div class="nav-item" data-page="general-ledger"><span class="icon">📒</span>总账</div>
+    <div class="nav-item" data-page="detail-ledger"><span class="icon">📄</span>明细账</div>
+
+    <div class="nav-group-title">财务报表</div>
+    <div class="nav-item" data-page="profit-loss"><span class="icon">📈</span>利润表</div>
+    <div class="nav-item" data-page="balance-sheet"><span class="icon">⚖️</span>资产负债表</div>
+
+    <div class="nav-group-title">基础设置</div>
+    <div class="nav-item" data-page="accounts"><span class="icon">🗂️</span>会计科目</div>
+    <div class="nav-item" data-page="periods"><span class="icon">📅</span>期间管理</div>
+  </div>
+</nav>
+
+<!-- 主内容 -->
+<div id="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">数据看板</div>
+    <div class="topbar-right">
+      <div class="period-badge" id="current-period-badge" onclick="showPeriodSelector()">
+        📅 当前期间：<span id="current-period">加载中...</span>
+      </div>
+    </div>
+  </div>
+  <div class="content-area" id="content-area">
+    <!-- 动态内容 -->
+  </div>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+let currentPage = 'dashboard';
+let currentPeriod = '';
+let allAccounts = [];
+let voucherPage = 1;
+
+const pages = {
+  'dashboard': '数据看板',
+  'vouchers': '记账凭证',
+  'voucher-new': '填制凭证',
+  'general-ledger': '总账',
+  'detail-ledger': '明细账',
+  'profit-loss': '利润表',
+  'balance-sheet': '资产负债表',
+  'accounts': '会计科目',
+  'periods': '期间管理'
+};
+
+// ==================== 初始化 ====================
+async function init() {
+  await loadCurrentPeriod();
+  await loadAllAccounts();
+  navigateTo('dashboard');
+}
+
+async function loadCurrentPeriod() {
+  try {
+    const data = await api('/api/periods');
+    const open = data.find(p => p.status === '开放');
+    currentPeriod = open ? open.period : (data[0]?.period || new Date().toISOString().slice(0, 7));
+    document.getElementById('current-period').textContent = currentPeriod;
+  } catch (e) {
+    currentPeriod = new Date().toISOString().slice(0, 7);
+    document.getElementById('current-period').textContent = currentPeriod;
+  }
+}
+
+async function loadAllAccounts() {
+  try {
+    allAccounts = await api('/api/accounts');
+  } catch (e) {}
+}
+
+// ==================== 路由 ====================
+function navigateTo(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  document.getElementById('page-title').textContent = pages[page] || page;
+  const content = document.getElementById('content-area');
+  content.innerHTML = '';
+
+  switch (page) {
+    case 'dashboard': renderDashboard(); break;
+    case 'vouchers': renderVouchers(); break;
+    case 'voucher-new': renderVoucherForm(); break;
+    case 'general-ledger': renderGeneralLedger(); break;
+    case 'detail-ledger': renderDetailLedger(); break;
+    case 'profit-loss': renderProfitLoss(); break;
+    case 'balance-sheet': renderBalanceSheet(); break;
+    case 'accounts': renderAccounts(); break;
+    case 'periods': renderPeriods(); break;
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => navigateTo(el.dataset.page));
+});
+
+// ==================== API 工具 ====================
+async function api(url, options = {}) {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '请求失败' }));
+    throw new Error(err.detail || '请求失败');
+  }
+  return res.json();
+}
+
+function toast(msg, type = 'default') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function fmt(n) {
+  if (n === null || n === undefined) return '-';
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ==================== 数据看板 ====================
+async function renderDashboard() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
+  try {
+    const data = await api(`/api/dashboard?period=${currentPeriod}`);
+    el.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">本期凭证总数</div>
+          <div class="stat-value">${data.total_vouchers}</div>
+          <div class="stat-sub">${currentPeriod}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">草稿凭证</div>
+          <div class="stat-value" style="color:var(--warning)">${data.draft_vouchers}</div>
+          <div class="stat-sub">待审核</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">已审核凭证</div>
+          <div class="stat-value" style="color:var(--success)">${data.audited_vouchers}</div>
+          <div class="stat-sub">已完成</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">本期借方合计</div>
+          <div class="stat-value" style="font-size:18px;color:var(--primary)">¥${fmt(data.total_amount)}</div>
+          <div class="stat-sub">元</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 最近凭证</div>
+        ${data.recent_vouchers.length === 0 ? '<div class="empty-state"><div class="icon">📭</div><p>暂无凭证，去<a href="#" onclick="navigateTo(\'voucher-new\');return false">填制凭证</a></p></div>' : `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>凭证号</th><th>日期</th><th>摘要</th><th class="num">金额</th><th>状态</th></tr></thead>
+            <tbody>
+              ${data.recent_vouchers.map(v => `
+                <tr>
+                  <td><a href="#" onclick="showVoucherDetail(${v.voucher_no});return false" style="color:var(--primary)">${v.voucher_no}</a></td>
+                  <td>${v.voucher_date}</td>
+                  <td>${v.summary}</td>
+                  <td class="num">¥${fmt(v.total_debit)}</td>
+                  <td>${statusBadge(v.status)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`}
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="navigateTo('voucher-new')">✏️ 填制新凭证</button>
+        <button class="btn btn-secondary" onclick="navigateTo('vouchers')">📋 查看全部凭证</button>
+        <button class="btn btn-secondary" onclick="navigateTo('profit-loss')">📈 查看利润表</button>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
+  }
+}
+
+function statusBadge(status) {
+  const map = { '草稿': 'badge-draft', '已审核': 'badge-audited', '已过账': 'badge-posted' };
+  return `<span class="badge ${map[status] || ''}">${status}</span>`;
+}
+
+// ==================== 记账凭证列表 ====================
+async function renderVouchers(page = 1) {
+  voucherPage = page;
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:600">记账凭证</div>
+        <button class="btn btn-primary" onclick="navigateTo('voucher-new')">✏️ 填制凭证</button>
+      </div>
+      <div class="filter-bar">
+        <input class="form-control" id="f-period" placeholder="期间 YYYY-MM" value="${currentPeriod}" style="width:140px">
+        <select class="form-control" id="f-status" style="width:120px">
+          <option value="">全部状态</option>
+          <option value="草稿">草稿</option>
+          <option value="已审核">已审核</option>
+          <option value="已过账">已过账</option>
+        </select>
+        <input class="form-control" id="f-keyword" placeholder="凭证号/摘要搜索" style="width:200px">
+        <button class="btn btn-primary" onclick="loadVouchers()">🔍 查询</button>
+      </div>
+      <div class="table-wrap" id="voucher-table">加载中...</div>
+      <div class="pagination" id="voucher-pagination"></div>
+    </div>
+  `;
+  await loadVouchers();
+}
+
+async function loadVouchers() {
+  const period = document.getElementById('f-period')?.value || currentPeriod;
+  const status = document.getElementById('f-status')?.value || '';
+  const keyword = document.getElementById('f-keyword')?.value || '';
+  const url = `/api/vouchers?page=${voucherPage}&page_size=15${period ? '&period=' + period : ''}${status ? '&status=' + status : ''}${keyword ? '&keyword=' + keyword : ''}`;
+
+  try {
+    const data = await api(url);
+    const tbody = data.data.map(v => `
+      <tr>
+        <td><a href="#" onclick="showVoucherDetailById(${v.id});return false" style="color:var(--primary);font-weight:500">${v.voucher_no}</a></td>
+        <td>${v.voucher_date}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.summary}</td>
+        <td class="num">¥${fmt(v.total_debit)}</td>
+        <td>${v.creator}</td>
+        <td>${statusBadge(v.status)}</td>
+        <td>
+          ${v.status === '草稿' ? `<button class="btn btn-success btn-sm" onclick="auditVoucher(${v.id})">审核</button>` : ''}
+          ${v.status !== '已过账' ? `<button class="btn btn-danger btn-sm" onclick="deleteVoucher(${v.id})">删除</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+
+    document.getElementById('voucher-table').innerHTML = `
+      <table>
+        <thead><tr><th>凭证号</th><th>日期</th><th>摘要</th><th class="num">金额</th><th>制单人</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>${tbody || '<tr><td colspan="7"><div class="empty-state"><div class="icon">📭</div><p>暂无凭证</p></div></td></tr>'}</tbody>
+      </table>
+    `;
+
+    const totalPages = Math.ceil(data.total / 15);
+    let pages = `<span style="color:var(--gray-500)">共 ${data.total} 条</span>`;
+    for (let i = 1; i <= totalPages; i++) {
+      pages += `<button class="page-btn ${i === voucherPage ? 'active' : ''}" onclick="renderVouchers(${i})">${i}</button>`;
+    }
+    document.getElementById('voucher-pagination').innerHTML = pages;
+  } catch (e) {
+    document.getElementById('voucher-table').innerHTML = `<p style="color:var(--danger);padding:12px">${e.message}</p>`;
+  }
+}
+
+async function auditVoucher(id) {
+  if (!confirm('确认审核该凭证？')) return;
+  try {
+    await api(`/api/vouchers/${id}/audit`, { method: 'PUT' });
+    toast('审核成功', 'success');
+    await loadVouchers();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteVoucher(id) {
+  if (!confirm('确认删除该凭证？')) return;
+  try {
+    await api(`/api/vouchers/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    await loadVouchers();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showVoucherDetailById(id) {
+  try {
+    const v = await api(`/api/vouchers/${id}`);
+    const detailRows = v.details.map(d => `
+      <tr>
+        <td>${d.line_no}</td>
+        <td>${d.summary || ''}</td>
+        <td>${d.account_code} ${d.account_name}</td>
+        <td class="num">${d.debit_amount > 0 ? '¥' + fmt(d.debit_amount) : ''}</td>
+        <td class="num">${d.credit_amount > 0 ? '¥' + fmt(d.credit_amount) : ''}</td>
+      </tr>
+    `).join('');
+
+    showModal(`
+      <div class="modal-title">凭证详情 - ${v.voucher_no}</div>
+      <div class="form-grid-3" style="margin-bottom:16px;font-size:13px">
+        <div><b>凭证日期：</b>${v.voucher_date}</div>
+        <div><b>期间：</b>${v.period}</div>
+        <div><b>状态：</b>${statusBadge(v.status)}</div>
+        <div><b>摘要：</b>${v.summary}</div>
+        <div><b>制单人：</b>${v.creator}</div>
+        <div><b>审核人：</b>${v.checker || '未审核'}</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>行号</th><th>摘要</th><th>科目</th><th class="num">借方</th><th class="num">贷方</th></tr></thead>
+          <tbody>${detailRows}</tbody>
+          <tfoot>
+            <tr style="font-weight:700;background:var(--gray-50)">
+              <td colspan="3" style="text-align:right">合计</td>
+              <td class="num">¥${fmt(v.total_debit)}</td>
+              <td class="num">¥${fmt(v.total_credit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 填制凭证 ====================
+let detailRows = [];
+
+function renderVoucherForm(editData = null) {
+  detailRows = editData ? editData.details : [
+    { line_no: 1, summary: '', account_code: '', debit_amount: 0, credit_amount: 0 },
+    { line_no: 2, summary: '', account_code: '', debit_amount: 0, credit_amount: 0 },
+  ];
+
+  const today = new Date().toISOString().slice(0, 10);
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">✏️ 填制记账凭证</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group">
+          <label>凭证日期 *</label>
+          <input type="date" class="form-control" id="v-date" value="${today}">
+        </div>
+        <div class="form-group">
+          <label>会计期间 *</label>
+          <input class="form-control" id="v-period" value="${currentPeriod}" placeholder="YYYY-MM">
+        </div>
+        <div class="form-group">
+          <label>摘要 *</label>
+          <input class="form-control" id="v-summary" placeholder="请输入摘要说明">
+        </div>
+        <div class="form-group">
+          <label>制单人</label>
+          <input class="form-control" id="v-creator" value="管理员">
+        </div>
+        <div class="form-group">
+          <label>附件张数</label>
+          <input type="number" class="form-control" id="v-attachments" value="0" min="0">
+        </div>
+      </div>
+
+      <hr class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-weight:600;font-size:14px">凭证明细</div>
+        <button class="btn btn-secondary btn-sm" onclick="addDetailRow()">+ 添加行</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th style="width:50px">行号</th>
+              <th style="width:160px">摘要</th>
+              <th style="width:240px">科目 *</th>
+              <th style="width:140px">借方金额</th>
+              <th style="width:140px">贷方金额</th>
+              <th style="width:60px">删除</th>
+            </tr>
+          </thead>
+          <tbody id="detail-tbody"></tbody>
+          <tfoot>
+            <tr style="background:var(--gray-50);font-weight:700">
+              <td colspan="3" style="text-align:right;padding:8px 12px">合 计</td>
+              <td class="num" id="total-debit" style="padding:8px 12px">0.00</td>
+              <td class="num" id="total-credit" style="padding:8px 12px">0.00</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div id="balance-hint" style="margin-top:8px;font-size:13px"></div>
+
+      <div style="margin-top:20px;display:flex;gap:12px">
+        <button class="btn btn-primary" onclick="submitVoucher()">💾 保存凭证</button>
+        <button class="btn btn-secondary" onclick="navigateTo('vouchers')">取消</button>
+      </div>
+    </div>
+  `;
+  renderDetailRows();
+}
+
+function renderDetailRows() {
+  const tbody = document.getElementById('detail-tbody');
+  const accountOptions = allAccounts
+    .filter(a => a.is_active)
+    .map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`)
+    .join('');
+
+  tbody.innerHTML = detailRows.map((row, idx) => `
+    <tr id="detail-row-${idx}">
+      <td><input type="number" value="${row.line_no}" onchange="detailRows[${idx}].line_no=+this.value" style="width:40px;padding:4px;border:1px solid var(--gray-200);border-radius:4px"></td>
+      <td><input value="${row.summary || ''}" onchange="detailRows[${idx}].summary=this.value" placeholder="摘要"></td>
+      <td>
+        <select onchange="detailRows[${idx}].account_code=this.value" style="width:100%;padding:4px 6px;border:1px solid var(--gray-200);border-radius:4px;font-size:12px">
+          <option value="">-- 选择科目 --</option>
+          ${accountOptions}
+        </select>
+      </td>
+      <td><input type="number" step="0.01" value="${row.debit_amount || ''}" onchange="detailRows[${idx}].debit_amount=+this.value||0;calcTotal()" placeholder="0.00" style="width:120px;text-align:right;padding:4px 6px;border:1px solid var(--gray-200);border-radius:4px"></td>
+      <td><input type="number" step="0.01" value="${row.credit_amount || ''}" onchange="detailRows[${idx}].credit_amount=+this.value||0;calcTotal()" placeholder="0.00" style="width:120px;text-align:right;padding:4px 6px;border:1px solid var(--gray-200);border-radius:4px"></td>
+      <td><button onclick="removeDetailRow(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">×</button></td>
+    </tr>
+  `).join('');
+
+  // 设置已选科目
+  detailRows.forEach((row, idx) => {
+    const sel = document.querySelector(`#detail-row-${idx} select`);
+    if (sel && row.account_code) sel.value = row.account_code;
+  });
+
+  calcTotal();
+}
+
+function addDetailRow() {
+  detailRows.push({ line_no: detailRows.length + 1, summary: '', account_code: '', debit_amount: 0, credit_amount: 0 });
+  renderDetailRows();
+}
+
+function removeDetailRow(idx) {
+  if (detailRows.length <= 2) { toast('至少保留2行', 'error'); return; }
+  detailRows.splice(idx, 1);
+  detailRows.forEach((r, i) => r.line_no = i + 1);
+  renderDetailRows();
+}
+
+function calcTotal() {
+  const td = detailRows.reduce((s, r) => s + (r.debit_amount || 0), 0);
+  const tc = detailRows.reduce((s, r) => s + (r.credit_amount || 0), 0);
+  const de = document.getElementById('total-debit');
+  const ce = document.getElementById('total-credit');
+  const hint = document.getElementById('balance-hint');
+  if (de) de.textContent = '¥' + fmt(td);
+  if (ce) ce.textContent = '¥' + fmt(tc);
+  if (hint) {
+    if (Math.abs(td - tc) < 0.001) {
+      hint.innerHTML = '<span style="color:var(--success)">✅ 借贷平衡</span>';
+    } else {
+      hint.innerHTML = `<span style="color:var(--danger)">⚠️ 借贷不平衡，差额：¥${fmt(Math.abs(td - tc))}</span>`;
+    }
+  }
+}
+
+async function submitVoucher() {
+  const date = document.getElementById('v-date').value;
+  const period = document.getElementById('v-period').value;
+  const summary = document.getElementById('v-summary').value;
+  const creator = document.getElementById('v-creator').value;
+  const attachments = parseInt(document.getElementById('v-attachments').value) || 0;
+
+  if (!date || !period || !summary) { toast('请填写日期、期间和摘要', 'error'); return; }
+
+  const details = detailRows.filter(r => r.account_code);
+  if (details.length < 2) { toast('至少需要2行明细', 'error'); return; }
+
+  try {
+    const res = await api('/api/vouchers', {
+      method: 'POST',
+      body: JSON.stringify({ voucher_date: date, period, summary, creator, attachments, details })
+    });
+    toast(`凭证 ${res.voucher_no} 保存成功！`, 'success');
+    setTimeout(() => navigateTo('vouchers'), 1000);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 总账 ====================
+async function renderGeneralLedger() {
+  const el = document.getElementById('content-area');
+  const yearMonth = currentPeriod;
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">📒 总账</div>
+      <div class="filter-bar">
+        <div class="form-group"><label>起始期间</label><input class="form-control" id="gl-from" value="${yearMonth}" style="width:130px"></div>
+        <div class="form-group"><label>截止期间</label><input class="form-control" id="gl-to" value="${yearMonth}" style="width:130px"></div>
+        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button></div>
+      </div>
+      <div class="table-wrap" id="gl-table">请点击查询</div>
+    </div>
+  `;
+}
+
+async function loadGeneralLedger() {
+  const from = document.getElementById('gl-from').value;
+  const to = document.getElementById('gl-to').value;
+  const el = document.getElementById('gl-table');
+  el.innerHTML = '加载中...';
+  try {
+    const data = await api(`/api/ledger/general?period_from=${from}&period_to=${to}`);
+    if (!data.length) { el.innerHTML = '<div class="empty-state"><p>该期间无发生额</p></div>'; return; }
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th>余额方向</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th class="num">期末余额</th></tr></thead>
+        <tbody>
+          ${data.map(r => `
+            <tr>
+              <td><a href="#" onclick="goDetailLedger('${r.account_code}');return false" style="color:var(--primary)">${r.account_code}</a></td>
+              <td>${r.account_name}</td>
+              <td style="text-align:center">${r.balance_direction}</td>
+              <td class="num">${r.total_debit > 0 ? '¥' + fmt(r.total_debit) : '-'}</td>
+              <td class="num">${r.total_credit > 0 ? '¥' + fmt(r.total_credit) : '-'}</td>
+              <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function goDetailLedger(code) {
+  navigateTo('detail-ledger');
+  setTimeout(() => {
+    const el = document.getElementById('dl-account');
+    if (el) { el.value = code; loadDetailLedger(); }
+  }, 100);
+}
+
+// ==================== 明细账 ====================
+async function renderDetailLedger() {
+  const el = document.getElementById('content-area');
+  const accountOptions = allAccounts.map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`).join('');
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">📄 明细账</div>
+      <div class="filter-bar">
+        <div class="form-group">
+          <label>科目</label>
+          <select class="form-control" id="dl-account" style="width:220px">
+            <option value="">-- 选择科目 --</option>
+            ${accountOptions}
+          </select>
+        </div>
+        <div class="form-group"><label>起始期间</label><input class="form-control" id="dl-from" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>截止期间</label><input class="form-control" id="dl-to" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button></div>
+      </div>
+      <div class="table-wrap" id="dl-table">请选择科目并查询</div>
+    </div>
+  `;
+}
+
+async function loadDetailLedger() {
+  const code = document.getElementById('dl-account').value;
+  const from = document.getElementById('dl-from').value;
+  const to = document.getElementById('dl-to').value;
+  if (!code) { toast('请选择科目', 'error'); return; }
+  const el = document.getElementById('dl-table');
+  el.innerHTML = '加载中...';
+  try {
+    const data = await api(`/api/ledger/detail?account_code=${code}&period_from=${from}&period_to=${to}`);
+    el.innerHTML = `
+      <div style="font-size:13px;margin-bottom:10px"><b>科目：</b>${data.account_code} ${data.account_name} &nbsp;&nbsp; <b>余额方向：</b>${data.balance_direction}</div>
+      <table>
+        <thead><tr><th>日期</th><th>凭证号</th><th>摘要</th><th class="num">借方</th><th class="num">贷方</th><th class="num">余额</th></tr></thead>
+        <tbody>
+          ${data.rows.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>该期间无明细</p></div></td></tr>' :
+            data.rows.map(r => `
+              <tr>
+                <td>${r.voucher_date}</td>
+                <td>${r.voucher_no}</td>
+                <td>${r.summary || ''}</td>
+                <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : ''}</td>
+                <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : ''}</td>
+                <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
+              </tr>
+            `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+// ==================== 利润表 ====================
+async function renderProfitLoss() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">📈 利润表</div>
+      <div class="filter-bar">
+        <div class="form-group"><label>起始期间</label><input class="form-control" id="pl-from" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>截止期间</label><input class="form-control" id="pl-to" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button></div>
+      </div>
+      <div id="pl-table">请点击生成报表</div>
+    </div>
+  `;
+}
+
+async function loadProfitLoss() {
+  const from = document.getElementById('pl-from').value;
+  const to = document.getElementById('pl-to').value;
+  const el = document.getElementById('pl-table');
+  el.innerHTML = '加载中...';
+  try {
+    const data = await api(`/api/reports/profit-loss?period_from=${from}&period_to=${to}`);
+    el.innerHTML = `
+      <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">报告期间：${from} 至 ${to}</div>
+      <table class="report-table" style="max-width:500px">
+        <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
+        <tbody>
+          ${data.items.map(item => `
+            <tr class="${item.bold ? 'report-bold' : ''} ${item.highlight ? 'report-highlight' : ''}">
+              <td>${item.label}</td>
+              <td>${item.amount !== null ? '¥' + fmt(item.amount) : ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+// ==================== 资产负债表 ====================
+async function renderBalanceSheet() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">⚖️ 资产负债表</div>
+      <div class="filter-bar">
+        <div class="form-group"><label>截止期间</label><input class="form-control" id="bs-period" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button></div>
+      </div>
+      <div id="bs-table">请点击生成报表</div>
+    </div>
+  `;
+}
+
+async function loadBalanceSheet() {
+  const period = document.getElementById('bs-period').value;
+  const el = document.getElementById('bs-table');
+  el.innerHTML = '加载中...';
+  try {
+    const data = await api(`/api/reports/balance-sheet?period=${period}`);
+    const renderRows = (rows) => rows.map(r => `
+      <tr class="${r.bold ? 'report-bold' : ''} ${r.highlight ? 'report-highlight' : ''}">
+        <td>${r.label}</td>
+        <td>${r.amount !== null && r.amount !== undefined ? '¥' + fmt(r.amount) : ''}</td>
+      </tr>
+    `).join('');
+
+    el.innerHTML = `
+      <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">截止期间：${period}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <div style="font-weight:700;margin-bottom:8px;font-size:14px">资产</div>
+          <table class="report-table" style="width:100%">
+            <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
+            <tbody>${renderRows(data.assets)}</tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-weight:700;margin-bottom:8px;font-size:14px">负债及所有者权益</div>
+          <table class="report-table" style="width:100%">
+            <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
+            <tbody>${renderRows(data.liabilities_equity)}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+// ==================== 会计科目 ====================
+async function renderAccounts() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin:0">🗂️ 会计科目</div>
+        <button class="btn btn-primary" onclick="showAddAccount()">+ 新增科目</button>
+      </div>
+      <div class="filter-bar">
+        <select class="form-control" id="acc-cat" style="width:130px">
+          <option value="">全部类别</option>
+          <option>资产</option><option>负债</option><option>权益</option>
+          <option>收入</option><option>费用</option><option>成本</option>
+        </select>
+        <input class="form-control" id="acc-kw" placeholder="科目编码/名称" style="width:180px">
+        <button class="btn btn-primary" onclick="loadAccounts()">🔍 查询</button>
+      </div>
+      <div class="table-wrap" id="acc-table">加载中...</div>
+    </div>
+  `;
+  await loadAccounts();
+}
+
+async function loadAccounts() {
+  const cat = document.getElementById('acc-cat')?.value;
+  const kw = document.getElementById('acc-kw')?.value;
+  const url = `/api/accounts${cat || kw ? '?' : ''}${cat ? 'category=' + cat : ''}${cat && kw ? '&' : ''}${kw ? 'keyword=' + kw : ''}`;
+  const el = document.getElementById('acc-table');
+  try {
+    const data = await api(url);
+    allAccounts = data;
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th>类别</th><th>余额方向</th><th>级次</th><th>上级科目</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>
+          ${data.map(a => `
+            <tr>
+              <td style="font-weight:500">${a.code}</td>
+              <td class="${a.level === 2 ? 'indent-2' : ''}">${a.name}</td>
+              <td><span class="badge" style="background:var(--primary-light);color:var(--primary)">${a.category}</span></td>
+              <td style="text-align:center">${a.balance_direction}</td>
+              <td style="text-align:center">${a.level}</td>
+              <td>${a.parent_code || '-'}</td>
+              <td>${a.is_active ? '<span class="badge badge-audited">启用</span>' : '<span class="badge" style="background:#f3f4f6;color:#6b7280">停用</span>'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="toggleAccount(${a.id}, ${!a.is_active})">${a.is_active ? '停用' : '启用'}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">删除</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function showAddAccount() {
+  const parentOptions = allAccounts.filter(a => a.level === 1).map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`).join('');
+  showModal(`
+    <div class="modal-title">新增会计科目</div>
+    <div class="form-grid">
+      <div class="form-group"><label>科目编码 *</label><input class="form-control" id="na-code" placeholder="如 6605"></div>
+      <div class="form-group"><label>科目名称 *</label><input class="form-control" id="na-name" placeholder="如 研发费用"></div>
+      <div class="form-group">
+        <label>科目类别 *</label>
+        <select class="form-control" id="na-cat">
+          <option>资产</option><option>负债</option><option>权益</option>
+          <option>收入</option><option>费用</option><option>成本</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>余额方向 *</label>
+        <select class="form-control" id="na-dir"><option>借</option><option>贷</option></select>
+      </div>
+      <div class="form-group">
+        <label>级次</label>
+        <select class="form-control" id="na-level"><option value="1">一级</option><option value="2">二级</option></select>
+      </div>
+      <div class="form-group">
+        <label>上级科目</label>
+        <select class="form-control" id="na-parent"><option value="">无</option>${parentOptions}</select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveNewAccount()">保存</button>
+    </div>
+  `);
+}
+
+async function saveNewAccount() {
+  const code = document.getElementById('na-code').value.trim();
+  const name = document.getElementById('na-name').value.trim();
+  const category = document.getElementById('na-cat').value;
+  const balance_direction = document.getElementById('na-dir').value;
+  const level = parseInt(document.getElementById('na-level').value);
+  const parent_code = document.getElementById('na-parent').value || null;
+  if (!code || !name) { toast('请填写科目编码和名称', 'error'); return; }
+  try {
+    await api('/api/accounts', { method: 'POST', body: JSON.stringify({ code, name, category, balance_direction, level, parent_code }) });
+    toast('科目创建成功', 'success');
+    closeModal();
+    await loadAccounts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function toggleAccount(id, active) {
+  try {
+    await api(`/api/accounts/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: active }) });
+    toast(active ? '科目已启用' : '科目已停用', 'success');
+    await loadAccounts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteAccount(id) {
+  if (!confirm('确认删除该科目？')) return;
+  try {
+    await api(`/api/accounts/${id}`, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    await loadAccounts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 期间管理 ====================
+async function renderPeriods() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div class="card">加载中...</div>';
+  try {
+    const data = await api('/api/periods');
+    el.innerHTML = `
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">📅 会计期间管理</div>
+        <table style="max-width:400px">
+          <thead><tr><th>会计期间</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            ${data.map(p => `
+              <tr>
+                <td style="font-weight:600">${p.period}</td>
+                <td><span class="badge ${p.status === '开放' ? 'badge-open' : 'badge-closed'}">${p.status}</span></td>
+                <td>
+                  ${p.status === '开放' ? `<button class="btn btn-secondary btn-sm" onclick="closePeriod('${p.period}')">结账</button>` : '<span style="color:var(--gray-500);font-size:12px">已结账</span>'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    document.getElementById('content-area').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+async function closePeriod(period) {
+  if (!confirm(`确认对 ${period} 进行月末结账？结账后该期间不可修改。`)) return;
+  try {
+    const res = await api(`/api/periods/${period}/close`, { method: 'POST' });
+    toast(res.message, 'success');
+    await loadCurrentPeriod();
+    await renderPeriods();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 模态框 ====================
+function showModal(html) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal modal-lg"><button class="modal-close" onclick="closeModal()">×</button>${html}</div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  document.body.appendChild(overlay);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay')?.remove();
+}
+
+function showPeriodSelector() {
+  // 简单点击切换期间
+  const newPeriod = prompt('输入要切换的会计期间 (格式 YYYY-MM):', currentPeriod);
+  if (newPeriod && /^\d{4}-\d{2}$/.test(newPeriod)) {
+    currentPeriod = newPeriod;
+    document.getElementById('current-period').textContent = currentPeriod;
+    toast(`已切换到 ${currentPeriod}`, 'success');
+    if (currentPage === 'dashboard') renderDashboard();
+  }
+}
+
+// ==================== 启动 ====================
+init();
+</script>
+</body>
+</html>
