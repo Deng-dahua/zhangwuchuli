@@ -1,7 +1,7 @@
 """
 中小制造业账务处理系统 - 后端 API
 """
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
@@ -10,6 +10,12 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
 import os
+import csv
+import io
+import re
+import uuid
+import openpyxl
+from pypdf import PdfReader
 
 from database import (
     get_db, init_db,
@@ -1082,6 +1088,110 @@ def extract_amount(text: str) -> Optional[float]:
 def extract_number(text: str) -> Optional[int]:
     m = re.search(r"(\d+)", text)
     return int(m.group(1)) if m else None
+
+
+# ==================== 文件上传 ====================
+
+def read_excel_content(file_bytes: bytes, filename: str) -> str:
+    """读取 Excel 文件内容"""
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    lines = [f"[Excel] {filename}"]
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        lines.append(f"\n--- 工作表: {sheet_name} ---")
+        headers = []
+        for col in range(1, ws.max_column + 1):
+            cell = ws.cell(row=1, column=col)
+            headers.append(str(cell.value) if cell.value is not None else "")
+        lines.append(" | ".join(headers))
+        lines.append("-" * 60)
+        row_count = 0
+        for row in range(2, ws.max_row + 1):
+            vals = []
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row, column=col)
+                vals.append(str(cell.value) if cell.value is not None else "")
+            if any(v.strip() for v in vals):
+                lines.append(" | ".join(vals))
+                row_count += 1
+                if row_count >= 200:
+                    lines.append(f"... (共 {ws.max_row - 1} 行，仅显示前 200 行)")
+                    break
+        lines.append(f"→ 共 {ws.max_row - 1} 行数据\n")
+    return "\n".join(lines)
+
+
+def read_csv_content(file_bytes: bytes, filename: str) -> str:
+    """读取 CSV 文件内容"""
+    text = file_bytes.decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return f"[CSV] {filename}\n(空文件)"
+    lines = [f"[CSV] {filename}"]
+    lines.append(" | ".join(rows[0]))
+    lines.append("-" * 60)
+    for i, row in enumerate(rows[1:], 1):
+        lines.append(" | ".join(row))
+        if i >= 200:
+            lines.append(f"... (共 {len(rows) - 1} 行，仅显示前 200 行)")
+            break
+    return "\n".join(lines)
+
+
+def read_pdf_content(file_bytes: bytes, filename: str) -> str:
+    """读取 PDF 文件文本内容"""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    lines = [f"[PDF] {filename}"]
+    total_text = ""
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text()
+        if text:
+            total_text += text + "\n"
+    if not total_text.strip():
+        return f"[PDF] {filename}\n(无法提取文本内容，可能是扫描件或图片型 PDF)"
+    # 限制长度
+    if len(total_text) > 5000:
+        total_text = total_text[:5000] + f"\n...(共 {len(total_text)} 字符，仅显示前 5000)"
+    lines.append(total_text.strip())
+    return "\n".join(lines)
+
+
+@app.post("/api/chat/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    session_id: str = Form("")
+):
+    """上传文件并识别内容"""
+    try:
+        content_bytes = await file.read()
+        fname = file.filename or "unknown"
+        ext = os.path.splitext(fname)[1].lower()
+
+        if ext in (".xlsx", ".xls"):
+            content = read_excel_content(content_bytes, fname)
+        elif ext == ".csv":
+            content = read_csv_content(content_bytes, fname)
+        elif ext == ".pdf":
+            content = read_pdf_content(content_bytes, fname)
+        elif ext in (".txt", ".md", ".log"):
+            text = content_bytes.decode("utf-8")
+            if len(text) > 5000:
+                text = text[:5000] + f"\n...(共 {len(text)} 字符，仅显示前 5000)"
+            content = f"[文本] {fname}\n{text}"
+        elif ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+            content = f"[图片] {fname}\n(不支持图片文字识别，请直接描述需求或将数据整理为 Excel/CSV 格式上传)"
+        else:
+            return {"error": f"不支持的文件格式：{ext}。支持格式：xlsx, csv, pdf, txt, md, log", "session_id": session_id}
+
+        return {
+            "file_name": fname,
+            "file_type": ext,
+            "content": content,
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {"error": f"文件处理失败：{str(e)}", "session_id": session_id}
 
 
 @app.post("/api/chat")
