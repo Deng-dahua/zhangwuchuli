@@ -3937,7 +3937,7 @@ async function showSalesInvoiceForm(id) {
   html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="si-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '-') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
   html += '</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="si-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
@@ -4349,7 +4349,7 @@ async function showPurchaseInvoiceForm(id) {
   html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="pi-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '-') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
   html += '</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="pi-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
