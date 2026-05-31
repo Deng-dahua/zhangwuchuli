@@ -24,7 +24,8 @@ from database import (
     FixedAsset, FixedAssetDepreciation,
     IntangibleAsset, IntangibleAssetAmortization,
     InventoryItem, InventoryTransaction, InventoryBalance,
-    Contract, ContractPayment
+    Contract, ContractPayment,
+    CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -1137,6 +1138,17 @@ class CompanyCreate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     legal_representative: Optional[str] = None
+    legal_representative_id: Optional[str] = None
+    registered_capital: Optional[str] = None
+    business_scope: Optional[str] = None
+    # 股东（可多人）
+    shareholders: Optional[List[dict]] = []
+    # 董事（可多人）
+    directors: Optional[List[dict]] = []
+    # 监事（可多人）
+    supervisors: Optional[List[dict]] = []
+    # 财务负责人（可多人）
+    finance_contacts: Optional[List[dict]] = []
 
 class CompanyUpdateModel(BaseModel):
     name: Optional[str] = None
@@ -1173,10 +1185,48 @@ def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
     company = Company(
         name=data.name, uscc=data.uscc, tax_no=data.tax_no,
         address=data.address, phone=data.phone,
-        legal_representative=data.legal_representative
+        legal_representative=data.legal_representative,
+        legal_representative_id=data.legal_representative_id,
+        registered_capital=data.registered_capital,
+        business_scope=data.business_scope
     )
     db.add(company)
     db.flush()
+
+    # 写入股东信息
+    for s in (data.shareholders or []):
+        if s.get("name"):
+            db.add(CompanyShareholder(
+                company_id=company.id,
+                name=s["name"],
+                id_number=s.get("id_number", ""),
+                shareholder_type=s.get("type", "自然人"),
+                share_ratio=float(s["share_ratio"]) if s.get("share_ratio") not in (None, "") else None
+            ))
+    # 写入董事信息
+    for d in (data.directors or []):
+        if d.get("name"):
+            db.add(CompanyDirector(
+                company_id=company.id,
+                name=d["name"],
+                id_number=d.get("id_number", "")
+            ))
+    # 写入监事信息
+    for s in (data.supervisors or []):
+        if s.get("name"):
+            db.add(CompanySupervisor(
+                company_id=company.id,
+                name=s["name"],
+                id_number=s.get("id_number", "")
+            ))
+    # 写入财务负责人信息
+    for f in (data.finance_contacts or []):
+        if f.get("name"):
+            db.add(CompanyFinanceContact(
+                company_id=company.id,
+                name=f["name"],
+                id_number=f.get("id_number", "")
+            ))
 
     # 初始化公司基础数据（科目表、部门、期间）
     init_company_data(db, company.id)

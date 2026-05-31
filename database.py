@@ -41,12 +41,63 @@ class Company(Base):
     bank_name = Column(String(100), comment="开户银行")
     bank_account = Column(String(50), comment="银行账号")
     legal_representative = Column(String(50), comment="法定代表人")
+    legal_representative_id = Column(String(50), comment="法定代表人身份证号")
     registered_capital = Column(String(50), comment="注册资本")
     established_date = Column(Date, nullable=True, comment="成立日期")
     business_scope = Column(Text, comment="经营范围")
     is_active = Column(Boolean, default=True, comment="是否启用")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ==================== 公司股东 ====================
+
+class CompanyShareholder(Base):
+    """股东信息 - 支持自然人和企业股东，可多人"""
+    __tablename__ = "company_shareholders"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    name = Column(String(100), nullable=False, comment="股东名称（自然人姓名或企业名称）")
+    id_number = Column(String(50), comment="证件号（身份证或统一社会信用代码）")
+    shareholder_type = Column(String(20), default="自然人", comment="股东类型：自然人/企业")
+    share_ratio = Column(Float, comment="股权比例（%）")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 公司董事 ====================
+
+class CompanyDirector(Base):
+    """董事信息 - 可多人"""
+    __tablename__ = "company_directors"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    name = Column(String(50), nullable=False, comment="董事姓名")
+    id_number = Column(String(50), comment="董事身份证号")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 公司监事 ====================
+
+class CompanySupervisor(Base):
+    """监事信息 - 可多人"""
+    __tablename__ = "company_supervisors"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    name = Column(String(50), nullable=False, comment="监事姓名")
+    id_number = Column(String(50), comment="监事身份证号")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 财务负责人 ====================
+
+class CompanyFinanceContact(Base):
+    """财务负责人信息 - 可多人"""
+    __tablename__ = "company_finance_contacts"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    name = Column(String(50), nullable=False, comment="财务负责人姓名")
+    id_number = Column(String(50), comment="财务负责人身份证号")
+    created_at = Column(DateTime, default=datetime.now)
 
 
 # ==================== 部门档案 ====================
@@ -481,12 +532,6 @@ def migrate_schema(db):
             except Exception as e:
                 db.rollback()
                 print(f"迁移 company_info → companies 失败: {e}")
-
-        # 如果还是没有任何公司，插入默认公司
-        if db.query(Company).count() == 0:
-            db.add(Company(name="默认公司", is_active=True))
-            db.commit()
-            print("已创建默认公司")
 
     # ── 3. 给所有表增加 company_id 列 ──
     migrations = {

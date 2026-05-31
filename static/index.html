@@ -267,6 +267,33 @@
     .reg-form button { width: 100%; padding: 13px; background: #1a56db; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
     .reg-form button:hover { background: #1546b8; }
     .reg-form button:disabled { background: #93c5fd; cursor: not-allowed; }
+    /* 添加按钮 */
+    .add-btn {
+      display: block; width: 100%; padding: 10px;
+      background: #f0f9ff; color: #1a56db; border: 2px dashed #bfdbfe;
+      border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; margin-bottom: 12px;
+    }
+    .add-btn:hover { background: #eff6ff; border-color: #1a56db; }
+    /* 人员行 */
+    .person-row {
+      display: flex; gap: 10px; align-items: flex-end;
+      padding: 12px; background: #f9fafb; border-radius: 10px;
+      margin-bottom: 10px; position: relative;
+    }
+    .person-row .form-group { flex: 1; margin-bottom: 0; }
+    .person-row .form-group label { font-size: 12px; }
+    .person-row .form-group input, .person-row .form-group select { padding: 8px 10px; font-size: 13px; }
+    .person-row .del-btn {
+      flex-shrink: 0; width: 32px; height: 32px;
+      background: #fee2e2; color: #dc2626; border: none;
+      border-radius: 8px; font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .person-row .del-btn:hover { background: #fca5a5; }
+    .shareholder-row .form-group:nth-child(3) { flex: 0.6; }
+    .shareholder-row .form-group:nth-child(4) { flex: 0.5; }
 
     .reg-hint { text-align: center; margin-top: 16px; font-size: 12px; color: #9ca3af; }
     .reg-hint a { color: #1a56db; cursor: pointer; text-decoration: none; }
@@ -300,44 +327,77 @@
     <div class="reg-header">
       <div class="logo">🏢</div>
       <h1>公司建档</h1>
-      <p>填写公司基本信息，建立独立账套</p>
+      <p>填写完整公司信息，用于税务风险六员比对</p>
     </div>
     <div class="reg-card">
-      <h2>📋 公司信息</h2>
       <form class="reg-form" id="reg-form" onsubmit="handleCompanyRegister(event)">
+
+        <!-- 基本信息 -->
+        <h2>📋 基本信息</h2>
         <div class="form-group">
           <label>公司全称 <span class="req">*</span></label>
-          <input type="text" id="reg-name" placeholder="例如：广州存勤法税咨询有限公司" required>
+          <input type="text" id="reg-name" placeholder="例如：存勤法税服务（广州）有限公司" required>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>统一社会信用代码</label>
-            <input type="text" id="reg-uscc" placeholder="18位代码">
+            <label>统一社会信用代码 <span class="req">*</span></label>
+            <input type="text" id="reg-uscc" placeholder="91XXXXXXXXXXXXXXXXXX" required>
           </div>
           <div class="form-group">
-            <label>纳税人识别号</label>
-            <input type="text" id="reg-tax-no" placeholder="纳税人识别号">
+            <label>纳税人识别号 <span class="req">*</span></label>
+            <input type="text" id="reg-tax-no" placeholder="纳税人识别号" required>
           </div>
         </div>
         <div class="form-group">
-          <label>公司地址</label>
-          <input type="text" id="reg-address" placeholder="例如：广州市天河区XX路XX号">
+          <label>注册地址 <span class="req">*</span></label>
+          <input type="text" id="reg-address" placeholder="例如：广州市天河区XX路XX号" required>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>联系电话</label>
-            <input type="text" id="reg-phone" placeholder="联系电话">
+            <label>法定代表人 <span class="req">*</span></label>
+            <input type="text" id="reg-legal-person" placeholder="法定代表人姓名" required>
           </div>
           <div class="form-group">
-            <label>法定代表人</label>
-            <input type="text" id="reg-legal-person" placeholder="法定代表人姓名">
+            <label>法定代表人身份证 <span class="req">*</span></label>
+            <input type="text" id="reg-legal-person-id" placeholder="18位身份证号" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>注册资本 <span class="req">*</span></label>
+            <input type="text" id="reg-capital" placeholder="例如：100万元" required>
+          </div>
+          <div class="form-group">
+            <label>成立日期</label>
+            <input type="date" id="reg-established-date">
           </div>
         </div>
         <div class="form-group">
-          <label>注册资本（万元）</label>
-          <input type="number" id="reg-capital" placeholder="例如：100" step="0.01" min="0">
+          <label>经营范围 <span class="req">*</span></label>
+          <textarea id="reg-business-scope" placeholder="填写完整经营范围" rows="3" required></textarea>
         </div>
-        <button type="submit" id="reg-submit-btn">✅ 创建账套，进入系统</button>
+
+        <!-- 股东信息 -->
+        <h2 style="margin-top:28px;">👥 股东信息 <span style="font-size:13px;font-weight:400;color:#6b7280;">（可添加多人）</span></h2>
+        <div id="shareholders-list"></div>
+        <button type="button" class="add-btn" onclick="addShareholderRow()">＋ 添加股东</button>
+
+        <!-- 董事信息 -->
+        <h2 style="margin-top:28px;">🧑‍💼 董事信息 <span style="font-size:13px;font-weight:400;color:#6b7280;">（可添加多人）</span></h2>
+        <div id="directors-list"></div>
+        <button type="button" class="add-btn" onclick="addDirectorRow()">＋ 添加董事</button>
+
+        <!-- 监事信息 -->
+        <h2 style="margin-top:28px;">🔍 监事信息 <span style="font-size:13px;font-weight:400;color:#6b7280;">（可添加多人）</span></h2>
+        <div id="supervisors-list"></div>
+        <button type="button" class="add-btn" onclick="addSupervisorRow()">＋ 添加监事</button>
+
+        <!-- 财务负责人信息 -->
+        <h2 style="margin-top:28px;">💰 财务负责人 <span style="font-size:13px;font-weight:400;color:#6b7280;">（可添加多人）</span></h2>
+        <div id="finance-list"></div>
+        <button type="button" class="add-btn" onclick="addFinanceRow()">＋ 添加财务负责人</button>
+
+        <button type="submit" id="reg-submit-btn" style="margin-top:28px;">✅ 创建账套，进入系统</button>
         <div class="reg-hint" id="reg-back-hint" style="display:none;">
           已有公司？<a onclick="showCompanyPick()">返回选择公司</a>
         </div>
@@ -519,17 +579,68 @@ async function handleCompanyRegister(e) {
   const btn = document.getElementById('reg-submit-btn');
   btn.disabled = true;
   btn.textContent = '⏳ 正在创建...';
+
   const name = document.getElementById('reg-name').value.trim();
   if (!name) { toast('请输入公司全称', 'error'); btn.disabled = false; btn.textContent = '✅ 创建账套，进入系统'; return; }
+
+  // 收集股东
+  const shareholders = [];
+  document.querySelectorAll('#shareholders-list .person-row').forEach(row => {
+    const nm = row.querySelector('.sh-name')?.value?.trim();
+    if (nm) shareholders.push({
+      name: nm,
+      id_number: row.querySelector('.sh-id')?.value?.trim() || '',
+      type: row.querySelector('.sh-type')?.value || '自然人',
+      share_ratio: parseFloat(row.querySelector('.sh-ratio')?.value) || 0
+    });
+  });
+
+  // 收集董事
+  const directors = [];
+  document.querySelectorAll('#directors-list .person-row').forEach(row => {
+    const nm = row.querySelector('.dr-name')?.value?.trim();
+    if (nm) directors.push({
+      name: nm,
+      id_number: row.querySelector('.dr-id')?.value?.trim() || ''
+    });
+  });
+
+  // 收集监事
+  const supervisors = [];
+  document.querySelectorAll('#supervisors-list .person-row').forEach(row => {
+    const nm = row.querySelector('.sv-name')?.value?.trim();
+    if (nm) supervisors.push({
+      name: nm,
+      id_number: row.querySelector('.sv-id')?.value?.trim() || ''
+    });
+  });
+
+  // 收集财务负责人
+  const finance_contacts = [];
+  document.querySelectorAll('#finance-list .person-row').forEach(row => {
+    const nm = row.querySelector('.fn-name')?.value?.trim();
+    if (nm) finance_contacts.push({
+      name: nm,
+      id_number: row.querySelector('.fn-id')?.value?.trim() || ''
+    });
+  });
+
   const body = {
     name: name,
     uscc: document.getElementById('reg-uscc').value.trim() || null,
     tax_no: document.getElementById('reg-tax-no').value.trim() || null,
     address: document.getElementById('reg-address').value.trim() || null,
-    phone: document.getElementById('reg-phone').value.trim() || null,
-    legal_person: document.getElementById('reg-legal-person').value.trim() || null,
-    registered_capital: document.getElementById('reg-capital').value ? parseFloat(document.getElementById('reg-capital').value) : null
+    legal_representative: document.getElementById('reg-legal-person').value.trim() || null,
+    legal_representative_id: document.getElementById('reg-legal-person-id').value.trim() || null,
+    registered_capital: document.getElementById('reg-capital').value.trim() || null,
+    business_scope: document.getElementById('reg-business-scope').value.trim() || null,
+    established_date: document.getElementById('reg-established-date')?.value || null,
+    shareholders: shareholders,
+    directors: directors,
+    supervisors: supervisors,
+    finance_contacts: finance_contacts
   };
+
   try {
     const data = await fetch('/api/companies', {
       method: 'POST',
@@ -544,6 +655,39 @@ async function handleCompanyRegister(e) {
     btn.textContent = '✅ 创建账套，进入系统';
   }
 }
+
+function addShareholderRow() {
+  const list = document.getElementById('shareholders-list');
+  const row = document.createElement('div');
+  row.className = 'person-row shareholder-row';
+  row.innerHTML = ;
+  list.appendChild(row);
+}
+
+function addDirectorRow() {
+  const list = document.getElementById('directors-list');
+  const row = document.createElement('div');
+  row.className = 'person-row';
+  row.innerHTML = ;
+  list.appendChild(row);
+}
+
+function addSupervisorRow() {
+  const list = document.getElementById('supervisors-list');
+  const row = document.createElement('div');
+  row.className = 'person-row';
+  row.innerHTML = ;
+  list.appendChild(row);
+}
+
+function addFinanceRow() {
+  const list = document.getElementById('finance-list');
+  const row = document.createElement('div');
+  row.className = 'person-row';
+  row.innerHTML = ;
+  list.appendChild(row);
+}
+
 
 function escapeHtml(str) {
   if (!str) return '';
