@@ -27,7 +27,9 @@ from database import (
     Contract, ContractPayment,
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     Payment,
-    SalesInvoice, PurchaseInvoice
+    SalesInvoice, PurchaseInvoice,
+    BankConfig, BankTransaction,
+    InputVATDeduction, ColumnTemplate
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -2434,6 +2436,760 @@ def delete_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Ses
     db.delete(inv)
     db.commit()
     return {"message": "删除成功"}
+
+
+import json
+
+# ==================== 银行配置 ====================
+
+class BankConfigCreate(BaseModel):
+    bank_name: str
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    column_mapping: Optional[str] = None  # JSON string
+
+class BankConfigUpdate(BaseModel):
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    column_mapping: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@app.get("/api/bank-configs")
+def list_bank_configs(company_id: int = Query(1), db: Session = Depends(get_db)):
+    configs = db.query(BankConfig).filter(
+        BankConfig.company_id == company_id, BankConfig.is_active == True
+    ).order_by(BankConfig.bank_name).all()
+    return [{
+        "id": c.id, "bank_name": c.bank_name,
+        "account_number": c.account_number or "",
+        "account_name": c.account_name or "",
+        "column_mapping": c.column_mapping or "{}",
+        "created_at": str(c.created_at) if c.created_at else ""
+    } for c in configs]
+
+
+@app.post("/api/bank-configs")
+def create_bank_config(data: BankConfigCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    cfg = BankConfig(company_id=company_id, **data.model_dump())
+    db.add(cfg)
+    db.commit()
+    db.refresh(cfg)
+    return {"id": cfg.id, "message": "银行配置创建成功"}
+
+
+@app.put("/api/bank-configs/{config_id}")
+def update_bank_config(config_id: int, data: BankConfigUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    cfg = db.query(BankConfig).filter(BankConfig.company_id == company_id, BankConfig.id == config_id).first()
+    if not cfg:
+        raise HTTPException(404, detail="银行配置不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(cfg, k, v)
+    cfg.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/bank-configs/{config_id}")
+def delete_bank_config(config_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    cfg = db.query(BankConfig).filter(BankConfig.company_id == company_id, BankConfig.id == config_id).first()
+    if not cfg:
+        raise HTTPException(404, detail="银行配置不存在")
+    cfg.is_active = False
+    db.commit()
+    return {"message": "已停用"}
+
+
+# ==================== 银行流水 ====================
+
+class BankTransactionCreate(BaseModel):
+    bank_config_id: Optional[int] = None
+    transaction_date: date
+    amount: float = 0.0
+    balance: Optional[float] = 0.0
+    counterparty_name: Optional[str] = None
+    counterparty_account: Optional[str] = None
+    counterparty_bank: Optional[str] = None
+    summary: Optional[str] = None
+    transaction_type: str = "支出"
+    payment_method: Optional[str] = None
+    voucher_no: Optional[str] = None
+    reference_no: Optional[str] = None
+    raw_data: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class BankTransactionUpdate(BaseModel):
+    bank_config_id: Optional[int] = None
+    transaction_date: Optional[date] = None
+    amount: Optional[float] = None
+    balance: Optional[float] = None
+    counterparty_name: Optional[str] = None
+    counterparty_account: Optional[str] = None
+    counterparty_bank: Optional[str] = None
+    summary: Optional[str] = None
+    transaction_type: Optional[str] = None
+    payment_method: Optional[str] = None
+    voucher_no: Optional[str] = None
+    reference_no: Optional[str] = None
+    raw_data: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/bank-transactions")
+def list_bank_transactions(
+    company_id: int = Query(1),
+    bank_config_id: Optional[int] = None,
+    transaction_type: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(BankTransaction).filter(BankTransaction.company_id == company_id)
+    if bank_config_id:
+        q = q.filter(BankTransaction.bank_config_id == bank_config_id)
+    if transaction_type:
+        q = q.filter(BankTransaction.transaction_type == transaction_type)
+    if date_from:
+        q = q.filter(BankTransaction.transaction_date >= date_from)
+    if date_to:
+        q = q.filter(BankTransaction.transaction_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            BankTransaction.counterparty_name.contains(keyword),
+            BankTransaction.summary.contains(keyword),
+            BankTransaction.reference_no.contains(keyword)
+        ))
+    txs = q.order_by(BankTransaction.transaction_date.desc(), BankTransaction.id.desc()).all()
+    return [{
+        "id": tx.id, "bank_config_id": tx.bank_config_id,
+        "transaction_date": str(tx.transaction_date) if tx.transaction_date else "",
+        "amount": tx.amount or 0, "balance": tx.balance or 0,
+        "counterparty_name": tx.counterparty_name or "",
+        "counterparty_account": tx.counterparty_account or "",
+        "counterparty_bank": tx.counterparty_bank or "",
+        "summary": tx.summary or "",
+        "transaction_type": tx.transaction_type,
+        "payment_method": tx.payment_method or "",
+        "voucher_no": tx.voucher_no or "",
+        "reference_no": tx.reference_no or "",
+        "raw_data": tx.raw_data or "{}",
+        "remark": tx.remark or "",
+        "created_at": str(tx.created_at) if tx.created_at else ""
+    } for tx in txs]
+
+
+@app.post("/api/bank-transactions")
+def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tx = BankTransaction(company_id=company_id, **data.model_dump())
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return {"id": tx.id, "message": "银行流水创建成功"}
+
+
+@app.get("/api/bank-transactions/stats")
+def bank_transaction_stats(
+    company_id: int = Query(1),
+    bank_config_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    base = db.query(BankTransaction).filter(BankTransaction.company_id == company_id)
+    if bank_config_id:
+        base = base.filter(BankTransaction.bank_config_id == bank_config_id)
+    if date_from:
+        base = base.filter(BankTransaction.transaction_date >= date_from)
+    if date_to:
+        base = base.filter(BankTransaction.transaction_date <= date_to)
+
+    total_count = base.count()
+    income_base = base.filter(BankTransaction.transaction_type == "收入")
+    expense_base = base.filter(BankTransaction.transaction_type == "支出")
+
+    total_income = income_base.with_entities(func.sum(BankTransaction.amount)).scalar() or 0
+    total_expense = expense_base.with_entities(func.sum(func.abs(BankTransaction.amount))).scalar() or 0
+    income_count = income_base.count()
+    expense_count = expense_base.count()
+
+    # 最新余额（取最后一条）
+    last_tx = base.order_by(BankTransaction.transaction_date.desc(), BankTransaction.id.desc()).first()
+    last_balance = last_tx.balance if last_tx else 0
+
+    return {
+        "total_count": total_count,
+        "total_income": round(total_income, 2),
+        "total_expense": round(total_expense, 2),
+        "income_count": income_count,
+        "expense_count": expense_count,
+        "last_balance": round(last_balance, 2)
+    }
+
+
+@app.get("/api/bank-transactions/{tx_id}")
+def get_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(404, detail="流水记录不存在")
+    return {
+        "id": tx.id, "bank_config_id": tx.bank_config_id,
+        "transaction_date": str(tx.transaction_date) if tx.transaction_date else "",
+        "amount": tx.amount or 0, "balance": tx.balance or 0,
+        "counterparty_name": tx.counterparty_name or "",
+        "counterparty_account": tx.counterparty_account or "",
+        "counterparty_bank": tx.counterparty_bank or "",
+        "summary": tx.summary or "",
+        "transaction_type": tx.transaction_type,
+        "payment_method": tx.payment_method or "",
+        "voucher_no": tx.voucher_no or "",
+        "reference_no": tx.reference_no or "",
+        "raw_data": tx.raw_data or "{}",
+        "remark": tx.remark or "",
+        "created_at": str(tx.created_at) if tx.created_at else ""
+    }
+
+
+@app.put("/api/bank-transactions/{tx_id}")
+def update_bank_transaction(tx_id: int, data: BankTransactionUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(404, detail="流水记录不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(tx, k, v)
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/bank-transactions/{tx_id}")
+def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(404, detail="流水记录不存在")
+    db.delete(tx)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 进项抵扣 ====================
+
+class InputVATDeductionCreate(BaseModel):
+    purchase_invoice_id: Optional[int] = None
+    invoice_no: Optional[str] = None
+    invoice_code: Optional[str] = None
+    invoice_date: Optional[date] = None
+    seller_name: Optional[str] = None
+    goods_name: Optional[str] = None
+    total_amount: float = 0.0
+    tax_amount: float = 0.0
+    tax_rate: Optional[float] = 0.0
+    deductible_tax_amount: float = 0.0
+    deducted_tax_amount: Optional[float] = 0.0
+    deduction_period: Optional[str] = None
+    deduction_status: str = "待抵扣"
+    certification_date: Optional[date] = None
+    deduction_date: Optional[date] = None
+    deduction_method: str = "凭票抵扣"
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class InputVATDeductionUpdate(BaseModel):
+    deductible_tax_amount: Optional[float] = None
+    deducted_tax_amount: Optional[float] = None
+    deduction_period: Optional[str] = None
+    deduction_status: Optional[str] = None
+    certification_date: Optional[date] = None
+    deduction_date: Optional[date] = None
+    deduction_method: Optional[str] = None
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/input-vat-deductions")
+def list_input_vat_deductions(
+    company_id: int = Query(1),
+    deduction_status: Optional[str] = None,
+    deduction_period: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
+    if deduction_status:
+        q = q.filter(InputVATDeduction.deduction_status == deduction_status)
+    if deduction_period:
+        q = q.filter(InputVATDeduction.deduction_period == deduction_period)
+    if date_from:
+        q = q.filter(InputVATDeduction.invoice_date >= date_from)
+    if date_to:
+        q = q.filter(InputVATDeduction.invoice_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            InputVATDeduction.invoice_no.contains(keyword),
+            InputVATDeduction.seller_name.contains(keyword),
+            InputVATDeduction.goods_name.contains(keyword)
+        ))
+    items = q.order_by(InputVATDeduction.deduction_period.desc(), InputVATDeduction.invoice_date.desc()).all()
+    return [{
+        "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
+        "invoice_no": it.invoice_no or "", "invoice_code": it.invoice_code or "",
+        "invoice_date": str(it.invoice_date) if it.invoice_date else "",
+        "seller_name": it.seller_name or "", "goods_name": it.goods_name or "",
+        "total_amount": it.total_amount or 0, "tax_amount": it.tax_amount or 0,
+        "tax_rate": it.tax_rate or 0,
+        "deductible_tax_amount": it.deductible_tax_amount or 0,
+        "deducted_tax_amount": it.deducted_tax_amount or 0,
+        "deduction_period": it.deduction_period or "",
+        "deduction_status": it.deduction_status,
+        "certification_date": str(it.certification_date) if it.certification_date else "",
+        "deduction_date": str(it.deduction_date) if it.deduction_date else "",
+        "deduction_method": it.deduction_method,
+        "voucher_no": it.voucher_no or "", "remark": it.remark or "",
+        "created_at": str(it.created_at) if it.created_at else ""
+    } for it in items]
+
+
+@app.post("/api/input-vat-deductions")
+def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    item = InputVATDeduction(company_id=company_id, **data.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "message": "进项抵扣记录创建成功"}
+
+
+@app.get("/api/input-vat-deductions/stats")
+def input_vat_deduction_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+    base = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
+    total_count = base.count()
+    total_tax = base.with_entities(func.sum(InputVATDeduction.tax_amount)).scalar() or 0
+    total_deductible = base.with_entities(func.sum(InputVATDeduction.deductible_tax_amount)).scalar() or 0
+    total_deducted = base.with_entities(func.sum(InputVATDeduction.deducted_tax_amount)).scalar() or 0
+    pending_count = base.filter(InputVATDeduction.deduction_status.in_(["待认证", "待抵扣"])).count()
+    deducted_count = base.filter(InputVATDeduction.deduction_status == "已抵扣").count()
+    not_deductible_count = base.filter(InputVATDeduction.deduction_status == "不得抵扣").count()
+    return {
+        "total_count": total_count,
+        "total_tax": round(total_tax, 2),
+        "total_deductible": round(total_deductible, 2),
+        "total_deducted": round(total_deducted, 2),
+        "pending_count": pending_count,
+        "deducted_count": deducted_count,
+        "not_deductible_count": not_deductible_count
+    }
+
+
+@app.get("/api/input-vat-deductions/{item_id}")
+def get_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
+    if not it:
+        raise HTTPException(404, detail="抵扣记录不存在")
+    return {
+        "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
+        "invoice_no": it.invoice_no or "", "invoice_code": it.invoice_code or "",
+        "invoice_date": str(it.invoice_date) if it.invoice_date else "",
+        "seller_name": it.seller_name or "", "goods_name": it.goods_name or "",
+        "total_amount": it.total_amount or 0, "tax_amount": it.tax_amount or 0,
+        "tax_rate": it.tax_rate or 0,
+        "deductible_tax_amount": it.deductible_tax_amount or 0,
+        "deducted_tax_amount": it.deducted_tax_amount or 0,
+        "deduction_period": it.deduction_period or "",
+        "deduction_status": it.deduction_status,
+        "certification_date": str(it.certification_date) if it.certification_date else "",
+        "deduction_date": str(it.deduction_date) if it.deduction_date else "",
+        "deduction_method": it.deduction_method,
+        "voucher_no": it.voucher_no or "", "remark": it.remark or "",
+        "created_at": str(it.created_at) if it.created_at else "",
+        "updated_at": str(it.updated_at) if it.updated_at else ""
+    }
+
+
+@app.put("/api/input-vat-deductions/{item_id}")
+def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
+    if not it:
+        raise HTTPException(404, detail="抵扣记录不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(it, k, v)
+    it.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/input-vat-deductions/{item_id}")
+def delete_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
+    if not it:
+        raise HTTPException(404, detail="抵扣记录不存在")
+    db.delete(it)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 列映射模板 ====================
+
+class ColumnTemplateCreate(BaseModel):
+    module: str
+    template_name: str
+    bank_config_id: Optional[int] = None
+    column_mapping: Optional[str] = None
+    is_default: bool = False
+
+
+class ColumnTemplateUpdate(BaseModel):
+    template_name: Optional[str] = None
+    column_mapping: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+@app.get("/api/column-templates")
+def list_column_templates(
+    company_id: int = Query(1),
+    module: Optional[str] = None,
+    bank_config_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id)
+    if module:
+        q = q.filter(ColumnTemplate.module == module)
+    if bank_config_id is not None:
+        q = q.filter(ColumnTemplate.bank_config_id == bank_config_id)
+    templates = q.order_by(ColumnTemplate.module, ColumnTemplate.template_name).all()
+    return [{
+        "id": t.id, "module": t.module, "template_name": t.template_name,
+        "bank_config_id": t.bank_config_id,
+        "column_mapping": t.column_mapping or "{}",
+        "is_default": t.is_default,
+        "created_at": str(t.created_at) if t.created_at else ""
+    } for t in templates]
+
+
+@app.post("/api/column-templates")
+def create_column_template(data: ColumnTemplateCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tpl = ColumnTemplate(company_id=company_id, **data.model_dump())
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return {"id": tpl.id, "message": "模板创建成功"}
+
+
+@app.put("/api/column-templates/{tpl_id}")
+def update_column_template(tpl_id: int, data: ColumnTemplateUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tpl = db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id, ColumnTemplate.id == tpl_id).first()
+    if not tpl:
+        raise HTTPException(404, detail="模板不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(tpl, k, v)
+    tpl.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/column-templates/{tpl_id}")
+def delete_column_template(tpl_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    tpl = db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id, ColumnTemplate.id == tpl_id).first()
+    if not tpl:
+        raise HTTPException(404, detail="模板不存在")
+    db.delete(tpl)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 文件上传 - 表头分析 ====================
+
+@app.post("/api/file/analyze-headers")
+async def analyze_file_headers(
+    file: UploadFile = File(...),
+    module: str = Form("bank-transaction"),
+    bank_config_id: Optional[int] = Form(None)
+):
+    """上传文件，返回表头列表供用户做列映射"""
+    try:
+        content_bytes = await file.read()
+        fname = file.filename or "unknown"
+        ext = os.path.splitext(fname)[1].lower()
+
+        headers = []
+        preview_rows = []
+
+        if ext in (".xlsx", ".xls"):
+            wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
+            ws = wb.active
+            # 第一行作为表头
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=1, column=col)
+                headers.append(str(cell.value).strip() if cell.value is not None else f"列{col}")
+            # 预览前3行
+            for row in range(2, min(ws.max_row + 1, 5)):
+                vals = {}
+                for col in range(1, ws.max_column + 1):
+                    cell = ws.cell(row=row, column=col)
+                    vals[headers[col - 1]] = str(cell.value) if cell.value is not None else ""
+                preview_rows.append(vals)
+            total_rows = ws.max_row - 1
+        elif ext == ".csv":
+            text = content_bytes.decode("utf-8-sig")
+            reader = csv.reader(io.StringIO(text))
+            rows = list(reader)
+            if rows:
+                headers = [h.strip() for h in rows[0]]
+                for row in rows[1:4]:
+                    vals = {}
+                    for i, h in enumerate(headers):
+                        vals[h] = row[i] if i < len(row) else ""
+                    preview_rows.append(vals)
+                total_rows = len(rows) - 1
+            else:
+                headers, total_rows = [], 0
+        else:
+            return {"error": f"不支持的文件格式：{ext}。请上传 xlsx 或 csv 文件。"}
+
+        # 获取已知的列映射模板
+        field_groups = {}
+        if module == "sales-invoice":
+            field_groups = {
+                "发票信息": ["invoice_no", "invoice_code", "invoice_date", "invoice_type", "status"],
+                "购方信息": ["buyer_name", "buyer_tax_no"],
+                "货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
+                "金额": ["amount", "tax_rate", "tax_amount", "total_amount"],
+                "其他": ["voucher_no", "remark"]
+            }
+        elif module == "purchase-invoice":
+            field_groups = {
+                "发票信息": ["invoice_no", "invoice_code", "invoice_date", "invoice_type", "status"],
+                "销方信息": ["seller_name", "seller_tax_no"],
+                "货物明细": ["goods_name", "spec", "unit", "quantity", "unit_price"],
+                "金额": ["amount", "tax_rate", "tax_amount", "total_amount"],
+                "认证信息": ["certification_status", "certification_date", "deduction_period"],
+                "其他": ["voucher_no", "remark"]
+            }
+        elif module == "bank-transaction":
+            field_groups = {
+                "核心字段": ["transaction_date", "amount", "balance", "summary", "transaction_type"],
+                "对方信息": ["counterparty_name", "counterparty_account", "counterparty_bank"],
+                "交易信息": ["payment_method", "reference_no", "voucher_no"],
+                "其他": ["remark"]
+            }
+
+        return {
+            "file_name": fname,
+            "headers": headers,
+            "preview_rows": preview_rows,
+            "total_rows": total_rows,
+            "module": module,
+            "field_groups": field_groups
+        }
+    except Exception as e:
+        return {"error": f"文件分析失败：{str(e)}"}
+
+
+@app.post("/api/file/import-with-mapping")
+async def import_file_with_mapping(
+    file: UploadFile = File(...),
+    module: str = Form("bank-transaction"),
+    bank_config_id: Optional[int] = Form(None),
+    column_mapping: str = Form(...),  # JSON: {标准字段: 文件列名}
+    company_id: int = Form(1),
+    db: Session = Depends(get_db)
+):
+    """根据列映射导入文件数据"""
+    try:
+        content_bytes = await file.read()
+        ext = os.path.splitext(file.filename or "unknown")[1].lower()
+        mapping = json.loads(column_mapping)
+
+        # 读取数据行
+        rows_data = []
+        if ext in (".xlsx", ".xls"):
+            wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
+            ws = wb.active
+            headers_file = []
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=1, column=col)
+                headers_file.append(str(cell.value).strip() if cell.value is not None else f"列{col}")
+            for row in range(2, ws.max_row + 1):
+                row_dict = {}
+                for col in range(1, ws.max_column + 1):
+                    cell = ws.cell(row=row, column=col)
+                    row_dict[headers_file[col - 1]] = str(cell.value) if cell.value is not None else ""
+                # 跳过完全空行
+                if any(v.strip() for v in row_dict.values()):
+                    rows_data.append(row_dict)
+        elif ext == ".csv":
+            text = content_bytes.decode("utf-8-sig")
+            reader = csv.reader(io.StringIO(text))
+            all_rows = list(reader)
+            if all_rows:
+                headers_file = [h.strip() for h in all_rows[0]]
+                for row in all_rows[1:]:
+                    row_dict = {}
+                    for i, h in enumerate(headers_file):
+                        row_dict[h] = row[i] if i < len(row) else ""
+                    if any(v.strip() for v in row_dict.values()):
+                        rows_data.append(row_dict)
+
+        # 根据映射转换并导入
+        imported = 0
+        errors = []
+        for i, row in enumerate(rows_data):
+            try:
+                mapped = {}
+                extra = {}
+                for std_field, file_col in mapping.items():
+                    if file_col and file_col in row:
+                        mapped[std_field] = row[file_col].strip()
+
+                # 收集额外列（未映射的）
+                for col_name, val in row.items():
+                    if col_name not in mapping.values():
+                        extra[col_name] = val.strip()
+
+                if module == "bank-transaction":
+                    # 解析日期
+                    tx_date = None
+                    date_str = mapped.get("transaction_date", "")
+                    if date_str:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d", "%m/%d/%Y"]:
+                            try:
+                                tx_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except: pass
+                    if not tx_date:
+                        errors.append(f"第{i+2}行: 无法解析日期")
+                        continue
+
+                    # 解析金额
+                    amount = 0.0
+                    amt_str = mapped.get("amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
+                    try: amount = float(amt_str) if amt_str else 0.0
+                    except: amount = 0.0
+
+                    tx_type = mapped.get("transaction_type", "支出")
+                    if tx_type in ("收入", "贷", "credit", "CR", "入账"):
+                        tx_type = "收入"
+                    else:
+                        tx_type = "支出"
+
+                    bal_str = mapped.get("balance", "0").replace(",", "").replace("￥", "").replace("¥", "")
+                    balance = 0.0
+                    try: balance = float(bal_str) if bal_str else 0.0
+                    except: pass
+
+                    tx = BankTransaction(
+                        company_id=company_id,
+                        bank_config_id=bank_config_id,
+                        transaction_date=tx_date,
+                        amount=amount,
+                        balance=balance,
+                        counterparty_name=mapped.get("counterparty_name", ""),
+                        counterparty_account=mapped.get("counterparty_account", ""),
+                        counterparty_bank=mapped.get("counterparty_bank", ""),
+                        summary=mapped.get("summary", ""),
+                        transaction_type=tx_type,
+                        payment_method=mapped.get("payment_method", ""),
+                        reference_no=mapped.get("reference_no", ""),
+                        raw_data=json.dumps(extra, ensure_ascii=False) if extra else "{}",
+                        remark=mapped.get("remark", "")
+                    )
+                    db.add(tx)
+
+                elif module in ("sales-invoice", "purchase-invoice"):
+                    inv_date = None
+                    date_str = mapped.get("invoice_date", "")
+                    if date_str:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+                            try:
+                                inv_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except: pass
+                    if not inv_date:
+                        errors.append(f"第{i+2}行: 无法解析开票日期")
+                        continue
+
+                    inv_no = mapped.get("invoice_no", "")
+                    if not inv_no:
+                        errors.append(f"第{i+2}行: 缺少发票号码")
+                        continue
+
+                    amt = float(mapped.get("amount", "0").replace(",", "")) if mapped.get("amount") else 0.0
+                    tax_amt = float(mapped.get("tax_amount", "0").replace(",", "")) if mapped.get("tax_amount") else 0.0
+                    total = float(mapped.get("total_amount", "0").replace(",", "")) if mapped.get("total_amount") else 0.0
+                    qty = float(mapped.get("quantity", "0").replace(",", "")) if mapped.get("quantity") else 0
+                    uprice = float(mapped.get("unit_price", "0").replace(",", "")) if mapped.get("unit_price") else 0
+                    tr = float(mapped.get("tax_rate", "0").replace(",", "")) if mapped.get("tax_rate") else 0.0
+
+                    if module == "sales-invoice":
+                        existing = db.query(SalesInvoice).filter(
+                            SalesInvoice.company_id == company_id,
+                            SalesInvoice.invoice_no == inv_no
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
+                            continue
+                        inv = SalesInvoice(
+                            company_id=company_id, invoice_no=inv_no,
+                            invoice_code=mapped.get("invoice_code", ""),
+                            invoice_date=inv_date,
+                            buyer_name=mapped.get("buyer_name", ""),
+                            buyer_tax_no=mapped.get("buyer_tax_no", ""),
+                            goods_name=mapped.get("goods_name", ""),
+                            spec=mapped.get("spec", ""),
+                            unit=mapped.get("unit", ""),
+                            quantity=qty, unit_price=uprice,
+                            amount=amt, tax_rate=tr, tax_amount=tax_amt,
+                            total_amount=total,
+                            invoice_type=mapped.get("invoice_type", "增值税专用发票"),
+                            status=mapped.get("status", "正常"),
+                            voucher_no=mapped.get("voucher_no", ""),
+                            remark=mapped.get("remark", "")
+                        )
+                        db.add(inv)
+                    else:
+                        existing = db.query(PurchaseInvoice).filter(
+                            PurchaseInvoice.company_id == company_id,
+                            PurchaseInvoice.invoice_no == inv_no
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
+                            continue
+                        inv = PurchaseInvoice(
+                            company_id=company_id, invoice_no=inv_no,
+                            invoice_code=mapped.get("invoice_code", ""),
+                            invoice_date=inv_date,
+                            seller_name=mapped.get("seller_name", ""),
+                            seller_tax_no=mapped.get("seller_tax_no", ""),
+                            goods_name=mapped.get("goods_name", ""),
+                            spec=mapped.get("spec", ""),
+                            unit=mapped.get("unit", ""),
+                            quantity=qty, unit_price=uprice,
+                            amount=amt, tax_rate=tr, tax_amount=tax_amt,
+                            total_amount=total,
+                            invoice_type=mapped.get("invoice_type", "增值税专用发票"),
+                            status=mapped.get("status", "正常"),
+                            voucher_no=mapped.get("voucher_no", ""),
+                            remark=mapped.get("remark", "")
+                        )
+                        db.add(inv)
+
+                imported += 1
+            except Exception as e:
+                errors.append(f"第{i+2}行: {str(e)}")
+
+        db.commit()
+
+        return {
+            "imported": imported,
+            "total": len(rows_data),
+            "errors": errors[:20],  # 最多返回20条错误
+            "message": f"成功导入 {imported}/{len(rows_data)} 条记录"
+        }
+    except Exception as e:
+        db.rollback()
+        return {"error": f"导入失败：{str(e)}"}
 
 
 # ==================== AI 智能助手对话引擎 ====================

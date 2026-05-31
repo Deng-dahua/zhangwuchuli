@@ -491,6 +491,10 @@
     <div class="nav-group-title">发票管理</div>
     <div class="nav-item" data-page="sales-invoices"><span class="icon">📤</span>销项发票</div>
     <div class="nav-item" data-page="purchase-invoices"><span class="icon">📥</span>进项发票</div>
+    <div class="nav-item" data-page="input-vat-deductions"><span class="icon">🔍</span>进项抵扣</div>
+
+    <div class="nav-group-title">资金管理</div>
+    <div class="nav-item" data-page="bank-transactions"><span class="icon">🏦</span>银行流水</div>
   </div>
 </nav>
 
@@ -540,7 +544,9 @@ const pages = {
   'contracts': '合同管理',
   'payments': '付款管理',
   'sales-invoices': '销项发票',
-  'purchase-invoices': '进项发票'
+  'purchase-invoices': '进项发票',
+  'input-vat-deductions': '进项抵扣',
+  'bank-transactions': '银行流水'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -828,6 +834,8 @@ function navigateTo(page) {
     case 'payments': renderPayments(); break;
     case 'sales-invoices': renderSalesInvoices(); break;
     case 'purchase-invoices': renderPurchaseInvoices(); break;
+    case 'input-vat-deductions': renderInputVATDeductions(); break;
+    case 'bank-transactions': renderBankTransactions(); break;
   }
 }
 
@@ -3751,6 +3759,7 @@ async function renderSalesInvoices() {
     html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
     html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增销项发票</button>';
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
     html += '</div>';
 
     // 状态 Tab
@@ -4018,6 +4027,7 @@ async function renderPurchaseInvoices() {
     html += '<input type="date" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '</div>';
     html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增进项发票</button>';
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')" style="margin-left:8px;">📁 导入文件</button>';
     html += '</div>';
 
     html += '<div class="tab-bar" style="margin-bottom:12px">';
@@ -4260,6 +4270,682 @@ async function showPurchaseDetail(id) {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+// ==================== 银行流水 ====================
+
+let _bankConfigs = [];
+let _currentBankId = null;
+
+async function loadBankConfigs() {
+  const data = await api('/api/bank-configs');
+  _bankConfigs = data;
+  return data;
+}
+
+async function renderBankTransactions() {
+  const [configs, stats] = await Promise.all([
+    loadBankConfigs(),
+    api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
+  ]);
+
+  document.title = '银行流水 - 财税系统';
+
+  let bankSelectHtml = '';
+  if (configs.length > 0) {
+    const opts = configs.map(c => `<option value="${c.id}" ${c.id == _currentBankId ? 'selected' : ''}>${c.bank_name} ${c.account_number ? '(' + c.account_number.slice(-4) + ')' : ''}</option>`).join('');
+    bankSelectHtml = `<select onchange="switchBank(this.value)" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:180px;">
+      <option value="">全部银行</option>${opts}
+    </select>`;
+  }
+
+  const html = `
+    <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
+      <div class="stat-card"><div class="stat-label">流水总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">笔</div></div>
+      <div class="stat-card"><div class="stat-label">收入合计</div><div class="stat-value" style="color:#e02424;">¥${stats.total_income.toLocaleString()}</div><div class="stat-sub">${stats.income_count} 笔</div></div>
+      <div class="stat-card"><div class="stat-label">支出合计</div><div class="stat-value" style="color:#0e9f6e;">¥${stats.total_expense.toLocaleString()}</div><div class="stat-sub">${stats.expense_count} 笔</div></div>
+      <div class="stat-card"><div class="stat-label">净流入</div><div class="stat-value" style="color:${stats.total_income - stats.total_expense >= 0 ? '#e02424' : '#0e9f6e'};">¥${(stats.total_income - stats.total_expense).toLocaleString()}</div><div class="stat-sub">收入-支出</div></div>
+      <div class="stat-card"><div class="stat-label">最新余额</div><div class="stat-value">¥${stats.last_balance.toLocaleString()}</div><div class="stat-sub"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span>银行流水记录</span>
+        <div style="flex:1;"></div>
+        ${bankSelectHtml}
+        <button class="btn btn-outline btn-sm" onclick="showBankConfigModal()" style="margin-left:8px;">⚙️ 银行设置</button>
+        <button class="btn btn-outline btn-sm" onclick="showUploadModal('bank-transaction')" style="margin-left:8px;">📁 导入文件</button>
+        <button class="btn btn-primary btn-sm" onclick="showBankTxForm()">+ 新增流水</button>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <select id="bt-type-filter" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
+          <option value="">全部类型</option><option value="收入">收入</option><option value="支出">支出</option>
+        </select>
+        <input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." oninput="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;">
+        <input type="date" id="bt-date-from" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
+        <span style="line-height:32px;color:var(--gray-500);">至</span>
+        <input type="date" id="bt-date-to" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
+      </div>
+      <div id="bank-tx-table-container"></div>
+    </div>
+  `;
+  setContent(html);
+  loadBankTxList();
+}
+
+window.switchBank = function(bankId) {
+  _currentBankId = bankId || null;
+  renderBankTransactions();
+};
+
+async function loadBankTxList() {
+  const type = document.getElementById('bt-type-filter')?.value || '';
+  const kw = document.getElementById('bt-keyword')?.value || '';
+  const df = document.getElementById('bt-date-from')?.value || '';
+  const dt = document.getElementById('bt-date-to')?.value || '';
+  const params = new URLSearchParams();
+  if (_currentBankId) params.set('bank_config_id', _currentBankId);
+  if (type) params.set('transaction_type', type);
+  if (kw) params.set('keyword', kw);
+  if (df) params.set('date_from', df);
+  if (dt) params.set('date_to', dt);
+  const qs = params.toString();
+  const data = await api('/api/bank-transactions' + (qs ? '?' + qs : ''));
+
+  const bankNames = {};
+  _bankConfigs.forEach(c => { bankNames[c.id] = c.bank_name; });
+
+  const rows = data.map(tx => {
+    const amtClass = tx.transaction_type === '收入' ? 'color:#e02424;font-weight:600;' : 'color:#0e9f6e;font-weight:600;';
+    const sign = tx.transaction_type === '收入' ? '+' : '-';
+    const rawExtra = (() => { try { return JSON.parse(tx.raw_data || '{}'); } catch(e) { return {}; } })();
+    const extraBadges = Object.entries(rawExtra).slice(0, 3).map(([k,v]) => `<span style="font-size:11px;background:var(--gray-100);padding:1px 6px;border-radius:4px;margin:0 2px;">${k}: ${v}</span>`).join('');
+    return `
+      <tr>
+        <td>${tx.transaction_date}</td>
+        <td>${bankNames[tx.bank_config_id] || '-'}</td>
+        <td style="${amtClass}">${sign}¥${Math.abs(tx.amount).toLocaleString()}</td>
+        <td>¥${tx.balance.toLocaleString()}</td>
+        <td>${tx.transaction_type}</td>
+        <td>${tx.counterparty_name || '-'}</td>
+        <td>${tx.summary || '-'}${extraBadges}</td>
+        <td>${tx.reference_no || '-'}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="editBankTx(${tx.id})">编辑</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankTx(${tx.id})">删除</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('bank-tx-table-container').innerHTML = `
+    <table class="data-table"><thead><tr>
+      <th>日期</th><th>银行</th><th>金额</th><th>余额</th><th>类型</th><th>对方户名</th><th>摘要</th><th>流水号</th><th>操作</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>`;
+}
+
+function showBankTxForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑银行流水' : '新增银行流水';
+  const bankOpts = _bankConfigs.map(c => `<option value="${c.id}">${c.bank_name}</option>`).join('');
+
+  const modal = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>银行</label><select id="btf-bank" class="form-input">${bankOpts}</select></div>
+      <div class="form-group"><label>交易日期 *</label><input id="btf-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>交易类型</label><select id="btf-type" class="form-input"><option value="支出">支出</option><option value="收入">收入</option></select></div>
+      <div class="form-group"><label>金额 *</label><input id="btf-amount" type="number" step="0.01" class="form-input" placeholder="金额（正数）"></div>
+      <div class="form-group"><label>余额</label><input id="btf-balance" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>结算方式</label><input id="btf-method" class="form-input" placeholder="如：转账/现金/电汇"></div>
+      <div class="form-group"><label>对方户名</label><input id="btf-cparty" class="form-input"></div>
+      <div class="form-group"><label>对方账号</label><input id="btf-cparty-acc" class="form-input"></div>
+      <div class="form-group"><label>对方开户行</label><input id="btf-cparty-bank" class="form-input"></div>
+      <div class="form-group"><label>流水号</label><input id="btf-ref" class="form-input"></div>
+      <div class="form-group"><label>关联凭证号</label><input id="btf-voucher" class="form-input"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>摘要</label><input id="btf-summary" class="form-input" placeholder="交易摘要/用途说明"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>备注</label><textarea id="btf-remark" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBankTx(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  if (isEdit) {
+    api('/api/bank-transactions/' + id).then(tx => {
+      document.getElementById('btf-bank').value = tx.bank_config_id || '';
+      document.getElementById('btf-date').value = tx.transaction_date;
+      document.getElementById('btf-type').value = tx.transaction_type;
+      document.getElementById('btf-amount').value = Math.abs(tx.amount);
+      document.getElementById('btf-balance').value = tx.balance;
+      document.getElementById('btf-method').value = tx.payment_method;
+      document.getElementById('btf-cparty').value = tx.counterparty_name;
+      document.getElementById('btf-cparty-acc').value = tx.counterparty_account;
+      document.getElementById('btf-cparty-bank').value = tx.counterparty_bank;
+      document.getElementById('btf-ref').value = tx.reference_no;
+      document.getElementById('btf-voucher').value = tx.voucher_no;
+      document.getElementById('btf-summary').value = tx.summary;
+      document.getElementById('btf-remark').value = tx.remark;
+    });
+  }
+}
+
+async function saveBankTx(id) {
+  const body = {
+    bank_config_id: parseInt(document.getElementById('btf-bank').value) || null,
+    transaction_date: document.getElementById('btf-date').value,
+    transaction_type: document.getElementById('btf-type').value,
+    amount: parseFloat(document.getElementById('btf-amount').value) || 0,
+    balance: parseFloat(document.getElementById('btf-balance').value) || 0,
+    payment_method: document.getElementById('btf-method').value,
+    counterparty_name: document.getElementById('btf-cparty').value,
+    counterparty_account: document.getElementById('btf-cparty-acc').value,
+    counterparty_bank: document.getElementById('btf-cparty-bank').value,
+    reference_no: document.getElementById('btf-ref').value,
+    voucher_no: document.getElementById('btf-voucher').value,
+    summary: document.getElementById('btf-summary').value,
+    remark: document.getElementById('btf-remark').value
+  };
+  try {
+    if (id) {
+      await api('/api/bank-transactions/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/bank-transactions', { method: 'POST', body });
+    }
+    closeModal();
+    renderBankTransactions();
+    toast(id ? '更新成功' : '创建成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function editBankTx(id) { showBankTxForm(id); }
+
+async function deleteBankTx(id) {
+  if (!confirm('确定删除此流水记录？')) return;
+  await api('/api/bank-transactions/' + id, { method: 'DELETE' });
+  renderBankTransactions();
+  toast('已删除');
+}
+
+// ==================== 银行配置弹窗 ====================
+
+function showBankConfigModal() {
+  const list = _bankConfigs.map(c => `
+    <tr>
+      <td>${c.bank_name}</td><td>${c.account_number || '-'}</td><td>${c.account_name || '-'}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="editBankConfig(${c.id})">编辑</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankConfig(${c.id})">删除</button>
+      </td>
+    </tr>`).join('');
+
+  const modal = createModal('银行设置', `
+    <table class="data-table" style="margin-bottom:16px;"><thead><tr><th>银行名称</th><th>账号</th><th>账户名称</th><th>操作</th></tr></thead>
+      <tbody>${list || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--gray-500);">暂无银行配置</td></tr>'}</tbody>
+    </table>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="showBankConfigForm()">+ 添加银行</button>
+    </div>
+    <div style="text-align:right;margin-top:16px;"><button class="btn" onclick="closeModal()">关闭</button></div>
+  `);
+  document.body.appendChild(modal);
+}
+
+function showBankConfigForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑银行配置' : '添加银行';
+  const modal2 = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>银行名称 *</label><input id="bcf-name" class="form-input" placeholder="如：中国工商银行"></div>
+      <div class="form-group"><label>银行账号</label><input id="bcf-acc" class="form-input"></div>
+      <div class="form-group"><label>账户名称</label><input id="bcf-acc-name" class="form-input"></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBankConfig(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal2);
+
+  if (isEdit) {
+    const cfg = _bankConfigs.find(c => c.id === id);
+    if (cfg) {
+      document.getElementById('bcf-name').value = cfg.bank_name;
+      document.getElementById('bcf-acc').value = cfg.account_number;
+      document.getElementById('bcf-acc-name').value = cfg.account_name;
+    }
+  }
+}
+
+async function saveBankConfig(id) {
+  const body = {
+    bank_name: document.getElementById('bcf-name').value,
+    account_number: document.getElementById('bcf-acc').value,
+    account_name: document.getElementById('bcf-acc-name').value
+  };
+  if (!body.bank_name) { toast('请输入银行名称', 'error'); return; }
+  try {
+    if (id) {
+      await api('/api/bank-configs/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/bank-configs', { method: 'POST', body });
+    }
+    closeModal();
+    await loadBankConfigs();
+    showBankConfigModal();
+    toast(id ? '更新成功' : '添加成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function editBankConfig(id) { showBankConfigForm(id); }
+
+async function deleteBankConfig(id) {
+  if (!confirm('确定删除此银行配置？')) return;
+  await api('/api/bank-configs/' + id, { method: 'DELETE' });
+  await loadBankConfigs();
+  showBankConfigModal();
+  toast('已停用');
+}
+
+// ==================== 进项抵扣 ====================
+
+async function renderInputVATDeductions() {
+  const [list, stats] = await Promise.all([
+    api('/api/input-vat-deductions'),
+    api('/api/input-vat-deductions/stats')
+  ]);
+
+  document.title = '进项抵扣 - 财税系统';
+
+  const html = `
+    <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
+      <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">条</div></div>
+      <div class="stat-card"><div class="stat-label">税额合计</div><div class="stat-value">¥${stats.total_tax.toLocaleString()}</div><div class="stat-sub">进项税额</div></div>
+      <div class="stat-card"><div class="stat-label">可抵扣税额</div><div class="stat-value" style="color:var(--primary);">¥${stats.total_deductible.toLocaleString()}</div><div class="stat-sub"></div></div>
+      <div class="stat-card"><div class="stat-label">已抵扣税额</div><div class="stat-value" style="color:var(--success);">¥${stats.total_deducted.toLocaleString()}</div><div class="stat-sub"></div></div>
+      <div class="stat-card"><div class="stat-label">待处理</div><div class="stat-value" style="color:var(--warning);">${stats.pending_count}</div><div class="stat-sub">待认证/待抵扣</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span>进项抵扣记录</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-primary btn-sm" onclick="showVATDeductionForm()">+ 新增抵扣</button>
+        <button class="btn btn-outline btn-sm" onclick="batchCertify()" style="margin-left:8px;">✅ 批量认证</button>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <select id="ivd-status-filter" onchange="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
+          <option value="">全部状态</option>
+          <option value="待认证">待认证</option><option value="待抵扣">待抵扣</option>
+          <option value="已抵扣">已抵扣</option><option value="部分抵扣">部分抵扣</option>
+          <option value="不得抵扣">不得抵扣</option>
+        </select>
+        <input id="ivd-period" placeholder="抵扣期间 YYYY-MM" oninput="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:150px;">
+        <input id="ivd-keyword" placeholder="搜索发票号/销方/货物..." oninput="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;">
+      </div>
+      <div id="ivd-table-container"></div>
+    </div>
+  `;
+  setContent(html);
+  renderVATDeductionTable(list);
+}
+
+async function loadVATDeductionList() {
+  const status = document.getElementById('ivd-status-filter')?.value || '';
+  const period = document.getElementById('ivd-period')?.value || '';
+  const kw = document.getElementById('ivd-keyword')?.value || '';
+  const params = new URLSearchParams();
+  if (status) params.set('deduction_status', status);
+  if (period) params.set('deduction_period', period);
+  if (kw) params.set('keyword', kw);
+  const qs = params.toString();
+  const data = await api('/api/input-vat-deductions' + (qs ? '?' + qs : ''));
+  renderVATDeductionTable(data);
+}
+
+function renderVATDeductionTable(data) {
+  const statusColors = {
+    '待认证': 'var(--warning)', '待抵扣': 'var(--primary)', '已抵扣': 'var(--success)',
+    '部分抵扣': '#e02424', '不得抵扣': 'var(--gray-500)'
+  };
+  const rows = data.map(it => `
+    <tr>
+      <td>${it.invoice_no || '-'}</td><td>${it.invoice_date || '-'}</td>
+      <td>${it.seller_name || '-'}</td>
+      <td>¥${it.total_amount.toLocaleString()}</td>
+      <td style="font-weight:600;">¥${it.tax_amount.toLocaleString()}</td>
+      <td>¥${it.deductible_tax_amount.toLocaleString()}</td>
+      <td>¥${it.deducted_tax_amount.toLocaleString()}</td>
+      <td><span style="color:${statusColors[it.deduction_status] || '#333'};font-weight:500;">${it.deduction_status}</span></td>
+      <td>${it.deduction_period || '-'}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="editVATDeduction(${it.id})">编辑</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteVATDeduction(${it.id})">删除</button>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('ivd-table-container').innerHTML = `
+    <table class="data-table"><thead><tr>
+      <th>发票号码</th><th>开票日期</th><th>销方名称</th><th>价税合计</th><th>税额</th><th>可抵扣</th><th>已抵扣</th><th>状态</th><th>所属期</th><th>操作</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500);">暂无抵扣记录</td></tr>'}</tbody></table>`;
+}
+
+function showVATDeductionForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑进项抵扣' : '新增进项抵扣';
+  const modal = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>发票号码</label><input id="ivdf-invoice-no" class="form-input"></div>
+      <div class="form-group"><label>发票代码</label><input id="ivdf-invoice-code" class="form-input"></div>
+      <div class="form-group"><label>开票日期</label><input id="ivdf-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>销方名称</label><input id="ivdf-seller" class="form-input"></div>
+      <div class="form-group"><label>货物名称</label><input id="ivdf-goods" class="form-input"></div>
+      <div class="form-group"><label>税率(%)</label><input id="ivdf-rate" type="number" step="0.01" class="form-input" value="13"></div>
+      <div class="form-group"><label>价税合计</label><input id="ivdf-total" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>税额</label><input id="ivdf-tax" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>可抵扣税额</label><input id="ivdf-deductible" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>已抵扣税额</label><input id="ivdf-deducted" type="number" step="0.01" class="form-input" value="0"></div>
+      <div class="form-group"><label>抵扣所属期</label><input id="ivdf-period" class="form-input" placeholder="YYYY-MM"></div>
+      <div class="form-group"><label>抵扣状态</label><select id="ivdf-status" class="form-input">
+        <option value="待认证">待认证</option><option value="待抵扣">待抵扣</option>
+        <option value="已抵扣">已抵扣</option><option value="部分抵扣">部分抵扣</option>
+        <option value="不得抵扣">不得抵扣</option>
+      </select></div>
+      <div class="form-group"><label>认证日期</label><input id="ivdf-cert-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>抵扣日期</label><input id="ivdf-ded-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>抵扣方式</label><select id="ivdf-method" class="form-input">
+        <option value="凭票抵扣">凭票抵扣</option><option value="计算抵扣">计算抵扣</option><option value="核定抵扣">核定抵扣</option>
+      </select></div>
+      <div class="form-group"><label>关联凭证号</label><input id="ivdf-voucher" class="form-input"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>备注</label><textarea id="ivdf-remark" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveVATDeduction(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  if (isEdit) {
+    api('/api/input-vat-deductions/' + id).then(it => {
+      document.getElementById('ivdf-invoice-no').value = it.invoice_no;
+      document.getElementById('ivdf-invoice-code').value = it.invoice_code;
+      document.getElementById('ivdf-date').value = it.invoice_date;
+      document.getElementById('ivdf-seller').value = it.seller_name;
+      document.getElementById('ivdf-goods').value = it.goods_name;
+      document.getElementById('ivdf-rate').value = it.tax_rate;
+      document.getElementById('ivdf-total').value = it.total_amount;
+      document.getElementById('ivdf-tax').value = it.tax_amount;
+      document.getElementById('ivdf-deductible').value = it.deductible_tax_amount;
+      document.getElementById('ivdf-deducted').value = it.deducted_tax_amount;
+      document.getElementById('ivdf-period').value = it.deduction_period;
+      document.getElementById('ivdf-status').value = it.deduction_status;
+      document.getElementById('ivdf-cert-date').value = it.certification_date;
+      document.getElementById('ivdf-ded-date').value = it.deduction_date;
+      document.getElementById('ivdf-method').value = it.deduction_method;
+      document.getElementById('ivdf-voucher').value = it.voucher_no;
+      document.getElementById('ivdf-remark').value = it.remark;
+    });
+  }
+}
+
+async function saveVATDeduction(id) {
+  const body = {
+    invoice_no: document.getElementById('ivdf-invoice-no').value,
+    invoice_code: document.getElementById('ivdf-invoice-code').value,
+    invoice_date: document.getElementById('ivdf-date').value || null,
+    seller_name: document.getElementById('ivdf-seller').value,
+    goods_name: document.getElementById('ivdf-goods').value,
+    tax_rate: parseFloat(document.getElementById('ivdf-rate').value) || 0,
+    total_amount: parseFloat(document.getElementById('ivdf-total').value) || 0,
+    tax_amount: parseFloat(document.getElementById('ivdf-tax').value) || 0,
+    deductible_tax_amount: parseFloat(document.getElementById('ivdf-deductible').value) || 0,
+    deducted_tax_amount: parseFloat(document.getElementById('ivdf-deducted').value) || 0,
+    deduction_period: document.getElementById('ivdf-period').value,
+    deduction_status: document.getElementById('ivdf-status').value,
+    certification_date: document.getElementById('ivdf-cert-date').value || null,
+    deduction_date: document.getElementById('ivdf-ded-date').value || null,
+    deduction_method: document.getElementById('ivdf-method').value,
+    voucher_no: document.getElementById('ivdf-voucher').value,
+    remark: document.getElementById('ivdf-remark').value
+  };
+  try {
+    if (id) {
+      await api('/api/input-vat-deductions/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/input-vat-deductions', { method: 'POST', body });
+    }
+    closeModal();
+    renderInputVATDeductions();
+    toast(id ? '更新成功' : '创建成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function editVATDeduction(id) { showVATDeductionForm(id); }
+
+async function deleteVATDeduction(id) {
+  if (!confirm('确定删除此抵扣记录？')) return;
+  await api('/api/input-vat-deductions/' + id, { method: 'DELETE' });
+  renderInputVATDeductions();
+  toast('已删除');
+}
+
+async function batchCertify() {
+  const status = document.getElementById('ivd-status-filter')?.value || '待认证';
+  const items = await api('/api/input-vat-deductions?deduction_status=' + status);
+  if (items.length === 0) { toast('没有待认证的记录', 'error'); return; }
+  const count = items.length;
+  if (!confirm(`确定将 ${count} 条「${status}」记录批量认证？`)) return;
+
+  let done = 0;
+  for (const it of items) {
+    try {
+      await api('/api/input-vat-deductions/' + it.id, {
+        method: 'PUT',
+        body: { deduction_status: '已认证', certification_date: new Date().toISOString().slice(0,10) }
+      });
+      done++;
+    } catch(e) {}
+  }
+  renderInputVATDeductions();
+  toast(`已认证 ${done}/${count} 条记录`);
+}
+
+// ==================== 文件导入 - 列映射 ====================
+
+function showUploadModal(module) {
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入销项发票', 'purchase-invoice': '导入进项发票' };
+  const modal = createModal(titles[module] || '导入文件', `
+    <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
+    <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
+      <div style="font-size:32px;margin-bottom:8px;">📁</div>
+      <div style="color:var(--gray-500);">点击选择文件 或拖拽到此处</div>
+      <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">支持 .xlsx .csv</div>
+    </div>
+    <input type="file" id="upload-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleFileSelect(this, '${module}')">
+    <div id="upload-progress" style="display:none;text-align:center;color:var(--primary);"></div>
+    <div id="mapping-section" style="display:none;"></div>
+    <div style="text-align:right;margin-top:16px;"><button class="btn" onclick="closeModal()">关闭</button></div>
+  `);
+  document.body.appendChild(modal);
+}
+
+async function handleFileSelect(input, module) {
+  const file = input.files[0];
+  if (!file) return;
+
+  document.getElementById('upload-progress').style.display = 'block';
+  document.getElementById('upload-progress').innerText = '正在分析文件表头...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('module', module);
+
+  let bankConfigId = null;
+  if (module === 'bank-transaction' && _currentBankId) {
+    bankConfigId = _currentBankId;
+    formData.append('bank_config_id', bankConfigId);
+  }
+
+  const resp = await fetch('/api/file/analyze-headers', { method: 'POST', body: formData });
+  const result = await resp.json();
+
+  document.getElementById('upload-progress').style.display = 'none';
+
+  if (result.error) {
+    toast(result.error, 'error');
+    return;
+  }
+
+  // 渲染列映射界面
+  buildMappingUI(result, module, file, bankConfigId);
+}
+
+function buildMappingUI(result, module, file, bankConfigId) {
+  const fieldLabels = {
+    'transaction_date': '交易日期', 'amount': '金额', 'balance': '余额',
+    'counterparty_name': '对方户名', 'counterparty_account': '对方账号', 'counterparty_bank': '对方开户行',
+    'summary': '摘要', 'transaction_type': '交易类型', 'payment_method': '结算方式',
+    'reference_no': '流水号', 'voucher_no': '凭证号', 'remark': '备注',
+    'invoice_no': '发票号码', 'invoice_code': '发票代码', 'invoice_date': '开票日期',
+    'buyer_name': '购方名称', 'buyer_tax_no': '购方税号',
+    'seller_name': '销方名称', 'seller_tax_no': '销方税号',
+    'goods_name': '货物名称', 'spec': '规格型号', 'unit': '单位',
+    'quantity': '数量', 'unit_price': '单价', 'amount': '金额（不含税）',
+    'tax_rate': '税率', 'tax_amount': '税额', 'total_amount': '价税合计',
+    'invoice_type': '发票类型', 'status': '状态',
+    'certification_status': '认证状态', 'certification_date': '认证日期', 'deduction_period': '抵扣期间'
+  };
+
+  const groups = result.field_groups || {};
+  let mappingHtml = '<div style="margin-top:16px;"><h4 style="margin-bottom:8px;">列映射配置</h4>';
+  mappingHtml += `<p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">文件: ${result.file_name} | 共 ${result.total_rows} 行数据 | ${result.headers.length} 列</p>`;
+
+  for (const [groupName, fields] of Object.entries(groups)) {
+    mappingHtml += `<div style="margin-bottom:12px;"><strong style="font-size:13px;">${groupName}</strong>`;
+    for (const field of fields) {
+      const label = fieldLabels[field] || field;
+      mappingHtml += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+        <span style="width:110px;font-size:12px;text-align:right;color:var(--gray-700);">${label}:</span>
+        <select id="map-${field}" style="padding:4px 8px;border:1px solid var(--gray-300);border-radius:4px;font-size:12px;flex:1;max-width:250px;">
+          <option value="">-- 不映射 --</option>
+          ${result.headers.map(h => `<option value="${h}">${h}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+    mappingHtml += '</div>';
+  }
+
+  // 自动猜测映射
+  const autoGuess = {};
+  for (const [groupName, fields] of Object.entries(groups)) {
+    for (const field of fields) {
+      for (const h of result.headers) {
+        const hl = h.toLowerCase();
+        const fl = field.toLowerCase();
+        if (hl.includes(fl) || fl.includes(hl) ||
+            (field === 'amount' && (hl.includes('金额') || hl.includes('amt'))) ||
+            (field === 'transaction_date' && (hl.includes('日期') || hl.includes('date') || hl.includes('时间'))) ||
+            (field === 'counterparty_name' && (hl.includes('对方') || hl.includes('户名') || hl.includes('名称'))) ||
+            (field === 'balance' && (hl.includes('余额') || hl.includes('bal'))) ||
+            (field === 'summary' && (hl.includes('摘要') || hl.includes('用途') || hl.includes('说明'))) ||
+            (field === 'reference_no' && (hl.includes('流水号') || hl.includes('参考号') || hl.includes('ref')))) {
+          autoGuess[field] = h;
+          break;
+        }
+      }
+    }
+  }
+
+  mappingHtml += `
+    <div style="margin-top:12px;">
+      <label style="font-size:12px;display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="save-as-template"> 保存此映射为模板，下次导入自动匹配
+      </label>
+      <input id="template-name" placeholder="模板名称（可选）" style="margin-top:4px;padding:4px 8px;border:1px solid var(--gray-300);border-radius:4px;font-size:12px;width:200px;display:none;">
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="doImportWithMapping('${module}', '${file.name}', ${bankConfigId || 'null'})">开始导入</button>
+    </div>`;
+
+  document.getElementById('mapping-section').innerHTML = mappingHtml;
+  document.getElementById('mapping-section').style.display = 'block';
+
+  // 应用自动猜测
+  setTimeout(() => {
+    for (const [field, col] of Object.entries(autoGuess)) {
+      const sel = document.getElementById('map-' + field);
+      if (sel) sel.value = col;
+    }
+    document.getElementById('save-as-template').onchange = function() {
+      document.getElementById('template-name').style.display = this.checked ? 'block' : 'none';
+    };
+  }, 100);
+}
+
+async function doImportWithMapping(module, fileName, bankConfigId) {
+  const mapping = {};
+  const selects = document.querySelectorAll('[id^="map-"]');
+  selects.forEach(sel => {
+    if (sel.value) {
+      const field = sel.id.replace('map-', '');
+      mapping[field] = sel.value;
+    }
+  });
+
+  if (Object.keys(mapping).length === 0) {
+    toast('请至少映射一个字段', 'error');
+    return;
+  }
+
+  // 保存模板
+  if (document.getElementById('save-as-template')?.checked) {
+    const tplName = document.getElementById('template-name')?.value || fileName + '_模板';
+    await api('/api/column-templates', {
+      method: 'POST',
+      body: {
+        module: module,
+        template_name: tplName,
+        bank_config_id: bankConfigId || null,
+        column_mapping: JSON.stringify(mapping)
+      }
+    });
+  }
+
+  const fileInput = document.getElementById('upload-file-input');
+  const file = fileInput.files[0];
+  if (!file) { toast('请重新选择文件', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('module', module);
+  formData.append('column_mapping', JSON.stringify(mapping));
+  formData.append('company_id', window.currentCompanyId || 1);
+  if (bankConfigId) formData.append('bank_config_id', bankConfigId);
+
+  document.getElementById('upload-progress').style.display = 'block';
+  document.getElementById('upload-progress').innerText = '正在导入数据...';
+
+  const resp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData });
+  const result = await resp.json();
+
+  document.getElementById('upload-progress').style.display = 'none';
+
+  if (result.error) {
+    toast(result.error, 'error');
+    return;
+  }
+
+  let msg = `成功导入 ${result.imported}/${result.total} 条记录`;
+  if (result.errors && result.errors.length > 0) {
+    msg += `\n⚠️ ${result.errors.length} 条错误:\n` + result.errors.slice(0, 5).join('\n');
+  }
+  alert(msg);
+  closeModal();
+
+  // 刷新页面
+  if (module === 'bank-transaction') renderBankTransactions();
+  else if (module === 'sales-invoice') renderSalesInvoices();
+  else if (module === 'purchase-invoice') renderPurchaseInvoices();
 }
 
 </script>

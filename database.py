@@ -604,6 +604,104 @@ class PurchaseInvoice(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+# ==================== 银行配置（不同银行不同列映射）====================
+
+class BankConfig(Base):
+    """银行配置 - 每个银行账号的列映射模板"""
+    __tablename__ = "bank_configs"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    bank_name = Column(String(100), nullable=False, comment="银行名称，如：中国工商银行")
+    account_number = Column(String(50), comment="银行账号")
+    account_name = Column(String(100), comment="账户名称")
+    column_mapping = Column(Text, comment="列映射JSON：{标准字段: 银行文件列名}")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ==================== 银行流水 ====================
+
+class BankTransaction(Base):
+    """银行流水 - 归一化核心字段 + raw_data JSON 存额外列"""
+    __tablename__ = "bank_transactions"
+    __table_args__ = (
+        Index('idx_bt_company_date', 'company_id', 'transaction_date'),
+        Index('idx_bt_company_bank', 'company_id', 'bank_config_id'),
+        Index('idx_bt_company_type', 'company_id', 'transaction_type'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    bank_config_id = Column(Integer, ForeignKey("bank_configs.id"), nullable=True, comment="关联银行配置")
+    transaction_date = Column(Date, nullable=False, comment="交易日期")
+    amount = Column(Float, default=0.0, comment="交易金额（收入为正/支出为负）")
+    balance = Column(Float, default=0.0, comment="余额")
+    counterparty_name = Column(String(100), comment="对方户名")
+    counterparty_account = Column(String(50), comment="对方账号")
+    counterparty_bank = Column(String(100), comment="对方开户行")
+    summary = Column(String(300), comment="摘要/用途")
+    transaction_type = Column(String(20), default="支出", comment="类型：收入/支出")
+    payment_method = Column(String(30), comment="结算方式")
+    voucher_no = Column(String(30), comment="关联凭证号")
+    reference_no = Column(String(50), comment="银行流水号/交易参考号")
+    raw_data = Column(Text, comment="原始数据JSON：存文件中的额外列")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+
+
+# ==================== 进项抵扣 ====================
+
+class InputVATDeduction(Base):
+    """进项抵扣管理 - 跟踪每张进项发票的认证抵扣"""
+    __tablename__ = "input_vat_deductions"
+    __table_args__ = (
+        Index('idx_ivd_company_period', 'company_id', 'deduction_period'),
+        Index('idx_ivd_company_invoice', 'company_id', 'purchase_invoice_id'),
+        Index('idx_ivd_status', 'company_id', 'deduction_status'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联进项发票ID")
+    invoice_no = Column(String(30), comment="发票号码")
+    invoice_code = Column(String(30), comment="发票代码")
+    invoice_date = Column(Date, comment="开票日期")
+    seller_name = Column(String(100), comment="销方名称")
+    goods_name = Column(String(200), comment="货物名称")
+    total_amount = Column(Float, default=0.0, comment="价税合计")
+    tax_amount = Column(Float, default=0.0, comment="税额")
+    tax_rate = Column(Float, default=0.0, comment="税率（%）")
+    deductible_tax_amount = Column(Float, default=0.0, comment="可抵扣税额")
+    deducted_tax_amount = Column(Float, default=0.0, comment="已抵扣税额")
+    deduction_period = Column(String(7), comment="抵扣所属期 YYYY-MM")
+    deduction_status = Column(String(20), default="待抵扣", comment="状态：待认证/待抵扣/已抵扣/部分抵扣/不得抵扣")
+    certification_date = Column(Date, comment="认证日期")
+    deduction_date = Column(Date, comment="抵扣日期")
+    deduction_method = Column(String(30), default="凭票抵扣", comment="抵扣方式：凭票抵扣/计算抵扣/核定抵扣")
+    voucher_no = Column(String(30), comment="关联凭证号")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ==================== 列映射模板（动态表头）====================
+
+class ColumnTemplate(Base):
+    """列映射模板 - 保存各模块上传文件的列对应关系"""
+    __tablename__ = "column_templates"
+    __table_args__ = (
+        UniqueConstraint('company_id', 'module', 'template_name', name='uq_ct_company_module_name'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    module = Column(String(30), nullable=False, comment="模块：sales-invoice/purchase-invoice/bank-transaction")
+    template_name = Column(String(100), nullable=False, comment="模板名称，如：工行流水模板")
+    bank_config_id = Column(Integer, ForeignKey("bank_configs.id"), nullable=True, comment="关联银行配置（银行流水专用）")
+    column_mapping = Column(Text, comment="列映射JSON：{标准字段: 文件列名}")
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # ==================== 数据库迁移与初始化 ====================
 
 def migrate_schema(db):
