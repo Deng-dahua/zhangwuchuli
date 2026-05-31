@@ -3433,7 +3433,7 @@ function injectPaymentStyles() {
     .payment-type-badge.external { background:#dbeafe; color:#1e40af; }
 
     .scenario-badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; margin-left:6px; }
-    .scenario-badge.scenario-internal-备用金 { background:#fce4ec; color:#880e4f; }
+
     .scenario-badge.scenario-internal-报销 { background:#e8f5e9; color:#1b5e20; }
     .scenario-badge.scenario-internal-借支 { background:#fff3e0; color:#e65100; }
     .scenario-badge.scenario-external-预付款 { background:#ede7f6; color:#4a148c; }
@@ -3581,7 +3581,7 @@ async function showPaymentForm(paymentId) {
   const defaultNo = (isInternal ? 'NR' : 'DW') + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
 
   // 情形选项
-  const internalScenarios = ['备用金', '报销', '借支'];
+  const internalScenarios = ['报销', '借支'];
   const externalScenarios = ['预付款', '应付款'];
   const scenarios = isInternal ? internalScenarios : externalScenarios;
   let scenarioOptions = '<option value="">选择情形</option>';
