@@ -3728,7 +3728,7 @@ async function showPaymentDetail(paymentId) {
 // ==================== 开具发票 ====================
 
 let siTab = 'all'; // all / 正常 / 作废 / 红冲
-let siFilter = { type: '', keyword: '', dateFrom: '', dateTo: '' };
+let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices() {
   try {
@@ -3751,9 +3751,9 @@ async function renderSalesInvoices() {
     // 工具栏
     html += '<div class="toolbar">';
     html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-    html += '<select onchange="siFilter.type=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
-    html += '<option value="">全部类型</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
-    html += '<input placeholder="搜索发票号/购方/货物..." oninput="siFilter.keyword=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:200px">';
+    html += '<select onchange="siFilter.category=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
+    html += '<option value="">全部票种</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
+    html += '<input placeholder="搜索发票号/代码/购方/货物..." oninput="siFilter.keyword=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px">';
     html += '<input type="date" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
@@ -3773,29 +3773,32 @@ async function renderSalesInvoices() {
     // 过滤
     let items = inv;
     if (siTab !== 'all') items = items.filter(i => i.status === siTab);
-    if (siFilter.type) items = items.filter(i => i.invoice_type === siFilter.type);
+    if (siFilter.category) items = items.filter(i => i.invoice_category === siFilter.category);
     if (siFilter.dateFrom) items = items.filter(i => i.invoice_date >= siFilter.dateFrom);
     if (siFilter.dateTo) items = items.filter(i => i.invoice_date <= siFilter.dateTo);
 
     // 表格
     html += '<div class="table-wrap"><table><thead><tr>';
-    html += '<th>发票号码</th><th>开票日期</th><th>购方名称</th><th>货物/服务</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>类型</th><th>状态</th><th>操作</th>';
+    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方名称</th><th>购买方名称</th><th>开票日期</th><th>货物/服务</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票票种</th><th>发票状态</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
+      html += '<tr><td colspan="13" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const stCls = i.status === '正常' ? 'badge-green' : i.status === '红冲' ? 'badge-red' : 'badge-gray';
         html += '<tr>';
+        html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500" onclick="showSalesDetail(' + i.id + ')">' + i.invoice_no + '</a></td>';
-        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
+        html += '<td>' + (i.seller_name || '-') + '</td>';
         html += '<td>' + (i.buyer_name || '-') + '</td>';
-        html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
         html += '<td style="text-align:right">' + fmt(i.amount) + '</td>';
         html += '<td style="text-align:right">' + fmt(i.tax_amount) + '</td>';
         html += '<td style="text-align:right;font-weight:600">' + fmt(i.total_amount) + '</td>';
-        html += '<td>' + i.invoice_type + '</td>';
+        html += '<td>' + (i.invoice_category || '-') + '</td>';
         html += '<td><span class="' + stCls + '">' + i.status + '</span></td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')" style="margin-right:4px">编辑</button>';
@@ -3819,52 +3822,92 @@ async function showSalesInvoiceForm(id) {
   let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑开具发票' : '新增开具发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
   html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
 
-  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label>';
-  html += '<input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
-
+  // ── 发票基本信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="si-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="si-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label><input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
   html += '</div>';
-
   html += '<div class="form-grid-2">';
-  html += '<div class="form-group"><label class="form-label">购方名称</label><input class="form-input" id="si-buyer-name" value="' + (data.buyer_name || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">购方税号</label><input class="form-input" id="si-buyer-taxno" value="' + (data.buyer_tax_no || '') + '"></div>';
-  html += '</div>';
+  html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="si-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="si-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '</div></div>';
 
-  html += '<div class="form-group"><label class="form-label">货物或应税劳务名称</label>';
-  html += '<input class="form-input" id="si-goods-name" value="' + (data.goods_name || '') + '"></div>';
+  // ── 销方信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 销方信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">销方识别号</label><input class="form-input" id="si-seller-taxno" value="' + (data.seller_tax_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">销方名称</label><input class="form-input" id="si-seller-name" value="' + (data.seller_name || '') + '"></div>';
+  html += '</div></div>';
 
+  // ── 购方信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 购方信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">购方识别号</label><input class="form-input" id="si-buyer-taxno" value="' + (data.buyer_tax_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">购买方名称</label><input class="form-input" id="si-buyer-name" value="' + (data.buyer_name || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 分类信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏷️ 分类信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">税收分类编码</label><input class="form-input" id="si-tax-category-code" value="' + (data.tax_category_code || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">特定业务类型</label><input class="form-input" id="si-specific-business-type" value="' + (data.specific_business_type || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 货物明细 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
+  html += '<div class="form-group"><label class="form-label">货物或应税劳务名称</label><input class="form-input" id="si-goods-name" value="' + (data.goods_name || '') + '"></div>';
   html += '<div class="form-grid-4">';
   html += '<div class="form-group"><label class="form-label">规格型号</label><input class="form-input" id="si-spec" value="' + (data.spec || '') + '"></div>';
   html += '<div class="form-group"><label class="form-label">单位</label><input class="form-input" id="si-unit" value="' + (data.unit || '') + '"></div>';
   html += '<div class="form-group"><label class="form-label">数量</label><input type="number" step="any" class="form-input" id="si-qty" value="' + (data.quantity || 0) + '" onchange="calcSiTotal()"></div>';
   html += '<div class="form-group"><label class="form-label">单价</label><input type="number" step="any" class="form-input" id="si-price" value="' + (data.unit_price || 0) + '" onchange="calcSiTotal()"></div>';
-  html += '</div>';
+  html += '</div></div>';
 
+  // ── 金额信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">💰 金额信息</div>';
   html += '<div class="form-grid-3">';
   html += '<div class="form-group"><label class="form-label">金额（不含税）</label><input type="number" step="any" class="form-input" id="si-amount" value="' + (data.amount || 0) + '" onchange="calcSiTax()"></div>';
   html += '<div class="form-group"><label class="form-label">税率（%）</label><input type="number" step="any" class="form-input" id="si-taxrate" value="' + (data.tax_rate || 0) + '" onchange="calcSiTax()"></div>';
   html += '<div class="form-group"><label class="form-label">税额</label><input type="number" step="any" class="form-input" id="si-taxamount" value="' + (data.tax_amount || 0) + '" onchange="calcSiAmount()"></div>';
   html += '</div>';
-
   html += '<div class="form-group"><label class="form-label">价税合计</label><input type="number" step="any" class="form-input" id="si-total" value="' + (data.total_amount || 0) + '" readonly style="background:#f0f9ff;font-weight:600;font-size:16px"></div>';
+  html += '</div>';
 
+  // ── 发票属性 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📄 发票属性</div>';
   html += '<div class="form-grid-2">';
-  html += '<div class="form-group"><label class="form-label">发票类型</label><select class="form-input" id="si-type">';
+  html += '<div class="form-group"><label class="form-label">发票票种</label><select class="form-input" id="si-category">';
   ['增值税专用发票', '增值税普通发票', '电子普通发票', '其他'].forEach(t => {
-    html += '<option value="' + t + '"' + (data.invoice_type === t ? ' selected' : '') + '>' + t + '</option>';
+    html += '<option value="' + t + '"' + (data.invoice_category === t ? ' selected' : '') + '>' + t + '</option>';
   });
   html += '</select></div>';
-  html += '<div class="form-group"><label class="form-label">状态</label><select class="form-input" id="si-status">';
+  html += '<div class="form-group"><label class="form-label">发票状态</label><select class="form-input" id="si-status">';
   ['正常', '作废', '红冲'].forEach(s => {
     html += '<option value="' + s + '"' + (data.status === s ? ' selected' : '') + '>' + s + '</option>';
   });
   html += '</select></div>';
   html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票来源</label><input class="form-input" id="si-source" value="' + (data.invoice_source || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">发票风险等级</label><select class="form-input" id="si-risk-level">';
+  ['', '正常', '关注', '异常'].forEach(r => {
+    html += '<option value="' + r + '"' + (data.invoice_risk_level === r ? ' selected' : '') + '>' + (r || '--') + '</option>';
+  });
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">是否正数发票</label><select class="form-input" id="si-is-positive">';
+  html += '<option value="1"' + (data.is_positive !== false ? ' selected' : '') + '>是</option>';
+  html += '<option value="0"' + (data.is_positive === false ? ' selected' : '') + '>否</option>';
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">开票人</label><input class="form-input" id="si-issuer" value="' + (data.issuer || '') + '"></div>';
+  html += '</div></div>';
 
-  html += '<div class="form-group"><label class="form-label">关联凭证号</label><input class="form-input" id="si-voucher" value="' + (data.voucher_no || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">备注</label><input class="form-input" id="si-remark" value="' + (data.remark || '') + '"></div>';
+  // ── 备注 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📝 备注</div>';
+  html += '<div class="form-group"><label class="form-label">备注</label><textarea class="form-input" id="si-remark" rows="2" style="width:100%">' + (data.remark || '') + '</textarea></div>';
+  html += '</div>';
 
   html += '</div>';
   html += '<div class="modal-footer">';
@@ -3898,11 +3941,16 @@ function calcSiAmount() {
 async function saveSalesInvoice(id) {
   try {
     const body = {
-      invoice_no: document.getElementById('si-invoice-no').value.trim(),
       invoice_code: document.getElementById('si-invoice-code').value.trim(),
-      invoice_date: document.getElementById('si-invoice-date').value,
-      buyer_name: document.getElementById('si-buyer-name').value.trim(),
+      invoice_no: document.getElementById('si-invoice-no').value.trim(),
+      digital_invoice_no: document.getElementById('si-digital-invoice-no').value.trim(),
+      seller_tax_no: document.getElementById('si-seller-taxno').value.trim(),
+      seller_name: document.getElementById('si-seller-name').value.trim(),
       buyer_tax_no: document.getElementById('si-buyer-taxno').value.trim(),
+      buyer_name: document.getElementById('si-buyer-name').value.trim(),
+      invoice_date: document.getElementById('si-invoice-date').value,
+      tax_category_code: document.getElementById('si-tax-category-code').value.trim(),
+      specific_business_type: document.getElementById('si-specific-business-type').value.trim(),
       goods_name: document.getElementById('si-goods-name').value.trim(),
       spec: document.getElementById('si-spec').value.trim(),
       unit: document.getElementById('si-unit').value.trim(),
@@ -3912,9 +3960,12 @@ async function saveSalesInvoice(id) {
       tax_rate: parseFloat(document.getElementById('si-taxrate').value) || 0,
       tax_amount: parseFloat(document.getElementById('si-taxamount').value) || 0,
       total_amount: parseFloat(document.getElementById('si-total').value) || 0,
-      invoice_type: document.getElementById('si-type').value,
+      invoice_source: document.getElementById('si-source').value.trim(),
+      invoice_category: document.getElementById('si-category').value,
       status: document.getElementById('si-status').value,
-      voucher_no: document.getElementById('si-voucher').value.trim(),
+      is_positive: document.getElementById('si-is-positive').value === '1',
+      invoice_risk_level: document.getElementById('si-risk-level').value,
+      issuer: document.getElementById('si-issuer').value.trim(),
       remark: document.getElementById('si-remark').value.trim()
     };
     if (!body.invoice_no || !body.invoice_date) { toast('发票号码和开票日期必填', 'error'); return; }
@@ -3949,22 +4000,38 @@ async function showSalesDetail(id) {
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '<div class="modal-header"><h3>开具发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
     html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+
+    // 基本信息
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
     html += '<div class="form-grid-2">';
-    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
     html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
+    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
+    html += '<div><b>数电发票号码：</b>' + (i.digital_invoice_no || '-') + '</div>';
     html += '<div><b>开票日期：</b>' + i.invoice_date + '</div>';
-    html += '<div><b>发票类型：</b>' + i.invoice_type + '</div>';
-    html += '<div><b>状态：</b>' + i.status + '</div>';
-    html += '<div><b>关联凭证：</b>' + (i.voucher_no || '-') + '</div>';
     html += '</div></div>';
 
+    // 销方信息
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 销方信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>销方识别号：</b>' + (i.seller_tax_no || '-') + '</div>';
+    html += '<div><b>销方名称：</b>' + (i.seller_name || '-') + '</div>';
+    html += '</div></div>';
+
+    // 购方信息
     html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 购方信息</div>';
     html += '<div class="form-grid-2">';
-    html += '<div><b>购方名称：</b>' + (i.buyer_name || '-') + '</div>';
-    html += '<div><b>购方税号：</b>' + (i.buyer_tax_no || '-') + '</div>';
+    html += '<div><b>购方识别号：</b>' + (i.buyer_tax_no || '-') + '</div>';
+    html += '<div><b>购买方名称：</b>' + (i.buyer_name || '-') + '</div>';
     html += '</div></div>';
 
+    // 分类信息
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">🏷️ 分类信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>税收分类编码：</b>' + (i.tax_category_code || '-') + '</div>';
+    html += '<div><b>特定业务类型：</b>' + (i.specific_business_type || '-') + '</div>';
+    html += '</div></div>';
+
+    // 货物明细
     html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
     html += '<div class="form-grid-2">';
     html += '<div><b>货物名称：</b>' + (i.goods_name || '-') + '</div>';
@@ -3974,12 +4041,24 @@ async function showSalesDetail(id) {
     html += '<div><b>单价：</b>¥' + fmt(i.unit_price) + '</div>';
     html += '</div></div>';
 
+    // 金额信息
     html += '<div class="payment-form-section"><div class="payment-form-section-title">💰 金额信息</div>';
     html += '<div class="form-grid-2">';
     html += '<div><b>金额（不含税）：</b>¥' + fmt(i.amount) + '</div>';
     html += '<div><b>税率：</b>' + i.tax_rate + '%</div>';
     html += '<div><b>税额：</b>¥' + fmt(i.tax_amount) + '</div>';
     html += '<div><b>价税合计：</b><span style="font-weight:700;font-size:16px;color:#1d4ed8">¥' + fmt(i.total_amount) + '</span></div>';
+    html += '</div></div>';
+
+    // 发票属性
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">📄 发票属性</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>发票票种：</b>' + (i.invoice_category || '-') + '</div>';
+    html += '<div><b>发票状态：</b>' + i.status + '</div>';
+    html += '<div><b>发票来源：</b>' + (i.invoice_source || '-') + '</div>';
+    html += '<div><b>发票风险等级：</b>' + (i.invoice_risk_level || '-') + '</div>';
+    html += '<div><b>是否正数发票：</b>' + (i.is_positive ? '是' : '否') + '</div>';
+    html += '<div><b>开票人：</b>' + (i.issuer || '-') + '</div>';
     html += '</div></div>';
 
     if (i.remark) {
@@ -4805,13 +4884,16 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'counterparty_name': '对方户名', 'counterparty_account': '对方账号', 'counterparty_bank': '对方开户行',
     'summary': '摘要', 'transaction_type': '交易类型', 'payment_method': '结算方式',
     'reference_no': '流水号', 'voucher_no': '凭证号', 'remark': '备注',
-    'invoice_no': '发票号码', 'invoice_code': '发票代码', 'invoice_date': '开票日期',
-    'buyer_name': '购方名称', 'buyer_tax_no': '购方税号',
-    'seller_name': '销方名称', 'seller_tax_no': '销方税号',
+    'invoice_code': '发票代码', 'invoice_no': '发票号码', 'digital_invoice_no': '数电发票号码',
+    'seller_tax_no': '销方识别号', 'seller_name': '销方名称',
+    'buyer_tax_no': '购方识别号', 'buyer_name': '购买方名称',
+    'invoice_date': '开票日期', 'tax_category_code': '税收分类编码',
+    'specific_business_type': '特定业务类型',
     'goods_name': '货物名称', 'spec': '规格型号', 'unit': '单位',
-    'quantity': '数量', 'unit_price': '单价', 'amount': '金额（不含税）',
+    'quantity': '数量', 'unit_price': '单价',
     'tax_rate': '税率', 'tax_amount': '税额', 'total_amount': '价税合计',
-    'invoice_type': '发票类型', 'status': '状态',
+    'invoice_source': '发票来源', 'invoice_category': '发票票种', 'status': '发票状态',
+    'is_positive': '是否正数发票', 'invoice_risk_level': '发票风险等级', 'issuer': '开票人',
     'certification_status': '认证状态', 'certification_date': '认证日期', 'deduction_period': '抵扣期间'
   };
 
@@ -4841,13 +4923,44 @@ function buildMappingUI(result, module, file, bankConfigId) {
       for (const h of result.headers) {
         const hl = h.toLowerCase();
         const fl = field.toLowerCase();
-        if (hl.includes(fl) || fl.includes(hl) ||
-            (field === 'amount' && (hl.includes('金额') || hl.includes('amt'))) ||
-            (field === 'transaction_date' && (hl.includes('日期') || hl.includes('date') || hl.includes('时间'))) ||
-            (field === 'counterparty_name' && (hl.includes('对方') || hl.includes('户名') || hl.includes('名称'))) ||
-            (field === 'balance' && (hl.includes('余额') || hl.includes('bal'))) ||
-            (field === 'summary' && (hl.includes('摘要') || hl.includes('用途') || hl.includes('说明'))) ||
-            (field === 'reference_no' && (hl.includes('流水号') || hl.includes('参考号') || hl.includes('ref')))) {
+        const km = {
+          'amount': ['金额', 'amt', '不含税'],
+          'transaction_date': ['日期', 'date', '时间'],
+          'counterparty_name': ['对方', '户名'],
+          'balance': ['余额', 'bal'],
+          'summary': ['摘要', '用途', '说明'],
+          'reference_no': ['流水号', '参考号', 'ref'],
+          'invoice_no': ['发票号码', 'inv_no'],
+          'invoice_code': ['发票代码', 'inv_code'],
+          'digital_invoice_no': ['数电', '全电'],
+          'seller_tax_no': ['销方识别号', '销方税号', 'seller_tax'],
+          'seller_name': ['销方名称', 'seller_name'],
+          'buyer_tax_no': ['购方识别号', '购方税号', 'buyer_tax'],
+          'buyer_name': ['购买方', '购方名称', 'buyer_name'],
+          'tax_category_code': ['税收分类', '分类编码', 'tax_category'],
+          'specific_business_type': ['特定业务', '业务类型', 'specific'],
+          'goods_name': ['货物', 'goods', '名称'],
+          'spec': ['规格', 'spec'],
+          'unit': ['单位', 'unit'],
+          'quantity': ['数量', 'qty', 'quantity'],
+          'unit_price': ['单价', 'price', 'unit_price'],
+          'tax_rate': ['税率', 'tax_rate'],
+          'tax_amount': ['税额', 'tax_amt'],
+          'total_amount': ['价税合计', 'total', '合计'],
+          'invoice_source': ['发票来源', '来源', 'source'],
+          'invoice_category': ['发票票种', '票种', 'category'],
+          'status': ['状态', 'status'],
+          'is_positive': ['正数', 'positive', '是否正数'],
+          'invoice_risk_level': ['风险等级', 'risk', '风险'],
+          'issuer': ['开票人', 'issuer'],
+          'certification_status': ['认证状态', 'cert'],
+          'certification_date': ['认证日期'],
+          'deduction_period': ['抵扣期间', '抵扣期', 'deduction'],
+          'voucher_no': ['凭证号', 'voucher'],
+          'remark': ['备注', 'remark']
+        };
+        const keys = km[field] || [fl];
+        if (hl.includes(fl) || fl.includes(hl) || keys.some(k => hl.includes(k))) {
           autoGuess[field] = h;
           break;
         }
