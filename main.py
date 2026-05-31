@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
@@ -3177,6 +3178,7 @@ async def import_file_with_mapping(
         # 根据映射转换并导入
         imported = 0
         errors = []
+        used_invoice_nos = set()  # 同批次去重
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -3264,6 +3266,12 @@ async def import_file_with_mapping(
                         errors.append(f"第{i+2}行: 缺少发票号码")
                         continue
 
+                    # 同批次去重：避免两行映射到同一号码导致 UNIQUE 冲突
+                    batch_key = (company_id, inv_no)
+                    if batch_key in used_invoice_nos:
+                        errors.append(f"第{i+2}行: 发票号码 {inv_no} 与本批次重复，跳过")
+                        continue
+
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
                     def safe_float(val, default=0.0):
                         if val is None or str(val).strip() == "":
@@ -3315,6 +3323,7 @@ async def import_file_with_mapping(
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
+                        used_invoice_nos.add(batch_key)
                     else:
                         existing = db.query(PurchaseInvoice).filter(
                             PurchaseInvoice.company_id == company_id,
@@ -3360,12 +3369,18 @@ async def import_file_with_mapping(
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
+                        used_invoice_nos.add(batch_key)
 
                 imported += 1
             except Exception as e:
                 errors.append(f"第{i+2}行: {str(e)}")
 
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as e:
+            db.rollback()
+            errors.append("数据重复，已跳过已存在的记录")
+            imported = 0
 
         return {
             "imported": imported,
