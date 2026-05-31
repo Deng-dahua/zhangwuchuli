@@ -487,6 +487,10 @@
 
     <div class="nav-group-title">付款管理</div>
     <div class="nav-item" data-page="payments"><span class="icon">💰</span>付款管理</div>
+
+    <div class="nav-group-title">发票管理</div>
+    <div class="nav-item" data-page="sales-invoices"><span class="icon">📤</span>销项发票</div>
+    <div class="nav-item" data-page="purchase-invoices"><span class="icon">📥</span>进项发票</div>
   </div>
 </nav>
 
@@ -534,7 +538,9 @@ const pages = {
   'intangible-assets': '无形资产',
   'inventory': '库存管理',
   'contracts': '合同管理',
-  'payments': '付款管理'
+  'payments': '付款管理',
+  'sales-invoices': '销项发票',
+  'purchase-invoices': '进项发票'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -820,6 +826,8 @@ function navigateTo(page) {
     case 'inventory': renderInventory(); break;
     case 'contracts': renderContracts(); break;
     case 'payments': renderPayments(); break;
+    case 'sales-invoices': renderSalesInvoices(); break;
+    case 'purchase-invoices': renderPurchaseInvoices(); break;
   }
 }
 
@@ -3701,6 +3709,551 @@ async function showPaymentDetail(paymentId) {
     html += '<div><b>实际付款：</b>' + (p.paid_at || '-') + '</div>';
     html += '<div><b>备注：</b>' + (p.remark || '-') + '</div>';
     html += '</div></div>';
+
+    html += '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-secondary" onclick="closeModal()">关闭</button></div>';
+    showModal(html);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 销项发票 ====================
+
+let siTab = 'all'; // all / 正常 / 作废 / 红冲
+let siFilter = { type: '', keyword: '', dateFrom: '', dateTo: '' };
+
+async function renderSalesInvoices() {
+  try {
+    const [inv, stats] = await Promise.all([
+      api('/api/sales-invoices'),
+      api('/api/sales-invoices/stats')
+    ]);
+    const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    let html = '<div class="page-header"><h2>📤 销项发票</h2></div>';
+
+    // 统计卡片
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">税额合计</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.normal_count + '</div><div class="stat-label">正常</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '/' + stats.red_count + '</div><div class="stat-label">作废/红冲</div></div>';
+    html += '</div>';
+
+    // 工具栏
+    html += '<div class="toolbar">';
+    html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+    html += '<select onchange="siFilter.type=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
+    html += '<option value="">全部类型</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
+    html += '<input placeholder="搜索发票号/购方/货物..." oninput="siFilter.keyword=this.value;renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:200px">';
+    html += '<input type="date" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
+    html += '<span style="color:#9ca3af">至</span>';
+    html += '<input type="date" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '</div>';
+    html += '<button class="btn btn-primary" onclick="showSalesInvoiceForm()">＋ 新增销项发票</button>';
+    html += '</div>';
+
+    // 状态 Tab
+    html += '<div class="tab-bar" style="margin-bottom:12px">';
+    const tabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
+    tabs.forEach(([t, label]) => {
+      html += '<button class="tab-btn ' + (siTab === t ? 'active' : '') + '" onclick="siTab=\'' + t + '\';renderSalesInvoices()">' + label + '</button>';
+    });
+    html += '</div>';
+
+    // 过滤
+    let items = inv;
+    if (siTab !== 'all') items = items.filter(i => i.status === siTab);
+    if (siFilter.type) items = items.filter(i => i.invoice_type === siFilter.type);
+    if (siFilter.dateFrom) items = items.filter(i => i.invoice_date >= siFilter.dateFrom);
+    if (siFilter.dateTo) items = items.filter(i => i.invoice_date <= siFilter.dateTo);
+
+    // 表格
+    html += '<div class="table-wrap"><table><thead><tr>';
+    html += '<th>发票号码</th><th>开票日期</th><th>购方名称</th><th>货物/服务</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>类型</th><th>状态</th><th>操作</th>';
+    html += '</tr></thead><tbody>';
+
+    if (items.length === 0) {
+      html += '<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:40px">暂无销项发票记录</td></tr>';
+    } else {
+      items.forEach(i => {
+        const stCls = i.status === '正常' ? 'badge-green' : i.status === '红冲' ? 'badge-red' : 'badge-gray';
+        html += '<tr>';
+        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500" onclick="showSalesDetail(' + i.id + ')">' + i.invoice_no + '</a></td>';
+        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td>' + (i.buyer_name || '-') + '</td>';
+        html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td style="text-align:right">' + fmt(i.amount) + '</td>';
+        html += '<td style="text-align:right">' + fmt(i.tax_amount) + '</td>';
+        html += '<td style="text-align:right;font-weight:600">' + fmt(i.total_amount) + '</td>';
+        html += '<td>' + i.invoice_type + '</td>';
+        html += '<td><span class="' + stCls + '">' + i.status + '</span></td>';
+        html += '<td style="white-space:nowrap">';
+        html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')" style="margin-right:4px">编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deleteSalesInvoice(' + i.id + ')">删除</button>';
+        html += '</td></tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+    document.getElementById('content-area').innerHTML = html;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showSalesInvoiceForm(id) {
+  let data = {};
+  if (id) {
+    data = await api('/api/sales-invoices/' + id);
+  }
+  const isEdit = !!id;
+  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑销项发票' : '新增销项发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+
+  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label>';
+  html += '<input class="form-input" id="si-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="si-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="si-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '</div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">购方名称</label><input class="form-input" id="si-buyer-name" value="' + (data.buyer_name || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">购方税号</label><input class="form-input" id="si-buyer-taxno" value="' + (data.buyer_tax_no || '') + '"></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">货物或应税劳务名称</label>';
+  html += '<input class="form-input" id="si-goods-name" value="' + (data.goods_name || '') + '"></div>';
+
+  html += '<div class="form-grid-4">';
+  html += '<div class="form-group"><label class="form-label">规格型号</label><input class="form-input" id="si-spec" value="' + (data.spec || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">单位</label><input class="form-input" id="si-unit" value="' + (data.unit || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">数量</label><input type="number" step="any" class="form-input" id="si-qty" value="' + (data.quantity || 0) + '" onchange="calcSiTotal()"></div>';
+  html += '<div class="form-group"><label class="form-label">单价</label><input type="number" step="any" class="form-input" id="si-price" value="' + (data.unit_price || 0) + '" onchange="calcSiTotal()"></div>';
+  html += '</div>';
+
+  html += '<div class="form-grid-3">';
+  html += '<div class="form-group"><label class="form-label">金额（不含税）</label><input type="number" step="any" class="form-input" id="si-amount" value="' + (data.amount || 0) + '" onchange="calcSiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税率（%）</label><input type="number" step="any" class="form-input" id="si-taxrate" value="' + (data.tax_rate || 0) + '" onchange="calcSiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税额</label><input type="number" step="any" class="form-input" id="si-taxamount" value="' + (data.tax_amount || 0) + '" onchange="calcSiAmount()"></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">价税合计</label><input type="number" step="any" class="form-input" id="si-total" value="' + (data.total_amount || 0) + '" readonly style="background:#f0f9ff;font-weight:600;font-size:16px"></div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票类型</label><select class="form-input" id="si-type">';
+  ['增值税专用发票', '增值税普通发票', '电子普通发票', '其他'].forEach(t => {
+    html += '<option value="' + t + '"' + (data.invoice_type === t ? ' selected' : '') + '>' + t + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">状态</label><select class="form-input" id="si-status">';
+  ['正常', '作废', '红冲'].forEach(s => {
+    html += '<option value="' + s + '"' + (data.status === s ? ' selected' : '') + '>' + s + '</option>';
+  });
+  html += '</select></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">关联凭证号</label><input class="form-input" id="si-voucher" value="' + (data.voucher_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">备注</label><input class="form-input" id="si-remark" value="' + (data.remark || '') + '"></div>';
+
+  html += '</div>';
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary" onclick="closeModal()">取消</button>';
+  html += '<button class="btn btn-primary" onclick="saveSalesInvoice(' + (id || 0) + ')">保存</button>';
+  html += '</div>';
+  showModal(html);
+}
+
+function calcSiTotal() {
+  const qty = parseFloat(document.getElementById('si-qty').value) || 0;
+  const price = parseFloat(document.getElementById('si-price').value) || 0;
+  document.getElementById('si-amount').value = (qty * price).toFixed(2);
+  calcSiTax();
+}
+
+function calcSiTax() {
+  const amount = parseFloat(document.getElementById('si-amount').value) || 0;
+  const rate = parseFloat(document.getElementById('si-taxrate').value) || 0;
+  const tax = amount * rate / 100;
+  document.getElementById('si-taxamount').value = tax.toFixed(2);
+  document.getElementById('si-total').value = (amount + tax).toFixed(2);
+}
+
+function calcSiAmount() {
+  const tax = parseFloat(document.getElementById('si-taxamount').value) || 0;
+  const amount = parseFloat(document.getElementById('si-amount').value) || 0;
+  document.getElementById('si-total').value = (amount + tax).toFixed(2);
+}
+
+async function saveSalesInvoice(id) {
+  try {
+    const body = {
+      invoice_no: document.getElementById('si-invoice-no').value.trim(),
+      invoice_code: document.getElementById('si-invoice-code').value.trim(),
+      invoice_date: document.getElementById('si-invoice-date').value,
+      buyer_name: document.getElementById('si-buyer-name').value.trim(),
+      buyer_tax_no: document.getElementById('si-buyer-taxno').value.trim(),
+      goods_name: document.getElementById('si-goods-name').value.trim(),
+      spec: document.getElementById('si-spec').value.trim(),
+      unit: document.getElementById('si-unit').value.trim(),
+      quantity: parseFloat(document.getElementById('si-qty').value) || 0,
+      unit_price: parseFloat(document.getElementById('si-price').value) || 0,
+      amount: parseFloat(document.getElementById('si-amount').value) || 0,
+      tax_rate: parseFloat(document.getElementById('si-taxrate').value) || 0,
+      tax_amount: parseFloat(document.getElementById('si-taxamount').value) || 0,
+      total_amount: parseFloat(document.getElementById('si-total').value) || 0,
+      invoice_type: document.getElementById('si-type').value,
+      status: document.getElementById('si-status').value,
+      voucher_no: document.getElementById('si-voucher').value.trim(),
+      remark: document.getElementById('si-remark').value.trim()
+    };
+    if (!body.invoice_no || !body.invoice_date) { toast('发票号码和开票日期必填', 'error'); return; }
+    let result;
+    if (id) {
+      result = await api('/api/sales-invoices/' + id, { method: 'PUT', body });
+    } else {
+      result = await api('/api/sales-invoices', { method: 'POST', body });
+    }
+    toast(result.message || '保存成功', 'success');
+    closeModal();
+    renderSalesInvoices();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteSalesInvoice(id) {
+  if (!confirm('确认删除该销项发票？')) return;
+  try {
+    const result = await api('/api/sales-invoices/' + id, { method: 'DELETE' });
+    toast(result.message, 'success');
+    renderSalesInvoices();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showSalesDetail(id) {
+  try {
+    const i = await api('/api/sales-invoices/' + id);
+    const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    let html = '<div class="modal-header"><h3>销项发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+    html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
+    html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
+    html += '<div><b>开票日期：</b>' + i.invoice_date + '</div>';
+    html += '<div><b>发票类型：</b>' + i.invoice_type + '</div>';
+    html += '<div><b>状态：</b>' + i.status + '</div>';
+    html += '<div><b>关联凭证：</b>' + (i.voucher_no || '-') + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 购方信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>购方名称：</b>' + (i.buyer_name || '-') + '</div>';
+    html += '<div><b>购方税号：</b>' + (i.buyer_tax_no || '-') + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>货物名称：</b>' + (i.goods_name || '-') + '</div>';
+    html += '<div><b>规格型号：</b>' + (i.spec || '-') + '</div>';
+    html += '<div><b>单位：</b>' + (i.unit || '-') + '</div>';
+    html += '<div><b>数量：</b>' + i.quantity + '</div>';
+    html += '<div><b>单价：</b>¥' + fmt(i.unit_price) + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">💰 金额信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>金额（不含税）：</b>¥' + fmt(i.amount) + '</div>';
+    html += '<div><b>税率：</b>' + i.tax_rate + '%</div>';
+    html += '<div><b>税额：</b>¥' + fmt(i.tax_amount) + '</div>';
+    html += '<div><b>价税合计：</b><span style="font-weight:700;font-size:16px;color:#1d4ed8">¥' + fmt(i.total_amount) + '</span></div>';
+    html += '</div></div>';
+
+    if (i.remark) {
+      html += '<div class="payment-form-section"><div class="payment-form-section-title">📝 备注</div><div>' + i.remark + '</div></div>';
+    }
+
+    html += '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-secondary" onclick="closeModal()">关闭</button></div>';
+    showModal(html);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ==================== 进项发票 ====================
+
+let piTab = 'all';
+let piFilter = { type: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
+
+async function renderPurchaseInvoices() {
+  try {
+    const [inv, stats] = await Promise.all([
+      api('/api/purchase-invoices'),
+      api('/api/purchase-invoices/stats')
+    ]);
+    const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    let html = '<div class="page-header"><h2>📥 进项发票</h2></div>';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">可抵扣税额</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.deducted_count + '</div><div class="stat-label">已抵扣</div></div>';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.uncertified_count + '/' + stats.certified_count + '</div><div class="stat-label">未认证/已认证</div></div>';
+    html += '</div>';
+
+    html += '<div class="toolbar">';
+    html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+    html += '<select onchange="piFilter.type=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
+    html += '<option value="">全部类型</option><option value="增值税专用发票">增值税专用发票</option><option value="增值税普通发票">增值税普通发票</option><option value="电子普通发票">电子普通发票</option><option value="其他">其他</option></select>';
+    html += '<select onchange="piFilter.cert=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px">';
+    html += '<option value="">全部认证</option><option value="未认证">未认证</option><option value="已认证">已认证</option><option value="已抵扣">已抵扣</option></select>';
+    html += '<input placeholder="搜索发票号/销方/货物..." oninput="piFilter.keyword=this.value;renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:200px">';
+    html += '<input type="date" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
+    html += '<span style="color:#9ca3af">至</span>';
+    html += '<input type="date" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '</div>';
+    html += '<button class="btn btn-primary" onclick="showPurchaseInvoiceForm()">＋ 新增进项发票</button>';
+    html += '</div>';
+
+    html += '<div class="tab-bar" style="margin-bottom:12px">';
+    const tabs = [['all', '全部'], ['未认证', '未认证'], ['已认证', '已认证'], ['已抵扣', '已抵扣']];
+    tabs.forEach(([t, label]) => {
+      html += '<button class="tab-btn ' + (piTab === t ? 'active' : '') + '" onclick="piTab=\'' + t + '\';renderPurchaseInvoices()">' + label + '</button>';
+    });
+    html += '</div>';
+
+    let items = inv;
+    if (piTab !== 'all') items = items.filter(i => i.certification_status === piTab);
+    if (piFilter.type) items = items.filter(i => i.invoice_type === piFilter.type);
+    if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
+    if (piFilter.dateFrom) items = items.filter(i => i.invoice_date >= piFilter.dateFrom);
+    if (piFilter.dateTo) items = items.filter(i => i.invoice_date <= piFilter.dateTo);
+
+    html += '<div class="table-wrap"><table><thead><tr>';
+    html += '<th>发票号码</th><th>开票日期</th><th>销方名称</th><th>货物/服务</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>认证状态</th><th>操作</th>';
+    html += '</tr></thead><tbody>';
+
+    if (items.length === 0) {
+      html += '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:40px">暂无进项发票记录</td></tr>';
+    } else {
+      items.forEach(i => {
+        const certCls = i.certification_status === '已抵扣' ? 'badge-green' : i.certification_status === '已认证' ? 'badge-blue' : 'badge-gray';
+        html += '<tr>';
+        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500" onclick="showPurchaseDetail(' + i.id + ')">' + i.invoice_no + '</a></td>';
+        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td>' + (i.seller_name || '-') + '</td>';
+        html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td style="text-align:right">' + fmt(i.amount) + '</td>';
+        html += '<td style="text-align:right">' + fmt(i.tax_amount) + '</td>';
+        html += '<td style="text-align:right;font-weight:600">' + fmt(i.total_amount) + '</td>';
+        html += '<td><span class="' + certCls + '">' + i.certification_status + '</span></td>';
+        html += '<td style="white-space:nowrap">';
+        html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')" style="margin-right:4px">编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseInvoice(' + i.id + ')">删除</button>';
+        html += '</td></tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+    document.getElementById('content-area').innerHTML = html;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showPurchaseInvoiceForm(id) {
+  let data = {};
+  if (id) {
+    data = await api('/api/purchase-invoices/' + id);
+  }
+  const isEdit = !!id;
+  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑进项发票' : '新增进项发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+
+  html += '<div class="form-group"><label class="form-label">发票号码 <span style="color:red">*</span></label>';
+  html += '<input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '') + '" ' + (isEdit ? 'readonly' : 'required') + '></div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="pi-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期 <span style="color:red">*</span></label><input type="date" class="form-input" id="pi-invoice-date" value="' + (data.invoice_date || '') + '" required></div>';
+  html += '</div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">销方名称</label><input class="form-input" id="pi-seller-name" value="' + (data.seller_name || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">销方税号</label><input class="form-input" id="pi-seller-taxno" value="' + (data.seller_tax_no || '') + '"></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">货物或应税劳务名称</label>';
+  html += '<input class="form-input" id="pi-goods-name" value="' + (data.goods_name || '') + '"></div>';
+
+  html += '<div class="form-grid-4">';
+  html += '<div class="form-group"><label class="form-label">规格型号</label><input class="form-input" id="pi-spec" value="' + (data.spec || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">单位</label><input class="form-input" id="pi-unit" value="' + (data.unit || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">数量</label><input type="number" step="any" class="form-input" id="pi-qty" value="' + (data.quantity || 0) + '" onchange="calcPiTotal()"></div>';
+  html += '<div class="form-group"><label class="form-label">单价</label><input type="number" step="any" class="form-input" id="pi-price" value="' + (data.unit_price || 0) + '" onchange="calcPiTotal()"></div>';
+  html += '</div>';
+
+  html += '<div class="form-grid-3">';
+  html += '<div class="form-group"><label class="form-label">金额（不含税）</label><input type="number" step="any" class="form-input" id="pi-amount" value="' + (data.amount || 0) + '" onchange="calcPiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税率（%）</label><input type="number" step="any" class="form-input" id="pi-taxrate" value="' + (data.tax_rate || 0) + '" onchange="calcPiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税额</label><input type="number" step="any" class="form-input" id="pi-taxamount" value="' + (data.tax_amount || 0) + '" onchange="calcPiAmount()"></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">价税合计</label><input type="number" step="any" class="form-input" id="pi-total" value="' + (data.total_amount || 0) + '" readonly style="background:#f0f9ff;font-weight:600;font-size:16px"></div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票类型</label><select class="form-input" id="pi-type">';
+  ['增值税专用发票', '增值税普通发票', '电子普通发票', '其他'].forEach(t => {
+    html += '<option value="' + t + '"' + (data.invoice_type === t ? ' selected' : '') + '>' + t + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">认证状态</label><select class="form-input" id="pi-cert-status">';
+  ['未认证', '已认证', '已抵扣'].forEach(s => {
+    html += '<option value="' + s + '"' + (data.certification_status === s ? ' selected' : '') + '>' + s + '</option>';
+  });
+  html += '</select></div>';
+  html += '</div>';
+
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">认证日期</label><input type="date" class="form-input" id="pi-cert-date" value="' + (data.certification_date || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">抵扣期间</label><input type="month" class="form-input" id="pi-deduct-period" value="' + (data.deduction_period || '') + '"></div>';
+  html += '</div>';
+
+  html += '<div class="form-group"><label class="form-label">关联凭证号</label><input class="form-input" id="pi-voucher" value="' + (data.voucher_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">备注</label><input class="form-input" id="pi-remark" value="' + (data.remark || '') + '"></div>';
+
+  html += '</div>';
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary" onclick="closeModal()">取消</button>';
+  html += '<button class="btn btn-primary" onclick="savePurchaseInvoice(' + (id || 0) + ')">保存</button>';
+  html += '</div>';
+  showModal(html);
+}
+
+function calcPiTotal() {
+  const qty = parseFloat(document.getElementById('pi-qty').value) || 0;
+  const price = parseFloat(document.getElementById('pi-price').value) || 0;
+  document.getElementById('pi-amount').value = (qty * price).toFixed(2);
+  calcPiTax();
+}
+
+function calcPiTax() {
+  const amount = parseFloat(document.getElementById('pi-amount').value) || 0;
+  const rate = parseFloat(document.getElementById('pi-taxrate').value) || 0;
+  const tax = amount * rate / 100;
+  document.getElementById('pi-taxamount').value = tax.toFixed(2);
+  document.getElementById('pi-total').value = (amount + tax).toFixed(2);
+}
+
+function calcPiAmount() {
+  const tax = parseFloat(document.getElementById('pi-taxamount').value) || 0;
+  const amount = parseFloat(document.getElementById('pi-amount').value) || 0;
+  document.getElementById('pi-total').value = (amount + tax).toFixed(2);
+}
+
+async function savePurchaseInvoice(id) {
+  try {
+    const body = {
+      invoice_no: document.getElementById('pi-invoice-no').value.trim(),
+      invoice_code: document.getElementById('pi-invoice-code').value.trim(),
+      invoice_date: document.getElementById('pi-invoice-date').value,
+      seller_name: document.getElementById('pi-seller-name').value.trim(),
+      seller_tax_no: document.getElementById('pi-seller-taxno').value.trim(),
+      goods_name: document.getElementById('pi-goods-name').value.trim(),
+      spec: document.getElementById('pi-spec').value.trim(),
+      unit: document.getElementById('pi-unit').value.trim(),
+      quantity: parseFloat(document.getElementById('pi-qty').value) || 0,
+      unit_price: parseFloat(document.getElementById('pi-price').value) || 0,
+      amount: parseFloat(document.getElementById('pi-amount').value) || 0,
+      tax_rate: parseFloat(document.getElementById('pi-taxrate').value) || 0,
+      tax_amount: parseFloat(document.getElementById('pi-taxamount').value) || 0,
+      total_amount: parseFloat(document.getElementById('pi-total').value) || 0,
+      invoice_type: document.getElementById('pi-type').value,
+      certification_status: document.getElementById('pi-cert-status').value,
+      certification_date: document.getElementById('pi-cert-date').value || null,
+      deduction_period: document.getElementById('pi-deduct-period').value.trim() || null,
+      voucher_no: document.getElementById('pi-voucher').value.trim(),
+      remark: document.getElementById('pi-remark').value.trim()
+    };
+    if (!body.invoice_no || !body.invoice_date) { toast('发票号码和开票日期必填', 'error'); return; }
+    let result;
+    if (id) {
+      result = await api('/api/purchase-invoices/' + id, { method: 'PUT', body });
+    } else {
+      result = await api('/api/purchase-invoices', { method: 'POST', body });
+    }
+    toast(result.message || '保存成功', 'success');
+    closeModal();
+    renderPurchaseInvoices();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deletePurchaseInvoice(id) {
+  if (!confirm('确认删除该进项发票？')) return;
+  try {
+    const result = await api('/api/purchase-invoices/' + id, { method: 'DELETE' });
+    toast(result.message, 'success');
+    renderPurchaseInvoices();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showPurchaseDetail(id) {
+  try {
+    const i = await api('/api/purchase-invoices/' + id);
+    const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    let html = '<div class="modal-header"><h3>进项发票详情</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+    html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 基本信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>发票号码：</b>' + i.invoice_no + '</div>';
+    html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
+    html += '<div><b>开票日期：</b>' + i.invoice_date + '</div>';
+    html += '<div><b>发票类型：</b>' + i.invoice_type + '</div>';
+    html += '<div><b>状态：</b>' + i.status + '</div>';
+    html += '<div><b>关联凭证：</b>' + (i.voucher_no || '-') + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 销方信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>销方名称：</b>' + (i.seller_name || '-') + '</div>';
+    html += '<div><b>销方税号：</b>' + (i.seller_tax_no || '-') + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>货物名称：</b>' + (i.goods_name || '-') + '</div>';
+    html += '<div><b>规格型号：</b>' + (i.spec || '-') + '</div>';
+    html += '<div><b>单位：</b>' + (i.unit || '-') + '</div>';
+    html += '<div><b>数量：</b>' + i.quantity + '</div>';
+    html += '<div><b>单价：</b>¥' + fmt(i.unit_price) + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">💰 金额信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>金额（不含税）：</b>¥' + fmt(i.amount) + '</div>';
+    html += '<div><b>税率：</b>' + i.tax_rate + '%</div>';
+    html += '<div><b>税额：</b>¥' + fmt(i.tax_amount) + '</div>';
+    html += '<div><b>价税合计：</b><span style="font-weight:700;font-size:16px;color:#1d4ed8">¥' + fmt(i.total_amount) + '</span></div>';
+    html += '</div></div>';
+
+    html += '<div class="payment-form-section"><div class="payment-form-section-title">✅ 认证信息</div>';
+    html += '<div class="form-grid-2">';
+    html += '<div><b>认证状态：</b><span class="' + (i.certification_status === '已抵扣' ? 'badge-green' : i.certification_status === '已认证' ? 'badge-blue' : 'badge-gray') + '">' + i.certification_status + '</span></div>';
+    html += '<div><b>认证日期：</b>' + (i.certification_date || '-') + '</div>';
+    html += '<div><b>抵扣期间：</b>' + (i.deduction_period || '-') + '</div>';
+    html += '</div></div>';
+
+    if (i.remark) {
+      html += '<div class="payment-form-section"><div class="payment-form-section-title">📝 备注</div><div>' + i.remark + '</div></div>';
+    }
 
     html += '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-secondary" onclick="closeModal()">关闭</button></div>';
     showModal(html);

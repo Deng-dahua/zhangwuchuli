@@ -531,6 +531,79 @@ class Payment(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+# ==================== 销项发票（销售发票）====================
+
+class SalesInvoice(Base):
+    """销项发票 - 企业开出的销售发票"""
+    __tablename__ = "sales_invoices"
+    __table_args__ = (
+        UniqueConstraint('company_id', 'invoice_no', name='uq_si_company_no'),
+        Index('idx_si_company_date', 'company_id', 'invoice_date'),
+        Index('idx_si_company_buyer', 'company_id', 'buyer_name'),
+        Index('idx_si_company_status', 'company_id', 'status'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    invoice_code = Column(String(30), comment="发票代码")
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    buyer_name = Column(String(100), comment="购方名称")
+    buyer_tax_no = Column(String(50), comment="购方税号")
+    goods_name = Column(String(200), comment="货物或应税劳务名称")
+    spec = Column(String(100), comment="规格型号")
+    unit = Column(String(10), comment="单位")
+    quantity = Column(Float, default=0, comment="数量")
+    unit_price = Column(Float, default=0, comment="单价")
+    amount = Column(Float, default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Float, default=0.0, comment="税率（%）")
+    tax_amount = Column(Float, default=0.0, comment="税额")
+    total_amount = Column(Float, default=0.0, comment="价税合计")
+    invoice_type = Column(String(20), default="增值税专用发票", comment="发票类型：增值税专用发票/增值税普通发票/电子普通发票/其他")
+    status = Column(String(20), default="正常", comment="状态：正常/作废/红冲")
+    voucher_no = Column(String(30), comment="关联凭证号")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ==================== 进项发票（采购发票）====================
+
+class PurchaseInvoice(Base):
+    """进项发票 - 企业收到的采购发票"""
+    __tablename__ = "purchase_invoices"
+    __table_args__ = (
+        UniqueConstraint('company_id', 'invoice_no', name='uq_pi_company_no'),
+        Index('idx_pi_company_date', 'company_id', 'invoice_date'),
+        Index('idx_pi_company_seller', 'company_id', 'seller_name'),
+        Index('idx_pi_company_cert', 'company_id', 'certification_status'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    invoice_no = Column(String(30), nullable=False, comment="发票号码")
+    invoice_code = Column(String(30), comment="发票代码")
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
+    seller_name = Column(String(100), comment="销方名称")
+    seller_tax_no = Column(String(50), comment="销方税号")
+    goods_name = Column(String(200), comment="货物或应税劳务名称")
+    spec = Column(String(100), comment="规格型号")
+    unit = Column(String(10), comment="单位")
+    quantity = Column(Float, default=0, comment="数量")
+    unit_price = Column(Float, default=0, comment="单价")
+    amount = Column(Float, default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Float, default=0.0, comment="税率（%）")
+    tax_amount = Column(Float, default=0.0, comment="税额")
+    total_amount = Column(Float, default=0.0, comment="价税合计")
+    invoice_type = Column(String(20), default="增值税专用发票", comment="发票类型")
+    certification_status = Column(String(20), default="未认证", comment="认证状态：未认证/已认证/已抵扣")
+    certification_date = Column(Date, comment="认证日期")
+    deduction_period = Column(String(7), comment="抵扣期间 YYYY-MM")
+    status = Column(String(20), default="正常", comment="状态：正常/作废")
+    voucher_no = Column(String(30), comment="关联凭证号")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # ==================== 数据库迁移与初始化 ====================
 
 def migrate_schema(db):

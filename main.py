@@ -26,7 +26,8 @@ from database import (
     InventoryItem, InventoryTransaction, InventoryBalance,
     Contract, ContractPayment,
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
-    Payment
+    Payment,
+    SalesInvoice, PurchaseInvoice
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -86,9 +87,12 @@ class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
     department_code: Optional[str] = None
     position: Optional[str] = None
+    id_card: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     salary: Optional[float] = None
+    entry_date: Optional[date] = None
+    leave_date: Optional[date] = None
     is_active: Optional[bool] = None
 
 # 客户
@@ -2100,6 +2104,334 @@ def delete_payment(payment_id: int, company_id: int = Query(1), db: Session = De
     if p.status in ("已审批", "已付款"):
         raise HTTPException(400, detail=f"付款单状态为'{p.status}'，不能删除")
     db.delete(p)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 销项发票（销售发票）====================
+
+class SalesInvoiceCreate(BaseModel):
+    invoice_no: str
+    invoice_code: Optional[str] = None
+    invoice_date: date
+    buyer_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = 0
+    unit_price: Optional[float] = 0
+    amount: float = 0.0
+    tax_rate: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    total_amount: Optional[float] = 0.0
+    invoice_type: str = "增值税专用发票"
+    status: str = "正常"
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class SalesInvoiceUpdate(BaseModel):
+    invoice_code: Optional[str] = None
+    invoice_date: Optional[date] = None
+    buyer_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    amount: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total_amount: Optional[float] = None
+    invoice_type: Optional[str] = None
+    status: Optional[str] = None
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/sales-invoices")
+def list_sales_invoices(
+    company_id: int = Query(1),
+    invoice_type: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
+    if invoice_type:
+        q = q.filter(SalesInvoice.invoice_type == invoice_type)
+    if status:
+        q = q.filter(SalesInvoice.status == status)
+    if date_from:
+        q = q.filter(SalesInvoice.invoice_date >= date_from)
+    if date_to:
+        q = q.filter(SalesInvoice.invoice_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            SalesInvoice.invoice_no.contains(keyword),
+            SalesInvoice.buyer_name.contains(keyword),
+            SalesInvoice.goods_name.contains(keyword)
+        ))
+    invoices = q.order_by(SalesInvoice.invoice_date.desc()).all()
+    return [{
+        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+        "buyer_name": inv.buyer_name or "", "buyer_tax_no": inv.buyer_tax_no or "",
+        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
+        "unit": inv.unit or "", "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "total_amount": inv.total_amount or 0,
+        "invoice_type": inv.invoice_type, "status": inv.status,
+        "voucher_no": inv.voucher_no or "", "remark": inv.remark or "",
+        "created_at": str(inv.created_at) if inv.created_at else ""
+    } for inv in invoices]
+
+
+@app.post("/api/sales-invoices")
+def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.invoice_no == data.invoice_no).first():
+        raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
+    inv = SalesInvoice(company_id=company_id, **data.model_dump())
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "销项发票创建成功"}
+
+
+@app.get("/api/sales-invoices/stats")
+def sales_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+    base = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
+    total_count = base.count()
+    total_amount = base.with_entities(func.sum(SalesInvoice.total_amount)).scalar() or 0
+    total_tax = base.with_entities(func.sum(SalesInvoice.tax_amount)).scalar() or 0
+    normal_count = base.filter(SalesInvoice.status == "正常").count()
+    void_count = base.filter(SalesInvoice.status == "作废").count()
+    red_count = base.filter(SalesInvoice.status == "红冲").count()
+    return {
+        "total_count": total_count, "total_amount": round(total_amount, 2),
+        "total_tax": round(total_tax, 2),
+        "normal_count": normal_count, "void_count": void_count,
+        "red_count": red_count
+    }
+
+
+@app.get("/api/sales-invoices/{invoice_id}")
+def get_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    return {
+        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+        "buyer_name": inv.buyer_name or "", "buyer_tax_no": inv.buyer_tax_no or "",
+        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
+        "unit": inv.unit or "", "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "total_amount": inv.total_amount or 0,
+        "invoice_type": inv.invoice_type, "status": inv.status,
+        "voucher_no": inv.voucher_no or "", "remark": inv.remark or "",
+        "created_at": str(inv.created_at) if inv.created_at else "",
+        "updated_at": str(inv.updated_at) if inv.updated_at else ""
+    }
+
+
+@app.put("/api/sales-invoices/{invoice_id}")
+def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(inv, k, v)
+    inv.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/sales-invoices/{invoice_id}")
+def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    db.delete(inv)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+# ==================== 进项发票（采购发票）====================
+
+class PurchaseInvoiceCreate(BaseModel):
+    invoice_no: str
+    invoice_code: Optional[str] = None
+    invoice_date: date
+    seller_name: Optional[str] = None
+    seller_tax_no: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = 0
+    unit_price: Optional[float] = 0
+    amount: float = 0.0
+    tax_rate: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    total_amount: Optional[float] = 0.0
+    invoice_type: str = "增值税专用发票"
+    certification_status: str = "未认证"
+    certification_date: Optional[date] = None
+    deduction_period: Optional[str] = None
+    status: str = "正常"
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class PurchaseInvoiceUpdate(BaseModel):
+    invoice_code: Optional[str] = None
+    invoice_date: Optional[date] = None
+    seller_name: Optional[str] = None
+    seller_tax_no: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    amount: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total_amount: Optional[float] = None
+    invoice_type: Optional[str] = None
+    certification_status: Optional[str] = None
+    certification_date: Optional[date] = None
+    deduction_period: Optional[str] = None
+    status: Optional[str] = None
+    voucher_no: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/purchase-invoices")
+def list_purchase_invoices(
+    company_id: int = Query(1),
+    invoice_type: Optional[str] = None,
+    certification_status: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
+    if invoice_type:
+        q = q.filter(PurchaseInvoice.invoice_type == invoice_type)
+    if certification_status:
+        q = q.filter(PurchaseInvoice.certification_status == certification_status)
+    if status:
+        q = q.filter(PurchaseInvoice.status == status)
+    if date_from:
+        q = q.filter(PurchaseInvoice.invoice_date >= date_from)
+    if date_to:
+        q = q.filter(PurchaseInvoice.invoice_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            PurchaseInvoice.invoice_no.contains(keyword),
+            PurchaseInvoice.seller_name.contains(keyword),
+            PurchaseInvoice.goods_name.contains(keyword)
+        ))
+    invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).all()
+    return [{
+        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+        "seller_name": inv.seller_name or "", "seller_tax_no": inv.seller_tax_no or "",
+        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
+        "unit": inv.unit or "", "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "total_amount": inv.total_amount or 0,
+        "invoice_type": inv.invoice_type,
+        "certification_status": inv.certification_status,
+        "certification_date": str(inv.certification_date) if inv.certification_date else "",
+        "deduction_period": inv.deduction_period or "",
+        "status": inv.status, "voucher_no": inv.voucher_no or "",
+        "remark": inv.remark or "",
+        "created_at": str(inv.created_at) if inv.created_at else ""
+    } for inv in invoices]
+
+
+@app.post("/api/purchase-invoices")
+def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    if db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.invoice_no == data.invoice_no).first():
+        raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
+    inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "进项发票创建成功"}
+
+
+@app.get("/api/purchase-invoices/stats")
+def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+    base = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
+    total_count = base.count()
+    total_amount = base.with_entities(func.sum(PurchaseInvoice.total_amount)).scalar() or 0
+    total_tax = base.with_entities(func.sum(PurchaseInvoice.tax_amount)).scalar() or 0
+    uncertified_count = base.filter(PurchaseInvoice.certification_status == "未认证").count()
+    certified_count = base.filter(PurchaseInvoice.certification_status == "已认证").count()
+    deducted_count = base.filter(PurchaseInvoice.certification_status == "已抵扣").count()
+    return {
+        "total_count": total_count, "total_amount": round(total_amount, 2),
+        "total_tax": round(total_tax, 2),
+        "uncertified_count": uncertified_count,
+        "certified_count": certified_count,
+        "deducted_count": deducted_count
+    }
+
+
+@app.get("/api/purchase-invoices/{invoice_id}")
+def get_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    return {
+        "id": inv.id, "invoice_no": inv.invoice_no, "invoice_code": inv.invoice_code or "",
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+        "seller_name": inv.seller_name or "", "seller_tax_no": inv.seller_tax_no or "",
+        "goods_name": inv.goods_name or "", "spec": inv.spec or "",
+        "unit": inv.unit or "", "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0, "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0, "tax_amount": inv.tax_amount or 0,
+        "total_amount": inv.total_amount or 0,
+        "invoice_type": inv.invoice_type,
+        "certification_status": inv.certification_status,
+        "certification_date": str(inv.certification_date) if inv.certification_date else "",
+        "deduction_period": inv.deduction_period or "",
+        "status": inv.status, "voucher_no": inv.voucher_no or "",
+        "remark": inv.remark or "",
+        "created_at": str(inv.created_at) if inv.created_at else "",
+        "updated_at": str(inv.updated_at) if inv.updated_at else ""
+    }
+
+
+@app.put("/api/purchase-invoices/{invoice_id}")
+def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(inv, k, v)
+    inv.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/purchase-invoices/{invoice_id}")
+def delete_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    db.delete(inv)
     db.commit()
     return {"message": "删除成功"}
 
