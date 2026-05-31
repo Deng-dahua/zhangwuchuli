@@ -931,9 +931,10 @@ def migrate_schema(db):
         if table_name in inspector.get_table_names():
             cols = {c["name"]: c for c in inspector.get_columns(table_name)}
             need_fix = False
-            if "invoice_no" in cols and cols["invoice_no"].get("nullable") is False:
+            # 用 == False 兼容 SQLite 返回的 0/1 和 Python bool
+            if "invoice_no" in cols and cols["invoice_no"].get("nullable") == False:
                 need_fix = True
-            if "invoice_date" in cols and cols["invoice_date"].get("nullable") is False:
+            if "invoice_date" in cols and cols["invoice_date"].get("nullable") == False:
                 need_fix = True
             if need_fix:
                 try:
@@ -941,15 +942,23 @@ def migrate_schema(db):
                     col_names = [c["name"] for c in all_cols]
                     col_names_str = ", ".join(col_names)
                     backup_table = f"{table_name}_bk"
+                    # 先统计原表数据量
+                    old_count_result = db.execute(TextClause(f"SELECT COUNT(*) FROM {table_name}")).fetchone()
+                    old_count = old_count_result[0] if old_count_result else 0
                     # 备份 → 删除 → 重建（新 schema）→ 恢复数据
                     db.execute(TextClause(f"ALTER TABLE {table_name} RENAME TO {backup_table}"))
                     Base.metadata.create_all(bind=engine, tables=[Base.metadata.tables[table_name]])
                     # 迁移前将空字符串发票号码转为 NULL（避免 UNIQUE 约束冲突）
                     db.execute(TextClause(f"UPDATE {backup_table} SET invoice_no = NULL WHERE invoice_no = ''"))
                     db.execute(TextClause(f"INSERT INTO {table_name} ({col_names_str}) SELECT {col_names_str} FROM {backup_table}"))
+                    # 安全校验：新表数据量必须和原表一致才允许删备份
+                    new_count_result = db.execute(TextClause(f"SELECT COUNT(*) FROM {table_name}")).fetchone()
+                    new_count = new_count_result[0] if new_count_result else 0
+                    if new_count != old_count:
+                        raise Exception(f"数据迁移数量不匹配: 新表{new_count}条, 原表{old_count}条，备份表保留未删除")
                     db.execute(TextClause(f"DROP TABLE {backup_table}"))
                     db.commit()
-                    print(f"已重建 {table_name} 表（发票号码和开票日期改为可空）")
+                    print(f"已重建 {table_name} 表（发票号码和开票日期改为可空），迁移{new_count}条数据")
                 except Exception as e:
                     db.rollback()
                     print(f"重建 {table_name} 表失败: {e}")

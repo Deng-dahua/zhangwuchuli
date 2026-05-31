@@ -2259,12 +2259,13 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
 def sales_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     base = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
     total_count = base.count()
-    total_amt = base.with_entities(func.sum(SalesInvoice.amount)).scalar() or 0
-    total_amount = base.with_entities(func.sum(SalesInvoice.total_amount)).scalar() or 0
-    total_tax = base.with_entities(func.sum(SalesInvoice.tax_amount)).scalar() or 0
+    # SQLAlchemy func.sum().scalar() 在SQLite下有时返回None，改用Python求和
+    total_amt = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.amount).all())
+    total_amount = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.total_amount).all())
+    total_tax = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.tax_amount).all())
     normal_count = base.filter(SalesInvoice.status == "正常").count()
-    void_count = base.filter(SalesInvoice.status == "作废").count()
-    red_count = base.filter(SalesInvoice.status == "红冲").count()
+    void_count = base.filter(SalesInvoice.status.like("%作废%")).count()
+    red_count = base.filter(SalesInvoice.status.like("%红冲%")).count()
     return {
         "total_count": total_count, "total_amt": round(total_amt, 2),
         "total_amount": round(total_amount, 2),
@@ -2490,12 +2491,12 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
 def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
     base = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
     total_count = base.count()
-    total_amt = base.with_entities(func.sum(PurchaseInvoice.amount)).scalar() or 0
-    total_amount = base.with_entities(func.sum(PurchaseInvoice.total_amount)).scalar() or 0
-    total_tax = base.with_entities(func.sum(PurchaseInvoice.tax_amount)).scalar() or 0
+    total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
+    total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
+    total_tax = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.tax_amount).all())
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
-    void_count = base.filter(PurchaseInvoice.status == "作废").count()
-    red_count = base.filter(PurchaseInvoice.status == "红冲").count()
+    void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
+    red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
     uncertified_count = base.filter(PurchaseInvoice.certification_status == "未认证").count()
     certified_count = base.filter(PurchaseInvoice.certification_status == "已认证").count()
     deducted_count = base.filter(PurchaseInvoice.certification_status == "已抵扣").count()
@@ -3297,13 +3298,21 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             return None if nullable else default
 
                     amt = safe_float(mapped.get("amount"))
-                    tax_amt = safe_float(mapped.get("tax_amount"))
+                    tax_amt = safe_float(mapped.get("tax_amount"), nullable=True)
                     total = safe_float(mapped.get("total_amount"), nullable=True)
-                    # 价税合计为空时，自动用 金额+税额 计算
-                    if total is None and amt is not None and tax_amt is not None:
+                    # 三个字段互推：任意两个有值就能算出第三个
+                    if amt is not None and tax_amt is not None and total is None:
                         total = round(amt + tax_amt, 2)
-                    elif total is None:
+                    elif amt is not None and total is not None and tax_amt is None:
+                        tax_amt = round(total - amt, 2)
+                    elif tax_amt is not None and total is not None and amt is None:
+                        amt = round(total - tax_amt, 2)
+                    if total is None:
                         total = 0.0
+                    if tax_amt is None:
+                        tax_amt = 0.0
+                    if amt is None:
+                        amt = 0.0
                     qty = safe_float(mapped.get("quantity"), 0, nullable=True)
                     uprice = safe_float(mapped.get("unit_price"), 0, nullable=True)
                     tr = safe_float(mapped.get("tax_rate"))
