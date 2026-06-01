@@ -3784,6 +3784,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
         return {
             "imported": imported,
             "total": len(rows_data),
+            "skipped": len(rows_data) - imported,
             "errors": errors[:20],  # 最多返回20条错误
             "infos": infos[:20],    # 非错误提示
             "message": f"成功导入 {imported}/{len(rows_data)} 条记录"

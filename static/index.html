@@ -5263,11 +5263,6 @@ function buildMappingUI(result, module, file, bankConfigId) {
       </label>
       <input id="template-name" placeholder="模板名称（可选）" style="margin-top:4px;padding:4px 8px;border:1px solid var(--gray-300);border-radius:4px;font-size:12px;width:200px;display:none;">
     </div>
-    <div style="margin-top:8px;">
-      <label style="font-size:12px;display:flex;align-items:center;gap:8px;color:var(--warning);">
-        <input type="checkbox" id="force-import"> 强制导入（忽略去重，允许重复记录入库）
-      </label>
-    </div>
     <div style="text-align:right;margin-top:16px;">
       <button class="btn" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="doImportWithMapping('${module}', '${file.name}', ${bankConfigId || 'null'})">开始导入</button>
@@ -5327,9 +5322,8 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   formData.append('column_mapping', JSON.stringify(mapping));
   formData.append('company_id', currentCompanyId);
   if (bankConfigId) formData.append('bank_config_id', bankConfigId);
-  if (document.getElementById('force-import')?.checked) formData.append('force', 'true');
 
-  document.getElementById('upload-progress').style.display = 'block';
+  // 第一轮：带去重导入
   document.getElementById('upload-progress').innerText = '正在导入数据...';
 
   const resp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData });
@@ -5340,6 +5334,43 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   if (result.error) {
     toast(result.error, 'error');
     return;
+  }
+
+  // 仅全部被去重拦截时，弹出强制导入确认框
+  const allDupSkipped = result.imported === 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
+  if (allDupSkipped) {
+    const confirmForce = confirm(
+      `导入结果：成功 ${result.imported} 条，跳过 ${result.skipped} 条重复记录。\n\n` +
+      (result.errors && result.errors.length > 0 ? '详情：\n' + result.errors.slice(0, 10).join('\n') + '\n\n' : '') +
+      '是否强制导入这些重复记录？'
+    );
+    if (confirmForce) {
+      formData.append('force', 'true');
+      document.getElementById('upload-progress').style.display = 'block';
+      document.getElementById('upload-progress').innerText = '正在强制导入数据...';
+
+      const resp2 = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData });
+      const result2 = await resp2.json();
+
+      document.getElementById('upload-progress').style.display = 'none';
+
+      if (result2.error) {
+        toast(result2.error, 'error');
+        return;
+      }
+
+      let msg2 = `强制导入完成：${result2.imported}/${result2.total} 条记录`;
+      if (result2.infos && result2.infos.length > 0) {
+        msg2 += '\nℹ️ ' + result2.infos.slice(0, 5).join('\n');
+      }
+      alert(msg2);
+      closeModal();
+      if (module === 'bank-transaction') renderBankTransactions();
+      else if (module === 'sales-invoice') renderSalesInvoices();
+      else if (module === 'purchase-invoice') renderPurchaseInvoices();
+      else if (module === 'input-vat-deduction') renderInputVATDeductions();
+      return;
+    }
   }
 
   let msg = `成功导入 ${result.imported}/${result.total} 条记录`;
