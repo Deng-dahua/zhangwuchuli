@@ -3341,7 +3341,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
         # 根据映射转换并导入
         imported = 0
         errors = []
-        used_invoice_nos = set()  # 同批次去重
+        used_invoice_nos = set()  # 发票同批次去重
+        used_bank_serials = set()  # 银行流水同批次去重（交易流水号）
+        used_vat_keys = set()  # 进项抵扣同批次去重（发票代码+号码）
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         for i, row in enumerate(rows_data):
             try:
@@ -3404,6 +3406,23 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: balance = float(bal_str) if bal_str else 0.0
                     except: pass
 
+                    # 去重：按交易流水号检查
+                    serial_no = mapped.get("transaction_serial_no", "").strip()
+                    if serial_no:
+                        # 同批次去重
+                        batch_key = (company_id, serial_no)
+                        if batch_key in used_bank_serials:
+                            errors.append(f"第{i+2}行: 交易流水号 {serial_no} 与本批次重复，跳过")
+                            continue
+                        # 跨批次数据库查重
+                        existing = db.query(BankTransaction).filter(
+                            BankTransaction.company_id == company_id,
+                            BankTransaction.transaction_serial_no == serial_no
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 交易流水号 {serial_no} 已存在，跳过")
+                            continue
+
                     tx = BankTransaction(
                         company_id=company_id,
                         bank_config_id=bank_config_id,
@@ -3430,6 +3449,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         remark=mapped.get("remark", "")
                     )
                     db.add(tx)
+                    if serial_no:
+                        used_bank_serials.add(batch_key)
 
                 elif module in ("sales-invoice", "purchase-invoice"):
                     inv_date = None
@@ -3609,6 +3630,25 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: deductible = float(deductible) if deductible else 0.0
                     except: deductible = 0.0
 
+                    # 去重：按发票代码+发票号码检查
+                    inv_code = mapped.get("invoice_code", "").strip()
+                    inv_no = mapped.get("invoice_no", "").strip()
+                    if inv_code or inv_no:
+                        vat_key = (company_id, inv_code, inv_no)
+                        # 同批次去重
+                        if vat_key in used_vat_keys:
+                            errors.append(f"第{i+2}行: 发票 {inv_code}/{inv_no} 与本批次重复，跳过")
+                            continue
+                        # 跨批次数据库查重
+                        existing = db.query(InputVATDeduction).filter(
+                            InputVATDeduction.company_id == company_id,
+                            InputVATDeduction.invoice_code == inv_code,
+                            InputVATDeduction.invoice_no == inv_no
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 发票 {inv_code}/{inv_no} 已存在，跳过")
+                            continue
+
                     inv = InputVATDeduction(
                         company_id=company_id,
                         check_status=mapped.get("check_status", "未勾选"),
@@ -3631,6 +3671,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         remark=mapped.get("remark", "")
                     )
                     db.add(inv)
+                    if inv_code or inv_no:
+                        used_vat_keys.add(vat_key)
 
                 imported += 1
             except Exception as e:
