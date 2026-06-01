@@ -104,11 +104,6 @@ class CustomerCreate(BaseModel):
     name: str
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
-    contact: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    credit_limit: Optional[float] = 0.0
-    payment_terms: Optional[int] = 30
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     remark: Optional[str] = None
@@ -117,11 +112,6 @@ class CustomerUpdate(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
-    contact: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    credit_limit: Optional[float] = None
-    payment_terms: Optional[int] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     is_active: Optional[bool] = None
@@ -495,11 +485,8 @@ def list_customers(
     return [
         {
             "id": c.id, "code": c.code, "name": c.name,
-            "uscc": c.uscc or "",  # ← 新增
-            "tax_no": c.tax_no, "contact": c.contact,
-            "phone": c.phone, "address": c.address,
-            "credit_limit": c.credit_limit,
-            "payment_terms": c.payment_terms,
+            "uscc": c.uscc or "",
+            "tax_no": c.tax_no,
             "bank_name": c.bank_name,
             "bank_account": c.bank_account,
             "is_active": c.is_active,

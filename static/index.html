@@ -2049,20 +2049,15 @@ async function renderCustomers() {
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <thead><tr><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
+              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
                 <tr>
                   <td>${c.code}</td>
                   <td>${c.name}</td>
                   <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
-                  <td>${c.contact || '-'}</td>
-                  <td>${c.phone || '-'}</td>
-                  <td class="num">¥${fmt(c.credit_limit)}</td>
-                  <td>${c.payment_terms || 0}</td>
-                  <td>${c.address || '-'}</td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${c.code}','${esc(c.name)}','${esc(c.uscc||'')}','${esc(c.contact||'')}','${esc(c.phone||'')}',${c.credit_limit||0},${c.payment_terms||0},'${esc(c.address||'')}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>
                   </td>
                 </tr>
@@ -2077,7 +2072,7 @@ async function renderCustomers() {
   }
 }
 
-function showCustForm(id, code, name, uscc, contact, phone, creditLimit, paymentTerms, address) {
+function showCustForm(id, code, name, uscc) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}客户</h3>
@@ -2085,11 +2080,6 @@ function showCustForm(id, code, name, uscc, contact, phone, creditLimit, payment
       <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="cust-code" value="${code||''}" placeholder="如：KH001"></div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
-      <div class="form-field"><label>联系人</label><input id="cust-contact" value="${contact||''}"></div>
-      <div class="form-field"><label>电话</label><input id="cust-phone" value="${phone||''}"></div>
-      <div class="form-field"><label>信用额度</label><input id="cust-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
-      <div class="form-field"><label>账期(天)</label><input id="cust-days" type="number" value="${paymentTerms||0}"></div>
-      <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="cust-addr" value="${address||''}"></div>
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveCust(${id||0})">保存</button>
@@ -2102,12 +2092,7 @@ async function saveCust(id) {
   const body = {
     code: document.getElementById('cust-code').value.trim(),
     name: document.getElementById('cust-name').value.trim(),
-    uscc: document.getElementById('cust-uscc')?.value.trim() || null,
-    contact: document.getElementById('cust-contact').value.trim(),
-    phone: document.getElementById('cust-phone').value.trim(),
-    credit_limit: parseFloat(document.getElementById('cust-credit').value) || 0,
-    payment_terms: parseInt(document.getElementById('cust-days').value) || 0,
-    address: document.getElementById('cust-addr').value.trim()
+    uscc: document.getElementById('cust-uscc')?.value.trim() || null
   };
   if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
   try {
