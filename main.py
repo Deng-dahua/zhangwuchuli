@@ -3734,24 +3734,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: deductible = float(deductible) if deductible else 0.0
                     except: deductible = 0.0
 
-                    # 去重：按发票代码+发票号码检查
-                    inv_code = mapped.get("invoice_code", "").strip()
-                    inv_no = mapped.get("invoice_no", "").strip()
-                    if inv_code or inv_no:
-                        vat_key = (company_id, inv_code, inv_no)
-                        # 同批次去重
-                        if vat_key in used_vat_keys:
-                            errors.append(f"第{i+2}行: 发票 {inv_code}/{inv_no} 与本批次重复，跳过")
-                            continue
-                        # 跨批次数据库查重
-                        existing = db.query(InputVATDeduction).filter(
-                            InputVATDeduction.company_id == company_id,
-                            InputVATDeduction.invoice_code == inv_code,
-                            InputVATDeduction.invoice_no == inv_no
-                        ).first()
-                        if existing:
-                            errors.append(f"第{i+2}行: 发票 {inv_code}/{inv_no} 已存在，跳过")
-                            continue
+                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
+                    fp = row_fingerprint(mapped)
+                    if fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        continue
+                    if fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        continue
 
                     inv = InputVATDeduction(
                         company_id=company_id,
