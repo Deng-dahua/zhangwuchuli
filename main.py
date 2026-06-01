@@ -3496,10 +3496,13 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
                     fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        dup_row = used_fingerprints[fp]
+                        key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
+                        errors.append(f"第{i+2}行: 与第{dup_row}行完全重复（{key_info}），跳过")
                         continue
                     if fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（{key_info}），跳过")
                         continue
 
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
