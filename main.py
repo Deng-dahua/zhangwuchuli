@@ -3349,7 +3349,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             for rec in db.query(BankTransaction).filter(BankTransaction.company_id == company_id).all():
                 d = {
                     "transaction_date": str(rec.transaction_date or ""),
-                    "transaction_time": rec.transaction_time or "",
+                    "transaction_time": str(rec.transaction_time or ""),
                     "application_date": str(rec.application_date or ""),
                     "voucher_no": rec.voucher_no or "",
                     "debit_amount": str(rec.debit_amount or 0),
@@ -3366,6 +3366,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     "account_type": rec.account_type or "",
                     "remark": rec.remark or "",
                 }
+                # 并上 raw_data 中的额外列，确保重导同文件时指纹完全一致
+                raw = rec.raw_data
+                if raw:
+                    try:
+                        rw = json.loads(raw) if isinstance(raw, str) else raw
+                        if isinstance(rw, dict):
+                            d.update({str(k): str(v) for k, v in rw.items()})
+                    except: pass
                 existing_fingerprints.add(row_fingerprint(d))
         elif module == "sales-invoice":
             for rec in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
@@ -3519,8 +3527,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: balance = float(bal_str) if bal_str else 0.0
                     except: pass
 
-                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
-                    fp = row_fingerprint(mapped)
+                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
+                    fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
                         continue
