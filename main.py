@@ -3220,7 +3220,7 @@ async def analyze_file_headers(
                 "invoice_date", "seller_tax_id", "seller_name",
                 "amount", "tax_amount", "deductible_tax_amount",
                 "invoice_category", "invoice_category_label", "invoice_status",
-                "check_time", "risk_level", "remark"
+                "check_time", "risk_level"
             ]
 
         return {
