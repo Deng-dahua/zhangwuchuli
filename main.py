@@ -610,6 +610,7 @@ def list_accounts(
     category: Optional[str] = None,
     keyword: Optional[str] = None,
     level: Optional[int] = None,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Account).filter(Account.company_id == company_id)
