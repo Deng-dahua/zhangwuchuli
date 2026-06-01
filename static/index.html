@@ -4739,73 +4739,60 @@ async function deleteBankConfig(id) {
 // ==================== 进项抵扣 - 认证台账 ====================
 
 async function renderInputVATDeductions() {
-  const [list, stats] = await Promise.all([
-    api('/api/input-vat-deductions'),
-    api('/api/input-vat-deductions/stats')
-  ]);
-
-  document.title = '进项抵扣 - 财税系统';
-
-  const html = `
-    <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">条</div></div>
-      <div class="stat-card"><div class="stat-label">金额合计</div><div class="stat-value">¥${(stats.total_amount||0).toLocaleString()}</div><div class="stat-sub">不含税</div></div>
-      <div class="stat-card"><div class="stat-label">税额合计</div><div class="stat-value" style="color:var(--primary);">¥${(stats.total_tax||0).toLocaleString()}</div><div class="stat-sub">进项税额</div></div>
-      <div class="stat-card"><div class="stat-label">已勾选</div><div class="stat-value" style="color:var(--success);">${stats.checked_count}</div><div class="stat-sub">未勾选 ${stats.unchecked_count}</div></div>
-      <div class="stat-card"><div class="stat-label">异常发票</div><div class="stat-value" style="color:var(--danger);">${stats.abnormal_count}</div><div class="stat-sub">疑点/异常/失控</div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">
-        <span>进项发票认证台账</span>
-      </div>
-      <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-        <div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <select id="ivd-check-status" onchange="ivdFilter.checkStatus=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
-            <option value="">全部勾选状态</option>
-            <option value="已勾选" ${ivdFilter.checkStatus==='已勾选'?'selected':''}>已勾选</option>
-            <option value="未勾选" ${ivdFilter.checkStatus==='未勾选'?'selected':''}>未勾选</option>
-          </select>
-          <input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="${ivdFilter.keyword||''}" onkeydown="if(event.key==='Enter'){ivdFilter.keyword=this.value;loadVATDeductionList()}">
-          <button onclick="ivdFilter.keyword=document.getElementById('ivdKeyword').value;loadVATDeductionList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>
-          <input type="date" value="${ivdFilter.dateFrom||''}" onchange="ivdFilter.dateFrom=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">
-          <span style="color:#9ca3af;font-size:13px;">至</span>
-          <input type="date" value="${ivdFilter.dateTo||''}" onchange="ivdFilter.dateTo=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">
-          <button onclick="ivdFilter.checkStatus='';ivdFilter.keyword='';ivdFilter.dateFrom='';ivdFilter.dateTo='';loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
-          <button class="btn btn-outline" onclick="showUploadModal('input-vat-deduction')">📁 导入文件</button>
-          <button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()" style="display:none">🗑 批量删除</button>
-        </div>
-      </div>
-      <div id="ivd-table-container"></div>
-    </div>
-  `;
-  document.getElementById('content-area').innerHTML = html;
-  renderVATDeductionTable(list);
-}
-
-async function loadVATDeductionList() {
   const params = new URLSearchParams();
   if (ivdFilter.checkStatus) params.set('check_status', ivdFilter.checkStatus);
   if (ivdFilter.dateFrom) params.set('date_from', ivdFilter.dateFrom);
   if (ivdFilter.dateTo) params.set('date_to', ivdFilter.dateTo);
   if (ivdFilter.keyword) params.set('keyword', ivdFilter.keyword);
   const qs = params.toString();
-  const data = await api('/api/input-vat-deductions' + (qs ? '?' + qs : ''));
-  renderVATDeductionTable(data);
-}
 
-function renderVATDeductionTable(data) {
-  window._ivdData = data;
+  const [list, stats] = await Promise.all([
+    api('/api/input-vat-deductions' + (qs ? '?' + qs : '')),
+    api('/api/input-vat-deductions/stats')
+  ]);
+
+  document.title = '进项抵扣 - 财税系统';
+  const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let html = '<div class="page-header"><h2>✅ 进项抵扣</h2></div>';
+
+  // 统计卡片
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">记录总数</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">金额合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">税额合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.checked_count + '</div><div class="stat-label">已勾选</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.abnormal_count + '</div><div class="stat-label">异常发票</div></div>';
+  html += '</div>';
+
+  // 工具栏
+  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += '<select id="ivd-check-status" onchange="ivdFilter.checkStatus=this.value;renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">';
+  html += '<option value="">全部勾选状态</option>';
+  html += '<option value="已勾选"' + (ivdFilter.checkStatus==='已勾选'?' selected':'') + '>已勾选</option>';
+  html += '<option value="未勾选"' + (ivdFilter.checkStatus==='未勾选'?' selected':'') + '>未勾选</option>';
+  html += '</select>';
+  html += '<input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="' + (ivdFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){ivdFilter.keyword=this.value;renderInputVATDeductions()}">';
+  html += '<button onclick="ivdFilter.keyword=document.getElementById(\'ivdKeyword\').value;renderInputVATDeductions()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
+  html += '<input type="date" value="' + (ivdFilter.dateFrom||'') + '" onchange="ivdFilter.dateFrom=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">';
+  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
+  html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
+  html += '<button onclick="ivdFilter.checkStatus=\'\';ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()" style="display:none">🗑 批量删除</button>';
+  html += '</div></div>';
+
+  // 表格
   const riskColors = { '正常': '#059669', '疑点': '#d97706', '异常': '#e02424', '失控': '#7c3aed' };
-
-  let html = '<div class="table-wrap" style="max-height:calc(100vh - 350px);overflow-y:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
+  html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
   html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th>';
   html += '</tr></thead><tbody>';
 
-  if (data.length === 0) {
+  if (list.length === 0) {
     html += '<tr><td colspan="19" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
   } else {
-    data.forEach(it => {
+    list.forEach(it => {
       const stCls = it.invoice_status === '正常' ? 'badge-green' : it.invoice_status === '作废' ? 'badge-gray' : 'badge-red';
       html += '<tr>';
       html += '<td><input type="checkbox" class="ivd-check" data-id="' + it.id + '" onchange="updateIVDBatchBtn()"></td>';
@@ -4830,7 +4817,8 @@ function renderVATDeductionTable(data) {
     });
   }
   html += '</tbody></table></div>';
-  document.getElementById('ivd-table-container').innerHTML = html;
+
+  document.getElementById('content-area').innerHTML = html;
 }
 
 function toggleIVDSelectAll() {
