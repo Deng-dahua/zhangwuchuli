@@ -3242,7 +3242,7 @@ async def analyze_file_headers(
                 "issuer", "remark"
             ]
         elif module == "purchase-invoice":
-            # 取得发票26列 + 认证3项
+            # 取得发票26列
             field_order = [
                 "invoice_code", "invoice_no", "digital_invoice_no",
                 "seller_tax_no", "seller_name",
@@ -3251,8 +3251,7 @@ async def analyze_file_headers(
                 "goods_name", "spec", "unit", "quantity", "unit_price",
                 "amount", "tax_rate", "tax_amount", "total_amount",
                 "invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level",
-                "issuer", "remark",
-                "certification_status", "certification_date", "deduction_period"
+                "issuer", "remark"
             ]
         elif module == "bank-transaction":
             field_order = [
