@@ -3390,8 +3390,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
 
         used_fingerprints = {} if not force_import else None  # fp -> 行号，同批次去重；None时跳过
 
-        # 跨批次数据库查重：直接从存储的指纹列加载，100%精确
-        existing_fingerprints = set() if not force_import else None
+        # 跨批次数据库查重：始终加载，防止 force 导入时重复入库已有记录
+        existing_fingerprints = set()
         if module == "bank-transaction":
             for rec in db.query(BankTransaction._fingerprint).filter(
                 BankTransaction.company_id == company_id,
