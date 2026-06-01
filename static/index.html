@@ -4605,7 +4605,7 @@ async function batchDeleteBankTx() {
     const result = await api('/api/bank-transactions/batch-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids)
+      body: JSON.stringify({ids: ids})
     });
     toast(result.message, 'success');
     loadBankTxList();
