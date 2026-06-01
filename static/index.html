@@ -4487,35 +4487,38 @@ async function renderBankTransactions() {
     </select>`;
   }
 
-  const html = `
-    <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="stat-label">流水总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">笔</div></div>
-      <div class="stat-card"><div class="stat-label">收入合计</div><div class="stat-value" style="color:#e02424;">¥${stats.total_income.toLocaleString()}</div><div class="stat-sub">${stats.income_count} 笔</div></div>
-      <div class="stat-card"><div class="stat-label">支出合计</div><div class="stat-value" style="color:#0e9f6e;">¥${stats.total_expense.toLocaleString()}</div><div class="stat-sub">${stats.expense_count} 笔</div></div>
-      <div class="stat-card"><div class="stat-label">净流入</div><div class="stat-value" style="color:${stats.total_income - stats.total_expense >= 0 ? '#e02424' : '#0e9f6e'};">¥${(stats.total_income - stats.total_expense).toLocaleString()}</div><div class="stat-sub">收入-支出</div></div>
-      <div class="stat-card"><div class="stat-label">最新余额</div><div class="stat-value">¥${stats.last_balance.toLocaleString()}</div><div class="stat-sub"></div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">
-        <span>银行流水记录</span>
-        <div style="flex:1;"></div>
-        ${bankSelectHtml}
-        <button class="btn btn-outline btn-sm" onclick="showBankConfigModal()" style="margin-left:8px;">⚙️ 银行设置</button>
-        <button class="btn btn-outline btn-sm" onclick="showUploadModal('bank-transaction')" style="margin-left:8px;">📁 导入文件</button>
-        <button class="btn btn-primary btn-sm" onclick="showBankTxForm()">+ 新增流水</button>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <select id="bt-type-filter" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-          <option value="">全部类型</option><option value="收入">收入</option><option value="支出">支出</option>
-        </select>
-        <input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." oninput="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;">
-        <input type="date" id="bt-date-from" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-        <span style="line-height:32px;color:var(--gray-500);">至</span>
-        <input type="date" id="bt-date-to" onchange="loadBankTxList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-      </div>
-      <div id="bank-tx-table-container"></div>
-    </div>
-  `;
+  const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let html = '<div class="page-header"><h2>💰 银行流水</h2></div>';
+
+  // 统计卡片
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">流水总数</div></div>';
+  html += '<div class="stat-card"><div class="stat-value" style="color:#e02424;">¥' + fmt(stats.total_income) + '</div><div class="stat-label">收入合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value" style="color:#0e9f6e;">¥' + fmt(stats.total_expense) + '</div><div class="stat-label">支出合计</div></div>';
+  const net = stats.total_income - stats.total_expense;
+  html += '<div class="stat-card"><div class="stat-value" style="color:' + (net >= 0 ? '#e02424' : '#0e9f6e') + ';">¥' + fmt(net) + '</div><div class="stat-label">净流入</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.last_balance) + '</div><div class="stat-label">最新余额</div></div>';
+  html += '</div>';
+
+  // 工具栏
+  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += bankSelectHtml;
+  html += '<select id="bt-type-filter" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">';
+  html += '<option value="">全部类型</option><option value="收入">收入</option><option value="支出">支出</option>';
+  html += '</select>';
+  html += '<input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;" onkeydown="if(event.key===\'Enter\')loadBankTxList()">';
+  html += '<button onclick="loadBankTxList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
+  html += '<input type="date" id="bt-date-from" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
+  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
+  html += '<input type="date" id="bt-date-to" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
+  html += '<button onclick="document.getElementById(\'bt-type-filter\').value=\'\';document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '</div></div>';
+
+  // 表格
+  html += '<div id="bank-tx-table-container"></div>';
+
   document.getElementById('content-area').innerHTML = html;
   loadBankTxList();
 }
@@ -4565,7 +4568,7 @@ async function loadBankTxList() {
   }).join('');
 
   document.getElementById('bank-tx-table-container').innerHTML = `
-    <div class="table-wrap" style="max-height:calc(100vh - 350px);overflow-y:auto;padding-bottom:15px">
+    <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th>日期</th><th>银行</th><th>金额</th><th>余额</th><th>类型</th><th>对方户名</th><th>摘要</th><th>流水号</th><th>操作</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
