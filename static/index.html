@@ -1118,11 +1118,12 @@ function renderVoucherForm(editData = null) {
   el.innerHTML = `
     <div class="card">
       <div class="card-title">✏️ 填制记账凭证</div>
-      <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px">
-        当前期间：<b>${currentPeriod || '未设置'}</b> &nbsp;|&nbsp; 日期：<b>${today}</b>
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <label style="font-size:13px;font-weight:500">会计期间 *</label>
+        <input type="month" id="v-period" value="${currentPeriod}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px">
+        <span style="font-size:12px;color:var(--gray-400)">日期自动取当天</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-weight:600;font-size:14px">凭证明细</div>
         <button class="btn btn-secondary btn-sm" onclick="addDetailRow()">+ 添加行</button>
       </div>
 
@@ -1224,19 +1225,12 @@ function calcTotal() {
 
 async function submitVoucher() {
   const date = new Date().toISOString().slice(0, 10);
-  let period = currentPeriod;
-  if (!period) {
-    // 从第一行明细日期推期间
-    const firstDate = detailRows.find(r => r.account_code && r.debit_amount + r.credit_amount > 0);
-    if (firstDate) {
-      period = new Date().toISOString().slice(0, 7);
-    }
-  }
+  const period = document.getElementById('v-period')?.value || '';
   const summary = detailRows[0]?.summary || '记账凭证';
   const creator = '管理员';
   const attachments = 0;
 
-  if (!period) { toast('请先设置会计期间', 'error'); return; }
+  if (!period) { toast('请选择会计期间', 'error'); return; }
 
   const details = detailRows.filter(r => r.account_code);
   if (details.length < 2) { toast('至少需要2行明细', 'error'); return; }
@@ -1251,6 +1245,7 @@ async function submitVoucher() {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
 }
 
 // ==================== 总账 ====================
