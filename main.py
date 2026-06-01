@@ -3405,6 +3405,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     "issuer": rec.issuer or "",
                     "remark": rec.remark or "",
                 }
+                # 并上 raw_data 中的额外列
+                raw = rec.raw_data
+                if raw:
+                    try:
+                        rw = json.loads(raw) if isinstance(raw, str) else raw
+                        if isinstance(rw, dict):
+                            d.update({str(k): str(v) for k, v in rw.items()})
+                    except: pass
                 existing_fingerprints.add(row_fingerprint(d))
         elif module == "purchase-invoice":
             for rec in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
@@ -3440,6 +3448,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     "deduction_rate": str(rec.deduction_rate if rec.deduction_rate is not None else 100.0),
                     "remark": rec.remark or "",
                 }
+                # 并上 raw_data 中的额外列
+                raw = rec.raw_data
+                if raw:
+                    try:
+                        rw = json.loads(raw) if isinstance(raw, str) else raw
+                        if isinstance(rw, dict):
+                            d.update({str(k): str(v) for k, v in rw.items()})
+                    except: pass
                 existing_fingerprints.add(row_fingerprint(d))
         elif module == "input-vat-deduction":
             for rec in db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id).all():
@@ -3463,6 +3479,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     "risk_level": rec.risk_level or "",
                     "remark": rec.remark or "",
                 }
+                # 并上 raw_data 中的额外列
+                raw = rec.raw_data
+                if raw:
+                    try:
+                        rw = json.loads(raw) if isinstance(raw, str) else raw
+                        if isinstance(rw, dict):
+                            d.update({str(k): str(v) for k, v in rw.items()})
+                    except: pass
                 existing_fingerprints.add(row_fingerprint(d))
 
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
@@ -3579,8 +3603,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 空值保留为 None，不拦截
                     inv_no = mapped.get("invoice_no", "") or None
 
-                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
-                    fp = row_fingerprint(mapped)
+                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
+                    fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
                         continue
@@ -3652,7 +3676,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             is_positive=mapped.get("is_positive", "是") in ("是", "true", "True", "1", True),
                             invoice_risk_level=mapped.get("invoice_risk_level", ""),
                             issuer=mapped.get("issuer", ""),
-                            remark=mapped.get("remark", "")
+                            remark=mapped.get("remark", ""),
+                            raw_data=json.dumps(extra) if extra else None
                         )
                         db.add(inv)
                         used_fingerprints.add(fp)
@@ -3705,7 +3730,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             certification_status=mapped.get("certification_status", "未认证"),
                             certification_date=cert_date,
                             deduction_period=mapped.get("deduction_period", ""),
-                            remark=mapped.get("remark", "")
+                            remark=mapped.get("remark", ""),
+                            raw_data=json.dumps(extra) if extra else None
                         )
                         db.add(inv)
                         used_fingerprints.add(fp)
@@ -3742,8 +3768,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: deductible = float(deductible) if deductible else 0.0
                     except: deductible = 0.0
 
-                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
-                    fp = row_fingerprint(mapped)
+                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
+                    fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
                         continue
@@ -3770,7 +3796,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         invoice_status=mapped.get("invoice_status", "正常"),
                         check_time=check_time,
                         risk_level=mapped.get("risk_level", "正常"),
-                        remark=mapped.get("remark", "")
+                        remark=mapped.get("remark", ""),
+                        raw_data=json.dumps(extra) if extra else None
                     )
                     db.add(inv)
                     used_fingerprints.add(fp)

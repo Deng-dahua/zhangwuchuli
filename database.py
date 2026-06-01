@@ -578,6 +578,7 @@ class SalesInvoice(Base):
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
+    raw_data = Column(Text, comment="导入时的额外列数据JSON")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -634,6 +635,7 @@ class PurchaseInvoice(Base):
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
+    raw_data = Column(Text, comment="导入时的额外列数据JSON")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -738,6 +740,7 @@ class InputVATDeduction(Base):
     deduction_method = Column(String(30), default="凭票抵扣", comment="抵扣方式：凭票抵扣/计算抵扣/核定抵扣")
     voucher_no = Column(String(30), comment="关联凭证号")
     remark = Column(Text, comment="备注")
+    raw_data = Column(Text, comment="导入时的额外列数据JSON")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
