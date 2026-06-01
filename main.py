@@ -3682,17 +3682,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         Customer.name == name
                     ).first()
                 if not existing:
-                    # 自动生成编码
-                    existing_count = db.query(Customer).filter(
-                        Customer.company_id == company_id
-                    ).count()
-                    code = f"KH{existing_count + 1:04d}"
-                    while db.query(Customer).filter(
-                        Customer.company_id == company_id,
-                        Customer.code == code
-                    ).first():
-                        existing_count += 1
-                        code = f"KH{existing_count + 1:04d}"
+                    # 自动生成编码（用局部变量递增，避免同事务内重复）
+                    if 'next_cust_idx' not in locals():
+                        existing_count = db.query(Customer).filter(
+                            Customer.company_id == company_id
+                        ).count()
+                        next_cust_idx = existing_count + 1
+                    code = f"KH{next_cust_idx:04d}"
+                    next_cust_idx += 1
                     cust = Customer(
                         company_id=company_id,
                         code=code,
