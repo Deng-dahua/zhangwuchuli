@@ -818,11 +818,11 @@ async function loadCurrentPeriod() {
   try {
     const data = await api('/api/periods');
     const open = data.find(p => p.status === '开放');
-    currentPeriod = open ? open.period : (data[0]?.period || new Date().toISOString().slice(0, 7));
-    document.getElementById('current-period').textContent = currentPeriod;
+    currentPeriod = open ? open.period : (data[0]?.period || '');
+    document.getElementById('current-period').textContent = currentPeriod || '未设置';
   } catch (e) {
-    currentPeriod = new Date().toISOString().slice(0, 7);
-    document.getElementById('current-period').textContent = currentPeriod;
+    currentPeriod = '';
+    document.getElementById('current-period').textContent = '未设置';
   }
 }
 
@@ -1118,30 +1118,9 @@ function renderVoucherForm(editData = null) {
   el.innerHTML = `
     <div class="card">
       <div class="card-title">✏️ 填制记账凭证</div>
-      <div class="form-grid" style="margin-bottom:16px">
-        <div class="form-group">
-          <label>凭证日期 *</label>
-          <input type="date" class="form-control" id="v-date" value="${today}">
-        </div>
-        <div class="form-group">
-          <label>会计期间 *</label>
-          <input class="form-control" id="v-period" value="${currentPeriod}" placeholder="YYYY-MM">
-        </div>
-        <div class="form-group">
-          <label>摘要 *</label>
-          <input class="form-control" id="v-summary" placeholder="请输入摘要说明">
-        </div>
-        <div class="form-group">
-          <label>制单人</label>
-          <input class="form-control" id="v-creator" value="管理员">
-        </div>
-        <div class="form-group">
-          <label>附件张数</label>
-          <input type="number" class="form-control" id="v-attachments" value="0" min="0">
-        </div>
+      <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px">
+        当前期间：<b>${currentPeriod || '未设置'}</b> &nbsp;|&nbsp; 日期：<b>${today}</b>
       </div>
-
-      <hr class="section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-weight:600;font-size:14px">凭证明细</div>
         <button class="btn btn-secondary btn-sm" onclick="addDetailRow()">+ 添加行</button>
@@ -1244,13 +1223,20 @@ function calcTotal() {
 }
 
 async function submitVoucher() {
-  const date = document.getElementById('v-date').value;
-  const period = document.getElementById('v-period').value;
-  const summary = document.getElementById('v-summary').value;
-  const creator = document.getElementById('v-creator').value;
-  const attachments = parseInt(document.getElementById('v-attachments').value) || 0;
+  const date = new Date().toISOString().slice(0, 10);
+  let period = currentPeriod;
+  if (!period) {
+    // 从第一行明细日期推期间
+    const firstDate = detailRows.find(r => r.account_code && r.debit_amount + r.credit_amount > 0);
+    if (firstDate) {
+      period = new Date().toISOString().slice(0, 7);
+    }
+  }
+  const summary = detailRows[0]?.summary || '记账凭证';
+  const creator = '管理员';
+  const attachments = 0;
 
-  if (!date || !period || !summary) { toast('请填写日期、期间和摘要', 'error'); return; }
+  if (!period) { toast('请先设置会计期间', 'error'); return; }
 
   const details = detailRows.filter(r => r.account_code);
   if (details.length < 2) { toast('至少需要2行明细', 'error'); return; }
