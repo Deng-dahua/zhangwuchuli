@@ -4250,6 +4250,8 @@ async function renderPurchaseInvoices() {
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
+    html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()" style="display:none">🗑 批量删除</button>';
+    html += '</div></div>';
     let items = inv;
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
@@ -4272,7 +4274,7 @@ async function renderPurchaseInvoices() {
       );
     }
 
-    html += '<div class="table-wrap"><table><thead><tr>';
+    html += '<div class="table-wrap" style="padding-bottom:20px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
     html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>操作</th>';
     html += '</tr></thead><tbody>';
