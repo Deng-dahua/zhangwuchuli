@@ -2046,13 +2046,17 @@ async function renderCustomers() {
     el.innerHTML = `
       <div class="card">
         <div class="card-title">🤝 客户档案</div>
-        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust" style="display:none">🗑 批量删除</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
                 <tr>
+                  <td><input type="checkbox" class="cust-check" value="${c.id}" onchange="updateBatchDelCustBtn()"></td>
                   <td>${c.code}</td>
                   <td>${c.name}</td>
                   <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
@@ -2070,6 +2074,28 @@ async function renderCustomers() {
   } catch (e) {
     el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
   }
+}
+
+function toggleSelectAllCust(el) {
+  document.querySelectorAll('.cust-check').forEach(cb => { cb.checked = el.checked; });
+  updateBatchDelCustBtn();
+}
+function updateBatchDelCustBtn() {
+  const btn = document.getElementById('btn-batch-del-cust');
+  if (!btn) return;
+  const checked = document.querySelectorAll('.cust-check:checked').length;
+  btn.style.display = checked > 0 ? '' : 'none';
+  btn.textContent = `🗑 批量删除（${checked}）`;
+}
+async function batchDeleteCust() {
+  const checked = [...document.querySelectorAll('.cust-check:checked')].map(cb => parseInt(cb.value));
+  if (checked.length === 0) return;
+  if (!confirm(`确认删除选中的 ${checked.length} 条客户记录？此操作不可撤销！`)) return;
+  try {
+    await api('/api/customers/batch', { method: 'DELETE', body: JSON.stringify({ids: checked}) });
+    toast(`成功删除 ${checked.length} 条客户`, 'success');
+    renderCustomers();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function showCustForm(id, code, name, uscc) {
@@ -2124,23 +2150,22 @@ async function renderSuppliers() {
     el.innerHTML = `
       <div class="card">
         <div class="card-title">📦 供应商档案</div>
-        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp" style="display:none">🗑 批量删除</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>联系人</th><th>电话</th><th>信用额度</th><th>账期(天)</th><th>地址</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
                 <tr>
+                  <td><input type="checkbox" class="supp-check" value="${s.id}" onchange="updateBatchDelSuppBtn()"></td>
                   <td>${s.code}</td>
                   <td>${s.name}</td>
                   <td style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
-                  <td>${s.contact || '-'}</td>
-                  <td>${s.phone || '-'}</td>
-                  <td class="num">¥${fmt(s.credit_limit)}</td>
-                  <td>${s.payment_terms || 0}</td>
-                  <td>${s.address || '-'}</td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}','${esc(s.contact||'')}','${esc(s.phone||'')}',${s.credit_limit||0},${s.payment_terms||0},'${esc(s.address||'')}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteSupp(${s.id})">删除</button>
                   </td>
                 </tr>
@@ -2155,7 +2180,29 @@ async function renderSuppliers() {
   }
 }
 
-function showSuppForm(id, code, name, uscc, contact, phone, creditLimit, paymentTerms, address) {
+function toggleSelectAllSupp(el) {
+  document.querySelectorAll('.supp-check').forEach(cb => { cb.checked = el.checked; });
+  updateBatchDelSuppBtn();
+}
+function updateBatchDelSuppBtn() {
+  const btn = document.getElementById('btn-batch-del-supp');
+  if (!btn) return;
+  const checked = document.querySelectorAll('.supp-check:checked').length;
+  btn.style.display = checked > 0 ? '' : 'none';
+  btn.textContent = `🗑 批量删除（${checked}）`;
+}
+async function batchDeleteSupp() {
+  const checked = [...document.querySelectorAll('.supp-check:checked')].map(cb => parseInt(cb.value));
+  if (checked.length === 0) return;
+  if (!confirm(`确认删除选中的 ${checked.length} 条供应商记录？此操作不可撤销！`)) return;
+  try {
+    await api('/api/suppliers/batch', { method: 'DELETE', body: JSON.stringify({ids: checked}) });
+    toast(`成功删除 ${checked.length} 条供应商`, 'success');
+    renderSuppliers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function showSuppForm(id, code, name, uscc) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}供应商</h3>
@@ -2163,11 +2210,6 @@ function showSuppForm(id, code, name, uscc, contact, phone, creditLimit, payment
       <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="supp-code" value="${code||''}" placeholder="如：GYS001"></div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
-      <div class="form-field"><label>联系人</label><input id="supp-contact" value="${contact||''}"></div>
-      <div class="form-field"><label>电话</label><input id="supp-phone" value="${phone||''}"></div>
-      <div class="form-field"><label>信用额度</label><input id="supp-credit" type="number" step="0.01" value="${creditLimit||0}"></div>
-      <div class="form-field"><label>账期(天)</label><input id="supp-days" type="number" value="${paymentTerms||0}"></div>
-      <div class="form-field" style="grid-column:1/-1"><label>地址</label><input id="supp-addr" value="${address||''}"></div>
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveSupp(${id||0})">保存</button>
@@ -2180,12 +2222,7 @@ async function saveSupp(id) {
   const body = {
     code: document.getElementById('supp-code').value.trim(),
     name: document.getElementById('supp-name').value.trim(),
-    uscc: document.getElementById('supp-uscc')?.value.trim() || null,
-    contact: document.getElementById('supp-contact').value.trim(),
-    phone: document.getElementById('supp-phone').value.trim(),
-    credit_limit: parseFloat(document.getElementById('supp-credit').value) || 0,
-    payment_terms: parseInt(document.getElementById('supp-days').value) || 0,
-    address: document.getElementById('supp-addr').value.trim()
+    uscc: document.getElementById('supp-uscc')?.value.trim() || null
   };
   if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
   try {

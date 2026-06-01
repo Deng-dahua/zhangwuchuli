@@ -99,6 +99,9 @@ class EmployeeUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 # 客户
+class BatchDelete(BaseModel):
+    ids: list[int]
+
 class CustomerCreate(BaseModel):
     code: str
     name: str
@@ -123,11 +126,6 @@ class SupplierCreate(BaseModel):
     name: str
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
-    contact: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    credit_limit: Optional[float] = 0.0
-    payment_terms: Optional[int] = 30
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     remark: Optional[str] = None
@@ -136,11 +134,6 @@ class SupplierUpdate(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
-    contact: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    credit_limit: Optional[float] = None
-    payment_terms: Optional[int] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     is_active: Optional[bool] = None
@@ -496,9 +489,14 @@ def list_customers(
 
 @app.post("/api/customers")
 def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
-    if db.query(Customer).filter(Customer.company_id == company_id, Customer.code == data.code).first():
-        raise HTTPException(400, detail=f"客户编码 {data.code} 已存在")
-    # 校验统一社会信用代码
+    # 去重：名称或统一社会信用代码任一重复即拦截（编码不参与去重）
+    dup = db.query(Customer).filter(Customer.company_id == company_id)
+    if data.uscc:
+        dup = dup.filter(or_(Customer.name == data.name, Customer.uscc == data.uscc))
+    else:
+        dup = dup.filter(Customer.name == data.name)
+    if dup.first():
+        raise HTTPException(400, detail="客户名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -513,6 +511,16 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
+    # 去重：名称或统一社会信用代码任一重复即拦截（排除自身）
+    dup = db.query(Customer).filter(Customer.company_id == company_id, Customer.id != cust_id)
+    name = data.name if data.name else c.name
+    uscc = data.uscc if data.uscc else c.uscc
+    if uscc:
+        dup = dup.filter(or_(Customer.name == name, Customer.uscc == uscc))
+    else:
+        dup = dup.filter(Customer.name == name)
+    if dup.first():
+        raise HTTPException(400, detail="客户名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -521,6 +529,19 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
         setattr(c, k, v)
     db.commit()
     return {"message": "更新成功"}
+
+@app.delete("/api/customers/batch")
+def batch_delete_customers(
+    body: BatchDelete,
+    company_id: int = Query(1),
+    db: Session = Depends(get_db)
+):
+    deleted = db.query(Customer).filter(
+        Customer.company_id == company_id,
+        Customer.id.in_(body.ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条客户"}
 
 @app.delete("/api/customers/{cust_id}")
 def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
@@ -545,8 +566,7 @@ def list_suppliers(
     if keyword:
         q = q.filter(or_(
             Supplier.code.contains(keyword),
-            Supplier.name.contains(keyword),
-            Supplier.contact.contains(keyword)
+            Supplier.name.contains(keyword)
         ))
     if is_active is not None:
         q = q.filter(Supplier.is_active == is_active)
@@ -554,11 +574,8 @@ def list_suppliers(
     return [
         {
             "id": s.id, "code": s.code, "name": s.name,
-            "uscc": s.uscc or "",  # ← 新增
-            "tax_no": s.tax_no, "contact": s.contact,
-            "phone": s.phone, "address": s.address,
-            "credit_limit": s.credit_limit,
-            "payment_terms": s.payment_terms,
+            "uscc": s.uscc or "",
+            "tax_no": s.tax_no,
             "bank_name": s.bank_name,
             "bank_account": s.bank_account,
             "is_active": s.is_active,
@@ -568,8 +585,14 @@ def list_suppliers(
 
 @app.post("/api/suppliers")
 def create_supplier(data: SupplierCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
-    if db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == data.code).first():
-        raise HTTPException(400, detail=f"供应商编码 {data.code} 已存在")
+    # 去重：名称或统一社会信用代码任一重复即拦截（编码不参与去重）
+    dup = db.query(Supplier).filter(Supplier.company_id == company_id)
+    if data.uscc:
+        dup = dup.filter(or_(Supplier.name == data.name, Supplier.uscc == data.uscc))
+    else:
+        dup = dup.filter(Supplier.name == data.name)
+    if dup.first():
+        raise HTTPException(400, detail="供应商名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -584,6 +607,16 @@ def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
+    # 去重：名称或统一社会信用代码任一重复即拦截（排除自身）
+    dup = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id != supp_id)
+    name = data.name if data.name else s.name
+    uscc = data.uscc if data.uscc else s.uscc
+    if uscc:
+        dup = dup.filter(or_(Supplier.name == name, Supplier.uscc == uscc))
+    else:
+        dup = dup.filter(Supplier.name == name)
+    if dup.first():
+        raise HTTPException(400, detail="供应商名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -592,6 +625,19 @@ def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(
         setattr(s, k, v)
     db.commit()
     return {"message": "更新成功"}
+
+@app.delete("/api/suppliers/batch")
+def batch_delete_suppliers(
+    body: BatchDelete,
+    company_id: int = Query(1),
+    db: Session = Depends(get_db)
+):
+    deleted = db.query(Supplier).filter(
+        Supplier.company_id == company_id,
+        Supplier.id.in_(body.ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条供应商"}
 
 @app.delete("/api/suppliers/{supp_id}")
 def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
@@ -4689,12 +4735,20 @@ def handle_create_customer(sess, msg, db, sid):
 
 def save_customer(data, db, sess, sid):
     try:
-        existing = db.query(Customer).filter(Customer.company_id == company_id, Customer.code == data.get("code", "")).first()
-        if existing:
-            return {"reply": f"⚠️ 编码 {data['code']} 已存在，请换一个编码。", "session_id": sid, "action": None}
+        name = data.get("name", "")
+        # 去重：名称或统一社会信用代码任一重复即拦截
+        dup_q = db.query(Customer).filter(Customer.company_id == company_id)
+        uscc = data.get("uscc")
+        if uscc:
+            dup_q = dup_q.filter(or_(Customer.name == name, Customer.uscc == uscc))
+        else:
+            dup_q = dup_q.filter(Customer.name == name)
+        if dup_q.first():
+            return {"reply": "⚠️ 客户名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
         c = Customer(
             code=data.get("code", ""),
-            name=data.get("name", "未命名客户"),
+            name=name or "未命名客户",
+            uscc=data.get("uscc"),
             contact=data.get("contact"),
             phone=data.get("phone"),
             address=data.get("address"),
@@ -4726,7 +4780,7 @@ def handle_create_supplier(sess, msg, db, sid):
         if data.get("name"):
             if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).count() + 1:03d}"
             sess["data"] = data; sess["step"] = 2
-            return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充联系人、电话、地址吗？或说「**完成**」直接保存。", "session_id": sid, "action": None}
+            return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充其他信息吗？或说「**完成**」直接保存。", "session_id": sid, "action": None}
         return {"reply": "📦 新增供应商。请告诉我**供应商名称**，例如：\n「广州钢铁供应链有限公司」", "session_id": sid, "action": None}
 
     elif step == 1:
@@ -4738,16 +4792,8 @@ def handle_create_supplier(sess, msg, db, sid):
     elif step >= 2:
         if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
             return save_supplier(data, db, sess, sid)
-        contact_m = re.search(r"联系人[：:]*\s*(\S+)", msg)
-        phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
-        if contact_m: data["contact"] = contact_m.group(1)
-        if phone_m: data["phone"] = phone_m.group(1)
-        if not contact_m and not phone_m:
-            pt = msg.strip().split()
-            if len(pt) >= 1 and not data.get("contact"): data["contact"] = pt[0]
-            if len(pt) >= 2 and not data.get("phone"): data["phone"] = pt[1]
         sess["data"] = data
-        lines = [f"  {k}：{v}" for k, v in data.items() if v and k in ("name", "code", "contact", "phone")]
+        lines = [f"  {k}：{v}" for k, v in data.items() if v and k in ("name", "code")]
         return {"reply": "已更新：\n" + "\n".join(lines) + "\n\n说「**完成**」保存。", "session_id": sid, "action": None}
 
     return {"reply": "请继续...", "session_id": sid, "action": None}
@@ -4755,9 +4801,17 @@ def handle_create_supplier(sess, msg, db, sid):
 
 def save_supplier(data, db, sess, sid):
     try:
-        if db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == data.get("code", "")).first():
-            return {"reply": f"⚠️ 编码 {data['code']} 已存在。", "session_id": sid, "action": None}
-        s = Supplier(code=data.get("code", ""), name=data.get("name", ""), contact=data.get("contact"), phone=data.get("phone"))
+        name = data.get("name", "")
+        uscc = data.get("uscc")
+        # 去重：名称或统一社会信用代码任一重复即拦截
+        dup_q = db.query(Supplier).filter(Supplier.company_id == company_id)
+        if uscc:
+            dup_q = dup_q.filter(or_(Supplier.name == name, Supplier.uscc == uscc))
+        else:
+            dup_q = dup_q.filter(Supplier.name == name)
+        if dup_q.first():
+            return {"reply": "⚠️ 供应商名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
+        s = Supplier(code=data.get("code", ""), name=name, uscc=uscc)
         db.add(s); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
         return {"reply": f"🎉 供应商 **{s.name}**（{s.code}）添加成功！", "session_id": sid, "action": {"type": "reload", "page": "suppliers"}}
