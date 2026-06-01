@@ -3342,6 +3342,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
         imported = 0
         errors = []
         used_invoice_nos = set()  # 同批次去重
+        new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -3521,6 +3522,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         db.add(inv)
                         if inv_no:
                             used_invoice_nos.add(batch_key)
+                        # 收集购买方信息，导入后自动添加客户档案
+                        buyer_nm = mapped.get("buyer_name", "").strip()
+                        buyer_tn = mapped.get("buyer_tax_no", "").strip()
+                        if buyer_nm:
+                            new_customers[(buyer_tn, buyer_nm)] = True
                     else:
                         # 仅对非空发票号码做数据库查重
                         if inv_no:
@@ -3629,6 +3635,45 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 imported += 1
             except Exception as e:
                 errors.append(f"第{i+2}行: {str(e)}")
+
+        # 自动添加客户档案（仅开具发票导入时）
+        if module == "sales-invoice" and new_customers:
+            customer_added = 0
+            for (tax_no, name) in new_customers:
+                # 先按税号匹配，再按名称匹配
+                existing = None
+                if tax_no:
+                    existing = db.query(Customer).filter(
+                        Customer.company_id == company_id,
+                        Customer.tax_no == tax_no
+                    ).first()
+                if not existing:
+                    existing = db.query(Customer).filter(
+                        Customer.company_id == company_id,
+                        Customer.name == name
+                    ).first()
+                if not existing:
+                    # 自动生成编码
+                    existing_count = db.query(Customer).filter(
+                        Customer.company_id == company_id
+                    ).count()
+                    code = f"KH{existing_count + 1:04d}"
+                    while db.query(Customer).filter(
+                        Customer.company_id == company_id,
+                        Customer.code == code
+                    ).first():
+                        existing_count += 1
+                        code = f"KH{existing_count + 1:04d}"
+                    cust = Customer(
+                        company_id=company_id,
+                        code=code,
+                        name=name,
+                        tax_no=tax_no or None
+                    )
+                    db.add(cust)
+                    customer_added += 1
+            if customer_added > 0:
+                errors.append(f"自动新增 {customer_added} 个客户到客户档案")
 
         try:
             db.commit()
