@@ -3213,6 +3213,15 @@ async def analyze_file_headers(
                 "交易信息": ["payment_method", "reference_no", "voucher_no"],
                 "其他": ["remark"]
             }
+        elif module == "input-vat-deduction":
+            field_order = [
+                "check_status", "invoice_source", "domestic_sale_cert_no",
+                "digital_invoice_no", "invoice_code", "invoice_no",
+                "invoice_date", "seller_tax_id", "seller_name",
+                "amount", "tax_amount", "deductible_tax_amount",
+                "invoice_category", "invoice_category_label", "invoice_status",
+                "check_time", "risk_level", "remark"
+            ]
 
         return {
             "file_name": fname,
@@ -3487,6 +3496,61 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         db.add(inv)
                         if inv_no:
                             used_invoice_nos.add(batch_key)
+
+                elif module == "input-vat-deduction":
+                    # 进项抵扣导入：解析日期
+                    inv_date = None
+                    date_str = mapped.get("invoice_date", "")
+                    if date_str:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d",
+                                    "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"]:
+                            try:
+                                inv_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except: pass
+
+                    check_time = None
+                    ct_str = mapped.get("check_time", "")
+                    if ct_str:
+                        for fmt in ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                                    "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]:
+                            try:
+                                check_time = datetime.strptime(ct_str, fmt)
+                                break
+                            except: pass
+
+                    amt = mapped.get("amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
+                    try: amt = float(amt) if amt else 0.0
+                    except: amt = 0.0
+                    tax_amt = mapped.get("tax_amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
+                    try: tax_amt = float(tax_amt) if tax_amt else 0.0
+                    except: tax_amt = 0.0
+                    deductible = mapped.get("deductible_tax_amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
+                    try: deductible = float(deductible) if deductible else 0.0
+                    except: deductible = 0.0
+
+                    inv = InputVATDeduction(
+                        company_id=company_id,
+                        check_status=mapped.get("check_status", "未勾选"),
+                        invoice_source=mapped.get("invoice_source", ""),
+                        domestic_sale_cert_no=mapped.get("domestic_sale_cert_no", ""),
+                        digital_invoice_no=mapped.get("digital_invoice_no", ""),
+                        invoice_code=mapped.get("invoice_code", ""),
+                        invoice_no=mapped.get("invoice_no", ""),
+                        invoice_date=inv_date,
+                        seller_tax_id=mapped.get("seller_tax_id", ""),
+                        seller_name=mapped.get("seller_name", ""),
+                        amount=amt,
+                        tax_amount=tax_amt,
+                        deductible_tax_amount=deductible,
+                        invoice_category=mapped.get("invoice_category", ""),
+                        invoice_category_label=mapped.get("invoice_category_label", ""),
+                        invoice_status=mapped.get("invoice_status", "正常"),
+                        check_time=check_time,
+                        risk_level=mapped.get("risk_level", "正常"),
+                        remark=mapped.get("remark", "")
+                    )
+                    db.add(inv)
 
                 imported += 1
             except Exception as e:

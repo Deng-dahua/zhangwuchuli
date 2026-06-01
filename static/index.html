@@ -4220,6 +4220,7 @@ async function showSalesDetail(id) {
 
 let piTab = 'all';
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
+let ivdFilter = { invStatus: '', checkStatus: '', riskLevel: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices() {
   try {
@@ -4757,20 +4758,34 @@ async function renderInputVATDeductions() {
         <button class="btn btn-outline btn-sm" onclick="batchCheckVAT()" style="margin-left:8px;" id="btn-batch-check" disabled>✅ 批量勾选</button>
         <button class="btn btn-outline btn-sm" onclick="batchDeleteVAT()" style="margin-left:8px;color:var(--danger);" id="btn-batch-delete" disabled>🗑 批量删除</button>
       </div>
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-        <select id="ivd-status-filter" onchange="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-          <option value="">全部发票状态</option>
-          <option value="正常">正常</option><option value="作废">作废</option><option value="红冲">红冲</option>
-        </select>
-        <select id="ivd-check-filter" onchange="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-          <option value="">全部勾选状态</option>
-          <option value="已勾选">已勾选</option><option value="未勾选">未勾选</option>
-        </select>
-        <select id="ivd-risk-filter" onchange="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">
-          <option value="">全部风险等级</option>
-          <option value="正常">正常</option><option value="疑点">疑点</option><option value="异常">异常</option><option value="失控">失控</option>
-        </select>
-        <input id="ivd-keyword" placeholder="搜索发票号/数电号/销方..." oninput="loadVATDeductionList()" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:240px;">
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <select id="ivd-inv-status" onchange="ivdFilter.invStatus=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+            <option value="">全部发票状态</option>
+            <option value="正常" ${ivdFilter.invStatus==='正常'?'selected':''}>正常</option>
+            <option value="作废" ${ivdFilter.invStatus==='作废'?'selected':''}>作废</option>
+            <option value="红冲" ${ivdFilter.invStatus==='红冲'?'selected':''}>红冲</option>
+          </select>
+          <select id="ivd-check-status" onchange="ivdFilter.checkStatus=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+            <option value="">全部勾选状态</option>
+            <option value="已勾选" ${ivdFilter.checkStatus==='已勾选'?'selected':''}>已勾选</option>
+            <option value="未勾选" ${ivdFilter.checkStatus==='未勾选'?'selected':''}>未勾选</option>
+          </select>
+          <select id="ivd-risk-level" onchange="ivdFilter.riskLevel=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+            <option value="">全部风险等级</option>
+            <option value="正常" ${ivdFilter.riskLevel==='正常'?'selected':''}>正常</option>
+            <option value="疑点" ${ivdFilter.riskLevel==='疑点'?'selected':''}>疑点</option>
+            <option value="异常" ${ivdFilter.riskLevel==='异常'?'selected':''}>异常</option>
+            <option value="失控" ${ivdFilter.riskLevel==='失控'?'selected':''}>失控</option>
+          </select>
+          <input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="${ivdFilter.keyword||''}" onkeydown="if(event.key==='Enter'){ivdFilter.keyword=this.value;loadVATDeductionList()}">
+          <button onclick="ivdFilter.keyword=document.getElementById('ivdKeyword').value;loadVATDeductionList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>
+          <input type="date" value="${ivdFilter.dateFrom||''}" onchange="ivdFilter.dateFrom=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">
+          <span style="color:#9ca3af;font-size:13px;">至</span>
+          <input type="date" value="${ivdFilter.dateTo||''}" onchange="ivdFilter.dateTo=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">
+          <button onclick="ivdFilter.invStatus='';ivdFilter.checkStatus='';ivdFilter.riskLevel='';ivdFilter.keyword='';ivdFilter.dateFrom='';ivdFilter.dateTo='';loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
+          <button class="btn btn-outline" onclick="showUploadModal('input-vat-deduction')">📁 导入文件</button>
+        </div>
       </div>
       <div id="ivd-table-container"></div>
     </div>
@@ -4781,15 +4796,13 @@ async function renderInputVATDeductions() {
 }
 
 async function loadVATDeductionList() {
-  const invStatus = document.getElementById('ivd-status-filter')?.value || '';
-  const checkStatus = document.getElementById('ivd-check-filter')?.value || '';
-  const riskLevel = document.getElementById('ivd-risk-filter')?.value || '';
-  const kw = document.getElementById('ivd-keyword')?.value || '';
   const params = new URLSearchParams();
-  if (invStatus) params.set('invoice_status', invStatus);
-  if (checkStatus) params.set('check_status', checkStatus);
-  if (riskLevel) params.set('risk_level', riskLevel);
-  if (kw) params.set('keyword', kw);
+  if (ivdFilter.invStatus) params.set('invoice_status', ivdFilter.invStatus);
+  if (ivdFilter.checkStatus) params.set('check_status', ivdFilter.checkStatus);
+  if (ivdFilter.riskLevel) params.set('risk_level', ivdFilter.riskLevel);
+  if (ivdFilter.dateFrom) params.set('date_from', ivdFilter.dateFrom);
+  if (ivdFilter.dateTo) params.set('date_to', ivdFilter.dateTo);
+  if (ivdFilter.keyword) params.set('keyword', ivdFilter.keyword);
   const qs = params.toString();
   const data = await api('/api/input-vat-deductions' + (qs ? '?' + qs : ''));
   renderVATDeductionTable(data);
@@ -5018,7 +5031,7 @@ async function deleteVATDeduction(id) {
 // ==================== 文件导入 - 列映射 ====================
 
 function showUploadModal(module) {
-  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票' };
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣' };
   const modal = createModal(titles[module] || '导入文件', `
     <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
     <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
@@ -5081,7 +5094,11 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'tax_rate': '税率', 'tax_amount': '税额', 'total_amount': '价税合计',
     'invoice_source': '发票来源', 'invoice_category': '发票票种', 'status': '发票状态',
     'is_positive': '是否正数发票', 'invoice_risk_level': '发票风险等级', 'issuer': '开票人',
-    'certification_status': '认证状态', 'certification_date': '认证日期', 'deduction_period': '抵扣期间'
+    'certification_status': '认证状态', 'certification_date': '认证日期', 'deduction_period': '抵扣期间',
+    'check_status': '勾选状态', 'domestic_sale_cert_no': '转内销证明编号',
+    'seller_tax_id': '销售方纳税人识别号', 'invoice_category_label': '票种标签',
+    'check_time': '勾选时间', 'risk_level': '发票风险等级',
+    'deductible_tax_amount': '有效抵扣税额'
   };
 
   const fieldOrder = result.field_order; // 发票模块用平铺列表
@@ -5171,7 +5188,14 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'certification_date': ['认证日期'],
           'deduction_period': ['抵扣期间', '抵扣期', 'deduction'],
           'voucher_no': ['凭证号', 'voucher'],
-          'remark': ['备注', 'remark']
+          'remark': ['备注', 'remark'],
+          'check_status': ['勾选状态', '勾选', 'check'],
+          'domestic_sale_cert_no': ['转内销', '转内销证明', 'domestic'],
+          'seller_tax_id': ['销方识别号', '销方税号', '销售方纳税人', 'seller_tax_id'],
+          'invoice_category_label': ['票种标签', '标签', 'label'],
+          'check_time': ['勾选时间', 'check_time'],
+          'risk_level': ['风险等级', '风险', 'risk_level'],
+          'deductible_tax_amount': ['有效抵扣', '可抵扣', 'deductible']
         };
         const keys = km[field] || [fl];
         if (hl.includes(fl) || fl.includes(hl) || keys.some(k => hl.includes(k))) {
@@ -5272,6 +5296,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   if (module === 'bank-transaction') renderBankTransactions();
   else if (module === 'sales-invoice') renderSalesInvoices();
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
+  else if (module === 'input-vat-deduction') renderInputVATDeductions();
 }
 
 </script>
