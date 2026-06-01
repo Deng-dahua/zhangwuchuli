@@ -1113,6 +1113,7 @@ function renderVoucherForm(editData = null) {
     { line_no: 2, summary: '', account_code: '', debit_amount: 0, credit_amount: 0 },
   ];
 
+  const periodValue = editData ? editData.period : currentPeriod;
   const today = new Date().toISOString().slice(0, 10);
   const el = document.getElementById('content-area');
   el.innerHTML = `
@@ -1120,7 +1121,7 @@ function renderVoucherForm(editData = null) {
       <div class="card-title">✏️ 填制记账凭证</div>
       <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
         <label style="font-size:13px;font-weight:500">会计期间 *</label>
-        <input type="month" id="v-period" value="${currentPeriod}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px">
+        <input type="month" id="v-period" value="${periodValue}" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px">
         <span style="font-size:12px;color:var(--gray-400)">日期自动取当天</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -3854,6 +3855,7 @@ async function renderSalesInvoices() {
     html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()" style="display:none">🗑 批量删除</button>';
+    html += '<button class="btn btn-primary" id="siGenVoucherBtn" onclick="generateVoucherFromInvoices()" style="display:none">📝 生成凭证</button>';
     html += '<div class="tab-btn-group">';
     const salesTabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
     salesTabs.forEach(([t, label]) => {
@@ -4127,9 +4129,14 @@ function toggleSiSelectAll() {
 function updateSiBatchBtn() {
   const count = document.querySelectorAll('.si-check:checked').length;
   const btn = document.getElementById('siBatchDelBtn');
+  const voucherBtn = document.getElementById('siGenVoucherBtn');
   if (btn) {
     btn.style.display = count > 0 ? '' : 'none';
     btn.textContent = '🗑 批量删除（' + count + '）';
+  }
+  if (voucherBtn) {
+    voucherBtn.style.display = count > 0 ? '' : 'none';
+    voucherBtn.textContent = '📝 生成凭证（' + count + '）';
   }
 }
 
@@ -4146,6 +4153,40 @@ async function batchDeleteSalesInvoices() {
     });
     toast(result.message, 'success');
     renderSalesInvoices();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function generateVoucherFromInvoices() {
+  const checked = document.querySelectorAll('.si-check:checked');
+  if (checked.length === 0) return;
+
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const data = await api('/api/sales-invoices/generate-voucher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+
+    // 转换后端返回的数据格式为前端表单格式
+    const editData = {
+      period: data.period,
+      summary: data.summary,
+      details: data.details.map((d, idx) => ({
+        line_no: idx + 1,
+        summary: d.summary,
+        account_code: d.account_code || '',
+        debit_amount: d.debit || 0,
+        credit_amount: d.credit || 0
+      }))
+    };
+
+    // 直接调用填制凭证表单，并传入预填充数据
+    renderVoucherForm(editData);
+
+    toast(`已根据${data.invoice_count}张发票生成凭证，请选择科目后保存`, 'success');
   } catch (e) {
     toast(e.message, 'error');
   }

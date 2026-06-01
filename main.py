@@ -2377,6 +2377,71 @@ def batch_delete_sales_invoices(ids: list[int], company_id: int = Query(1), db: 
     return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
 
+@app.post("/api/sales-invoices/generate-voucher")
+def generate_voucher_from_sales_invoices(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    """根据开具发票记录生成凭证数据"""
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.id.in_(ids)
+    ).all()
+
+    if not invoices:
+        raise HTTPException(status_code=404, detail="未找到选中的发票")
+
+    # 计算总额
+    total_amount = sum(inv.amount or 0 for inv in invoices)
+    total_tax = sum(inv.tax_amount or 0 for inv in invoices)
+    total_price_tax = sum(inv.total_amount or 0 for inv in invoices)
+
+    # 获取第一个发票的日期作为凭证日期
+    voucher_date = invoices[0].invoice_date or date.today()
+    if isinstance(voucher_date, str):
+        voucher_date = voucher_date[:10]
+
+    # 生成凭证明细
+    details = []
+
+    # 借方：应收账款（或银行存款）
+    # 如果有客户信息，可以尝试匹配客户档案中的应收账款科目
+    details.append({
+        "account_code": "",  # 需要用户选择
+        "account_name": "请选择借方科目（如：应收账款、银行存款）",
+        "summary": f"开具发票{len(invoices)}张",
+        "debit": round(total_price_tax, 2),
+        "credit": 0
+    })
+
+    # 贷方：主营业务收入
+    details.append({
+        "account_code": "",
+        "account_name": "请选择贷方科目（如：主营业务收入）",
+        "summary": f"开具发票{len(invoices)}张",
+        "debit": 0,
+        "credit": round(total_amount, 2)
+    })
+
+    # 贷方：销项税额（如果有关税）
+    if total_tax > 0:
+        details.append({
+            "account_code": "",
+            "account_name": "请选择贷方科目（如：应交税费-应交增值税-销项税额）",
+            "summary": f"开具发票{len(invoices)}张",
+            "debit": 0,
+            "credit": round(total_tax, 2)
+        })
+
+    return {
+        "voucher_date": str(voucher_date),
+        "period": str(voucher_date)[:7] if isinstance(voucher_date, (str, date)) else "",
+        "summary": f"开具发票{len(invoices)}张",
+        "details": details,
+        "invoice_count": len(invoices),
+        "total_amount": round(total_amount, 2),
+        "total_tax": round(total_tax, 2),
+        "total_price_tax": round(total_price_tax, 2)
+    }
+
+
 # ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoiceCreate(BaseModel):
