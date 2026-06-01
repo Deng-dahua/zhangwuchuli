@@ -487,7 +487,7 @@ def list_customers(
         } for c in items
     ]
 
-@pp.post("/api/customers")
+@app.post("/api/customers")
 def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     # 去重：编码/名称/统一社会信用代码 任一重复即拦截
     conds = [Customer.code == data.code, Customer.name == data.name]
