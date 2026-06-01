@@ -2658,15 +2658,25 @@ def delete_bank_config(config_id: int, company_id: int = Query(1), db: Session =
 class BankTransactionCreate(BaseModel):
     bank_config_id: Optional[int] = None
     transaction_date: date
-    amount: float = 0.0
+    transaction_time: Optional[str] = None
+    application_date: Optional[date] = None
+    voucher_no: Optional[str] = None
+    debit_amount: Optional[float] = 0.0
+    credit_amount: Optional[float] = 0.0
     balance: Optional[float] = 0.0
     counterparty_name: Optional[str] = None
     counterparty_account: Optional[str] = None
     counterparty_bank: Optional[str] = None
+    transaction_serial_no: Optional[str] = None
+    voucher_seq: Optional[str] = None
+    record_status: Optional[str] = None
     summary: Optional[str] = None
-    transaction_type: str = "支出"
+    transaction_remark: Optional[str] = None
+    account_type: Optional[str] = None
+    # 旧字段（向后兼容）
+    amount: Optional[float] = 0.0
+    transaction_type: Optional[str] = "支出"
     payment_method: Optional[str] = None
-    voucher_no: Optional[str] = None
     reference_no: Optional[str] = None
     raw_data: Optional[str] = None
     remark: Optional[str] = None
@@ -2675,15 +2685,25 @@ class BankTransactionCreate(BaseModel):
 class BankTransactionUpdate(BaseModel):
     bank_config_id: Optional[int] = None
     transaction_date: Optional[date] = None
-    amount: Optional[float] = None
+    transaction_time: Optional[str] = None
+    application_date: Optional[date] = None
+    voucher_no: Optional[str] = None
+    debit_amount: Optional[float] = None
+    credit_amount: Optional[float] = None
     balance: Optional[float] = None
     counterparty_name: Optional[str] = None
     counterparty_account: Optional[str] = None
     counterparty_bank: Optional[str] = None
+    transaction_serial_no: Optional[str] = None
+    voucher_seq: Optional[str] = None
+    record_status: Optional[str] = None
     summary: Optional[str] = None
+    transaction_remark: Optional[str] = None
+    account_type: Optional[str] = None
+    # 旧字段（向后兼容）
+    amount: Optional[float] = None
     transaction_type: Optional[str] = None
     payment_method: Optional[str] = None
-    voucher_no: Optional[str] = None
     reference_no: Optional[str] = None
     raw_data: Optional[str] = None
     remark: Optional[str] = None
@@ -2718,14 +2738,25 @@ def list_bank_transactions(
     return [{
         "id": tx.id, "bank_config_id": tx.bank_config_id,
         "transaction_date": str(tx.transaction_date) if tx.transaction_date else "",
-        "amount": tx.amount or 0, "balance": tx.balance or 0,
-        "counterparty_name": tx.counterparty_name or "",
+        "transaction_time": str(tx.transaction_time) if tx.transaction_time else "",
+        "application_date": str(tx.application_date) if tx.application_date else "",
+        "voucher_no": tx.voucher_no or "",
+        "debit_amount": tx.debit_amount or 0,
+        "credit_amount": tx.credit_amount or 0,
+        "balance": tx.balance or 0,
         "counterparty_account": tx.counterparty_account or "",
+        "counterparty_name": tx.counterparty_name or "",
         "counterparty_bank": tx.counterparty_bank or "",
+        "transaction_serial_no": tx.transaction_serial_no or "",
+        "voucher_seq": tx.voucher_seq or "",
+        "record_status": tx.record_status or "",
         "summary": tx.summary or "",
+        "transaction_remark": tx.transaction_remark or "",
+        "account_type": tx.account_type or "",
+        # 旧字段（向后兼容）
+        "amount": tx.amount or 0,
         "transaction_type": tx.transaction_type,
         "payment_method": tx.payment_method or "",
-        "voucher_no": tx.voucher_no or "",
         "reference_no": tx.reference_no or "",
         "raw_data": tx.raw_data or "{}",
         "remark": tx.remark or "",
@@ -2764,6 +2795,9 @@ def bank_transaction_stats(
 
     total_income = income_base.with_entities(func.sum(BankTransaction.amount)).scalar() or 0
     total_expense = expense_base.with_entities(func.sum(func.abs(BankTransaction.amount))).scalar() or 0
+    # 新字段口径：借方=支出, 贷方=收入
+    total_debit = base.with_entities(func.sum(BankTransaction.debit_amount)).scalar() or 0
+    total_credit = base.with_entities(func.sum(BankTransaction.credit_amount)).scalar() or 0
     income_count = income_base.count()
     expense_count = expense_base.count()
 
@@ -3217,12 +3251,13 @@ async def analyze_file_headers(
                 "certification_status", "certification_date", "deduction_period"
             ]
         elif module == "bank-transaction":
-            field_groups = {
-                "核心字段": ["transaction_date", "amount", "balance", "summary", "transaction_type"],
-                "对方信息": ["counterparty_name", "counterparty_account", "counterparty_bank"],
-                "交易信息": ["payment_method", "reference_no", "voucher_no"],
-                "其他": ["remark"]
-            }
+            field_order = [
+                "transaction_date", "transaction_time", "application_date",
+                "voucher_no", "debit_amount", "credit_amount", "balance",
+                "counterparty_account", "counterparty_name", "counterparty_bank",
+                "transaction_serial_no", "voucher_seq", "record_status",
+                "summary", "transaction_remark", "account_type"
+            ]
         elif module == "input-vat-deduction":
             field_order = [
                 "check_status", "invoice_source", "domestic_sale_cert_no",
@@ -3331,18 +3366,35 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         errors.append(f"第{i+2}行: 无法解析日期")
                         continue
 
-                    # 解析金额
-                    amount = 0.0
-                    amt_str = mapped.get("amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
-                    try: amount = float(amt_str) if amt_str else 0.0
-                    except: amount = 0.0
+                    # 解析交易时间
+                    tx_time = None
+                    time_str = mapped.get("transaction_time", "")
+                    if time_str:
+                        for tf in ["%H:%M:%S", "%H:%M", "%H:%M:%S.%f"]:
+                            try:
+                                tx_time = datetime.strptime(time_str, tf).time()
+                                break
+                            except: pass
 
-                    tx_type = mapped.get("transaction_type", "支出")
-                    if tx_type in ("收入", "贷", "credit", "CR", "入账"):
-                        tx_type = "收入"
-                    else:
-                        tx_type = "支出"
+                    # 解析申请日期
+                    app_date = None
+                    app_date_str = mapped.get("application_date", "")
+                    if app_date_str:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+                            try:
+                                app_date = datetime.strptime(app_date_str, fmt).date()
+                                break
+                            except: pass
 
+                    # 解析借方/贷方金额
+                    def parse_amt(key):
+                        v = mapped.get(key, "0").replace(",", "").replace("￥", "").replace("¥", "")
+                        try: return float(v) if v else 0.0
+                        except: return 0.0
+                    debit_amount = parse_amt("debit_amount")
+                    credit_amount = parse_amt("credit_amount")
+
+                    # 余额
                     bal_str = mapped.get("balance", "0").replace(",", "").replace("￥", "").replace("¥", "")
                     balance = 0.0
                     try: balance = float(bal_str) if bal_str else 0.0
@@ -3352,15 +3404,24 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         company_id=company_id,
                         bank_config_id=bank_config_id,
                         transaction_date=tx_date,
-                        amount=amount,
+                        transaction_time=tx_time,
+                        application_date=app_date,
+                        voucher_no=mapped.get("voucher_no", ""),
+                        debit_amount=debit_amount,
+                        credit_amount=credit_amount,
                         balance=balance,
-                        counterparty_name=mapped.get("counterparty_name", ""),
                         counterparty_account=mapped.get("counterparty_account", ""),
+                        counterparty_name=mapped.get("counterparty_name", ""),
                         counterparty_bank=mapped.get("counterparty_bank", ""),
+                        transaction_serial_no=mapped.get("transaction_serial_no", ""),
+                        voucher_seq=mapped.get("voucher_seq", ""),
+                        record_status=mapped.get("record_status", ""),
                         summary=mapped.get("summary", ""),
-                        transaction_type=tx_type,
-                        payment_method=mapped.get("payment_method", ""),
-                        reference_no=mapped.get("reference_no", ""),
+                        transaction_remark=mapped.get("transaction_remark", ""),
+                        account_type=mapped.get("account_type", ""),
+                        # 旧字段兼容
+                        amount=credit_amount - debit_amount,
+                        transaction_type="收入" if credit_amount > 0 else "支出",
                         raw_data=json.dumps(extra, ensure_ascii=False) if extra else "{}",
                         remark=mapped.get("remark", "")
                     )

@@ -4543,25 +4543,28 @@ async function loadBankTxList() {
   const qs = params.toString();
   const data = await api('/api/bank-transactions' + (qs ? '?' + qs : ''));
 
-  const bankNames = {};
-  _bankConfigs.forEach(c => { bankNames[c.id] = c.bank_name; });
-
   const rows = data.map(tx => {
-    const amtClass = tx.transaction_type === '收入' ? 'color:#e02424;font-weight:600;' : 'color:#0e9f6e;font-weight:600;';
-    const sign = tx.transaction_type === '收入' ? '+' : '-';
-    const rawExtra = (() => { try { return JSON.parse(tx.raw_data || '{}'); } catch(e) { return {}; } })();
-    const extraBadges = Object.entries(rawExtra).slice(0, 3).map(([k,v]) => `<span style="font-size:11px;background:var(--gray-100);padding:1px 6px;border-radius:4px;margin:0 2px;">${k}: ${v}</span>`).join('');
+    const debitColor = (tx.debit_amount || 0) > 0 ? 'color:#e02424;font-weight:600;' : '';
+    const creditColor = (tx.credit_amount || 0) > 0 ? 'color:#0e9f6e;font-weight:600;' : '';
     return `
       <tr>
         <td><input type="checkbox" class="bt-check" data-id="${tx.id}" onchange="updateBankTxBatchBtn()"></td>
         <td>${tx.transaction_date}</td>
-        <td>${bankNames[tx.bank_config_id] || '-'}</td>
-        <td style="${amtClass}">${sign}¥${Math.abs(tx.amount).toLocaleString()}</td>
-        <td>¥${tx.balance.toLocaleString()}</td>
-        <td>${tx.transaction_type}</td>
+        <td>${tx.transaction_time || '-'}</td>
+        <td>${tx.application_date || '-'}</td>
+        <td>${tx.voucher_no || '-'}</td>
+        <td style="${debitColor}">${(tx.debit_amount || 0) > 0 ? '¥' + (tx.debit_amount || 0).toLocaleString() : '-'}</td>
+        <td style="${creditColor}">${(tx.credit_amount || 0) > 0 ? '¥' + (tx.credit_amount || 0).toLocaleString() : '-'}</td>
+        <td>¥${(tx.balance || 0).toLocaleString()}</td>
+        <td>${tx.counterparty_account || '-'}</td>
         <td>${tx.counterparty_name || '-'}</td>
-        <td>${tx.summary || '-'}${extraBadges}</td>
-        <td>${tx.reference_no || '-'}</td>
+        <td>${tx.counterparty_bank || '-'}</td>
+        <td>${tx.transaction_serial_no || '-'}</td>
+        <td>${tx.voucher_seq || '-'}</td>
+        <td>${tx.record_status || '-'}</td>
+        <td>${tx.summary || '-'}</td>
+        <td>${tx.transaction_remark || '-'}</td>
+        <td>${tx.account_type || '-'}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="editBankTx(${tx.id})">编辑</button>
           <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankTx(${tx.id})">删除</button>
@@ -4573,8 +4576,8 @@ async function loadBankTxList() {
     <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
-      <th>日期</th><th>银行</th><th>金额</th><th>余额</th><th>类型</th><th>对方户名</th><th>摘要</th><th>流水号</th><th>操作</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>操作</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="18" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
 }
 
@@ -4618,17 +4621,21 @@ function showBankTxForm(id) {
     <div class="form-grid">
       <div class="form-group"><label>银行</label><select id="btf-bank" class="form-input">${bankOpts}</select></div>
       <div class="form-group"><label>交易日期 *</label><input id="btf-date" type="date" class="form-input"></div>
-      <div class="form-group"><label>交易类型</label><select id="btf-type" class="form-input"><option value="支出">支出</option><option value="收入">收入</option></select></div>
-      <div class="form-group"><label>金额 *</label><input id="btf-amount" type="number" step="0.01" class="form-input" placeholder="金额（正数）"></div>
+      <div class="form-group"><label>交易时间</label><input id="btf-time" type="time" step="1" class="form-input"></div>
+      <div class="form-group"><label>申请日期</label><input id="btf-app-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>凭证号</label><input id="btf-voucher" class="form-input"></div>
+      <div class="form-group"><label>借方金额</label><input id="btf-debit" type="number" step="0.01" class="form-input" placeholder="0.00"></div>
+      <div class="form-group"><label>贷方金额</label><input id="btf-credit" type="number" step="0.01" class="form-input" placeholder="0.00"></div>
       <div class="form-group"><label>余额</label><input id="btf-balance" type="number" step="0.01" class="form-input"></div>
-      <div class="form-group"><label>结算方式</label><input id="btf-method" class="form-input" placeholder="如：转账/现金/电汇"></div>
-      <div class="form-group"><label>对方户名</label><input id="btf-cparty" class="form-input"></div>
       <div class="form-group"><label>对方账号</label><input id="btf-cparty-acc" class="form-input"></div>
-      <div class="form-group"><label>对方开户行</label><input id="btf-cparty-bank" class="form-input"></div>
-      <div class="form-group"><label>流水号</label><input id="btf-ref" class="form-input"></div>
-      <div class="form-group"><label>关联凭证号</label><input id="btf-voucher" class="form-input"></div>
+      <div class="form-group"><label>对方户名</label><input id="btf-cparty" class="form-input"></div>
+      <div class="form-group"><label>对方行名</label><input id="btf-cparty-bank" class="form-input"></div>
+      <div class="form-group"><label>交易流水号</label><input id="btf-serial" class="form-input"></div>
+      <div class="form-group"><label>传票序号</label><input id="btf-seq" class="form-input"></div>
+      <div class="form-group"><label>记录状态</label><input id="btf-status" class="form-input" placeholder="正常"></div>
+      <div class="form-group"><label>客户账户类型</label><input id="btf-account-type" class="form-input"></div>
       <div class="form-group" style="grid-column:1/-1;"><label>摘要</label><input id="btf-summary" class="form-input" placeholder="交易摘要/用途说明"></div>
-      <div class="form-group" style="grid-column:1/-1;"><label>备注</label><textarea id="btf-remark" class="form-input" rows="2"></textarea></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>交易附言</label><textarea id="btf-txn-remark" class="form-input" rows="2"></textarea></div>
     </div>
     <div style="text-align:right;margin-top:16px;">
       <button class="btn" onclick="closeModal()">取消</button>
@@ -4641,17 +4648,21 @@ function showBankTxForm(id) {
     api('/api/bank-transactions/' + id).then(tx => {
       document.getElementById('btf-bank').value = tx.bank_config_id || '';
       document.getElementById('btf-date').value = tx.transaction_date;
-      document.getElementById('btf-type').value = tx.transaction_type;
-      document.getElementById('btf-amount').value = Math.abs(tx.amount);
-      document.getElementById('btf-balance').value = tx.balance;
-      document.getElementById('btf-method').value = tx.payment_method;
-      document.getElementById('btf-cparty').value = tx.counterparty_name;
-      document.getElementById('btf-cparty-acc').value = tx.counterparty_account;
-      document.getElementById('btf-cparty-bank').value = tx.counterparty_bank;
-      document.getElementById('btf-ref').value = tx.reference_no;
-      document.getElementById('btf-voucher').value = tx.voucher_no;
-      document.getElementById('btf-summary').value = tx.summary;
-      document.getElementById('btf-remark').value = tx.remark;
+      document.getElementById('btf-time').value = tx.transaction_time || '';
+      document.getElementById('btf-app-date').value = tx.application_date || '';
+      document.getElementById('btf-voucher').value = tx.voucher_no || '';
+      document.getElementById('btf-debit').value = tx.debit_amount || 0;
+      document.getElementById('btf-credit').value = tx.credit_amount || 0;
+      document.getElementById('btf-balance').value = tx.balance || 0;
+      document.getElementById('btf-cparty-acc').value = tx.counterparty_account || '';
+      document.getElementById('btf-cparty').value = tx.counterparty_name || '';
+      document.getElementById('btf-cparty-bank').value = tx.counterparty_bank || '';
+      document.getElementById('btf-serial').value = tx.transaction_serial_no || '';
+      document.getElementById('btf-seq').value = tx.voucher_seq || '';
+      document.getElementById('btf-status').value = tx.record_status || '';
+      document.getElementById('btf-account-type').value = tx.account_type || '';
+      document.getElementById('btf-summary').value = tx.summary || '';
+      document.getElementById('btf-txn-remark').value = tx.transaction_remark || '';
     });
   }
 }
@@ -4660,17 +4671,21 @@ async function saveBankTx(id) {
   const body = {
     bank_config_id: parseInt(document.getElementById('btf-bank').value) || null,
     transaction_date: document.getElementById('btf-date').value,
-    transaction_type: document.getElementById('btf-type').value,
-    amount: parseFloat(document.getElementById('btf-amount').value) || 0,
-    balance: parseFloat(document.getElementById('btf-balance').value) || 0,
-    payment_method: document.getElementById('btf-method').value,
-    counterparty_name: document.getElementById('btf-cparty').value,
-    counterparty_account: document.getElementById('btf-cparty-acc').value,
-    counterparty_bank: document.getElementById('btf-cparty-bank').value,
-    reference_no: document.getElementById('btf-ref').value,
+    transaction_time: document.getElementById('btf-time').value || null,
+    application_date: document.getElementById('btf-app-date').value || null,
     voucher_no: document.getElementById('btf-voucher').value,
+    debit_amount: parseFloat(document.getElementById('btf-debit').value) || 0,
+    credit_amount: parseFloat(document.getElementById('btf-credit').value) || 0,
+    balance: parseFloat(document.getElementById('btf-balance').value) || 0,
+    counterparty_account: document.getElementById('btf-cparty-acc').value,
+    counterparty_name: document.getElementById('btf-cparty').value,
+    counterparty_bank: document.getElementById('btf-cparty-bank').value,
+    transaction_serial_no: document.getElementById('btf-serial').value,
+    voucher_seq: document.getElementById('btf-seq').value,
+    record_status: document.getElementById('btf-status').value,
     summary: document.getElementById('btf-summary').value,
-    remark: document.getElementById('btf-remark').value
+    transaction_remark: document.getElementById('btf-txn-remark').value,
+    account_type: document.getElementById('btf-account-type').value
   };
   try {
     if (id) {
@@ -5071,10 +5086,13 @@ async function handleFileSelect(input, module) {
 
 function buildMappingUI(result, module, file, bankConfigId) {
   const fieldLabels = {
-    'transaction_date': '交易日期', 'amount': '金额', 'balance': '余额',
-    'counterparty_name': '对方户名', 'counterparty_account': '对方账号', 'counterparty_bank': '对方开户行',
-    'summary': '摘要', 'transaction_type': '交易类型', 'payment_method': '结算方式',
-    'reference_no': '流水号', 'voucher_no': '凭证号', 'remark': '备注',
+    'transaction_date': '交易日期', 'transaction_time': '交易时间', 'application_date': '申请日期',
+    'debit_amount': '借方金额', 'credit_amount': '贷方金额', 'balance': '余额',
+    'counterparty_name': '对方户名', 'counterparty_account': '对方账号', 'counterparty_bank': '对方行名',
+    'transaction_serial_no': '交易流水号', 'voucher_seq': '传票序号', 'record_status': '记录状态',
+    'summary': '摘要', 'transaction_remark': '交易附言', 'account_type': '客户账户类型',
+    'amount': '金额', 'transaction_type': '交易类型', 'payment_method': '结算方式',
+    'voucher_no': '凭证号', 'reference_no': '流水号', 'remark': '备注',
     'invoice_code': '发票代码', 'invoice_no': '发票号码', 'digital_invoice_no': '数电发票号码',
     'seller_tax_no': '销方识别号', 'seller_name': '销方名称',
     'buyer_tax_no': '购方识别号', 'buyer_name': '购买方名称',
@@ -5146,12 +5164,24 @@ function buildMappingUI(result, module, file, bankConfigId) {
       const fl = field.toLowerCase();
       const km = {
 
-          'amount': ['金额', 'amt', '不含税'],
-          'transaction_date': ['日期', 'date', '时间'],
-          'counterparty_name': ['对方', '户名'],
+          'transaction_date': ['交易日期', '日期', 'date'],
+          'transaction_time': ['交易时间', '时间', 'time'],
+          'application_date': ['申请日期', '申请', 'application'],
+          'debit_amount': ['借方金额', '借方', 'debit'],
+          'credit_amount': ['贷方金额', '贷方', 'credit'],
           'balance': ['余额', 'bal'],
+          'counterparty_name': ['对方户名', '户名', '对方名称'],
+          'counterparty_account': ['对方账号', '账号', 'account'],
+          'counterparty_bank': ['对方行名', '行名', '开户行', '银行名称'],
+          'transaction_serial_no': ['交易流水号', '流水号', 'serial'],
+          'voucher_seq': ['传票序号', '传票', 'seq'],
+          'record_status': ['记录状态', '状态', 'status'],
           'summary': ['摘要', '用途', '说明'],
-          'reference_no': ['流水号', '参考号', 'ref'],
+          'transaction_remark': ['交易附言', '附言', 'remark'],
+          'account_type': ['客户账户类型', '账户类型', 'account_type'],
+          'voucher_no': ['凭证号', 'voucher'],
+          'amount': ['金额', 'amt', '不含税'],
+          'reference_no': ['参考号', 'ref'],
           'invoice_no': ['发票号码', 'inv_no'],
           'invoice_code': ['发票代码', 'inv_code'],
           'invoice_date': ['开票日期', 'inv_date', '发票日期'],
@@ -5172,21 +5202,20 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'total_amount': ['价税合计', 'total', '合计'],
           'invoice_source': ['发票来源', '来源', 'source'],
           'invoice_category': ['发票票种', '票种', 'category'],
-          'status': ['状态', 'status'],
+          'status': ['发票状态'],
           'is_positive': ['正数', 'positive', '是否正数'],
           'invoice_risk_level': ['风险等级', 'risk', '风险'],
           'issuer': ['开票人', 'issuer'],
           'certification_status': ['认证状态', 'cert'],
           'certification_date': ['认证日期'],
           'deduction_period': ['抵扣期间', '抵扣期', 'deduction'],
-          'voucher_no': ['凭证号', 'voucher'],
           'remark': ['备注', 'remark'],
           'check_status': ['勾选状态', '勾选', 'check'],
           'domestic_sale_cert_no': ['转内销', '转内销证明', 'domestic'],
           'seller_tax_id': ['销方识别号', '销方税号', '销售方纳税人', 'seller_tax_id'],
           'invoice_category_label': ['票种标签', '标签', 'label'],
           'check_time': ['勾选时间', 'check_time'],
-          'risk_level': ['风险等级', '风险', 'risk_level'],
+          'risk_level': ['风险等级', 'risk_level'],
           'deductible_tax_amount': ['有效抵扣', '可抵扣', 'deductible'],
           'invoice_status': ['发票状态', 'invoice_status']
         };

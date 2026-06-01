@@ -2,7 +2,7 @@
 中小制造业账务处理系统 - 数据库模型（多公司账套版本）
 """
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Float, Date, DateTime,
+    create_engine, Column, Integer, String, Float, Date, Time, DateTime,
     Text, Boolean, ForeignKey, inspect, text as TextClause, UniqueConstraint, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -667,18 +667,28 @@ class BankTransaction(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
     bank_config_id = Column(Integer, ForeignKey("bank_configs.id"), nullable=True, comment="关联银行配置")
     transaction_date = Column(Date, nullable=False, comment="交易日期")
-    amount = Column(Float, default=0.0, comment="交易金额（收入为正/支出为负）")
+    transaction_time = Column(Time, nullable=True, comment="交易时间")
+    application_date = Column(Date, nullable=True, comment="申请日期")
+    voucher_no = Column(String(30), comment="凭证号")
+    debit_amount = Column(Float, default=0.0, comment="借方金额")
+    credit_amount = Column(Float, default=0.0, comment="贷方金额")
     balance = Column(Float, default=0.0, comment="余额")
-    counterparty_name = Column(String(100), comment="对方户名")
     counterparty_account = Column(String(50), comment="对方账号")
-    counterparty_bank = Column(String(100), comment="对方开户行")
+    counterparty_name = Column(String(100), comment="对方户名")
+    counterparty_bank = Column(String(100), comment="对方行名")
+    transaction_serial_no = Column(String(50), comment="交易流水号")
+    voucher_seq = Column(String(30), comment="传票序号")
+    record_status = Column(String(20), comment="记录状态")
     summary = Column(String(300), comment="摘要/用途")
-    transaction_type = Column(String(20), default="支出", comment="类型：收入/支出")
-    payment_method = Column(String(30), comment="结算方式")
-    voucher_no = Column(String(30), comment="关联凭证号")
-    reference_no = Column(String(50), comment="银行流水号/交易参考号")
-    raw_data = Column(Text, comment="原始数据JSON：存文件中的额外列")
-    remark = Column(Text, comment="备注")
+    transaction_remark = Column(Text, comment="交易附言")
+    account_type = Column(String(30), comment="客户账户类型")
+    # === 旧字段（保留向后兼容） ===
+    amount = Column(Float, default=0.0, comment="交易金额（旧：收入为正/支出为负）")
+    transaction_type = Column(String(20), default="支出", comment="类型（旧）")
+    payment_method = Column(String(30), comment="结算方式（旧）")
+    reference_no = Column(String(50), comment="银行流水号（旧）")
+    raw_data = Column(Text, comment="原始数据JSON（旧）")
+    remark = Column(Text, comment="备注（旧）")
     created_at = Column(DateTime, default=datetime.now)
 
 
