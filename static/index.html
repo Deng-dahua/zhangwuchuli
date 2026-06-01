@@ -4573,10 +4573,10 @@ async function loadBankTxList() {
   }).join('');
 
   document.getElementById('bank-tx-table-container').innerHTML = `
-    <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px">
+    <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;overflow-x:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
-      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>操作</th>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th style="width:100px">操作</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="18" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
 }
@@ -5087,12 +5087,13 @@ async function handleFileSelect(input, module) {
 function buildMappingUI(result, module, file, bankConfigId) {
   const fieldLabels = {
     'transaction_date': '交易日期', 'transaction_time': '交易时间', 'application_date': '申请日期',
-    'debit_amount': '借方金额', 'credit_amount': '贷方金额', 'balance': '余额',
-    'counterparty_name': '对方户名', 'counterparty_account': '对方账号', 'counterparty_bank': '对方行名',
+    'voucher_no': '凭证号', 'debit_amount': '借方金额', 'credit_amount': '贷方金额', 'balance': '余额',
+    'counterparty_account': '对方账号', 'counterparty_name': '对方户名', 'counterparty_bank': '对方行名',
     'transaction_serial_no': '交易流水号', 'voucher_seq': '传票序号', 'record_status': '记录状态',
     'summary': '摘要', 'transaction_remark': '交易附言', 'account_type': '客户账户类型',
+    // 旧字段（保留向后兼容）
     'amount': '金额', 'transaction_type': '交易类型', 'payment_method': '结算方式',
-    'voucher_no': '凭证号', 'reference_no': '流水号', 'remark': '备注',
+    'reference_no': '流水号', 'remark': '备注',
     'invoice_code': '发票代码', 'invoice_no': '发票号码', 'digital_invoice_no': '数电发票号码',
     'seller_tax_no': '销方识别号', 'seller_name': '销方名称',
     'buyer_tax_no': '购方识别号', 'buyer_name': '购买方名称',
@@ -5167,11 +5168,12 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'transaction_date': ['交易日期', '日期', 'date'],
           'transaction_time': ['交易时间', '时间', 'time'],
           'application_date': ['申请日期', '申请', 'application'],
+          'voucher_no': ['凭证号', 'voucher'],
           'debit_amount': ['借方金额', '借方', 'debit'],
           'credit_amount': ['贷方金额', '贷方', 'credit'],
           'balance': ['余额', 'bal'],
-          'counterparty_name': ['对方户名', '户名', '对方名称'],
           'counterparty_account': ['对方账号', '账号', 'account'],
+          'counterparty_name': ['对方户名', '户名', '对方名称'],
           'counterparty_bank': ['对方行名', '行名', '开户行', '银行名称'],
           'transaction_serial_no': ['交易流水号', '流水号', 'serial'],
           'voucher_seq': ['传票序号', '传票', 'seq'],
@@ -5179,7 +5181,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'summary': ['摘要', '用途', '说明'],
           'transaction_remark': ['交易附言', '附言', 'remark'],
           'account_type': ['客户账户类型', '账户类型', 'account_type'],
-          'voucher_no': ['凭证号', 'voucher'],
+          // 旧字段（保留向后兼容）
           'amount': ['金额', 'amt', '不含税'],
           'reference_no': ['参考号', 'ref'],
           'invoice_no': ['发票号码', 'inv_no'],
