@@ -3533,15 +3533,6 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
-                        # 仅对非空发票号码做数据库查重
-                        if inv_no:
-                            existing = db.query(SalesInvoice).filter(
-                                SalesInvoice.company_id == company_id,
-                                SalesInvoice.invoice_no == inv_no
-                            ).first()
-                            if existing:
-                                errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
-                                continue
                         inv = SalesInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
@@ -3577,15 +3568,6 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         if buyer_nm:
                             new_customers[(buyer_tn, buyer_nm)] = True
                     else:
-                        # 仅对非空发票号码做数据库查重
-                        if inv_no:
-                            existing = db.query(PurchaseInvoice).filter(
-                                PurchaseInvoice.company_id == company_id,
-                                PurchaseInvoice.invoice_no == inv_no
-                            ).first()
-                            if existing:
-                                errors.append(f"第{i+2}行: 发票号码 {inv_no} 已存在，跳过")
-                                continue
                         cert_date = None
                         cert_date_str = mapped.get("certification_date", "")
                         if cert_date_str:
