@@ -2493,9 +2493,12 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     total_count = base.count()
     total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
-    total_tax = sum(a[0] or 0 for a in base.filter(
+    # 可抵扣税额：仅统计专票 + 铁路电子客票
+    total_tax = db.query(func.sum(PurchaseInvoice.tax_amount)).filter(
+        PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_category.in_(["数电发票（增值税专用发票）", "数电发票（铁路电子客票）"])
-    ).with_entities(PurchaseInvoice.tax_amount).all())
+    ).scalar() or 0
+    total_tax = round(total_tax, 2)
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
@@ -2505,7 +2508,7 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     return {
         "total_count": total_count, "total_amt": round(total_amt, 2),
         "total_amount": round(total_amount, 2),
-        "total_tax": round(total_tax, 2),
+        "total_tax": total_tax,
         "normal_count": normal_count, "void_count": void_count,
         "red_count": red_count,
         "uncertified_count": uncertified_count,
