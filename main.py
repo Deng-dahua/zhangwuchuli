@@ -2364,6 +2364,7 @@ class PurchaseInvoiceCreate(BaseModel):
     certification_status: str = "未认证"
     certification_date: Optional[date] = None
     deduction_period: Optional[str] = None
+    deduction_rate: Optional[float] = 100.0
     remark: Optional[str] = None
 
 
@@ -2395,9 +2396,8 @@ class PurchaseInvoiceUpdate(BaseModel):
     certification_status: Optional[str] = None
     certification_date: Optional[date] = None
     deduction_period: Optional[str] = None
+    deduction_rate: Optional[float] = None
     remark: Optional[str] = None
-
-
 @app.get("/api/purchase-invoices")
 def list_purchase_invoices(
     company_id: int = Query(1),
@@ -2459,6 +2459,7 @@ def list_purchase_invoices(
         "certification_status": inv.certification_status,
         "certification_date": str(inv.certification_date) if inv.certification_date else "",
         "deduction_period": inv.deduction_period or "",
+        "deduction_rate": inv.deduction_rate if inv.deduction_rate is not None else 100.0,
         "remark": inv.remark or "",
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
@@ -2481,12 +2482,16 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     total_count = base.count()
     total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
-    # 可抵扣税额：仅统计专票 + 铁路电子客票
-    total_tax = db.query(func.sum(PurchaseInvoice.tax_amount)).filter(
+    # 可抵扣税额：tax_amount * deduction_rate / 100，仅统计专票 + 铁路电子客票
+    deductible_invoices = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.tax_amount > 0,
         PurchaseInvoice.invoice_category.in_(["数电发票（增值税专用发票）", "数电发票（铁路电子客票）"])
-    ).scalar() or 0
-    total_tax = round(total_tax, 2)
+    ).all()
+    total_tax = round(sum(
+        (inv.tax_amount or 0) * ((inv.deduction_rate if inv.deduction_rate is not None else 100.0) / 100.0)
+        for inv in deductible_invoices
+    ), 2)
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
@@ -2540,6 +2545,7 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
         "certification_status": inv.certification_status,
         "certification_date": str(inv.certification_date) if inv.certification_date else "",
         "deduction_period": inv.deduction_period or "",
+        "deduction_rate": inv.deduction_rate if inv.deduction_rate is not None else 100.0,
         "remark": inv.remark or "",
         "created_at": str(inv.created_at) if inv.created_at else "",
         "updated_at": str(inv.updated_at) if inv.updated_at else ""
@@ -3329,9 +3335,128 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
         # 根据映射转换并导入
         imported = 0
         errors = []
-        used_invoice_nos = set()  # 发票同批次去重
-        used_bank_serials = set()  # 银行流水同批次去重（交易流水号）
-        used_vat_keys = set()  # 进项抵扣同批次去重（发票代码+号码）
+
+        # 全行指纹去重：比对整行所有列数据，而非单一字段
+        def row_fingerprint(values_dict):
+            """生成全行指纹：所有列名+值排序后组成元组，可哈希对比"""
+            return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
+
+        used_fingerprints = set()  # 同批次去重
+
+        # 跨批次数据库查重：预查询已有记录，构建全行指纹集合
+        existing_fingerprints = set()
+        if module == "bank-transaction":
+            for rec in db.query(BankTransaction).filter(BankTransaction.company_id == company_id).all():
+                d = {
+                    "transaction_date": str(rec.transaction_date or ""),
+                    "transaction_time": rec.transaction_time or "",
+                    "application_date": str(rec.application_date or ""),
+                    "voucher_no": rec.voucher_no or "",
+                    "debit_amount": str(rec.debit_amount or 0),
+                    "credit_amount": str(rec.credit_amount or 0),
+                    "balance": str(rec.balance or 0),
+                    "counterparty_account": rec.counterparty_account or "",
+                    "counterparty_name": rec.counterparty_name or "",
+                    "counterparty_bank": rec.counterparty_bank or "",
+                    "transaction_serial_no": rec.transaction_serial_no or "",
+                    "voucher_seq": rec.voucher_seq or "",
+                    "record_status": rec.record_status or "",
+                    "summary": rec.summary or "",
+                    "transaction_remark": rec.transaction_remark or "",
+                    "account_type": rec.account_type or "",
+                    "remark": rec.remark or "",
+                }
+                existing_fingerprints.add(row_fingerprint(d))
+        elif module == "sales-invoice":
+            for rec in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
+                d = {
+                    "invoice_code": rec.invoice_code or "",
+                    "invoice_no": rec.invoice_no or "",
+                    "digital_invoice_no": rec.digital_invoice_no or "",
+                    "seller_tax_no": rec.seller_tax_no or "",
+                    "seller_name": rec.seller_name or "",
+                    "buyer_tax_no": rec.buyer_tax_no or "",
+                    "buyer_name": rec.buyer_name or "",
+                    "invoice_date": str(rec.invoice_date or ""),
+                    "tax_category_code": rec.tax_category_code or "",
+                    "specific_business_type": rec.specific_business_type or "",
+                    "goods_name": rec.goods_name or "",
+                    "spec": rec.spec or "",
+                    "unit": rec.unit or "",
+                    "quantity": str(rec.quantity or ""),
+                    "unit_price": str(rec.unit_price or ""),
+                    "amount": str(rec.amount or 0),
+                    "tax_rate": str(rec.tax_rate or 0),
+                    "tax_amount": str(rec.tax_amount or ""),
+                    "total_amount": str(rec.total_amount or ""),
+                    "invoice_source": rec.invoice_source or "",
+                    "invoice_category": rec.invoice_category or "",
+                    "status": rec.status or "",
+                    "is_positive": str(rec.is_positive),
+                    "invoice_risk_level": rec.invoice_risk_level or "",
+                    "issuer": rec.issuer or "",
+                    "remark": rec.remark or "",
+                }
+                existing_fingerprints.add(row_fingerprint(d))
+        elif module == "purchase-invoice":
+            for rec in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
+                d = {
+                    "invoice_code": rec.invoice_code or "",
+                    "invoice_no": rec.invoice_no or "",
+                    "digital_invoice_no": rec.digital_invoice_no or "",
+                    "seller_tax_no": rec.seller_tax_no or "",
+                    "seller_name": rec.seller_name or "",
+                    "buyer_tax_no": rec.buyer_tax_no or "",
+                    "buyer_name": rec.buyer_name or "",
+                    "invoice_date": str(rec.invoice_date or ""),
+                    "tax_category_code": rec.tax_category_code or "",
+                    "specific_business_type": rec.specific_business_type or "",
+                    "goods_name": rec.goods_name or "",
+                    "spec": rec.spec or "",
+                    "unit": rec.unit or "",
+                    "quantity": str(rec.quantity or ""),
+                    "unit_price": str(rec.unit_price or ""),
+                    "amount": str(rec.amount or 0),
+                    "tax_rate": str(rec.tax_rate or 0),
+                    "tax_amount": str(rec.tax_amount or ""),
+                    "total_amount": str(rec.total_amount or ""),
+                    "invoice_source": rec.invoice_source or "",
+                    "invoice_category": rec.invoice_category or "",
+                    "status": rec.status or "",
+                    "is_positive": str(rec.is_positive),
+                    "invoice_risk_level": rec.invoice_risk_level or "",
+                    "issuer": rec.issuer or "",
+                    "certification_status": rec.certification_status or "",
+                    "certification_date": str(rec.certification_date or ""),
+                    "deduction_period": rec.deduction_period or "",
+                    "deduction_rate": str(rec.deduction_rate if rec.deduction_rate is not None else 100.0),
+                    "remark": rec.remark or "",
+                }
+                existing_fingerprints.add(row_fingerprint(d))
+        elif module == "input-vat-deduction":
+            for rec in db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id).all():
+                d = {
+                    "check_status": rec.check_status or "",
+                    "invoice_source": rec.invoice_source or "",
+                    "domestic_sale_cert_no": rec.domestic_sale_cert_no or "",
+                    "digital_invoice_no": rec.digital_invoice_no or "",
+                    "invoice_code": rec.invoice_code or "",
+                    "invoice_no": rec.invoice_no or "",
+                    "invoice_date": str(rec.invoice_date or ""),
+                    "seller_tax_id": rec.seller_tax_id or "",
+                    "seller_name": rec.seller_name or "",
+                    "amount": str(rec.amount or 0),
+                    "tax_amount": str(rec.tax_amount or 0),
+                    "deductible_tax_amount": str(rec.deductible_tax_amount or 0),
+                    "invoice_category": rec.invoice_category or "",
+                    "invoice_category_label": rec.invoice_category_label or "",
+                    "invoice_status": rec.invoice_status or "",
+                    "check_time": str(rec.check_time or ""),
+                    "risk_level": rec.risk_level or "",
+                    "remark": rec.remark or "",
+                }
+                existing_fingerprints.add(row_fingerprint(d))
+
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         for i, row in enumerate(rows_data):
             try:
@@ -3394,22 +3519,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: balance = float(bal_str) if bal_str else 0.0
                     except: pass
 
-                    # 去重：按交易流水号检查
-                    serial_no = mapped.get("transaction_serial_no", "").strip()
-                    if serial_no:
-                        # 同批次去重
-                        batch_key = (company_id, serial_no)
-                        if batch_key in used_bank_serials:
-                            errors.append(f"第{i+2}行: 交易流水号 {serial_no} 与本批次重复，跳过")
-                            continue
-                        # 跨批次数据库查重
-                        existing = db.query(BankTransaction).filter(
-                            BankTransaction.company_id == company_id,
-                            BankTransaction.transaction_serial_no == serial_no
-                        ).first()
-                        if existing:
-                            errors.append(f"第{i+2}行: 交易流水号 {serial_no} 已存在，跳过")
-                            continue
+                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
+                    fp = row_fingerprint(mapped)
+                    if fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        continue
+                    if fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        continue
 
                     tx = BankTransaction(
                         company_id=company_id,
@@ -3437,8 +3554,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         remark=mapped.get("remark", "")
                     )
                     db.add(tx)
-                    if serial_no:
-                        used_bank_serials.add(batch_key)
+                    used_fingerprints.add(fp)
 
                 elif module in ("sales-invoice", "purchase-invoice"):
                     inv_date = None
@@ -3455,12 +3571,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 空值保留为 None，不拦截
                     inv_no = mapped.get("invoice_no", "") or None
 
-                    # 同批次去重：仅对非空发票号码做去重，空值允许多条
-                    if inv_no:
-                        batch_key = (company_id, inv_no)
-                        if batch_key in used_invoice_nos:
-                            errors.append(f"第{i+2}行: 发票号码 {inv_no} 与本批次重复，跳过")
-                            continue
+                    # 去重：全行指纹比对（所有列数据完全一致才算重复）
+                    fp = row_fingerprint(mapped)
+                    if fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        continue
+                    if fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        continue
 
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
                     # nullable=True 时源文件为空则返回 None，保留空白不填 0
@@ -3529,8 +3647,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
-                        if inv_no:
-                            used_invoice_nos.add(batch_key)
+                        used_fingerprints.add(fp)
                         # 收集购买方信息，导入后自动添加客户档案
                         buyer_nm = mapped.get("buyer_name", "").strip()
                         buyer_tn = mapped.get("buyer_tax_no", "").strip()
@@ -3583,8 +3700,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             remark=mapped.get("remark", "")
                         )
                         db.add(inv)
-                        if inv_no:
-                            used_invoice_nos.add(batch_key)
+                        used_fingerprints.add(fp)
 
                 elif module == "input-vat-deduction":
                     # 进项抵扣导入：解析日期
@@ -3659,8 +3775,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         remark=mapped.get("remark", "")
                     )
                     db.add(inv)
-                    if inv_code or inv_no:
-                        used_vat_keys.add(vat_key)
+                    used_fingerprints.add(fp)
 
                 imported += 1
             except Exception as e:
@@ -3695,6 +3810,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         company_id=company_id,
                         code=code,
                         name=name,
+                        uscc=tax_no or None,   # 购方识别号 → 统一社会信用代码
                         tax_no=tax_no or None
                     )
                     db.add(cust)

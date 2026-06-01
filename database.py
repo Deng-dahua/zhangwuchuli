@@ -630,6 +630,7 @@ class PurchaseInvoice(Base):
     certification_status = Column(String(20), default="未认证", comment="认证状态：未认证/已认证/已抵扣")
     certification_date = Column(Date, comment="认证日期")
     deduction_period = Column(String(7), comment="抵扣期间 YYYY-MM")
+    deduction_rate = Column(Float, default=100.0, comment="抵扣率（%），默认100=全额抵扣")
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
