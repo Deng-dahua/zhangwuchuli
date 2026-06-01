@@ -2493,7 +2493,9 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     total_count = base.count()
     total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
-    total_tax = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.tax_amount).all())
+    total_tax = sum(a[0] or 0 for a in base.filter(
+        PurchaseInvoice.invoice_category.in_(["数电发票（增值税专用发票）", "数电发票（铁路电子客票）"])
+    ).with_entities(PurchaseInvoice.tax_amount).all())
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()

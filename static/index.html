@@ -4248,15 +4248,7 @@ async function renderPurchaseInvoices() {
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
-    html += '<div class="tab-btn-group">';
-    const purchaseTabs = [['all', '全部'], ['未认证', '未认证'], ['已认证', '已认证'], ['已抵扣', '已抵扣']];
-    purchaseTabs.forEach(([t, label]) => {
-      html += '<button class="tab-btn ' + (piTab === t ? 'active' : '') + '" onclick="piTab=\'' + t + '\';renderPurchaseInvoices()">' + label + '</button>';
-    });
-    html += '</div>';
-
     let items = inv;
-    if (piTab !== 'all') items = items.filter(i => i.certification_status === piTab);
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
       const dFrom = piFilter.dateFrom.length === 10 && piFilter.dateFrom.includes('/') ? piFilter.dateFrom.replace(/\//g, '-') : piFilter.dateFrom;
