@@ -3474,7 +3474,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         raw_data=json.dumps(extra, ensure_ascii=False) if extra else "{}",
                         _fingerprint=json.dumps(list(fp)),
                         remark=mapped.get("remark", "")
-                    )                    db.add(tx)
+                    )
+                    db.add(tx)
                     used_fingerprints[fp] = i+2
 
                 elif module in ("sales-invoice", "purchase-invoice"):
