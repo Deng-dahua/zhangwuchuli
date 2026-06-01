@@ -4514,6 +4514,7 @@ async function renderBankTransactions() {
   html += '<input type="date" id="bt-date-to" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
   html += '<button onclick="document.getElementById(\'bt-type-filter\').value=\'\';document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()" style="display:none">🗑 批量删除</button>';
   html += '</div></div>';
 
   // 表格
@@ -4552,6 +4553,7 @@ async function loadBankTxList() {
     const extraBadges = Object.entries(rawExtra).slice(0, 3).map(([k,v]) => `<span style="font-size:11px;background:var(--gray-100);padding:1px 6px;border-radius:4px;margin:0 2px;">${k}: ${v}</span>`).join('');
     return `
       <tr>
+        <td><input type="checkbox" class="bt-check" data-id="${tx.id}" onchange="updateBankTxBatchBtn()"></td>
         <td>${tx.transaction_date}</td>
         <td>${bankNames[tx.bank_config_id] || '-'}</td>
         <td style="${amtClass}">${sign}¥${Math.abs(tx.amount).toLocaleString()}</td>
@@ -4570,9 +4572,41 @@ async function loadBankTxList() {
   document.getElementById('bank-tx-table-container').innerHTML = `
     <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
+      <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
       <th>日期</th><th>银行</th><th>金额</th><th>余额</th><th>类型</th><th>对方户名</th><th>摘要</th><th>流水号</th><th>操作</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
+    </tr></thead><tbody>${rows || '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
+}
+
+function toggleBankTxSelectAll() {
+  const all = document.getElementById('btSelectAll');
+  document.querySelectorAll('.bt-check').forEach(cb => cb.checked = all.checked);
+  updateBankTxBatchBtn();
+}
+
+function updateBankTxBatchBtn() {
+  const count = document.querySelectorAll('.bt-check:checked').length;
+  const btn = document.getElementById('btBatchDelBtn');
+  if (btn) {
+    btn.style.display = count > 0 ? '' : 'none';
+    btn.textContent = '🗑 批量删除（' + count + '）';
+  }
+}
+
+async function batchDeleteBankTx() {
+  const checked = document.querySelectorAll('.bt-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条银行流水记录？此操作不可恢复。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/bank-transactions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    loadBankTxList();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function showBankTxForm(id) {

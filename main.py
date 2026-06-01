@@ -2825,6 +2825,16 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session 
     return {"message": "删除成功"}
 
 
+@app.post("/api/bank-transactions/batch-delete")
+def batch_delete_bank_transactions(ids: List[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.id.in_(ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条流水记录", "count": deleted}
+
+
 # ==================== 进项抵扣 ====================
 
 class InputVATDeductionCreate(BaseModel):
