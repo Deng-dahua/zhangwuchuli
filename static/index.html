@@ -4755,10 +4755,6 @@ async function renderInputVATDeductions() {
     <div class="card">
       <div class="card-title">
         <span>进项发票认证台账</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-primary btn-sm" onclick="showVATDeductionForm()">+ 新增记录</button>
-        <button class="btn btn-outline btn-sm" onclick="batchCheckVAT()" style="margin-left:8px;" id="btn-batch-check" disabled>✅ 批量勾选</button>
-        <button class="btn btn-outline btn-sm" onclick="batchDeleteVAT()" style="margin-left:8px;color:var(--danger);" id="btn-batch-delete" disabled>🗑 批量删除</button>
       </div>
       <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
         <div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -4832,12 +4828,6 @@ function renderVATDeductionTable(data) {
       <th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th>金额</th><th>税额</th><th>有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>选择</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="19" style="text-align:center;padding:40px;color:var(--gray-500);">暂无认证记录</td></tr>'}</tbody></table>`;
 
-  // 更新批量按钮状态
-  const btnDel = document.getElementById('btn-batch-delete');
-  const btnCheck = document.getElementById('btn-batch-check');
-  if (btnDel) btnDel.disabled = sel.size === 0;
-  if (btnCheck) btnCheck.disabled = sel.size === 0;
-}
 
 function toggleIVDSelect(id, checked) {
   if (checked) { window._ivdSelected.add(id); } else { window._ivdSelected.delete(id); }
