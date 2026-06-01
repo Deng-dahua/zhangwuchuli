@@ -4220,7 +4220,7 @@ async function showSalesDetail(id) {
 
 let piTab = 'all';
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
-let ivdFilter = { invStatus: '', checkStatus: '', riskLevel: '', keyword: '', dateFrom: '', dateTo: '' };
+let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices() {
   try {
@@ -4762,30 +4762,17 @@ async function renderInputVATDeductions() {
       </div>
       <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
         <div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <select id="ivd-inv-status" onchange="ivdFilter.invStatus=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
-            <option value="">全部发票状态</option>
-            <option value="正常" ${ivdFilter.invStatus==='正常'?'selected':''}>正常</option>
-            <option value="作废" ${ivdFilter.invStatus==='作废'?'selected':''}>作废</option>
-            <option value="红冲" ${ivdFilter.invStatus==='红冲'?'selected':''}>红冲</option>
-          </select>
           <select id="ivd-check-status" onchange="ivdFilter.checkStatus=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
             <option value="">全部勾选状态</option>
             <option value="已勾选" ${ivdFilter.checkStatus==='已勾选'?'selected':''}>已勾选</option>
             <option value="未勾选" ${ivdFilter.checkStatus==='未勾选'?'selected':''}>未勾选</option>
-          </select>
-          <select id="ivd-risk-level" onchange="ivdFilter.riskLevel=this.value;loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
-            <option value="">全部风险等级</option>
-            <option value="正常" ${ivdFilter.riskLevel==='正常'?'selected':''}>正常</option>
-            <option value="疑点" ${ivdFilter.riskLevel==='疑点'?'selected':''}>疑点</option>
-            <option value="异常" ${ivdFilter.riskLevel==='异常'?'selected':''}>异常</option>
-            <option value="失控" ${ivdFilter.riskLevel==='失控'?'selected':''}>失控</option>
           </select>
           <input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="${ivdFilter.keyword||''}" onkeydown="if(event.key==='Enter'){ivdFilter.keyword=this.value;loadVATDeductionList()}">
           <button onclick="ivdFilter.keyword=document.getElementById('ivdKeyword').value;loadVATDeductionList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>
           <input type="date" value="${ivdFilter.dateFrom||''}" onchange="ivdFilter.dateFrom=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">
           <span style="color:#9ca3af;font-size:13px;">至</span>
           <input type="date" value="${ivdFilter.dateTo||''}" onchange="ivdFilter.dateTo=this.value;loadVATDeductionList()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">
-          <button onclick="ivdFilter.invStatus='';ivdFilter.checkStatus='';ivdFilter.riskLevel='';ivdFilter.keyword='';ivdFilter.dateFrom='';ivdFilter.dateTo='';loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
+          <button onclick="ivdFilter.checkStatus='';ivdFilter.keyword='';ivdFilter.dateFrom='';ivdFilter.dateTo='';loadVATDeductionList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
           <button class="btn btn-outline" onclick="showUploadModal('input-vat-deduction')">📁 导入文件</button>
         </div>
       </div>
@@ -4799,9 +4786,7 @@ async function renderInputVATDeductions() {
 
 async function loadVATDeductionList() {
   const params = new URLSearchParams();
-  if (ivdFilter.invStatus) params.set('invoice_status', ivdFilter.invStatus);
   if (ivdFilter.checkStatus) params.set('check_status', ivdFilter.checkStatus);
-  if (ivdFilter.riskLevel) params.set('risk_level', ivdFilter.riskLevel);
   if (ivdFilter.dateFrom) params.set('date_from', ivdFilter.dateFrom);
   if (ivdFilter.dateTo) params.set('date_to', ivdFilter.dateTo);
   if (ivdFilter.keyword) params.set('keyword', ivdFilter.keyword);
