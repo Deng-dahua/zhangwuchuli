@@ -5309,6 +5309,9 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   if (result.errors && result.errors.length > 0) {
     msg += `\n⚠️ ${result.errors.length} 条错误:\n` + result.errors.slice(0, 5).join('\n');
   }
+  if (result.infos && result.infos.length > 0) {
+    msg += `\nℹ️ ${result.infos.length} 条提示:\n` + result.infos.slice(0, 5).join('\n');
+  }
   alert(msg);
   closeModal();
 

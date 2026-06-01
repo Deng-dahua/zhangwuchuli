@@ -3337,6 +3337,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
         # 根据映射转换并导入
         imported = 0
         errors = []
+        infos = []  # 非错误提示（如自动创建客户档案）
 
         # 全行指纹去重：比对整行所有列数据，而非单一字段
         def row_fingerprint(values_dict):
@@ -3725,7 +3726,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     db.add(cust)
                     customer_added += 1
             if customer_added > 0:
-                errors.append(f"自动新增 {customer_added} 个客户到客户档案")
+                infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
         try:
             db.commit()
@@ -3738,6 +3739,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             "imported": imported,
             "total": len(rows_data),
             "errors": errors[:20],  # 最多返回20条错误
+            "infos": infos[:20],    # 非错误提示
             "message": f"成功导入 {imported}/{len(rows_data)} 条记录"
         }
     except Exception as e:
