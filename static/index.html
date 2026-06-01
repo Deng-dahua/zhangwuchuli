@@ -4512,7 +4512,7 @@ async function renderBankTransactions() {
       <div id="bank-tx-table-container"></div>
     </div>
   `;
-  setContent(html);
+  document.getElementById('content-area').innerHTML = html;
   loadBankTxList();
 }
 
@@ -4768,7 +4768,7 @@ async function renderInputVATDeductions() {
       <div id="ivd-table-container"></div>
     </div>
   `;
-  setContent(html);
+  document.getElementById('content-area').innerHTML = html;
   renderVATDeductionTable(list);
 }
 
