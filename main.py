@@ -3343,151 +3343,40 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
 
         used_fingerprints = {}  # fp -> 行号，同批次去重
 
-        # 跨批次数据库查重：预查询已有记录，构建全行指纹集合
+        # 跨批次数据库查重：直接从存储的指纹列加载，100%精确
         existing_fingerprints = set()
         if module == "bank-transaction":
-            for rec in db.query(BankTransaction).filter(BankTransaction.company_id == company_id).all():
-                d = {
-                    "transaction_date": str(rec.transaction_date or ""),
-                    "transaction_time": str(rec.transaction_time or ""),
-                    "application_date": str(rec.application_date or ""),
-                    "voucher_no": rec.voucher_no or "",
-                    "debit_amount": str(rec.debit_amount or 0),
-                    "credit_amount": str(rec.credit_amount or 0),
-                    "balance": str(rec.balance or 0),
-                    "counterparty_account": rec.counterparty_account or "",
-                    "counterparty_name": rec.counterparty_name or "",
-                    "counterparty_bank": rec.counterparty_bank or "",
-                    "transaction_serial_no": rec.transaction_serial_no or "",
-                    "voucher_seq": rec.voucher_seq or "",
-                    "record_status": rec.record_status or "",
-                    "summary": rec.summary or "",
-                    "transaction_remark": rec.transaction_remark or "",
-                    "account_type": rec.account_type or "",
-                    "remark": rec.remark or "",
-                }
-                # 并上 raw_data 中的额外列，确保重导同文件时指纹完全一致
-                raw = rec.raw_data
-                if raw:
-                    try:
-                        rw = json.loads(raw) if isinstance(raw, str) else raw
-                        if isinstance(rw, dict):
-                            d.update({str(k): str(v) for k, v in rw.items()})
-                    except: pass
-                existing_fingerprints.add(row_fingerprint(d))
+            for rec in db.query(BankTransaction._fingerprint).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
         elif module == "sales-invoice":
-            for rec in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
-                d = {
-                    "invoice_code": rec.invoice_code or "",
-                    "invoice_no": rec.invoice_no or "",
-                    "digital_invoice_no": rec.digital_invoice_no or "",
-                    "seller_tax_no": rec.seller_tax_no or "",
-                    "seller_name": rec.seller_name or "",
-                    "buyer_tax_no": rec.buyer_tax_no or "",
-                    "buyer_name": rec.buyer_name or "",
-                    "invoice_date": str(rec.invoice_date or ""),
-                    "tax_category_code": rec.tax_category_code or "",
-                    "specific_business_type": rec.specific_business_type or "",
-                    "goods_name": rec.goods_name or "",
-                    "spec": rec.spec or "",
-                    "unit": rec.unit or "",
-                    "quantity": str(rec.quantity or ""),
-                    "unit_price": str(rec.unit_price or ""),
-                    "amount": str(rec.amount or 0),
-                    "tax_rate": str(rec.tax_rate or 0),
-                    "tax_amount": str(rec.tax_amount or ""),
-                    "total_amount": str(rec.total_amount or ""),
-                    "invoice_source": rec.invoice_source or "",
-                    "invoice_category": rec.invoice_category or "",
-                    "status": rec.status or "",
-                    "is_positive": str(rec.is_positive),
-                    "invoice_risk_level": rec.invoice_risk_level or "",
-                    "issuer": rec.issuer or "",
-                    "remark": rec.remark or "",
-                }
-                # 并上 raw_data 中的额外列
-                raw = rec.raw_data
-                if raw:
-                    try:
-                        rw = json.loads(raw) if isinstance(raw, str) else raw
-                        if isinstance(rw, dict):
-                            d.update({str(k): str(v) for k, v in rw.items()})
-                    except: pass
-                existing_fingerprints.add(row_fingerprint(d))
+            for rec in db.query(SalesInvoice._fingerprint).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
         elif module == "purchase-invoice":
-            for rec in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
-                d = {
-                    "invoice_code": rec.invoice_code or "",
-                    "invoice_no": rec.invoice_no or "",
-                    "digital_invoice_no": rec.digital_invoice_no or "",
-                    "seller_tax_no": rec.seller_tax_no or "",
-                    "seller_name": rec.seller_name or "",
-                    "buyer_tax_no": rec.buyer_tax_no or "",
-                    "buyer_name": rec.buyer_name or "",
-                    "invoice_date": str(rec.invoice_date or ""),
-                    "tax_category_code": rec.tax_category_code or "",
-                    "specific_business_type": rec.specific_business_type or "",
-                    "goods_name": rec.goods_name or "",
-                    "spec": rec.spec or "",
-                    "unit": rec.unit or "",
-                    "quantity": str(rec.quantity or ""),
-                    "unit_price": str(rec.unit_price or ""),
-                    "amount": str(rec.amount or 0),
-                    "tax_rate": str(rec.tax_rate or 0),
-                    "tax_amount": str(rec.tax_amount or ""),
-                    "total_amount": str(rec.total_amount or ""),
-                    "invoice_source": rec.invoice_source or "",
-                    "invoice_category": rec.invoice_category or "",
-                    "status": rec.status or "",
-                    "is_positive": str(rec.is_positive),
-                    "invoice_risk_level": rec.invoice_risk_level or "",
-                    "issuer": rec.issuer or "",
-                    "certification_status": rec.certification_status or "",
-                    "certification_date": str(rec.certification_date or ""),
-                    "deduction_period": rec.deduction_period or "",
-                    "deduction_rate": str(rec.deduction_rate if rec.deduction_rate is not None else 100.0),
-                    "remark": rec.remark or "",
-                }
-                # 并上 raw_data 中的额外列
-                raw = rec.raw_data
-                if raw:
-                    try:
-                        rw = json.loads(raw) if isinstance(raw, str) else raw
-                        if isinstance(rw, dict):
-                            d.update({str(k): str(v) for k, v in rw.items()})
-                    except: pass
-                existing_fingerprints.add(row_fingerprint(d))
+            for rec in db.query(PurchaseInvoice._fingerprint).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
         elif module == "input-vat-deduction":
-            for rec in db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id).all():
-                d = {
-                    "check_status": rec.check_status or "",
-                    "invoice_source": rec.invoice_source or "",
-                    "domestic_sale_cert_no": rec.domestic_sale_cert_no or "",
-                    "digital_invoice_no": rec.digital_invoice_no or "",
-                    "invoice_code": rec.invoice_code or "",
-                    "invoice_no": rec.invoice_no or "",
-                    "invoice_date": str(rec.invoice_date or ""),
-                    "seller_tax_id": rec.seller_tax_id or "",
-                    "seller_name": rec.seller_name or "",
-                    "amount": str(rec.amount or 0),
-                    "tax_amount": str(rec.tax_amount or 0),
-                    "deductible_tax_amount": str(rec.deductible_tax_amount or 0),
-                    "invoice_category": rec.invoice_category or "",
-                    "invoice_category_label": rec.invoice_category_label or "",
-                    "invoice_status": rec.invoice_status or "",
-                    "check_time": str(rec.check_time or ""),
-                    "risk_level": rec.risk_level or "",
-                    "remark": rec.remark or "",
-                }
-                # 并上 raw_data 中的额外列
-                raw = rec.raw_data
-                if raw:
-                    try:
-                        rw = json.loads(raw) if isinstance(raw, str) else raw
-                        if isinstance(rw, dict):
-                            d.update({str(k): str(v) for k, v in rw.items()})
-                    except: pass
-                existing_fingerprints.add(row_fingerprint(d))
+            for rec in db.query(InputVATDeduction._fingerprint).filter(
+                InputVATDeduction.company_id == company_id,
+                InputVATDeduction._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
 
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         for i, row in enumerate(rows_data):
@@ -3583,9 +3472,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         amount=credit_amount - debit_amount,
                         transaction_type="收入" if credit_amount > 0 else "支出",
                         raw_data=json.dumps(extra, ensure_ascii=False) if extra else "{}",
+                        _fingerprint=json.dumps(list(fp)),
                         remark=mapped.get("remark", "")
-                    )
-                    db.add(tx)
+                    )                    db.add(tx)
                     used_fingerprints[fp] = i+2
 
                 elif module in ("sales-invoice", "purchase-invoice"):
@@ -3677,7 +3566,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             invoice_risk_level=mapped.get("invoice_risk_level", ""),
                             issuer=mapped.get("issuer", ""),
                             remark=mapped.get("remark", ""),
-                            raw_data=json.dumps(extra) if extra else None
+                            raw_data=json.dumps(extra) if extra else None,
+                            _fingerprint=json.dumps(list(fp))
                         )
                         db.add(inv)
                         used_fingerprints[fp] = i+2
@@ -3731,7 +3621,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             certification_date=cert_date,
                             deduction_period=mapped.get("deduction_period", ""),
                             remark=mapped.get("remark", ""),
-                            raw_data=json.dumps(extra) if extra else None
+                            raw_data=json.dumps(extra) if extra else None,
+                            _fingerprint=json.dumps(list(fp))
                         )
                         db.add(inv)
                         used_fingerprints[fp] = i+2
@@ -3797,7 +3688,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         check_time=check_time,
                         risk_level=mapped.get("risk_level", "正常"),
                         remark=mapped.get("remark", ""),
-                        raw_data=json.dumps(extra) if extra else None
+                        raw_data=json.dumps(extra) if extra else None,
+                        _fingerprint=json.dumps(list(fp))
                     )
                     db.add(inv)
                     used_fingerprints[fp] = i+2

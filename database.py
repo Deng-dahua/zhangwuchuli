@@ -579,6 +579,7 @@ class SalesInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -636,6 +637,7 @@ class PurchaseInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -691,6 +693,7 @@ class BankTransaction(Base):
     payment_method = Column(String(30), comment="结算方式（旧）")
     reference_no = Column(String(50), comment="银行流水号（旧）")
     raw_data = Column(Text, comment="原始数据JSON（旧）")
+    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     remark = Column(Text, comment="备注（旧）")
     created_at = Column(DateTime, default=datetime.now)
 
@@ -741,6 +744,7 @@ class InputVATDeduction(Base):
     voucher_no = Column(String(30), comment="关联凭证号")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -991,6 +995,25 @@ def migrate_schema(db):
                 except Exception as e:
                     db.rollback()
                     print(f"重建 {table_name} 表失败: {e}")
+
+    # ── 10. 添加 _fingerprint 列（去重指纹） ──
+    fingerprint_tables = {
+        "sales_invoices": "ALTER TABLE sales_invoices ADD COLUMN _fingerprint TEXT",
+        "purchase_invoices": "ALTER TABLE purchase_invoices ADD COLUMN _fingerprint TEXT",
+        "bank_transactions": "ALTER TABLE bank_transactions ADD COLUMN _fingerprint TEXT",
+        "input_vat_deductions": "ALTER TABLE input_vat_deductions ADD COLUMN _fingerprint TEXT",
+    }
+    for table_name, sql in fingerprint_tables.items():
+        try:
+            if table_name in inspector.get_table_names():
+                existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+                if "_fingerprint" not in existing_cols:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 {table_name} 添加 _fingerprint 列")
+        except Exception as e:
+            db.rollback()
+            print(f"添加 {table_name}._fingerprint 跳过: {e}")
 
 
 # 基础科目数据模板（中小制造业标准科目表）
