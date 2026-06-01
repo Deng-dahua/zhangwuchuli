@@ -3341,7 +3341,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             """生成全行指纹：所有列名+值排序后组成元组，可哈希对比"""
             return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
 
-        used_fingerprints = set()  # 同批次去重
+        used_fingerprints = {}  # fp -> 行号，同批次去重
 
         # 跨批次数据库查重：预查询已有记录，构建全行指纹集合
         existing_fingerprints = set()
@@ -3554,7 +3554,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
                     fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
                         continue
                     if fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
@@ -3586,7 +3586,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         remark=mapped.get("remark", "")
                     )
                     db.add(tx)
-                    used_fingerprints.add(fp)
+                    used_fingerprints[fp] = i+2
 
                 elif module in ("sales-invoice", "purchase-invoice"):
                     inv_date = None
@@ -3606,7 +3606,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
                     fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
                         continue
                     if fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
@@ -3680,7 +3680,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             raw_data=json.dumps(extra) if extra else None
                         )
                         db.add(inv)
-                        used_fingerprints.add(fp)
+                        used_fingerprints[fp] = i+2
                         # 收集购买方信息，导入后自动添加客户档案
                         buyer_nm = mapped.get("buyer_name", "").strip()
                         buyer_tn = mapped.get("buyer_tax_no", "").strip()
@@ -3734,7 +3734,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             raw_data=json.dumps(extra) if extra else None
                         )
                         db.add(inv)
-                        used_fingerprints.add(fp)
+                        used_fingerprints[fp] = i+2
 
                 elif module == "input-vat-deduction":
                     # 进项抵扣导入：解析日期
@@ -3771,7 +3771,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
                     fp = row_fingerprint({**mapped, **extra})
                     if fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与本批次其他行完全重复，跳过")
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
                         continue
                     if fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
@@ -3800,7 +3800,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         raw_data=json.dumps(extra) if extra else None
                     )
                     db.add(inv)
-                    used_fingerprints.add(fp)
+                    used_fingerprints[fp] = i+2
 
                 imported += 1
             except Exception as e:
