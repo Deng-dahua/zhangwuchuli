@@ -5226,6 +5226,11 @@ function buildMappingUI(result, module, file, bankConfigId) {
       </label>
       <input id="template-name" placeholder="模板名称（可选）" style="margin-top:4px;padding:4px 8px;border:1px solid var(--gray-300);border-radius:4px;font-size:12px;width:200px;display:none;">
     </div>
+    <div style="margin-top:8px;">
+      <label style="font-size:12px;display:flex;align-items:center;gap:8px;color:var(--warning);">
+        <input type="checkbox" id="force-import"> 强制导入（忽略去重，允许重复记录入库）
+      </label>
+    </div>
     <div style="text-align:right;margin-top:16px;">
       <button class="btn" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="doImportWithMapping('${module}', '${file.name}', ${bankConfigId || 'null'})">开始导入</button>
@@ -5285,6 +5290,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   formData.append('column_mapping', JSON.stringify(mapping));
   formData.append('company_id', currentCompanyId);
   if (bankConfigId) formData.append('bank_config_id', bankConfigId);
+  if (document.getElementById('force-import')?.checked) formData.append('force', 'true');
 
   document.getElementById('upload-progress').style.display = 'block';
   document.getElementById('upload-progress').innerText = '正在导入数据...';
