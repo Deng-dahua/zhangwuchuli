@@ -1101,6 +1101,35 @@ def init_company_data(db, company_id: int):
     db.commit()
 
 
+def verify_dedup_columns(db):
+    """启动自检：验证四模块_fingerprint列存在并可写入"""
+    import json
+    models = {
+        "bank_transactions": BankTransaction,
+        "sales_invoices": SalesInvoice,
+        "purchase_invoices": PurchaseInvoice,
+        "input_vat_deductions": InputVATDeduction,
+    }
+    for name, model in models.items():
+        # 检查列是否存在
+        if not hasattr(model, '_fingerprint'):
+            print(f"[DEDUP-ERROR] {name} 模型缺少 _fingerprint 列！")
+            continue
+        # 尝试写读自检：插入→验证→回滚
+        try:
+            test_fp = json.dumps([["__test__", "__verify__"]])
+            rec = model(_fingerprint=test_fp, company_id=1)
+            db.add(rec)
+            db.flush()
+            db.refresh(rec)
+            assert rec._fingerprint == test_fp, f"写入={rec._fingerprint}, 预期={test_fp}"
+            db.rollback()
+            print(f"[DEDUP-OK] {name}._fingerprint 读写正常")
+        except Exception as e:
+            db.rollback()
+            print(f"[DEDUP-FAIL] {name}._fingerprint 自检失败: {e}")
+
+
 def init_db():
     """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据"""
     Base.metadata.create_all(bind=engine)
@@ -1114,6 +1143,8 @@ def init_db():
         for company in companies:
             init_company_data(db, company.id)
 
+        # 启动自检：验证四模块_fingerprint列存在且可写入
+        verify_dedup_columns(db)
         print(f"数据库初始化完成（{len(companies)} 家公司）")
     except Exception as e:
         db.rollback()
