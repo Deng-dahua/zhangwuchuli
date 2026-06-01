@@ -1224,13 +1224,24 @@ function calcTotal() {
 }
 
 async function submitVoucher() {
-  const date = new Date().toISOString().slice(0, 10);
   const period = document.getElementById('v-period')?.value || '';
+  if (!period) { toast('请选择会计期间', 'error'); return; }
+
+  // 日期逻辑：期间=当月→当天；期间≠当月→期间最后一天
+  const now = new Date();
+  const currentYearMonth = now.toISOString().slice(0, 7);
+  let date;
+  if (period === currentYearMonth) {
+    date = now.toISOString().slice(0, 10);
+  } else {
+    const [y, m] = period.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    date = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  }
+
   const summary = detailRows[0]?.summary || '记账凭证';
   const creator = '管理员';
   const attachments = 0;
-
-  if (!period) { toast('请选择会计期间', 'error'); return; }
 
   const details = detailRows.filter(r => r.account_code);
   if (details.length < 2) { toast('至少需要2行明细', 'error'); return; }
