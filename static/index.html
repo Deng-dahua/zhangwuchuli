@@ -5052,7 +5052,8 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'check_status': '勾选状态', 'domestic_sale_cert_no': '转内销证明编号',
     'seller_tax_id': '销售方纳税人识别号', 'invoice_category_label': '票种标签',
     'check_time': '勾选时间', 'risk_level': '发票风险等级',
-    'deductible_tax_amount': '有效抵扣税额'
+    'deductible_tax_amount': '有效抵扣税额',
+    'invoice_status': '发票状态'
   };
 
   const fieldOrder = result.field_order; // 发票模块用平铺列表
@@ -5119,7 +5120,7 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'invoice_date': ['开票日期', 'inv_date', '发票日期'],
           'digital_invoice_no': ['数电', '全电'],
           'seller_tax_no': ['销方识别号', '销方税号', 'seller_tax'],
-          'seller_name': ['销方名称', 'seller_name'],
+          'seller_name': ['销方名称', 'seller_name', '销售方名称'],
           'buyer_tax_no': ['购方识别号', '购方税号', 'buyer_tax'],
           'buyer_name': ['购买方', '购方名称', 'buyer_name'],
           'tax_category_code': ['税收分类', '分类编码', 'tax_category'],
@@ -5149,7 +5150,8 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'invoice_category_label': ['票种标签', '标签', 'label'],
           'check_time': ['勾选时间', 'check_time'],
           'risk_level': ['风险等级', '风险', 'risk_level'],
-          'deductible_tax_amount': ['有效抵扣', '可抵扣', 'deductible']
+          'deductible_tax_amount': ['有效抵扣', '可抵扣', 'deductible'],
+          'invoice_status': ['发票状态', 'invoice_status']
         };
         const keys = km[field] || [fl];
         if (hl.includes(fl) || fl.includes(hl) || keys.some(k => hl.includes(k))) {
