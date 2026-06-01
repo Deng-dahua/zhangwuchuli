@@ -685,28 +685,43 @@ class BankTransaction(Base):
 # ==================== 进项抵扣 ====================
 
 class InputVATDeduction(Base):
-    """进项抵扣管理 - 跟踪每张取得发票的认证抵扣"""
+    """进项抵扣管理 - 进项发票认证抵扣台账"""
     __tablename__ = "input_vat_deductions"
     __table_args__ = (
-        Index('idx_ivd_company_period', 'company_id', 'deduction_period'),
+        Index('idx_ivd_company_check_time', 'company_id', 'check_time'),
         Index('idx_ivd_company_invoice', 'company_id', 'purchase_invoice_id'),
-        Index('idx_ivd_status', 'company_id', 'deduction_status'),
+        Index('idx_ivd_status', 'company_id', 'invoice_status'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
     purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联取得发票ID")
-    invoice_no = Column(String(30), comment="发票号码")
+    # 核心发票信息
+    check_status = Column(String(10), default="未勾选", comment="勾选状态：已勾选/未勾选")
+    invoice_source = Column(String(50), comment="发票来源，如：勾选平台/扫描认证/手工录入")
+    domestic_sale_cert_no = Column(String(50), comment="转内销证明编号")
+    digital_invoice_no = Column(String(50), comment="数电发票号码")
     invoice_code = Column(String(30), comment="发票代码")
+    invoice_no = Column(String(30), comment="发票号码")
     invoice_date = Column(Date, comment="开票日期")
+    seller_tax_id = Column(String(30), comment="销售方纳税人识别号")
     seller_name = Column(String(100), comment="销方名称")
+    amount = Column(Float, default=0.0, comment="金额（不含税）")
+    tax_amount = Column(Float, default=0.0, comment="税额")
+    deductible_tax_amount = Column(Float, default=0.0, comment="有效抵扣税额")
+    # 票种信息
+    invoice_category = Column(String(50), comment="票种，如：数电发票（增值税专用发票）")
+    invoice_category_label = Column(String(30), comment="票种标签")
+    invoice_status = Column(String(20), default="正常", comment="发票状态：正常/作废/红冲")
+    # 勾选与风险
+    check_time = Column(DateTime, comment="勾选时间")
+    risk_level = Column(String(20), default="正常", comment="发票风险等级：正常/疑点/异常/失控")
+    # 保留字段（历史兼容）
     goods_name = Column(String(200), comment="货物名称")
     total_amount = Column(Float, default=0.0, comment="价税合计")
-    tax_amount = Column(Float, default=0.0, comment="税额")
     tax_rate = Column(Float, default=0.0, comment="税率（%）")
-    deductible_tax_amount = Column(Float, default=0.0, comment="可抵扣税额")
     deducted_tax_amount = Column(Float, default=0.0, comment="已抵扣税额")
     deduction_period = Column(String(7), comment="抵扣所属期 YYYY-MM")
-    deduction_status = Column(String(20), default="待抵扣", comment="状态：待认证/待抵扣/已抵扣/部分抵扣/不得抵扣")
+    deduction_status = Column(String(20), default="待抵扣", comment="抵扣状态：待认证/待抵扣/已抵扣/部分抵扣/不得抵扣")
     certification_date = Column(Date, comment="认证日期")
     deduction_date = Column(Date, comment="抵扣日期")
     deduction_method = Column(String(30), default="凭票抵扣", comment="抵扣方式：凭票抵扣/计算抵扣/核定抵扣")

@@ -2829,15 +2829,27 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session 
 
 class InputVATDeductionCreate(BaseModel):
     purchase_invoice_id: Optional[int] = None
-    invoice_no: Optional[str] = None
+    check_status: Optional[str] = "未勾选"
+    invoice_source: Optional[str] = None
+    domestic_sale_cert_no: Optional[str] = None
+    digital_invoice_no: Optional[str] = None
     invoice_code: Optional[str] = None
+    invoice_no: Optional[str] = None
     invoice_date: Optional[date] = None
+    seller_tax_id: Optional[str] = None
     seller_name: Optional[str] = None
+    amount: float = 0.0
+    tax_amount: float = 0.0
+    deductible_tax_amount: float = 0.0
+    invoice_category: Optional[str] = None
+    invoice_category_label: Optional[str] = None
+    invoice_status: Optional[str] = "正常"
+    check_time: Optional[datetime] = None
+    risk_level: Optional[str] = "正常"
+    # 保留字段
     goods_name: Optional[str] = None
     total_amount: float = 0.0
-    tax_amount: float = 0.0
     tax_rate: Optional[float] = 0.0
-    deductible_tax_amount: float = 0.0
     deducted_tax_amount: Optional[float] = 0.0
     deduction_period: Optional[str] = None
     deduction_status: str = "待抵扣"
@@ -2849,7 +2861,27 @@ class InputVATDeductionCreate(BaseModel):
 
 
 class InputVATDeductionUpdate(BaseModel):
+    check_status: Optional[str] = None
+    invoice_source: Optional[str] = None
+    domestic_sale_cert_no: Optional[str] = None
+    digital_invoice_no: Optional[str] = None
+    invoice_code: Optional[str] = None
+    invoice_no: Optional[str] = None
+    invoice_date: Optional[date] = None
+    seller_tax_id: Optional[str] = None
+    seller_name: Optional[str] = None
+    amount: Optional[float] = None
+    tax_amount: Optional[float] = None
     deductible_tax_amount: Optional[float] = None
+    invoice_category: Optional[str] = None
+    invoice_category_label: Optional[str] = None
+    invoice_status: Optional[str] = None
+    check_time: Optional[datetime] = None
+    risk_level: Optional[str] = None
+    # 保留字段
+    goods_name: Optional[str] = None
+    total_amount: Optional[float] = None
+    tax_rate: Optional[float] = None
     deducted_tax_amount: Optional[float] = None
     deduction_period: Optional[str] = None
     deduction_status: Optional[str] = None
@@ -2863,7 +2895,9 @@ class InputVATDeductionUpdate(BaseModel):
 @app.get("/api/input-vat-deductions")
 def list_input_vat_deductions(
     company_id: int = Query(1),
-    deduction_status: Optional[str] = None,
+    invoice_status: Optional[str] = None,
+    check_status: Optional[str] = None,
+    risk_level: Optional[str] = None,
     deduction_period: Optional[str] = None,
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
@@ -2871,8 +2905,12 @@ def list_input_vat_deductions(
     db: Session = Depends(get_db)
 ):
     q = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
-    if deduction_status:
-        q = q.filter(InputVATDeduction.deduction_status == deduction_status)
+    if invoice_status:
+        q = q.filter(InputVATDeduction.invoice_status == invoice_status)
+    if check_status:
+        q = q.filter(InputVATDeduction.check_status == check_status)
+    if risk_level:
+        q = q.filter(InputVATDeduction.risk_level == risk_level)
     if deduction_period:
         q = q.filter(InputVATDeduction.deduction_period == deduction_period)
     if date_from:
@@ -2882,24 +2920,40 @@ def list_input_vat_deductions(
     if keyword:
         q = q.filter(or_(
             InputVATDeduction.invoice_no.contains(keyword),
+            InputVATDeduction.digital_invoice_no.contains(keyword),
+            InputVATDeduction.invoice_code.contains(keyword),
             InputVATDeduction.seller_name.contains(keyword),
-            InputVATDeduction.goods_name.contains(keyword)
+            InputVATDeduction.seller_tax_id.contains(keyword),
         ))
-    items = q.order_by(InputVATDeduction.deduction_period.desc(), InputVATDeduction.invoice_date.desc()).all()
+    items = q.order_by(InputVATDeduction.invoice_date.desc(), InputVATDeduction.check_time.desc()).all()
     return [{
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
-        "invoice_no": it.invoice_no or "", "invoice_code": it.invoice_code or "",
+        "check_status": it.check_status or "未勾选",
+        "invoice_source": it.invoice_source or "",
+        "domestic_sale_cert_no": it.domestic_sale_cert_no or "",
+        "digital_invoice_no": it.digital_invoice_no or "",
+        "invoice_code": it.invoice_code or "",
+        "invoice_no": it.invoice_no or "",
         "invoice_date": str(it.invoice_date) if it.invoice_date else "",
-        "seller_name": it.seller_name or "", "goods_name": it.goods_name or "",
-        "total_amount": it.total_amount or 0, "tax_amount": it.tax_amount or 0,
-        "tax_rate": it.tax_rate or 0,
+        "seller_tax_id": it.seller_tax_id or "",
+        "seller_name": it.seller_name or "",
+        "amount": it.amount or 0,
+        "tax_amount": it.tax_amount or 0,
         "deductible_tax_amount": it.deductible_tax_amount or 0,
+        "invoice_category": it.invoice_category or "",
+        "invoice_category_label": it.invoice_category_label or "",
+        "invoice_status": it.invoice_status or "正常",
+        "check_time": str(it.check_time) if it.check_time else "",
+        "risk_level": it.risk_level or "正常",
+        "goods_name": it.goods_name or "",
+        "total_amount": it.total_amount or 0,
+        "tax_rate": it.tax_rate or 0,
         "deducted_tax_amount": it.deducted_tax_amount or 0,
         "deduction_period": it.deduction_period or "",
-        "deduction_status": it.deduction_status,
+        "deduction_status": it.deduction_status or "",
         "certification_date": str(it.certification_date) if it.certification_date else "",
         "deduction_date": str(it.deduction_date) if it.deduction_date else "",
-        "deduction_method": it.deduction_method,
+        "deduction_method": it.deduction_method or "",
         "voucher_no": it.voucher_no or "", "remark": it.remark or "",
         "created_at": str(it.created_at) if it.created_at else ""
     } for it in items]
@@ -2920,18 +2974,18 @@ def input_vat_deduction_stats(company_id: int = Query(1), db: Session = Depends(
     total_count = base.count()
     total_tax = base.with_entities(func.sum(InputVATDeduction.tax_amount)).scalar() or 0
     total_deductible = base.with_entities(func.sum(InputVATDeduction.deductible_tax_amount)).scalar() or 0
-    total_deducted = base.with_entities(func.sum(InputVATDeduction.deducted_tax_amount)).scalar() or 0
-    pending_count = base.filter(InputVATDeduction.deduction_status.in_(["待认证", "待抵扣"])).count()
-    deducted_count = base.filter(InputVATDeduction.deduction_status == "已抵扣").count()
-    not_deductible_count = base.filter(InputVATDeduction.deduction_status == "不得抵扣").count()
+    total_amount = base.with_entities(func.sum(InputVATDeduction.amount)).scalar() or 0
+    unchecked_count = base.filter(InputVATDeduction.check_status == "未勾选").count()
+    checked_count = base.filter(InputVATDeduction.check_status == "已勾选").count()
+    abnormal_count = base.filter(InputVATDeduction.risk_level.in_(["疑点", "异常", "失控"])).count()
     return {
         "total_count": total_count,
+        "total_amount": round(total_amount, 2),
         "total_tax": round(total_tax, 2),
         "total_deductible": round(total_deductible, 2),
-        "total_deducted": round(total_deducted, 2),
-        "pending_count": pending_count,
-        "deducted_count": deducted_count,
-        "not_deductible_count": not_deductible_count
+        "unchecked_count": unchecked_count,
+        "checked_count": checked_count,
+        "abnormal_count": abnormal_count
     }
 
 
@@ -2942,18 +2996,32 @@ def get_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Sessio
         raise HTTPException(404, detail="抵扣记录不存在")
     return {
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
-        "invoice_no": it.invoice_no or "", "invoice_code": it.invoice_code or "",
+        "check_status": it.check_status or "未勾选",
+        "invoice_source": it.invoice_source or "",
+        "domestic_sale_cert_no": it.domestic_sale_cert_no or "",
+        "digital_invoice_no": it.digital_invoice_no or "",
+        "invoice_code": it.invoice_code or "",
+        "invoice_no": it.invoice_no or "",
         "invoice_date": str(it.invoice_date) if it.invoice_date else "",
-        "seller_name": it.seller_name or "", "goods_name": it.goods_name or "",
-        "total_amount": it.total_amount or 0, "tax_amount": it.tax_amount or 0,
-        "tax_rate": it.tax_rate or 0,
+        "seller_tax_id": it.seller_tax_id or "",
+        "seller_name": it.seller_name or "",
+        "amount": it.amount or 0,
+        "tax_amount": it.tax_amount or 0,
         "deductible_tax_amount": it.deductible_tax_amount or 0,
+        "invoice_category": it.invoice_category or "",
+        "invoice_category_label": it.invoice_category_label or "",
+        "invoice_status": it.invoice_status or "正常",
+        "check_time": str(it.check_time) if it.check_time else "",
+        "risk_level": it.risk_level or "正常",
+        "goods_name": it.goods_name or "",
+        "total_amount": it.total_amount or 0,
+        "tax_rate": it.tax_rate or 0,
         "deducted_tax_amount": it.deducted_tax_amount or 0,
         "deduction_period": it.deduction_period or "",
-        "deduction_status": it.deduction_status,
+        "deduction_status": it.deduction_status or "",
         "certification_date": str(it.certification_date) if it.certification_date else "",
         "deduction_date": str(it.deduction_date) if it.deduction_date else "",
-        "deduction_method": it.deduction_method,
+        "deduction_method": it.deduction_method or "",
         "voucher_no": it.voucher_no or "", "remark": it.remark or "",
         "created_at": str(it.created_at) if it.created_at else "",
         "updated_at": str(it.updated_at) if it.updated_at else ""
@@ -2980,6 +3048,16 @@ def delete_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Ses
     db.delete(it)
     db.commit()
     return {"message": "删除成功"}
+
+
+@app.post("/api/input-vat-deductions/batch-delete")
+def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        InputVATDeduction.id.in_(ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"已删除 {deleted} 条记录", "deleted": deleted}
 
 
 # ==================== 列映射模板 ====================
