@@ -5336,9 +5336,9 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     return;
   }
 
-  // 仅全部被去重拦截时，弹出强制导入确认框
-  const allDupSkipped = result.imported === 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
-  if (allDupSkipped) {
+  // 只要有重复记录被跳过，就提示是否强制导入
+  const hasDupSkipped = result.skipped > 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
+  if (hasDupSkipped) {
     const confirmForce = confirm(
       `导入结果：成功 ${result.imported} 条，跳过 ${result.skipped} 条重复记录。\n\n` +
       (result.errors && result.errors.length > 0 ? '详情：\n' + result.errors.slice(0, 10).join('\n') + '\n\n' : '') +
