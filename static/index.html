@@ -993,88 +993,101 @@ async function renderDashboard() {
   }
 }
 // ==================== 序时账 ====================
+
+let jeTab = 'all'; // all / reviewed / unreviewed
+let jeFilter = { keyword: '', periodFrom: '', periodTo: '' };
+
 async function renderJournal() {
   const el = document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
-    const stats = await api('/api/journal-entries/stats');
-    el.innerHTML = `
-      <div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
-        <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">条</div></div>
-        <div class="stat-card"><div class="stat-label">借方合计</div><div class="stat-value" style="color:var(--primary)">¥${fmt(stats.total_debit)}</div></div>
-        <div class="stat-card"><div class="stat-label">贷方合计</div><div class="stat-value" style="color:var(--success)">¥${fmt(stats.total_credit)}</div></div>
-        <div class="stat-card"><div class="stat-label">已复核</div><div class="stat-value" style="color:var(--success)">${stats.reviewed_count}</div><div class="stat-sub">条</div></div>
-        <div class="stat-card"><div class="stat-label">未复核</div><div class="stat-value" style="color:var(--warning)">${stats.unreviewed_count}</div><div class="stat-sub">条</div></div>
-      </div>
-      <div class="card" style="margin-bottom:0">
-        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span>📋 序时账</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn" style="color:var(--danger);border-color:var(--danger)" onclick="batchDeleteJe()">🗑 批量删除</button>
-            <button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从开具发票生成</button>
-          </div>
-        </div>
-        <div class="table-wrap" id="je-table"></div>
-      </div>
-    `;
-  } catch (e) {
-    el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
-  }
-  loadJournalList();
-}
+    const [data, stats] = await Promise.all([
+      api('/api/journal-entries'),
+      api('/api/journal-entries/stats')
+    ]);
+    let html = '<div class="page-header"><h2>📋 序时账</h2></div>';
 
+    // 统计卡片
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">记录总数</div></div>';
+    html += '<div class="stat-card"><div class="stat-value" style="color:var(--primary)">¥' + fmt(stats.total_debit) + '</div><div class="stat-label">借方合计</div></div>';
+    html += '<div class="stat-card"><div class="stat-value" style="color:var(--success)">¥' + fmt(stats.total_credit) + '</div><div class="stat-label">贷方合计</div></div>';
+    html += '<div class="stat-card"><div class="stat-value" style="color:var(--success)">' + stats.reviewed_count + '</div><div class="stat-label">已复核</div></div>';
+    html += '<div class="stat-card"><div class="stat-value" style="color:var(--warning)">' + stats.unreviewed_count + '</div><div class="stat-label">未复核</div></div>';
+    html += '</div>';
 
-async function loadJournalList() {
-  const el = document.getElementById('je-table');
-  el.innerHTML = '加载中...';
-  try {
-    const data = await api('/api/journal-entries');
-    if (!data.length) {
-      el.innerHTML = `
-        <table>
-          <thead><tr>
-            <th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>
-            <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th><th style="width:90px">操作</th>
-          </tr></thead>
-          <tbody><tr><td colspan="14" style="text-align:center;color:#999;padding:24px">暂无记录</td></tr></tbody>
-        </table>`;
-      return;
+    // 工具栏
+    html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+    html += '<div class="toolbar-left" style="flex:1 1 100%;">';
+    html += '<input id="jeKeyword" placeholder="搜索摘要/科目/凭证号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (jeFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){jeFilter.keyword=this.value;renderJournal()}">';
+    html += '<button onclick="jeFilter.keyword=document.getElementById(\'jeKeyword\').value;renderJournal()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
+    html += '<input type="text" id="jePeriodFrom" placeholder="起始期间" value="' + (jeFilter.periodFrom||'') + '" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:100px" onkeydown="if(event.key==\'Enter\'){jeFilter.periodFrom=this.value;renderJournal()}">';
+    html += '<span style="color:#9ca3af">至</span>';
+    html += '<input type="text" id="jePeriodTo" placeholder="截止期间" value="' + (jeFilter.periodTo||'') + '" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:100px" onkeydown="if(event.key==\'Enter\'){jeFilter.periodTo=this.value;renderJournal()}">';
+    html += '<button onclick="jeFilter.keyword=\'\';jeFilter.periodFrom=\'\';jeFilter.periodTo=\'\';renderJournal()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
+    html += '<button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从开具发票生成</button>';
+    html += '<div class="tab-btn-group">';
+    const jeTabs = [['all', '全部'], ['unreviewed', '未复核'], ['reviewed', '已复核']];
+    jeTabs.forEach(([t, label]) => {
+      html += '<button class="tab-btn ' + (jeTab === t ? 'active' : '') + '" onclick="jeTab=\'' + t + '\';renderJournal()">' + label + '</button>';
+    });
+    html += '</div></div></div>';
+
+    // 过滤
+    let items = data;
+    if (jeTab === 'reviewed') items = items.filter(i => i.is_reviewed);
+    if (jeTab === 'unreviewed') items = items.filter(i => !i.is_reviewed);
+    if (jeFilter.periodFrom) items = items.filter(i => i.period && i.period >= jeFilter.periodFrom);
+    if (jeFilter.periodTo) items = items.filter(i => i.period && i.period <= jeFilter.periodTo);
+    if (jeFilter.keyword) {
+      const kw = jeFilter.keyword.toLowerCase();
+      items = items.filter(i =>
+        (i.summary && i.summary.toLowerCase().includes(kw)) ||
+        (i.account_code && i.account_code.toLowerCase().includes(kw)) ||
+        (i.account_name && i.account_name.toLowerCase().includes(kw)) ||
+        (i.voucher_no && String(i.voucher_no).includes(kw))
+      );
     }
-    el.innerHTML = `
-      <table>
-        <thead><tr>
-          <th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>
-          <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th><th style="width:90px">操作</th>
-        </tr></thead>
-        <tbody>
-          ${data.map(r => `
-            <tr>
-              <td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="${r.id}" onchange="jeOnCheck()"></td>
-              <td>${r.period}</td>
-              <td style="text-align:center">${r.voucher_no}</td>
-              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(r.summary || '')}">${r.summary || '-'}</td>
-              <td>${r.account_code}</td>
-              <td>${r.account_name || '-'}</td>
-              <td>${r.contact_project || '-'}</td>
-              <td>${r.spec_model || '-'}</td>
-              <td class="num">${r.quantity > 0 ? fmt(r.quantity) : '-'}</td>
-              <td>${r.unit || '-'}</td>
-              <td class="num">${r.unit_price > 0 ? '¥' + fmt(r.unit_price) : '-'}</td>
-              <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-'}</td>
-              <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-'}</td>
-              <td style="text-align:center;white-space:nowrap">
-                <button class="btn btn-secondary btn-sm" onclick="editJeEntry(${r.id})">编辑</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteJeEntry(${r.id})">删除</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+
+    // 表格
+    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
+    html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
+    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>操作</th>';
+    html += '</tr></thead><tbody>';
+
+    if (items.length === 0) {
+      html += '<tr><td colspan="14" style="text-align:center;color:#9ca3af;padding:40px">暂无记录</td></tr>';
+    } else {
+      items.forEach(r => {
+        html += '<tr>';
+        html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" onchange="jeOnCheck()"></td>';
+        html += '<td>' + r.period + '</td>';
+        html += '<td style="text-align:center">' + r.voucher_no + '</td>';
+        html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
+        html += '<td>' + r.account_code + '</td>';
+        html += '<td>' + (r.account_name || '-') + '</td>';
+        html += '<td>' + (r.contact_project || '-') + '</td>';
+        html += '<td>' + (r.spec_model || '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.quantity > 0 ? r.quantity : '-') + '</td>';
+        html += '<td>' + (r.unit || '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.unit_price > 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+        html += '<td style="white-space:nowrap">';
+        html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')" style="margin-right:4px">编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
+        html += '</td></tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+    el.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">' + e.message + '</p></div>';
   }
 }
+
+
 
 async function showInvoicePicker() {
   const data = await api('/api/sales-invoices');
@@ -1109,7 +1122,7 @@ async function generateFromInvoice(invoiceId) {
     const res = await api('/api/sales-invoices/' + invoiceId + '/to-journal', { method: 'POST' });
     alert(res.message);
     document.getElementById('je-invoice-picker')?.remove();
-    loadJournalList();
+    renderJournal();
   } catch (e) {
     alert('生成失败：' + e.message);
   }
@@ -1136,7 +1149,7 @@ async function batchDeleteJe() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
     });
     toast(result.message, 'success');
-    loadJournalList();
+    renderJournal();
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1151,7 +1164,7 @@ async function deleteJeEntry(id) {
   try {
     const result = await api('/api/journal-entries/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
-    loadJournalList();
+    renderJournal();
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1262,7 +1275,7 @@ async function saveJournal(entryId) {
       toast('创建成功', 'success');
     }
     closeModal();
-    loadJournalList();
+    renderJournal();
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1273,7 +1286,7 @@ async function deleteJournal(id) {
   try {
     await api('/api/journal-entries/' + id, { method: 'DELETE' });
     toast('删除成功', 'success');
-    loadJournalList();
+    renderJournal();
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1860,17 +1873,14 @@ async function renderDepartments() {
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>部门名称</th><th>负责人</th><th>电话</th><th>创建时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
+              ${data.length === 0 ? '<tr><td colspan="3"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
                 <tr>
                   <td>${d.code}</td>
                   <td>${d.name}</td>
-                  <td>${d.manager || '-'}</td>
-                  <td>${d.phone || '-'}</td>
-                  <td>${d.created_at?.slice(0,10) || ''}</td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}','${esc(d.manager||'')}','${esc(d.phone||'')}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}')">编辑</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteDept(${d.id})">删除</button>
                   </td>
                 </tr>
@@ -1885,14 +1895,12 @@ async function renderDepartments() {
   }
 }
 
-function showDeptForm(id, code, name, manager, phone) {
+function showDeptForm(id, code, name) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}部门</h3>
     <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="dept-code" value="${code||''}" placeholder="如：SC"></div>
     <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="dept-name" value="${name||''}" placeholder="如：生产部"></div>
-    <div class="form-field"><label>负责人</label><input id="dept-manager" value="${manager||''}"></div>
-    <div class="form-field"><label>电话</label><input id="dept-phone" value="${phone||''}"></div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveDept(${id||0})">保存</button>
       <button class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -1903,9 +1911,7 @@ function showDeptForm(id, code, name, manager, phone) {
 async function saveDept(id) {
   const body = {
     code: document.getElementById('dept-code').value.trim(),
-    name: document.getElementById('dept-name').value.trim(),
-    manager: document.getElementById('dept-manager').value.trim(),
-    phone: document.getElementById('dept-phone').value.trim()
+    name: document.getElementById('dept-name').value.trim()
   };
   if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
   try {
