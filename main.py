@@ -2455,6 +2455,200 @@ def trial_balance(
     return result
 
 
+# ==================== 利润表 ====================
+@app.get("/api/reports/profit-loss")
+def profit_loss_report(
+    company_id: int = Query(1),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """利润表：按期间范围汇总收入/成本/费用/利润"""
+    # 查询指定期间范围内的所有凭证分录
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to
+    ).all()
+
+    # 按科目编码汇总借方贷方
+    balances = {}
+    for e in entries:
+        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+
+    def net(code_prefix, is_credit_nature=True):
+        """汇总指定前缀科目的净额：收入类=贷方-借方，费用类=借方-贷方"""
+        total_dr = 0.0
+        total_cr = 0.0
+        for code, bal in balances.items():
+            if code.startswith(code_prefix):
+                total_dr += bal["debit"]
+                total_cr += bal["credit"]
+        if is_credit_nature:
+            return round(total_cr - total_dr, 2)
+        else:
+            return round(total_dr - total_cr, 2)
+
+    # 营业收入 = 6001 + 6051（贷方余额）
+    revenue = net("6001") + net("6051")
+    # 营业成本 = 6401 + 6402（借方余额）
+    cost = net("6401", False) + net("6402", False)
+    # 税金及附加 = 6403（借方余额）
+    tax_surcharge = net("6403", False)
+    # 销售费用 = 6601（借方余额）
+    selling_exp = net("6601", False)
+    # 管理费用 = 6602（借方余额）
+    admin_exp = net("6602", False)
+    # 财务费用 = 6603（借方余额）
+    finance_exp = net("6603", False)
+    # 投资收益 = 6111（贷方余额，损失则为负）
+    invest_income = net("6111")
+    # 营业外收入 = 6301（贷方余额）
+    other_income = net("6301")
+    # 营业外支出 = 6711（借方余额）
+    other_expense = net("6711", False)
+    # 所得税 = 6801（借方余额）
+    income_tax = net("6801", False)
+
+    gross_profit = round(revenue - cost - tax_surcharge, 2)
+    operating_profit = round(gross_profit - selling_exp - admin_exp - finance_exp + invest_income, 2)
+    total_profit = round(operating_profit + other_income - other_expense, 2)
+    net_profit = round(total_profit - income_tax, 2)
+
+    def item(label, amount, bold=False, highlight=False):
+        return {"label": label, "amount": amount, "bold": bold, "highlight": highlight}
+
+    items = [
+        item("一、营业收入", revenue, bold=True),
+        item("  减：营业成本", cost),
+        item("  减：税金及附加", tax_surcharge),
+        item("二、毛利润", gross_profit, bold=True, highlight=True),
+        item("  减：销售费用", selling_exp),
+        item("  减：管理费用", admin_exp),
+        item("  减：财务费用", finance_exp),
+        item("  加：投资收益", invest_income),
+        item("三、营业利润", operating_profit, bold=True, highlight=True),
+        item("  加：营业外收入", other_income),
+        item("  减：营业外支出", other_expense),
+        item("四、利润总额", total_profit, bold=True, highlight=True),
+        item("  减：所得税费用", income_tax),
+        item("五、净利润", net_profit, bold=True, highlight=True),
+    ]
+    return {"items": items}
+
+
+# ==================== 资产负债表 ====================
+@app.get("/api/reports/balance-sheet")
+def balance_sheet_report(
+    company_id: int = Query(1),
+    period: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """资产负债表：资产 = 负债 + 所有者权益"""
+    # 截止期间前所有凭证分录的累计余额
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period <= period
+    ).all()
+
+    balances = {}
+    for e in entries:
+        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+
+    def bal_net(code_prefix, is_debit_nature=True):
+        """资产类=借方-贷方，负债/权益类=贷方-借方"""
+        total_dr = 0.0
+        total_cr = 0.0
+        for code, bal in balances.items():
+            if code.startswith(code_prefix):
+                total_dr += bal["debit"]
+                total_cr += bal["credit"]
+        if is_debit_nature:
+            return round(total_dr - total_cr, 2)
+        else:
+            return round(total_cr - total_dr, 2)
+
+    def row(label, amount, bold=False, highlight=False):
+        return {"label": label, "amount": amount, "bold": bold, "highlight": highlight}
+
+    # 资产
+    cash = bal_net("1001") + bal_net("1002")
+    receivables = bal_net("1122")
+    prepayments = bal_net("1123")
+    other_recv = bal_net("1221")
+    inventory = bal_net("140") + bal_net("1411")
+    fixed_assets = bal_net("1601")
+    accum_depr = bal_net("1602", is_debit_nature=False)  # 累计折旧是贷方科目
+    intangible = bal_net("1701")
+    long_term = bal_net("1801")
+
+    total_current = round(cash + receivables + prepayments + other_recv + inventory, 2)
+    total_noncurrent = round(fixed_assets + accum_depr + intangible + long_term, 2)
+    total_assets = round(total_current + total_noncurrent, 2)
+
+    # 负债
+    short_loan = bal_net("2001", is_debit_nature=False)
+    payables = bal_net("2202", is_debit_nature=False)
+    advance = bal_net("2203", is_debit_nature=False)
+    taxes = bal_net("2210", is_debit_nature=False)
+    payroll = bal_net("2211", is_debit_nature=False)
+    other_pay = bal_net("2221", is_debit_nature=False)
+    deferred = bal_net("2241", is_debit_nature=False)
+    long_loan = bal_net("2501", is_debit_nature=False)
+
+    total_liab = round(short_loan + payables + advance + taxes + payroll + other_pay + deferred + long_loan, 2)
+
+    # 所有者权益
+    paid_in = bal_net("4001", is_debit_nature=False)
+    capital_surplus = bal_net("4002", is_debit_nature=False)
+    surplus = bal_net("4101", is_debit_nature=False)
+    current_profit = bal_net("4103", is_debit_nature=False)
+    profit_dist = bal_net("4104", is_debit_nature=False)
+    total_equity = round(paid_in + capital_surplus + surplus + current_profit + profit_dist, 2)
+
+    total_right = round(total_liab + total_equity, 2)
+
+    assets = [
+        row("货币资金", cash),
+        row("应收账款", receivables),
+        row("预付款项", prepayments),
+        row("其他应收款", other_recv),
+        row("存货", inventory),
+        row("流动资产合计", total_current, bold=True, highlight=True),
+        row("固定资产", fixed_assets),
+        row("  减：累计折旧", accum_depr),
+        row("无形资产", intangible),
+        row("长期待摊费用", long_term),
+        row("非流动资产合计", total_noncurrent, bold=True, highlight=True),
+        row("资产总计", total_assets, bold=True, highlight=True),
+    ]
+
+    liabilities_equity = [
+        row("短期借款", short_loan),
+        row("应付账款", payables),
+        row("预收款项", advance),
+        row("应交税费", taxes),
+        row("应付职工薪酬", payroll),
+        row("其他应付款", other_pay),
+        row("递延收益", deferred),
+        row("长期借款", long_loan),
+        row("负债合计", total_liab, bold=True, highlight=True),
+        row("实收资本", paid_in),
+        row("资本公积", capital_surplus),
+        row("盈余公积", surplus),
+        row("未分配利润", current_profit),
+        row("  利润分配", profit_dist),
+        row("所有者权益合计", total_equity, bold=True, highlight=True),
+        row("负债及所有者权益总计", total_right, bold=True, highlight=True),
+    ]
+
+    return {"assets": assets, "liabilities_equity": liabilities_equity}
+
+
 @app.post("/api/journal-entries")
 def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     e = JournalEntry(company_id=company_id, **data.model_dump())

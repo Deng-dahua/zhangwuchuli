@@ -1493,7 +1493,11 @@ def verify_dedup_columns(db):
         # 尝试写读自检：插入→验证→回滚
         try:
             test_fp = json.dumps([["__test__", "__verify__"]])
-            rec = model(_fingerprint=test_fp, company_id=1)
+            kwargs = {"_fingerprint": test_fp, "company_id": 1}
+            if name == "bank_transactions":
+                from datetime import date
+                kwargs["transaction_date"] = date.today()
+            rec = model(**kwargs)
             db.add(rec)
             db.flush()
             db.refresh(rec)
