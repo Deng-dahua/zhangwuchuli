@@ -898,7 +898,7 @@ async function renderJournal() {
     }
 
     // 表格
-    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
+    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:4px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
     html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -910,10 +910,10 @@ async function renderJournal() {
         html += '<tr>';
         html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" onchange="jeOnCheck()"></td>';
         html += '<td>' + r.period + '</td>';
-        html += '<td style="text-align:center">' + r.voucher_no + '</td>';
+        html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
         html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
         html += '<td>' + r.account_code + '</td>';
-        html += '<td>' + (r.account_full_name || r.account_name || '-') + '</td>';
+        html += '<td>' + (r.account_name || '-') + '</td>';
         html += '<td>' + (r.contact_project || '-') + '</td>';
         html += '<td>' + (r.spec_model || '-') + '</td>';
         html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
@@ -952,7 +952,7 @@ async function showInvoicePicker() {
       <td style="padding:6px 12px">${(r.goods_name||'').substring(0,30)}</td>
       <td style="padding:6px 12px" class="num">¥${fmt(r.total_amount)}</td>
       <td style="padding:6px 12px">${r.status}</td>
-      <td style="padding:6px 12px"><button class="btn btn-primary btn-sm" onclick="generateFromInvoice(${r.id})">生成</button></td>
+      <td style="padding:6px 12px">${r.journal_voucher_no ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" onclick="generateFromInvoice(' + r.id + ')">生成</button>'}</td>
     </tr>`;
   });
   html += '</tbody></table></div>';
