@@ -2463,23 +2463,50 @@ def auto_voucher_from_sales_invoices(
     if not invoices:
         raise HTTPException(status_code=404, detail="未找到选中的发票")
 
-    # 校验借方科目存在
-    debit_acc = db.query(Account).filter(
-        Account.company_id == company_id, Account.code == debit_account
-    ).first()
-    if not debit_acc:
-        raise HTTPException(status_code=400, detail=f"借方科目 {debit_account} 不存在")
+    # 自动确保科目存在（缺了就建）
+    def ensure_account(code: str, name: str, category: str, direction: str, level: int, parent_code: str = None) -> Account:
+        acc = db.query(Account).filter(
+            Account.company_id == company_id, Account.code == code
+        ).first()
+        if acc:
+            return acc
+        # 如果有父科目，先确保父科目存在
+        if parent_code:
+            ensure_parent(db, company_id, parent_code)
+        acc = Account(
+            company_id=company_id, code=code, name=name,
+            category=category, balance_direction=direction,
+            level=level, parent_code=parent_code
+        )
+        db.add(acc)
+        db.flush()
+        return acc
 
-    # 校验贷方科目存在
-    revenue_acc = db.query(Account).filter(
-        Account.company_id == company_id, Account.code == "6001"
-    ).first()
-    if not revenue_acc:
-        raise HTTPException(status_code=400, detail="主营业务收入科目(6001)不存在，请先在科目表中添加")
+    def ensure_parent(db_session, cid: int, pcode: str):
+        """确保父科目存在（自动创建常见父科目）"""
+        existing = db_session.query(Account).filter(
+            Account.company_id == cid, Account.code == pcode
+        ).first()
+        if existing:
+            return existing
+        # 按编码前缀推断父科目属性
+        parent_defs = {
+            "2210": ("应交税费", "负债", "贷", 1),
+        }
+        if pcode in parent_defs:
+            nm, cat, dr, lv = parent_defs[pcode]
+            p_acc = Account(
+                company_id=cid, code=pcode, name=nm,
+                category=cat, balance_direction=dr, level=lv
+            )
+            db_session.add(p_acc)
+            db_session.flush()
+            return p_acc
+        return None
 
-    tax_acc = db.query(Account).filter(
-        Account.company_id == company_id, Account.code == "221001"
-    ).first()
+    debit_acc = ensure_account(debit_account, "应收账款", "资产", "借", 1)
+    revenue_acc = ensure_account("6001", "主营业务收入", "收入", "贷", 1)
+    tax_acc = ensure_account("221001", "应交增值税", "负债", "贷", 2, parent_code="2210")
 
     # 计算合计
     total_amount = round(sum(inv.amount or 0 for inv in invoices), 2)
