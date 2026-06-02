@@ -847,7 +847,6 @@ async function renderDashboard() {
 }
 // ==================== 序时账 ====================
 
-let jeTab = 'all'; // all / reviewed / unreviewed
 let jeFilter = { keyword: '', periodFrom: '', periodTo: '' };
 
 async function renderJournal() {
@@ -874,23 +873,17 @@ async function renderJournal() {
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<input id="jeKeyword" placeholder="搜索摘要/科目/凭证号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (jeFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){jeFilter.keyword=this.value;renderJournal()}">';
     html += '<button onclick="jeFilter.keyword=document.getElementById(\'jeKeyword\').value;renderJournal()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
-    html += '<input type="text" id="jePeriodFrom" placeholder="起始期间" value="' + (jeFilter.periodFrom||'') + '" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:100px" onkeydown="if(event.key==\'Enter\'){jeFilter.periodFrom=this.value;renderJournal()}">';
+    html += '<select onchange="jeFilter.periodFrom=this.value;renderJournal()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px"><option value="">起始期间</option>' + _periodOptions(jeFilter.periodFrom||'') + '</select>';
     html += '<span style="color:#9ca3af">至</span>';
-    html += '<input type="text" id="jePeriodTo" placeholder="截止期间" value="' + (jeFilter.periodTo||'') + '" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:100px" onkeydown="if(event.key==\'Enter\'){jeFilter.periodTo=this.value;renderJournal()}">';
+    html += '<select onchange="jeFilter.periodTo=this.value;renderJournal()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px"><option value="">截止期间</option>' + _periodOptions(jeFilter.periodTo||'') + '</select>';
     html += '<button onclick="jeFilter.keyword=\'\';jeFilter.periodFrom=\'\';jeFilter.periodTo=\'\';renderJournal()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
-    html += '<button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从开具发票生成</button>';
-    html += '<div class="tab-btn-group">';
-    const jeTabs = [['all', '全部'], ['unreviewed', '未复核'], ['reviewed', '已复核']];
-    jeTabs.forEach(([t, label]) => {
-      html += '<button class="tab-btn ' + (jeTab === t ? 'active' : '') + '" onclick="jeTab=\'' + t + '\';renderJournal()">' + label + '</button>';
-    });
-    html += '</div></div></div>';
+    html += '</div>';
+    html += '<div style="width:100%;margin-top:4px"><button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从开具发票生成</button></div>';
+    html += '</div></div>';
 
     // 过滤
     let items = data;
-    if (jeTab === 'reviewed') items = items.filter(i => i.is_reviewed);
-    if (jeTab === 'unreviewed') items = items.filter(i => !i.is_reviewed);
     if (jeFilter.periodFrom) items = items.filter(i => i.period && i.period >= jeFilter.periodFrom);
     if (jeFilter.periodTo) items = items.filter(i => i.period && i.period <= jeFilter.periodTo);
     if (jeFilter.keyword) {
@@ -1312,6 +1305,21 @@ async function loadDetailLedger() {
   }
 }
 
+// ===== 期间下拉辅助 =====
+function _periodOptions(selected) {
+  const now = new Date();
+  let y = now.getFullYear(), m = now.getMonth() + 1;
+  let opts = '';
+  for (let yy = 2024; yy <= y; yy++) {
+    const maxM = (yy === y) ? m : 12;
+    for (let mm = 1; mm <= maxM; mm++) {
+      const val = yy + '-' + String(mm).padStart(2, '0');
+      opts += '<option value="' + val + '"' + (val === selected ? ' selected' : '') + '>' + val + '</option>';
+    }
+  }
+  return opts;
+}
+
 // ==================== 利润表 ====================
 async function renderProfitLoss() {
   const el = document.getElementById('content-area');
@@ -1319,8 +1327,8 @@ async function renderProfitLoss() {
     <div class="card">
       <div class="card-title">📈 利润表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label><input class="form-control" id="pl-from" value="${currentPeriod}" style="width:130px"></div>
-        <div class="form-group"><label>截止期间</label><input class="form-control" id="pl-to" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>起始期间</label><select class="form-control" id="pl-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>截止期间</label><select class="form-control" id="pl-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button></div>
       </div>
       <div id="pl-table">请点击生成报表</div>
@@ -1361,7 +1369,8 @@ async function renderBalanceSheet() {
     <div class="card">
       <div class="card-title">⚖️ 资产负债表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>截止期间</label><input class="form-control" id="bs-period" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>起始期间</label><select class="form-control" id="bs-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>截止期间</label><select class="form-control" id="bs-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button></div>
       </div>
       <div id="bs-table">请点击生成报表</div>
@@ -1370,11 +1379,12 @@ async function renderBalanceSheet() {
 }
 
 async function loadBalanceSheet() {
-  const period = document.getElementById('bs-period').value;
+  const from = document.getElementById('bs-from').value;
+  const to = document.getElementById('bs-to').value;
   const el = document.getElementById('bs-table');
   el.innerHTML = '加载中...';
   try {
-    const data = await api(`/api/reports/balance-sheet?period=${period}`);
+    const data = await api(`/api/reports/balance-sheet?period=${to}`);
     const renderRows = (rows) => rows.map(r => `
       <tr class="${r.bold ? 'report-bold' : ''} ${r.highlight ? 'report-highlight' : ''}">
         <td>${r.label}</td>
@@ -1413,7 +1423,8 @@ async function renderAccountBalance() {
     <div class="card">
       <div class="card-title">📒 科目余额表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>期间</label><input class="form-control" id="tb-period" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>起始期间</label><select class="form-control" id="tb-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>截止期间</label><select class="form-control" id="tb-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button></div>
       </div>
       <div id="tb-table">加载中...</div>
@@ -1423,11 +1434,12 @@ async function renderAccountBalance() {
 }
 
 async function loadAccountBalance() {
-  const period = document.getElementById('tb-period').value;
+  const from = document.getElementById('tb-from').value;
+  const to = document.getElementById('tb-to').value;
   const el = document.getElementById('tb-table');
   el.innerHTML = '加载中...';
   try {
-    const data = await api(`/api/trial-balance?period=${period}`);
+    const data = await api(`/api/trial-balance?period=${to}`);
     
     // 合计只统计一级科目（避免子级重复计入）
     const l1 = data.filter(r => r.level === 1);
@@ -1787,19 +1799,24 @@ async function renderEmployees() {
     el.innerHTML = `
       <div class="card">
         <div class="card-title">👥 人员档案</div>
-        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">📁 导入文件</button>
+          <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">🗑 批量删除</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllEmp(this)" title="全选"></th><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
                 return `
                 <tr>
+                  <td><input type="checkbox" class="emp-check" value="${e.id}" onchange="updateEmpBatchBtn()"></td>
                   <td>${e.code}</td>
                   <td>${e.name}</td>
                   <td>${e.id_card || '-'}</td>
                   <td>
-                    <span class="link-action" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}','${esc(e.email||'')}',${e.salary||0})">编辑</span>
+                    <span class="link-action" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}')">编辑</span>
                     <span class="link-action link-danger" onclick="deleteEmp(${e.id})">删除</span>
                   </td>
                 </tr>
@@ -1814,7 +1831,32 @@ async function renderEmployees() {
   }
 }
 
-function showEmpForm(id, code, name, idCard, email, salary) {
+function toggleSelectAllEmp(cb) {
+  document.querySelectorAll('.emp-check').forEach(c => c.checked = cb.checked);
+  updateEmpBatchBtn();
+}
+
+function updateEmpBatchBtn() {
+  const count = document.querySelectorAll('.emp-check:checked').length;
+  const btn = document.getElementById('btn-batch-del-emp');
+  if (btn) {
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
+  }
+}
+
+async function batchDeleteEmp() {
+  const checked = [...document.querySelectorAll('.emp-check:checked')].map(cb => parseInt(cb.value));
+  if (checked.length === 0) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条人员记录？此操作不可撤销！')) return;
+  try {
+    await api('/api/employees/batch-delete', { method: 'POST', body: JSON.stringify({ids: checked}) });
+    toast('成功删除 ' + checked.length + ' 条人员', 'success');
+    renderEmployees();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function showEmpForm(id, code, name, idCard) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}人员</h3>
@@ -1822,8 +1864,6 @@ function showEmpForm(id, code, name, idCard, email, salary) {
       <div class="form-field"><label>工号 <span style="color:red">*</span></label><input id="emp-code" value="${code||''}"></div>
       <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
       <div class="form-field"><label>身份证号</label><input id="emp-idcard" value="${idCard||''}" placeholder="18位身份证号"></div>
-      <div class="form-field"><label>邮箱</label><input id="emp-email" value="${email||''}" placeholder="email@example.com"></div>
-      <div class="form-field"><label>基本工资</label><input id="emp-salary" type="number" step="0.01" value="${salary||0}"></div>
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveEmp(${id||0})">保存</button>
@@ -1836,9 +1876,7 @@ async function saveEmp(id) {
   const body = {
     code: document.getElementById('emp-code').value.trim(),
     name: document.getElementById('emp-name').value.trim(),
-    id_card: document.getElementById('emp-idcard')?.value.trim() || null,
-    email: document.getElementById('emp-email')?.value.trim() || null,
-    salary: parseFloat(document.getElementById('emp-salary')?.value) || 0
+    id_card: document.getElementById('emp-idcard')?.value.trim() || null
   };
   if (!body.code || !body.name) { toast('请填写工号和姓名', 'error'); return; }
   try {
@@ -1872,7 +1910,8 @@ async function renderCustomers() {
         <div class="card-title">🤝 客户档案</div>
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
-          <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust" style="display:none">🗑 批量删除</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">🗑 批量删除</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -1908,8 +1947,8 @@ function updateBatchDelCustBtn() {
   const btn = document.getElementById('btn-batch-del-cust');
   if (!btn) return;
   const checked = document.querySelectorAll('.cust-check:checked').length;
-  btn.style.display = checked > 0 ? '' : 'none';
-  btn.textContent = `🗑 批量删除（${checked}）`;
+  btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
+  btn.disabled = checked === 0;
 }
 async function batchDeleteCust() {
   const checked = [...document.querySelectorAll('.cust-check:checked')].map(cb => parseInt(cb.value));
@@ -1976,7 +2015,8 @@ async function renderSuppliers() {
         <div class="card-title">📦 供应商档案</div>
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
-          <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp" style="display:none">🗑 批量删除</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">🗑 批量删除</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -2012,8 +2052,8 @@ function updateBatchDelSuppBtn() {
   const btn = document.getElementById('btn-batch-del-supp');
   if (!btn) return;
   const checked = document.querySelectorAll('.supp-check:checked').length;
-  btn.style.display = checked > 0 ? '' : 'none';
-  btn.textContent = `🗑 批量删除（${checked}）`;
+  btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
+  btn.disabled = checked === 0;
 }
 async function batchDeleteSupp() {
   const checked = [...document.querySelectorAll('.supp-check:checked')].map(cb => parseInt(cb.value));
@@ -2358,7 +2398,7 @@ async function showCompanyManager() {
 
     html += '<div class="card-title" style="margin-top:24px">股东信息</div>';
     if (c.shareholders && c.shareholders.length) {
-      html += '<div class="table-wrap"><table><thead><tr><th>姓名</th><th>身份证号</th><th>持股比例(%)</th><th>认缴出资额</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>姓名/公司名称</th><th>身份证号/统一社会信用代码</th><th>持股比例(%)</th><th>认缴出资额</th></tr></thead><tbody>';
       for (const s of c.shareholders) {
         html += '<tr><td>' + s.name + '</td><td>' + (s.id_number || '--') + '</td><td>' + (s.ratio || '--') + '</td><td>' + (s.contribution_amount ? '¥' + s.contribution_amount.toLocaleString() : '--') + '</td></tr>';
       }
@@ -2391,9 +2431,9 @@ async function showCompanyManager() {
 
     html += '<div class="card-title" style="margin-top:24px">财务负责人信息</div>';
     if (c.finance_contacts && c.finance_contacts.length) {
-      html += '<div class="table-wrap"><table><thead><tr><th>姓名</th><th>身份证号</th><th>联系电话</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>姓名</th><th>身份证号</th></tr></thead><tbody>';
       for (const f of c.finance_contacts) {
-        html += '<tr><td>' + f.name + '</td><td>' + (f.id_number || '--') + '</td><td>' + (f.phone || '--') + '</td></tr>';
+        html += '<tr><td>' + f.name + '</td><td>' + (f.id_number || '--') + '</td></tr>';
       }
       html += '</tbody></table></div>';
     } else {
@@ -2427,10 +2467,10 @@ async function showCompanyEditForm() {
   html += '<div class="form-group" style="grid-column:1/-1"><label>经营范围</label><textarea class="form-control" name="business_scope" rows="2">' + (c.business_scope || '') + '</textarea></div>';
   html += '</form>';
 
-  html += _buildPersonSection('shareholders', '股东信息', c.shareholders || [], ['姓名', '身份证号', '持股比例(%)', '认缴出资额']);
+  html += _buildPersonSection('shareholders', '股东信息', c.shareholders || [], ['姓名/公司名称', '身份证号/统一社会信用代码', '持股比例(%)', '认缴出资额']);
   html += _buildPersonSection('directors', '董事信息', c.directors || [], ['姓名', '身份证号']);
   html += _buildPersonSection('supervisors', '监事信息', c.supervisors || [], ['姓名', '身份证号']);
-  html += _buildPersonSection('finance_contacts', '财务负责人', c.finance_contacts || [], ['姓名', '身份证号', '联系电话']);
+  html += _buildPersonSection('finance_contacts', '财务负责人', c.finance_contacts || [], ['姓名', '身份证号']);
 
   html += '<div class="modal-footer">' +
     '<button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
@@ -2459,7 +2499,7 @@ function addPersonRow(key, headers, data) {
   const tr = document.createElement('tr');
   let h = '';
   for (const th of headers) {
-    const fk = th === '持股比例(%)' ? 'ratio' : th === '认缴出资额' ? 'contribution_amount' : th === '联系电话' ? 'phone' : th === '身份证号' ? 'id_number' : 'name';
+    const fk = th === '持股比例(%)' ? 'ratio' : th === '认缴出资额' ? 'contribution_amount' : th === '联系电话' ? 'phone' : (th === '身份证号' || th === '身份证号/统一社会信用代码') ? 'id_number' : 'name';
     h += '<td style="padding:4px 8px"><input class="form-control" value="' + (data[fk] || '') + '" style="font-size:13px"></td>';
   }
   h += '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove()" style="padding:2px 8px">×</button></td>';
@@ -2475,7 +2515,7 @@ function _collectPersonData(key, headers) {
     const item = {};
     const inputs = tr.querySelectorAll('input');
     headers.forEach(function(th, i) {
-      const fk = th === '持股比例(%)' ? 'ratio' : th === '认缴出资额' ? 'contribution_amount' : th === '联系电话' ? 'phone' : th === '身份证号' ? 'id_number' : 'name';
+      const fk = th === '持股比例(%)' ? 'ratio' : th === '认缴出资额' ? 'contribution_amount' : th === '联系电话' ? 'phone' : (th === '身份证号' || th === '身份证号/统一社会信用代码') ? 'id_number' : 'name';
       let val = inputs[i] ? inputs[i].value.trim() : '';
       if (fk === 'ratio' || fk === 'contribution_amount') val = parseFloat(val) || null;
       item[fk] = val || null;
@@ -2491,10 +2531,10 @@ async function saveCompanyDetail() {
   new FormData(form).forEach(function(v, k) { if (v) body[k] = v; });
   if (body.registered_capital) body.registered_capital = parseFloat(body.registered_capital);
 
-  body.shareholders = _collectPersonData('shareholders', ['姓名', '身份证号', '持股比例(%)', '认缴出资额']);
+  body.shareholders = _collectPersonData('shareholders', ['姓名/公司名称', '身份证号/统一社会信用代码', '持股比例(%)', '认缴出资额']);
   body.directors = _collectPersonData('directors', ['姓名', '身份证号']);
   body.supervisors = _collectPersonData('supervisors', ['姓名', '身份证号']);
-  body.finance_contacts = _collectPersonData('finance_contacts', ['姓名', '身份证号', '联系电话']);
+  body.finance_contacts = _collectPersonData('finance_contacts', ['姓名', '身份证号']);
 
   try {
     await fetch('/api/company?company_id=' + currentCompanyId, {
@@ -3764,7 +3804,7 @@ async function renderSalesInvoices() {
     html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
-    html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()" style="display:none">🗑 批量删除</button>';
+    html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
     const salesTabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
     salesTabs.forEach(([t, label]) => {
@@ -4041,8 +4081,8 @@ function updateSiBatchBtn() {
   const count = document.querySelectorAll('.si-check:checked').length;
   const btn = document.getElementById('siBatchDelBtn');
   if (btn) {
-    btn.style.display = count > 0 ? '' : 'none';
-    btn.textContent = '🗑 批量删除（' + count + '）';
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
   }
 }
 
@@ -4178,7 +4218,7 @@ async function renderPurchaseInvoices() {
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
     html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
-    html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()" style="display:none">🗑 批量删除</button>';
+    html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
     let items = inv;
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
@@ -4280,8 +4320,8 @@ function updatePiBatchBtn() {
   const count = document.querySelectorAll('.pi-check:checked').length;
   const btn = document.getElementById('piBatchDelBtn');
   if (btn) {
-    btn.style.display = count > 0 ? '' : 'none';
-    btn.textContent = '🗑 批量删除（' + count + '）';
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
   }
 }
 
@@ -4437,17 +4477,14 @@ async function renderBankTransactions() {
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
   html += bankSelectHtml;
-  html += '<select id="bt-type-filter" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;">';
-  html += '<option value="">全部类型</option><option value="收入">收入</option><option value="支出">支出</option>';
-  html += '</select>';
   html += '<input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;" onkeydown="if(event.key===\'Enter\')loadBankTxList()">';
   html += '<button onclick="loadBankTxList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
   html += '<input type="date" id="bt-date-from" value="' + btDateFrom + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
   html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
   html += '<input type="date" id="bt-date-to" value="' + btDateTo + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="document.getElementById(\'bt-type-filter\').value=\'\';document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button onclick="document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
-  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()" style="display:none">🗑 批量删除</button>';
+  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
 
   // 表格
@@ -4525,8 +4562,8 @@ function updateBankTxBatchBtn() {
   const count = document.querySelectorAll('.bt-check:checked').length;
   const btn = document.getElementById('btBatchDelBtn');
   if (btn) {
-    btn.style.display = count > 0 ? '' : 'none';
-    btn.textContent = '🗑 批量删除（' + count + '）';
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
   }
 }
 
@@ -4755,19 +4792,14 @@ async function renderInputVATDeductions() {
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-  html += '<select id="ivd-check-status" onchange="ivdFilter.checkStatus=this.value;renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">';
-  html += '<option value="">全部勾选状态</option>';
-  html += '<option value="已勾选"' + (ivdFilter.checkStatus==='已勾选'?' selected':'') + '>已勾选</option>';
-  html += '<option value="未勾选"' + (ivdFilter.checkStatus==='未勾选'?' selected':'') + '>未勾选</option>';
-  html += '</select>';
   html += '<input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="' + (ivdFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){ivdFilter.keyword=this.value;renderInputVATDeductions()}">';
   html += '<button onclick="ivdFilter.keyword=document.getElementById(\'ivdKeyword\').value;renderInputVATDeductions()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
   html += '<input type="date" value="' + (ivdFilter.dateFrom||'') + '" onchange="ivdFilter.dateFrom=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">';
   html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
   html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="ivdFilter.checkStatus=\'\';ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button onclick="ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
-  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()" style="display:none">🗑 批量删除</button>';
+  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
   // 表格
@@ -4821,8 +4853,8 @@ function updateIVDBatchBtn() {
   const count = document.querySelectorAll('.ivd-check:checked').length;
   const btn = document.getElementById('ivdBatchDelBtn');
   if (btn) {
-    btn.style.display = count > 0 ? '' : 'none';
-    btn.textContent = '🗑 批量删除（' + count + '）';
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
   }
 }
 
@@ -4975,7 +5007,7 @@ async function deleteVATDeduction(id) {
 // ==================== 文件导入 - 列映射 ====================
 
 function showUploadModal(module) {
-  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣' };
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣', 'employee': '导入人员档案', 'customer': '导入客户档案', 'supplier': '导入供应商档案' };
   const modal = createModal(titles[module] || '导入文件', `
     <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
     <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
@@ -5047,7 +5079,10 @@ function buildMappingUI(result, module, file, bankConfigId) {
     'seller_tax_id': '销售方纳税人识别号', 'invoice_category_label': '票种标签',
     'check_time': '勾选时间', 'risk_level': '发票风险等级',
     'deductible_tax_amount': '有效抵扣税额',
-    'invoice_status': '发票状态'
+    'invoice_status': '发票状态',
+    // 人员/客户/供应商
+    'code': '编码', 'name': '名称', 'id_card': '身份证号',
+    'uscc': '统一社会信用代码',
   };
 
   const fieldOrder = result.field_order; // 发票模块用平铺列表

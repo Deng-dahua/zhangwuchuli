@@ -306,6 +306,15 @@ def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depen
     db.commit()
     return {"message": "删除成功"}
 
+@app.post("/api/employees/batch-delete")
+def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+    ids = data.get("ids", [])
+    if not ids:
+        raise HTTPException(400, detail="请选择要删除的记录")
+    deleted = db.query(Employee).filter(Employee.company_id == company_id, Employee.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条人员记录"}
+
 
 # ==================== 客户档案 ====================
 
@@ -3821,6 +3830,48 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     new_deductions.append(inv)
                     if used_fingerprints is not None:
                         used_fingerprints[fp] = i+2
+
+                elif module == "employee":
+                    code = mapped.get("code", "").strip()
+                    name = mapped.get("name", "").strip()
+                    if not code or not name:
+                        errors.append(f"第{i+2}行: 工号和姓名不能为空")
+                        continue
+                    existing = db.query(Employee).filter(Employee.company_id == company_id, Employee.code == code).first()
+                    if existing:
+                        existing.name = name
+                        existing.id_card = mapped.get("id_card", "") or None
+                    else:
+                        emp = Employee(company_id=company_id, code=code, name=name, id_card=mapped.get("id_card", "") or None)
+                        db.add(emp)
+
+                elif module == "customer":
+                    code = mapped.get("code", "").strip()
+                    name = mapped.get("name", "").strip()
+                    if not code or not name:
+                        errors.append(f"第{i+2}行: 编码和名称不能为空")
+                        continue
+                    existing = db.query(Customer).filter(Customer.company_id == company_id, Customer.code == code).first()
+                    if existing:
+                        existing.name = name
+                        existing.uscc = mapped.get("uscc", "") or None
+                    else:
+                        cust = Customer(company_id=company_id, code=code, name=name, uscc=mapped.get("uscc", "") or None)
+                        db.add(cust)
+
+                elif module == "supplier":
+                    code = mapped.get("code", "").strip()
+                    name = mapped.get("name", "").strip()
+                    if not code or not name:
+                        errors.append(f"第{i+2}行: 编码和名称不能为空")
+                        continue
+                    existing = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == code).first()
+                    if existing:
+                        existing.name = name
+                        existing.uscc = mapped.get("uscc", "") or None
+                    else:
+                        supp = Supplier(company_id=company_id, code=code, name=name, uscc=mapped.get("uscc", "") or None)
+                        db.add(supp)
 
                 imported += 1
             except Exception as e:
