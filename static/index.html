@@ -873,15 +873,17 @@ async function renderJournal() {
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<input id="jeKeyword" placeholder="搜索摘要/科目/凭证号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (jeFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){jeFilter.keyword=this.value;renderJournal()}">';
     html += '<button onclick="jeFilter.keyword=document.getElementById(\'jeKeyword\').value;renderJournal()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
-    html += '<select onchange="jeFilter.periodFrom=this.value;renderJournal()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px"><option value="">起始期间</option>' + _periodOptions(jeFilter.periodFrom||'') + '</select>';
+    html += '<span style="font-size:13px;color:#6b7280">起始:</span>' + _periodSelectsHTML('je-from', jeFilter.periodFrom||'');
     html += '<span style="color:#9ca3af">至</span>';
-    html += '<select onchange="jeFilter.periodTo=this.value;renderJournal()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px"><option value="">截止期间</option>' + _periodOptions(jeFilter.periodTo||'') + '</select>';
+    html += '<span style="font-size:13px;color:#6b7280">截止:</span>' + _periodSelectsHTML('je-to', jeFilter.periodTo||'');
     html += '<button onclick="jeFilter.keyword=\'\';jeFilter.periodFrom=\'\';jeFilter.periodTo=\'\';renderJournal()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
     html += '</div>';
     html += '</div></div>';
 
     // 过滤
+    jeFilter.periodFrom = _readPeriod('je-from');
+    jeFilter.periodTo = _readPeriod('je-to');
     let items = data;
     if (jeFilter.periodFrom) items = items.filter(i => i.period && i.period >= jeFilter.periodFrom);
     if (jeFilter.periodTo) items = items.filter(i => i.period && i.period <= jeFilter.periodTo);
@@ -1244,8 +1246,8 @@ async function renderGeneralLedger() {
     <div class="card" style="margin-bottom:0">
       <div class="card-title">📒 总账</div>
       <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label><input class="form-control" id="gl-from" value="${yearMonth}" style="width:130px"></div>
-        <div class="form-group"><label>截止期间</label><input class="form-control" id="gl-to" value="${yearMonth}" style="width:130px"></div>
+        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('gl-from', yearMonth)}</div>
+        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('gl-to', yearMonth)}</div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button></div>
       </div>
       <div class="table-wrap" id="gl-table">请点击查询</div>
@@ -1254,8 +1256,8 @@ async function renderGeneralLedger() {
 }
 
 async function loadGeneralLedger() {
-  const from = document.getElementById('gl-from').value;
-  const to = document.getElementById('gl-to').value;
+  const from = _readPeriod('gl-from');
+  const to = _readPeriod('gl-to');
   const el = document.getElementById('gl-table');
   el.innerHTML = '加载中...';
   try {
@@ -1306,8 +1308,8 @@ async function renderDetailLedger() {
             ${accountOptions}
           </select>
         </div>
-        <div class="form-group"><label>起始期间</label><input class="form-control" id="dl-from" value="${currentPeriod}" style="width:130px"></div>
-        <div class="form-group"><label>截止期间</label><input class="form-control" id="dl-to" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('dl-from', currentPeriod)}</div>
+        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('dl-to', currentPeriod)}</div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button></div>
       </div>
       <div class="table-wrap" id="dl-table">请选择科目并查询</div>
@@ -1317,8 +1319,8 @@ async function renderDetailLedger() {
 
 async function loadDetailLedger() {
   const code = document.getElementById('dl-account').value;
-  const from = document.getElementById('dl-from').value;
-  const to = document.getElementById('dl-to').value;
+  const from = _readPeriod('dl-from');
+  const to = _readPeriod('dl-to');
   if (!code) { toast('请选择科目', 'error'); return; }
   const el = document.getElementById('dl-table');
   el.innerHTML = '加载中...';
@@ -1348,19 +1350,36 @@ async function loadDetailLedger() {
   }
 }
 
-// ===== 期间下拉辅助 =====
-function _periodOptions(selected) {
+// ===== 期间下拉辅助（年+月分开） =====
+function _yearOptions(sel) {
   const now = new Date();
-  let y = now.getFullYear(), m = now.getMonth() + 1;
+  let y = now.getFullYear();
   let opts = '';
   for (let yy = 2024; yy <= y; yy++) {
-    const maxM = (yy === y) ? m : 12;
-    for (let mm = 1; mm <= maxM; mm++) {
-      const val = yy + '-' + String(mm).padStart(2, '0');
-      opts += '<option value="' + val + '"' + (val === selected ? ' selected' : '') + '>' + val + '</option>';
-    }
+    opts += '<option value="' + yy + '"' + (yy == sel ? ' selected' : '') + '>' + yy + '年</option>';
   }
   return opts;
+}
+function _monthOptions(sel) {
+  let opts = '';
+  for (let mm = 1; mm <= 12; mm++) {
+    const v = String(mm).padStart(2, '0');
+    opts += '<option value="' + v + '"' + (v == sel ? ' selected' : '') + '>' + mm + '月</option>';
+  }
+  return opts;
+}
+function _periodSelectsHTML(prefix, value) {
+  let y = '', m = '';
+  if (value && value.includes('-')) { var parts = value.split('-'); y = parts[0]; m = parts[1]; }
+  return '<select id="' + prefix + '-y" style="padding:6px 6px;border:1px solid #d1d5db;border-radius:6px;width:72px"><option value="">年</option>' + _yearOptions(y) + '</select>' +
+    '<select id="' + prefix + '-m" style="padding:6px 6px;border:1px solid #d1d5db;border-radius:6px;width:62px"><option value="">月</option>' + _monthOptions(m) + '</select>';
+}
+function _readPeriod(prefix) {
+  var y = document.getElementById(prefix + '-y');
+  var m = document.getElementById(prefix + '-m');
+  if (!y || !m) return '';
+  var yv = y.value, mv = m.value;
+  return (yv && mv) ? yv + '-' + mv : '';
 }
 
 // ==================== 利润表 ====================
@@ -1370,8 +1389,8 @@ async function renderProfitLoss() {
     <div class="card">
       <div class="card-title">📈 利润表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label><select class="form-control" id="pl-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
-        <div class="form-group"><label>截止期间</label><select class="form-control" id="pl-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('pl-from', currentPeriod)}</div>
+        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('pl-to', currentPeriod)}</div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button></div>
       </div>
       <div id="pl-table">请点击生成报表</div>
@@ -1380,8 +1399,8 @@ async function renderProfitLoss() {
 }
 
 async function loadProfitLoss() {
-  const from = document.getElementById('pl-from').value;
-  const to = document.getElementById('pl-to').value;
+  const from = _readPeriod('pl-from');
+  const to = _readPeriod('pl-to');
   const el = document.getElementById('pl-table');
   el.innerHTML = '加载中...';
   try {
@@ -1412,8 +1431,8 @@ async function renderBalanceSheet() {
     <div class="card">
       <div class="card-title">⚖️ 资产负债表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label><select class="form-control" id="bs-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
-        <div class="form-group"><label>截止期间</label><select class="form-control" id="bs-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('bs-from', currentPeriod)}</div>
+        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('bs-to', currentPeriod)}</div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button></div>
       </div>
       <div id="bs-table">请点击生成报表</div>
@@ -1422,8 +1441,8 @@ async function renderBalanceSheet() {
 }
 
 async function loadBalanceSheet() {
-  const from = document.getElementById('bs-from').value;
-  const to = document.getElementById('bs-to').value;
+  const from = _readPeriod('bs-from');
+  const to = _readPeriod('bs-to');
   const el = document.getElementById('bs-table');
   el.innerHTML = '加载中...';
   try {
@@ -1466,8 +1485,8 @@ async function renderAccountBalance() {
     <div class="card">
       <div class="card-title">📒 科目余额表</div>
       <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label><select class="form-control" id="tb-from" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
-        <div class="form-group"><label>截止期间</label><select class="form-control" id="tb-to" style="width:130px">${_periodOptions(currentPeriod)}</select></div>
+        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('tb-from', currentPeriod)}</div>
+        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('tb-to', currentPeriod)}</div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button></div>
       </div>
       <div id="tb-table">加载中...</div>
@@ -1477,8 +1496,8 @@ async function renderAccountBalance() {
 }
 
 async function loadAccountBalance() {
-  const from = document.getElementById('tb-from').value;
-  const to = document.getElementById('tb-to').value;
+  const from = _readPeriod('tb-from');
+  const to = _readPeriod('tb-to');
   const el = document.getElementById('tb-table');
   el.innerHTML = '加载中...';
   try {
