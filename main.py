@@ -634,6 +634,7 @@ def list_accounts(
     category: Optional[str] = None,
     keyword: Optional[str] = None,
     level: Optional[int] = None,
+    leaf_only: Optional[str] = None,
     company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
@@ -648,6 +649,13 @@ def list_accounts(
     if level:
         q = q.filter(Account.level == level)
     accounts = q.order_by(Account.code).all()
+
+    # 末级科目过滤：排除那些是其他科目parent_code的科目
+    if leaf_only and leaf_only.lower() in ("1", "true", "yes"):
+        all_codes = {a.code for a in accounts}
+        parent_codes = {a.parent_code for a in accounts if a.parent_code}
+        accounts = [a for a in accounts if a.code not in parent_codes]
+
     return [
         {
             "id": a.id, "code": a.code, "name": a.name,
@@ -2616,8 +2624,8 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             voucher_word="记",
             voucher_no=next_voucher_no,
             summary=f"{summary}（增值税）",
-            account_code="221001",
-            account_name="应交增值税",
+            account_code="221001001",
+            account_name="销项税额",
             debit_amount=0,
             credit_amount=inv.tax_amount,
             contact_project=buyer,

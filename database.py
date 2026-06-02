@@ -1000,6 +1000,28 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] journal_entries.{col_name} 迁移失败: {e}")
 
+    # ── 12. 已有公司补充 销项税额 科目（221001001） ──
+    if "accounts" in inspector.get_table_names():
+        companies = db.query(Company).filter(Company.is_active == True).all()
+        for comp in companies:
+            existing = db.query(Account).filter(
+                Account.company_id == comp.id,
+                Account.code == "221001001"
+            ).first()
+            if not existing:
+                try:
+                    db.add(Account(
+                        company_id=comp.id,
+                        code="221001001", name="销项税额",
+                        category="负债", balance_direction="贷",
+                        level=3, parent_code="221001"
+                    ))
+                    db.commit()
+                    print(f"  [OK] 为 {comp.name} 添加科目 221001001 销项税额")
+                except Exception as e:
+                    db.rollback()
+                    print(f"  [X] 221001001 销项税额 迁移失败: {e}")
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
@@ -1024,6 +1046,7 @@ ACCOUNTS_TEMPLATE = [
     ("2501", "长期借款", "负债", "贷", 1),
     ("2210", "应交税费", "负债", "贷", 1),
     ("221001", "应交增值税", "负债", "贷", 2, "2210"),
+    ("221001001", "销项税额", "负债", "贷", 3, "221001"),
     ("221002", "应交企业所得税", "负债", "贷", 2, "2210"),
     ("221003", "应交个人所得税", "负债", "贷", 2, "2210"),
     ("2211", "应付职工薪酬", "负债", "贷", 1),
