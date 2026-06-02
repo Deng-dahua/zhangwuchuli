@@ -2300,13 +2300,13 @@ function createModal(title, body, extraClass) {
   return overlay;
 }
 
-// ==================== 启动 ====================
-init();
-
 // ==================== 多公司支持 ====================
 let currentCompanyId = 1;
 let currentCompanyName = '';
 let allCompanies = [];
+
+// ==================== 启动 ====================
+init();
 
 async function loadCompanies() {
   try {
