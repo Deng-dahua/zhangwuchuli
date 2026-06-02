@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>财税系统 - 中小企业版</title>
+  <title>财税风险防控系统 - 中小企业版</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -38,7 +38,7 @@
     }
     .sidebar-logo {
       padding: 20px 16px; font-size: 16px; font-weight: 700; color: #fff;
-      border-bottom: 1px solid #334155; line-height: 1.4;
+      border-bottom: 1px solid #334155; line-height: 1.4; text-align: center;
     }
     .sidebar-logo span { display: block; font-size: 11px; font-weight: 400; color: #94a3b8; margin-top: 2px; }
     .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
@@ -224,7 +224,7 @@
 
     /* 科目缩进 */
     .indent-1 { padding-left: 8px; }
-    .indent-2 { padding-left: 24px; font-size: 12px; color: var(--gray-500); }
+    .indent-2 { padding-left: 24px; }
 
     /* ====== AI 助手聊天 ====== */
     .chat-wrapper { display: flex; flex-direction: column; height: calc(100vh - 120px); background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
@@ -404,8 +404,7 @@
 <div id="company-pick-view" class="hidden">
   <div class="reg-container">
     <div class="reg-header">
-      <div class="logo">⚙️</div>
-      <h1>财税系统</h1>
+      <h1>财税风险防控系统</h1>
       <p>中小企业版</p>
     </div>
     <div class="pick-card">
@@ -423,7 +422,7 @@
 <!-- 侧边栏 -->
 <nav id="sidebar">
   <div class="sidebar-logo">
-    ⚙️ 财税系统
+    财税风险防控系统
     <span>中小企业版 v1.0</span>
   </div>
   <div class="sidebar-nav">
@@ -1607,7 +1606,7 @@ async function loadAccounts() {
           ${data.map(a => `
             <tr>
               <td style="font-weight:500">${a.code}</td>
-              <td class="${a.level === 2 ? 'indent-2' : ''}">${a.name}</td>
+              <td class="${a.level === 2 ? 'indent-2' : ''}">${a.name.trim()}</td>
               <td><span class="badge" style="background:var(--primary-light);color:var(--primary)">${a.category}</span></td>
               <td style="text-align:center">${a.balance_direction}</td>
               <td style="text-align:center">${a.level}</td>
@@ -4514,7 +4513,7 @@ async function renderBankTransactions() {
     api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
   ]);
 
-  document.title = '银行流水 - 财税系统';
+  document.title = '银行流水 - 财税风险防控系统';
 
   let bankSelectHtml = '';
   if (configs.length > 0) {
@@ -4841,7 +4840,7 @@ async function renderInputVATDeductions() {
     api('/api/input-vat-deductions/stats')
   ]);
 
-  document.title = '进项抵扣 - 财税系统';
+  document.title = '进项抵扣 - 财税风险防控系统';
   const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
   let html = '<div class="page-header"><h2>✅ 进项抵扣</h2></div>';
 
@@ -5084,6 +5083,8 @@ function showUploadModal(module) {
     <input type="file" id="upload-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleFileSelect(this, '${module}')">
     <div id="upload-progress" style="display:none;text-align:center;color:var(--primary);"></div>
     <div id="mapping-section" style="display:none;"></div>
+    <div id="mapping-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:10px 14px;border-radius:6px;font-size:13px;margin-top:12px;"></div>
+    <div id="mapping-warning" style="display:none;background:#fffbeb;border:1px solid #fde68a;color:#b45309;padding:10px 14px;border-radius:6px;font-size:13px;margin-top:12px;"></div>
     <div style="text-align:right;margin-top:16px;"><button class="btn" onclick="closeModal()">关闭</button></div>
   `, 'modal-xl');
   document.body.appendChild(modal);
@@ -5327,9 +5328,32 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     }
   });
 
+  // 隐藏旧错误提示
+  const errEl = document.getElementById('mapping-error');
+  const warnEl = document.getElementById('mapping-warning');
+  if (errEl) { errEl.style.display = 'none'; errEl.innerText = ''; }
+  if (warnEl) { warnEl.style.display = 'none'; warnEl.innerText = ''; }
+
   if (Object.keys(mapping).length === 0) {
-    toast('请至少映射一个字段', 'error');
+    if (errEl) { errEl.innerText = '列映射配置错误：请至少映射一个字段，必须将Excel列与系统字段进行对应后方可导入。'; errEl.style.display = 'block'; }
     return;
+  }
+
+  // 人员/客户/供应商：检查必需字段
+  const requiredFields = {
+    employee: { fields: ['name', 'code'], label: '人员档案' },
+    customer: { fields: ['name', 'code'], label: '客户档案' },
+    supplier: { fields: ['name', 'code'], label: '供应商档案' }
+  };
+  if (requiredFields[module]) {
+    const rf = requiredFields[module];
+    const missing = rf.fields.filter(f => !mapping[f]);
+    if (missing.length > 0) {
+      const fieldLabels = { name: '名称', code: '编码' };
+      const missingNames = missing.map(f => fieldLabels[f] || f).join('、');
+      if (errEl) { errEl.innerText = `列映射配置错误：${rf.label}导入时必须映射「${missingNames}」字段，请检查列对应关系。`; errEl.style.display = 'block'; }
+      return;
+    }
   }
 
   // 保存模板
@@ -5366,7 +5390,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   document.getElementById('upload-progress').style.display = 'none';
 
   if (result.error) {
-    toast(result.error, 'error');
+    if (errEl) { errEl.innerText = '导入失败：' + result.error; errEl.style.display = 'block'; }
     return;
   }
 
@@ -5389,7 +5413,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       document.getElementById('upload-progress').style.display = 'none';
 
       if (result2.error) {
-        toast(result2.error, 'error');
+        if (errEl) { errEl.innerText = '强制导入失败：' + result2.error; errEl.style.display = 'block'; }
         return;
       }
 
