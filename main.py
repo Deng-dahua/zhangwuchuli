@@ -734,6 +734,7 @@ def list_vouchers(
     keyword: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     q = db.query(Voucher).filter(Voucher.company_id == company_id)
