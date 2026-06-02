@@ -1520,15 +1520,14 @@ async function loadAccountBalance() {
   try {
     const data = await api(`/api/trial-balance?period=${period}`);
     
-    // 统计
-    const totalBeginDebit = data.reduce((s, r) => s + r.begin_debit, 0);
-    const totalBeginCredit = data.reduce((s, r) => s + r.begin_credit, 0);
-    const totalPeriodDebit = data.reduce((s, r) => s + r.period_debit, 0);
-    const totalPeriodCredit = data.reduce((s, r) => s + r.period_credit, 0);
-    const totalEndDebit = data.reduce((s, r) => s + r.end_debit, 0);
-    const totalEndCredit = data.reduce((s, r) => s + r.end_credit, 0);
-
-    const hasData = data.filter(r => r.period_debit !== 0 || r.period_credit !== 0 || r.begin_debit !== 0 || r.begin_credit !== 0);
+    // 合计只统计一级科目（避免子级重复计入）
+    const l1 = data.filter(r => r.level === 1);
+    const totalPeriodDebit = l1.reduce((s, r) => s + r.period_debit, 0);
+    const totalPeriodCredit = l1.reduce((s, r) => s + r.period_credit, 0);
+    const totalCumDebit = l1.reduce((s, r) => s + r.cumulative_debit, 0);
+    const totalCumCredit = l1.reduce((s, r) => s + r.cumulative_credit, 0);
+    const totalEndDebit = l1.reduce((s, r) => s + r.end_debit, 0);
+    const totalEndCredit = l1.reduce((s, r) => s + r.end_credit, 0);
 
     let html = `<div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">报告期间：${period}</div>`;
     html += '<div class="table-wrap" style="max-height:calc(100vh - 280px);overflow:auto"><table>';
@@ -1536,33 +1535,44 @@ async function loadAccountBalance() {
     html += '<th>科目编码</th><th>科目名称</th><th style="text-align:center">方向</th>';
     html += '<th class="num">期初借方</th><th class="num">期初贷方</th>';
     html += '<th class="num">本期借方</th><th class="num">本期贷方</th>';
+    html += '<th class="num" style="color:var(--primary)">累计借方</th><th class="num" style="color:var(--success)">累计贷方</th>';
     html += '<th class="num">期末借方</th><th class="num">期末贷方</th>';
     html += '</tr></thead><tbody>';
 
-    if (hasData.length === 0) {
-      html += '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px">该期间无发生额</td></tr>';
+    if (data.length === 0) {
+      html += '<tr><td colspan="11" style="text-align:center;color:var(--gray-400);padding:24px">该期间无发生额</td></tr>';
     } else {
-      hasData.forEach(r => {
-        html += '<tr>';
+      const indent = {1: 0, 2: 16, 3: 32, 4: 48};
+      data.forEach(r => {
+        const lv = r.level || 1;
+        const pad = indent[lv] || 0;
+        const isParent = data.some(c => c.parent_code === r.account_code);
+        const rowStyle = isParent ? 'font-weight:600;background:var(--gray-25)' : '';
+        const nameStyle = pad > 0 ? `padding-left:${pad}px` : '';
+        html += `<tr style="${rowStyle}">`;
         html += `<td>${r.account_code}</td>`;
-        html += `<td>${r.account_name}</td>`;
+        html += `<td style="${nameStyle}">${lv > 1 ? '└ ' : ''}${r.account_name}</td>`;
         html += `<td style="text-align:center">${r.balance_direction}</td>`;
         html += `<td class="num">${r.begin_debit !== 0 ? '¥' + fmt(r.begin_debit) : ''}</td>`;
         html += `<td class="num">${r.begin_credit !== 0 ? '¥' + fmt(r.begin_credit) : ''}</td>`;
         html += `<td class="num">${r.period_debit !== 0 ? '¥' + fmt(r.period_debit) : ''}</td>`;
         html += `<td class="num">${r.period_credit !== 0 ? '¥' + fmt(r.period_credit) : ''}</td>`;
-        html += `<td class="num" style="font-weight:600">${r.end_debit !== 0 ? '¥' + fmt(r.end_debit) : ''}</td>`;
-        html += `<td class="num" style="font-weight:600">${r.end_credit !== 0 ? '¥' + fmt(r.end_credit) : ''}</td>`;
+        html += `<td class="num" style="color:var(--primary)">${r.cumulative_debit !== 0 ? '¥' + fmt(r.cumulative_debit) : ''}</td>`;
+        html += `<td class="num" style="color:var(--success)">${r.cumulative_credit !== 0 ? '¥' + fmt(r.cumulative_credit) : ''}</td>`;
+        html += `<td class="num">${r.end_debit !== 0 ? '¥' + fmt(r.end_debit) : ''}</td>`;
+        html += `<td class="num">${r.end_credit !== 0 ? '¥' + fmt(r.end_credit) : ''}</td>`;
         html += '</tr>';
       });
 
-      // 合计行
+      // 合计行（仅统计一级科目）
       html += '<tr style="font-weight:700;background:var(--gray-50);border-top:2px solid var(--gray-200)">';
       html += '<td colspan="3" style="text-align:center">合计</td>';
-      html += `<td class="num">¥${fmt(totalBeginDebit)}</td>`;
-      html += `<td class="num">¥${fmt(totalBeginCredit)}</td>`;
-      html += `<td class="num" style="color:var(--primary)">¥${fmt(totalPeriodDebit)}</td>`;
-      html += `<td class="num" style="color:var(--success)">¥${fmt(totalPeriodCredit)}</td>`;
+      html += `<td class="num">¥${fmt(l1.reduce((s, r) => s + r.begin_debit, 0))}</td>`;
+      html += `<td class="num">¥${fmt(l1.reduce((s, r) => s + r.begin_credit, 0))}</td>`;
+      html += `<td class="num">¥${fmt(totalPeriodDebit)}</td>`;
+      html += `<td class="num">¥${fmt(totalPeriodCredit)}</td>`;
+      html += `<td class="num" style="color:var(--primary)">¥${fmt(totalCumDebit)}</td>`;
+      html += `<td class="num" style="color:var(--success)">¥${fmt(totalCumCredit)}</td>`;
       html += `<td class="num">¥${fmt(totalEndDebit)}</td>`;
       html += `<td class="num">¥${fmt(totalEndCredit)}</td>`;
       html += '</tr>';

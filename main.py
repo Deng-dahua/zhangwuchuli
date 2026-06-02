@@ -2519,39 +2519,91 @@ def trial_balance(
     period: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """科目余额表：按科目汇总本期发生额，计算期末余额"""
+    """科目余额表：层级展示 + 本期发生额 + 累计发生额（年初至今）+ 期末余额"""
     accounts = db.query(Account).filter(
         Account.company_id == company_id,
         Account.is_active == True
     ).order_by(Account.code).all()
+    acc_map = {a.code: a for a in accounts}
+
+    # 构建父子树：code -> [child_codes]
+    children_map = {}
+    for a in accounts:
+        if a.parent_code:
+            children_map.setdefault(a.parent_code, []).append(a.code)
 
     # 本期发生额汇总
-    base = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
+    period_base = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
     if period:
-        base = base.filter(JournalEntry.period == period)
+        period_base = period_base.filter(JournalEntry.period == period)
+    period_raw = {}
+    for e in period_base.all():
+        c = period_raw.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
 
-    period_map = {}
-    for e in base.all():
-        code = e.account_code
-        if code not in period_map:
-            period_map[code] = {"debit": 0.0, "credit": 0.0}
-        period_map[code]["debit"] += e.debit_amount or 0
-        period_map[code]["credit"] += e.credit_amount or 0
+    # 累计发生额汇总（年初 → 当前期间）
+    cum_raw = {}
+    if period:
+        year = period.split("-")[0]
+        cum_base = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= f"{year}-01",
+            JournalEntry.period <= period
+        )
+        for e in cum_base.all():
+            c = cum_raw.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+            c["debit"] += e.debit_amount or 0
+            c["credit"] += e.credit_amount or 0
+    else:
+        cum_raw = dict(period_raw)
+
+    # 树形汇总函数：取自身 + 递归所有子级合计
+    def aggregate(code, data_map):
+        total = dict(data_map.get(code, {"debit": 0.0, "credit": 0.0}))
+        for child in children_map.get(code, []):
+            child_data = aggregate(child, data_map)
+            total["debit"] += child_data["debit"]
+            total["credit"] += child_data["credit"]
+        return total
+
+    # 预计算汇总（缓存避免重复递归）
+    period_agg = {a.code: aggregate(a.code, period_raw) for a in accounts}
+    cum_agg = {a.code: aggregate(a.code, cum_raw) for a in accounts}
+
+    # 确定需要显示的科目：末级有数据的科目 + 其所有父级
+    display_codes = set()
+    for a in accounts:
+        pt = period_agg[a.code]
+        ct = cum_agg[a.code]
+        if pt["debit"] != 0 or pt["credit"] != 0 or ct["debit"] != 0 or ct["credit"] != 0:
+            # 追溯父级链
+            current = a.code
+            while current:
+                display_codes.add(current)
+                parent = acc_map[current].parent_code if current in acc_map else None
+                current = parent if parent else None
 
     result = []
     for acc in accounts:
-        pt = period_map.get(acc.code, {"debit": 0.0, "credit": 0.0})
+        if acc.code not in display_codes:
+            continue
+
+        pt = period_agg[acc.code]
+        ct = cum_agg[acc.code]
         pdr = round(pt["debit"], 2)
         pcr = round(pt["credit"], 2)
+        cdr = round(ct["debit"], 2)
+        ccr = round(ct["credit"], 2)
 
-        # 期末余额：按科目余额方向计算
-        direction = acc.balance_direction  # '借' or '贷'
+        # 期末余额：按科目方向 + 累计发生额计算
+        direction = acc.balance_direction
         if direction == "借":
-            net = pdr - pcr  # 资产/成本/费用类
+            net = cdr - ccr
             end_debit = round(net, 2) if net >= 0 else 0
             end_credit = round(-net, 2) if net < 0 else 0
         else:
-            net = pcr - pdr  # 负债/权益/收入类
+            net = ccr - cdr
             end_credit = round(net, 2) if net >= 0 else 0
             end_debit = round(-net, 2) if net < 0 else 0
 
@@ -2561,10 +2613,13 @@ def trial_balance(
             "category": acc.category,
             "balance_direction": direction,
             "level": acc.level,
+            "parent_code": acc.parent_code,
             "begin_debit": 0,
             "begin_credit": 0,
             "period_debit": pdr,
             "period_credit": pcr,
+            "cumulative_debit": cdr,
+            "cumulative_credit": ccr,
             "end_debit": end_debit,
             "end_credit": end_credit,
         })
