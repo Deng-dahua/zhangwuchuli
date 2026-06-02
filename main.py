@@ -2617,9 +2617,6 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
     inv = db.query(SalesInvoice).filter(SalesInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "发票不存在")
-    if inv.status != "正常":
-        raise HTTPException(400, f"发票状态为「{inv.status}」，不能生成凭证")
-
     def get_full_name(code):
         """构建科目的全级次名称，如 221001001 → 应交税费/应交增值税/销项税额"""
         parts = []

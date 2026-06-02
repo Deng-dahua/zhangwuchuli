@@ -1038,8 +1038,7 @@ def auto_generate_journals(db):
     total = 0
     for comp in companies:
         invoices = db.query(SalesInvoice).filter(
-            SalesInvoice.company_id == comp.id,
-            SalesInvoice.status == "正常"
+            SalesInvoice.company_id == comp.id
         ).order_by(SalesInvoice.invoice_date.asc()).all()
 
         for inv in invoices:
@@ -1161,8 +1160,6 @@ def auto_generate_journals(db):
 def auto_generate_single_invoice(db, inv):
     """为单张开具发票生成凭证（供创建发票API调用）"""
     from datetime import datetime as dt
-    if inv.status != "正常":
-        return
 
     buyer = inv.buyer_name or "客户"
     goods = inv.goods_name or ""
