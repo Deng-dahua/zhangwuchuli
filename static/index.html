@@ -1047,6 +1047,7 @@ async function renderJournal() {
         (i.summary && i.summary.toLowerCase().includes(kw)) ||
         (i.account_code && i.account_code.toLowerCase().includes(kw)) ||
         (i.account_name && i.account_name.toLowerCase().includes(kw)) ||
+        (i.account_full_name && i.account_full_name.toLowerCase().includes(kw)) ||
         (i.voucher_no && String(i.voucher_no).includes(kw))
       );
     }
@@ -1067,7 +1068,7 @@ async function renderJournal() {
         html += '<td style="text-align:center">' + r.voucher_no + '</td>';
         html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
         html += '<td>' + r.account_code + '</td>';
-        html += '<td>' + (r.account_name || '-') + '</td>';
+        html += '<td>' + (r.account_full_name || r.account_name || '-') + '</td>';
         html += '<td>' + (r.contact_project || '-') + '</td>';
         html += '<td>' + (r.spec_model || '-') + '</td>';
         html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
@@ -1079,8 +1080,8 @@ async function renderJournal() {
         const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
         html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
         html += '<td style="white-space:nowrap">';
-        html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')" style="margin-right:4px">编辑</button>';
-        html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
+        html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
+        html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
         html += '</td></tr>';
       });
     }
@@ -1209,7 +1210,8 @@ async function showJournalForm(entryId) {
   const selCode = entry ? entry.account_code : '';
   html += '<div class="form-group"><label>科目 <span style="color:var(--danger)">*</span></label><select class="form-input" id="je-account-select" onchange="onJeAccountChange()"><option value="">请选择科目</option>';
   accounts.forEach(a => {
-    html += '<option value="' + a.code + '" data-name="' + escapeHtml(a.name) + '"' + (a.code === selCode ? ' selected' : '') + '>' + a.code + ' ' + a.name + '</option>';
+    const displayName = a.full_name || (a.code + ' ' + a.name);
+    html += '<option value="' + a.code + '" data-name="' + escapeHtml(a.name) + '" data-full-name="' + escapeHtml(displayName) + '"' + (a.code === selCode ? ' selected' : '') + '>' + displayName + '</option>';
   });
   html += '</select></div>';
   html += '<input type="hidden" id="je-account-code" value="' + (entry ? entry.account_code : '') + '">';
@@ -1217,13 +1219,15 @@ async function showJournalForm(entryId) {
   html += '<div class="form-group"><label>借方金额</label><input class="form-input" id="je-debit" type="number" step="0.01" value="' + (entry ? entry.debit_amount : '') + '"></div>';
   html += '<div class="form-group"><label>贷方金额</label><input class="form-input" id="je-credit" type="number" step="0.01" value="' + (entry ? entry.credit_amount : '') + '"></div>';
   html += '<div class="form-group"><label>备注</label><input class="form-input" id="je-remark" value="' + (entry ? escapeHtml(entry.remark) : '') + '"></div>';
-  // 往来项目下拉
+  // 往来项目下拉（仅往来科目时显示）
   const selContact = entry ? entry.contact_project : '';
-  html += '<div class="form-group"><label>往来项目</label><select class="form-input" id="je-contact"><option value="">无</option>';
+  html += '<div class="form-group" id="je-contact-wrap"><label>往来项目</label><select class="form-input" id="je-contact"><option value="">无</option>';
   if (customers.length) { html += '<optgroup label="── 客户 ──">'; customers.forEach(c => { html += '<option value="' + escapeHtml(c.name) + '"' + (c.name === selContact ? ' selected' : '') + '>' + c.name + '</option>'; }); html += '</optgroup>'; }
   if (suppliers.length) { html += '<optgroup label="── 供应商 ──">'; suppliers.forEach(s => { html += '<option value="' + escapeHtml(s.name) + '"' + (s.name === selContact ? ' selected' : '') + '>' + s.name + '</option>'; }); html += '</optgroup>'; }
   if (employees.length) { html += '<optgroup label="── 人员 ──">'; employees.forEach(e => { html += '<option value="' + escapeHtml(e.name) + '"' + (e.name === selContact ? ' selected' : '') + '>' + e.name + '</option>'; }); html += '</optgroup>'; }
   html += '</select></div>';
+  // 主营业务收入子科目选择
+  html += '<div class="form-group" id="je-revenue-sub-wrap" style="display:none"><label>收入明细</label><select class="form-input" id="je-revenue-sub"><option value="">自动（6001）</option></select></div>';
   html += '<div class="form-group"><label>规格型号</label><input class="form-input" id="je-spec" value="' + (entry ? escapeHtml(entry.spec_model) : '') + '"></div>';
   html += '<div class="form-group"><label>数量</label><input class="form-input" id="je-qty" type="number" step="0.01" value="' + (entry ? entry.quantity : '') + '"></div>';
   html += '<div class="form-group"><label>单位</label><input class="form-input" id="je-unit-val" value="' + (entry ? escapeHtml(entry.unit) : '') + '"></div>';
@@ -1232,6 +1236,8 @@ async function showJournalForm(entryId) {
   html += '</div>';
   html += '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveJournal(' + (isEdit ? entryId : 'null') + ')">保存</button></div>';
   showModal(html);
+  // 初始化往来项目显隐 + 收入明细状态
+  setTimeout(() => onJeAccountChange(), 50);
 }
 
 function onJeAccountChange() {
@@ -1240,12 +1246,59 @@ function onJeAccountChange() {
   const opt = sel.options[sel.selectedIndex];
   const code = opt.value;
   const name = opt.getAttribute('data-name') || '';
+  const fullName = opt.getAttribute('data-full-name') || (code + ' ' + name);
   document.getElementById('je-account-code').value = code;
   document.getElementById('je-account-name').value = name;
+
+  // 往来项目：仅往来科目显示
+  const contactWrap = document.getElementById('je-contact-wrap');
+  if (contactWrap) {
+    const往来前缀 = ['1121','1122','1123','1221','2201','2202','2203','2241'];
+    const is往来 = 往来前缀.some(p => code.startsWith(p));
+    contactWrap.style.display = is往来 ? '' : 'none';
+    if (!is往来) {
+      const contactSel = document.getElementById('je-contact');
+      if (contactSel) contactSel.value = '';
+    }
+  }
+
+  // 主营业务收入：显示子科目
+  const revWrap = document.getElementById('je-revenue-sub-wrap');
+  if (revWrap) {
+    if (code === '6001') {
+      revWrap.style.display = '';
+      const revSel = document.getElementById('je-revenue-sub');
+      if (revSel && revSel.options.length <= 1) {
+        // 加载6001下子科目
+        revSel.innerHTML = '<option value="">自动（6001 主营业务收入）</option>';
+        api('/api/accounts?company_id=' + currentCompanyId).then(accts => {
+          const subs = accts.filter(a => a.parent_code === '6001');
+          subs.forEach(a => {
+            revSel.innerHTML += '<option value="' + a.code + '" data-name="' + escapeHtml(a.name) + '" data-full-name="' + escapeHtml(a.full_name || (a.code + ' ' + a.name)) + '">' + (a.full_name || (a.code + ' ' + a.name)) + '</option>';
+          });
+        });
+      }
+    } else {
+      revWrap.style.display = 'none';
+      const revSel = document.getElementById('je-revenue-sub');
+      if (revSel) revSel.value = '';
+    }
+  }
 }
 
 async function saveJournal(entryId) {
   const isEdit = entryId && entryId !== 'null';
+  // 主营业务收入子科目：优先使用子科目
+  let account_code = document.getElementById('je-account-code').value;
+  let account_name = document.getElementById('je-account-name').value;
+  const revSub = document.getElementById('je-revenue-sub');
+  if (revSub && revSub.value) {
+    const subOpt = revSub.options[revSub.selectedIndex];
+    if (subOpt.value) {
+      account_code = subOpt.value;
+      account_name = subOpt.getAttribute('data-name') || account_name;
+    }
+  }
   const body = {
     entry_date: document.getElementById('je-entry-date').value,
     period: document.getElementById('je-period-input').value,
@@ -1253,8 +1306,8 @@ async function saveJournal(entryId) {
     voucher_no: parseInt(document.getElementById('je-voucher-no').value) || 0,
     attach_count: parseInt(document.getElementById('je-attach').value) || 0,
     summary: document.getElementById('je-summary').value,
-    account_code: document.getElementById('je-account-code').value,
-    account_name: document.getElementById('je-account-name').value,
+    account_code: account_code,
+    account_name: account_name,
     debit_amount: parseFloat(document.getElementById('je-debit').value) || 0,
     credit_amount: parseFloat(document.getElementById('je-credit').value) || 0,
     prepared_by: document.getElementById('je-prepared').value,

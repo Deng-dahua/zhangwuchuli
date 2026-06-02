@@ -631,6 +631,25 @@ def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depe
 
 # ==================== 会计科目（原有，保留）====================
 
+def _build_account_hierarchy(db: Session, company_id: int) -> dict:
+    """构建科目编码→全级次名称的映射"""
+    all_accounts = db.query(Account).filter(Account.company_id == company_id).all()
+    code_map = {a.code: a for a in all_accounts}
+
+    def get_full_name(acct):
+        parts = []
+        current = acct
+        visited = set()
+        while current and current.code not in visited:
+            visited.add(current.code)
+            parts.append(f"{current.code} {current.name}")
+            current = code_map.get(current.parent_code) if current.parent_code else None
+        parts.reverse()
+        return " / ".join(parts)
+
+    return {a.code: get_full_name(a) for a in all_accounts}
+
+
 @app.get("/api/accounts")
 def list_accounts(
     category: Optional[str] = None,
@@ -658,9 +677,13 @@ def list_accounts(
         parent_codes = {a.parent_code for a in accounts if a.parent_code}
         accounts = [a for a in accounts if a.code not in parent_codes]
 
+    # 构建全级次名称映射
+    hierarchy = _build_account_hierarchy(db, company_id)
+
     return [
         {
             "id": a.id, "code": a.code, "name": a.name,
+            "full_name": hierarchy.get(a.code, f"{a.code} {a.name}"),
             "category": a.category, "balance_direction": a.balance_direction,
             "level": a.level, "parent_code": a.parent_code,
             "is_active": a.is_active
@@ -2514,11 +2537,13 @@ def list_journal_entries(
             JournalEntry.account_code.contains(keyword),
         ))
     entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
+    hierarchy = _build_account_hierarchy(db, company_id)
     return [{
         "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
         "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
         "attach_count": e.attach_count or 0, "summary": e.summary or "",
         "account_code": e.account_code, "account_name": e.account_name or "",
+        "account_full_name": hierarchy.get(e.account_code, e.account_name or ""),
         "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
         "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
         "is_reviewed": e.is_reviewed, "remark": e.remark or "",
