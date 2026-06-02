@@ -2679,29 +2679,63 @@ def general_ledger(
     period_to: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """总账：调用统一余额计算函数"""
+    """总账：调用统一余额计算函数，树形汇总显示全级次"""
     period_raw = _compute_period_balances(company_id, period_from, period_to, db)
     cum_raw   = _compute_period_balances(company_id, None, period_to, db)
 
     accounts = db.query(Account).filter(
         Account.company_id == company_id,
         Account.is_active == True
-    ).all()
+    ).order_by(Account.code).all()
     acc_map = {a.code: a for a in accounts}
 
+    # 构建层级名称映射（与序时账一致）
+    hierarchy = _build_account_hierarchy(db, company_id)
+
+    # 树形汇总：父级 = 自身 + 所有子级合计
+    children_map = {}
+    for a in accounts:
+        if a.parent_code:
+            children_map.setdefault(a.parent_code, []).append(a.code)
+
+    def aggregate(code, data_map):
+        total = dict(data_map.get(code, {"debit": 0.0, "credit": 0.0}))
+        for child in children_map.get(code, []):
+            child_data = aggregate(child, data_map)
+            total["debit"] += child_data["debit"]
+            total["credit"] += child_data["credit"]
+        return total
+
+    period_agg = {a.code: aggregate(a.code, period_raw) for a in accounts}
+    cum_agg = {a.code: aggregate(a.code, cum_raw) for a in accounts}
+
+    # 全级次过滤：聚合后有数据的科目 + 其所有父级链
+    display_codes = set()
+    for a in accounts:
+        pt = period_agg[a.code]
+        ct = cum_agg[a.code]
+        if pt["debit"] != 0 or pt["credit"] != 0 or ct["debit"] != 0 or ct["credit"] != 0:
+            current = a.code
+            while current:
+                display_codes.add(current)
+                parent = acc_map[current].parent_code if current in acc_map else None
+                current = parent if parent else None
+
     result = []
-    for code in sorted(period_raw.keys()):
-        p = period_raw[code]
-        c = cum_raw.get(code, {"debit": 0.0, "credit": 0.0})
-        acc = acc_map.get(code)
-        direction = acc.balance_direction if acc else "借"
+    for acc in accounts:
+        if acc.code not in display_codes:
+            continue
+        p = period_agg[acc.code]
+        c = cum_agg[acc.code]
+        direction = acc.balance_direction
         if direction == "借":
             balance = round(c["debit"] - c["credit"], 2)
         else:
             balance = round(c["credit"] - c["debit"], 2)
         result.append({
-            "account_code": code,
-            "account_name": acc.name if acc else code,
+            "account_code": acc.code,
+            "account_name": hierarchy.get(acc.code, f"{acc.code} {acc.name}"),
+            "level": acc.level,
             "balance_direction": direction,
             "total_debit": round(p["debit"], 2),
             "total_credit": round(p["credit"], 2),
