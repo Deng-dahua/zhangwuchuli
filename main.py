@@ -3528,6 +3528,21 @@ async def analyze_file_headers(
                 "invoice_category", "invoice_category_label", "invoice_status",
                 "check_time", "risk_level"
             ]
+        elif module == "employee":
+            field_order = [
+                "code", "name", "id_card", "email", "salary", "leave_date"
+            ]
+        elif module == "customer":
+            field_order = [
+                "code", "name", "tax_no", "contact", "phone", "address",
+                "credit_limit", "payment_terms", "bank_name", "bank_account",
+                "uscc", "is_active", "remark"
+            ]
+        elif module == "supplier":
+            field_order = [
+                "code", "name", "tax_no", "bank_name", "bank_account",
+                "uscc", "is_active", "remark"
+            ]
 
         return {
             "file_name": fname,
@@ -3961,12 +3976,35 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if not code or not name:
                         errors.append(f"第{i+2}行: 工号和姓名不能为空")
                         continue
+                    # 解析离职日期
+                    leave_date = None
+                    ld_str = mapped.get("leave_date", "")
+                    if ld_str:
+                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
+                            try:
+                                leave_date = datetime.strptime(ld_str, fmt).date()
+                                break
+                            except: pass
+                    # 安全转浮点
+                    def _sf(v, d=0.0):
+                        try: return float(str(v).replace(",", "")) if str(v).strip() else d
+                        except: return d
                     existing = db.query(Employee).filter(Employee.company_id == company_id, Employee.code == code).first()
                     if existing:
                         existing.name = name
                         existing.id_card = mapped.get("id_card", "") or None
+                        existing.email = mapped.get("email", "") or None
+                        existing.salary = _sf(mapped.get("salary", 0))
+                        if leave_date:
+                            existing.leave_date = leave_date
                     else:
-                        emp = Employee(company_id=company_id, code=code, name=name, id_card=mapped.get("id_card", "") or None)
+                        emp = Employee(
+                            company_id=company_id, code=code, name=name,
+                            id_card=mapped.get("id_card", "") or None,
+                            email=mapped.get("email", "") or None,
+                            salary=_sf(mapped.get("salary", 0)),
+                            leave_date=leave_date
+                        )
                         db.add(emp)
 
                 elif module == "customer":
@@ -3975,12 +4013,44 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if not code or not name:
                         errors.append(f"第{i+2}行: 编码和名称不能为空")
                         continue
+                    def _sf2(v, d=0.0):
+                        try: return float(str(v).replace(",", "")) if str(v).strip() else d
+                        except: return d
+                    is_active = mapped.get("is_active", "是")
+                    if isinstance(is_active, str):
+                        is_active = is_active.strip() not in ("否", "false", "False", "0", "停用")
+                    pterms = mapped.get("payment_terms", "")
+                    try: pterms = int(float(pterms)) if pterms else 30
+                    except: pterms = 30
                     existing = db.query(Customer).filter(Customer.company_id == company_id, Customer.code == code).first()
                     if existing:
                         existing.name = name
+                        existing.tax_no = mapped.get("tax_no", "") or None
+                        existing.contact = mapped.get("contact", "") or None
+                        existing.phone = mapped.get("phone", "") or None
+                        existing.address = mapped.get("address", "") or None
+                        existing.credit_limit = _sf2(mapped.get("credit_limit", 0))
+                        existing.payment_terms = pterms
+                        existing.bank_name = mapped.get("bank_name", "") or None
+                        existing.bank_account = mapped.get("bank_account", "") or None
                         existing.uscc = mapped.get("uscc", "") or None
+                        existing.is_active = is_active
+                        existing.remark = mapped.get("remark", "") or None
                     else:
-                        cust = Customer(company_id=company_id, code=code, name=name, uscc=mapped.get("uscc", "") or None)
+                        cust = Customer(
+                            company_id=company_id, code=code, name=name,
+                            tax_no=mapped.get("tax_no", "") or None,
+                            contact=mapped.get("contact", "") or None,
+                            phone=mapped.get("phone", "") or None,
+                            address=mapped.get("address", "") or None,
+                            credit_limit=_sf2(mapped.get("credit_limit", 0)),
+                            payment_terms=pterms,
+                            bank_name=mapped.get("bank_name", "") or None,
+                            bank_account=mapped.get("bank_account", "") or None,
+                            uscc=mapped.get("uscc", "") or None,
+                            is_active=is_active,
+                            remark=mapped.get("remark", "") or None
+                        )
                         db.add(cust)
 
                 elif module == "supplier":
@@ -3989,12 +4059,28 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if not code or not name:
                         errors.append(f"第{i+2}行: 编码和名称不能为空")
                         continue
+                    is_active = mapped.get("is_active", "是")
+                    if isinstance(is_active, str):
+                        is_active = is_active.strip() not in ("否", "false", "False", "0", "停用")
                     existing = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == code).first()
                     if existing:
                         existing.name = name
+                        existing.tax_no = mapped.get("tax_no", "") or None
+                        existing.bank_name = mapped.get("bank_name", "") or None
+                        existing.bank_account = mapped.get("bank_account", "") or None
                         existing.uscc = mapped.get("uscc", "") or None
+                        existing.is_active = is_active
+                        existing.remark = mapped.get("remark", "") or None
                     else:
-                        supp = Supplier(company_id=company_id, code=code, name=name, uscc=mapped.get("uscc", "") or None)
+                        supp = Supplier(
+                            company_id=company_id, code=code, name=name,
+                            tax_no=mapped.get("tax_no", "") or None,
+                            bank_name=mapped.get("bank_name", "") or None,
+                            bank_account=mapped.get("bank_account", "") or None,
+                            uscc=mapped.get("uscc", "") or None,
+                            is_active=is_active,
+                            remark=mapped.get("remark", "") or None
+                        )
                         db.add(supp)
 
                 imported += 1

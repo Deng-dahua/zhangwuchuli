@@ -5130,6 +5130,11 @@ function buildMappingUI(result, module, file, bankConfigId) {
     // 人员/客户/供应商
     'code': '编码', 'name': '名称', 'id_card': '身份证号',
     'uscc': '统一社会信用代码',
+    'email': '邮箱', 'salary': '基本工资', 'leave_date': '离职日期',
+    'tax_no': '税号', 'contact': '联系人', 'phone': '联系电话',
+    'address': '地址', 'credit_limit': '信用额度', 'payment_terms': '账期(天)',
+    'bank_name': '开户银行', 'bank_account': '银行账号',
+    'is_active': '启用状态',
   };
 
   const fieldOrder = result.field_order; // 发票模块用平铺列表
@@ -5239,7 +5244,24 @@ function buildMappingUI(result, module, file, bankConfigId) {
           'check_time': ['勾选时间', 'check_time'],
           'risk_level': ['风险等级', 'risk_level'],
           'deductible_tax_amount': ['有效抵扣', '可抵扣', 'deductible'],
-          'invoice_status': ['发票状态', 'invoice_status']
+          'invoice_status': ['发票状态', 'invoice_status'],
+          // 人员/客户/供应商
+          'code': ['编码', '工号', '编号', 'code'],
+          'name': ['名称', '姓名', '名字', 'name'],
+          'id_card': ['身份证', '身份证号', 'id_card'],
+          'uscc': ['统一社会信用代码', '信用代码', 'uscc'],
+          'email': ['邮箱', 'email'],
+          'salary': ['工资', '基本工资', 'salary'],
+          'leave_date': ['离职日期', '离职', 'leave_date'],
+          'tax_no': ['税号', '纳税人识别号', 'tax_no'],
+          'contact': ['联系人', '经办人', 'contact'],
+          'phone': ['电话', '联系电话', '手机', 'phone'],
+          'address': ['地址', 'address'],
+          'credit_limit': ['信用额度', '额度', 'credit'],
+          'payment_terms': ['账期', '付款期限', 'payment_terms'],
+          'bank_name': ['开户银行', '开户行', '银行', 'bank_name'],
+          'bank_account': ['银行账号', '账号', 'account'],
+          'is_active': ['启用', '状态', 'is_active', 'active']
         };
         const keys = km[field] || [fl];
         if (hl.includes(fl) || fl.includes(hl) || keys.some(k => hl.includes(k))) {
