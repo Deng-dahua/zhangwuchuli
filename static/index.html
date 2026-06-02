@@ -1298,20 +1298,17 @@ async function renderDetailLedger() {
   const accountOptions = allAccounts.map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`).join('');
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
-      <div class="card-title">📄 明细账</div>
-      <div class="filter-bar">
-        <div class="form-group">
-          <label>科目</label>
-          <select class="form-control" id="dl-account" style="width:220px">
-            <option value="">-- 选择科目 --</option>
-            ${accountOptions}
-          </select>
-        </div>
-        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('dl-from', currentPeriod)}</div>
-        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('dl-to', currentPeriod)}</div>
-        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button></div>
+      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
+        <select class="form-control" id="dl-account" style="width:220px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">
+          <option value="">-- 选择科目 --</option>
+          ${accountOptions}
+        </select>
+        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('dl-from', currentPeriod)}
+        <span style="color:#9ca3af">至</span>
+        ${_periodSelectsHTML('dl-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
+        <button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button>
       </div>
-      <div class="table-wrap" id="dl-table">请选择科目并查询</div>
+      <div class="table-wrap" id="dl-table"></div>
     </div>
   `;
 }
@@ -1386,13 +1383,13 @@ async function renderProfitLoss() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
-      <div class="card-title">📈 利润表</div>
-      <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('pl-from', currentPeriod)}</div>
-        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('pl-to', currentPeriod)}</div>
-        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button></div>
+      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('pl-from', currentPeriod)}
+        <span style="color:#9ca3af">至</span>
+        ${_periodSelectsHTML('pl-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
+        <button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button>
       </div>
-      <div id="pl-table">请点击生成报表</div>
+      <div id="pl-table"></div>
     </div>
   `;
 }
@@ -1428,13 +1425,13 @@ async function renderBalanceSheet() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
-      <div class="card-title">⚖️ 资产负债表</div>
-      <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('bs-from', currentPeriod)}</div>
-        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('bs-to', currentPeriod)}</div>
-        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button></div>
+      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('bs-from', currentPeriod)}
+        <span style="color:#9ca3af">至</span>
+        ${_periodSelectsHTML('bs-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
+        <button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button>
       </div>
-      <div id="bs-table">请点击生成报表</div>
+      <div id="bs-table"></div>
     </div>
   `;
 }
@@ -1482,13 +1479,13 @@ async function renderAccountBalance() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
-      <div class="card-title">📒 科目余额表</div>
-      <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('tb-from', currentPeriod)}</div>
-        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('tb-to', currentPeriod)}</div>
-        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button></div>
+      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('tb-from', currentPeriod)}
+        <span style="color:#9ca3af">至</span>
+        ${_periodSelectsHTML('tb-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
+        <button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button>
       </div>
-      <div id="tb-table">加载中...</div>
+      <div id="tb-table"></div>
     </div>
   `;
   loadAccountBalance();
