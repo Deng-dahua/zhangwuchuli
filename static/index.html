@@ -528,8 +528,10 @@
     <div class="topbar-title" id="page-title">数据看板</div>
     <div class="topbar-right">
       <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
-      <div class="period-badge" id="current-period-badge" onclick="showPeriodSelector()">
-        📅 当前期间：<span id="current-period">加载中...</span>
+      <div class="period-badge" id="current-period-badge">
+        📅 <select id="global-period-select" onchange="onGlobalPeriodChange(this.value)" style="border:none;background:transparent;color:#1e40af;font-weight:600;font-size:13px;cursor:pointer;outline:none;max-width:170px">
+          <option value="">-- 手动选择期间 --</option>
+        </select>
       </div>
     </div>
   </div>
@@ -806,13 +808,29 @@ function escapeHtml(str) {
 async function loadCurrentPeriod() {
   try {
     const data = await api('/api/periods');
-    const open = data.find(p => p.status === '开放');
-    currentPeriod = open ? open.period : (data[0]?.period || '');
-    document.getElementById('current-period').textContent = currentPeriod || '未设置';
+    const sel = document.getElementById('global-period-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- 手动选择期间 --</option>' +
+      data.map(p => `<option value="${p.period}">${p.period} ${p.status === '开放' ? '●' : '🔒'}</option>`).join('');
   } catch (e) {
     currentPeriod = '';
-    document.getElementById('current-period').textContent = '未设置';
   }
+}
+
+function periodToDateRange(period) {
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) return { from: '', to: '' };
+  const [y, m] = period.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { from: period + '-01', to: period + '-' + String(lastDay).padStart(2, '0') };
+}
+
+function onGlobalPeriodChange(period) {
+  currentPeriod = period;
+  // 清空四个模块的日期筛选，强制使用期间范围
+  siFilter.dateFrom = ''; siFilter.dateTo = '';
+  piFilter.dateFrom = ''; piFilter.dateTo = '';
+  ivdFilter.dateFrom = ''; ivdFilter.dateTo = '';
+  navigateTo(currentPage);
 }
 
 async function loadAllAccounts() {
@@ -2364,17 +2382,6 @@ function createModal(title, body, extraClass) {
   return overlay;
 }
 
-function showPeriodSelector() {
-  // 简单点击切换期间
-  const newPeriod = prompt('输入要切换的会计期间 (格式 YYYY-MM):', currentPeriod);
-  if (newPeriod && /^\d{4}-\d{2}$/.test(newPeriod)) {
-    currentPeriod = newPeriod;
-    document.getElementById('current-period').textContent = currentPeriod;
-    toast(`已切换到 ${currentPeriod}`, 'success');
-    if (currentPage === 'dashboard') renderDashboard();
-  }
-}
-
 // ==================== 启动 ====================
 init();
 
@@ -3720,6 +3727,8 @@ let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices() {
+  // 全局期间联动
+  if (currentPeriod && !siFilter.dateFrom) { const r = periodToDateRange(currentPeriod); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
   try {
     const [inv, stats] = await Promise.all([
       api('/api/sales-invoices'),
@@ -4132,6 +4141,8 @@ let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' }
 let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices() {
+  // 全局期间联动
+  if (currentPeriod && !piFilter.dateFrom) { const r = periodToDateRange(currentPeriod); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
   try {
     const [inv, stats] = await Promise.all([
       api('/api/purchase-invoices'),
@@ -4381,6 +4392,9 @@ async function loadBankConfigs() {
 }
 
 async function renderBankTransactions() {
+  // 全局期间联动
+  let btDateFrom = '', btDateTo = '';
+  if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
   const [configs, stats] = await Promise.all([
     loadBankConfigs(),
     api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
@@ -4418,9 +4432,9 @@ async function renderBankTransactions() {
   html += '</select>';
   html += '<input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;" onkeydown="if(event.key===\'Enter\')loadBankTxList()">';
   html += '<button onclick="loadBankTxList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
-  html += '<input type="date" id="bt-date-from" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
+  html += '<input type="date" id="bt-date-from" value="' + btDateFrom + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
   html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
-  html += '<input type="date" id="bt-date-to" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
+  html += '<input type="date" id="bt-date-to" value="' + btDateTo + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
   html += '<button onclick="document.getElementById(\'bt-type-filter\').value=\'\';document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()" style="display:none">🗑 批量删除</button>';
@@ -4700,6 +4714,8 @@ async function deleteBankConfig(id) {
 // ==================== 进项抵扣 - 认证台账 ====================
 
 async function renderInputVATDeductions() {
+  // 全局期间联动
+  if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
   const params = new URLSearchParams();
   if (ivdFilter.checkStatus) params.set('check_status', ivdFilter.checkStatus);
   if (ivdFilter.dateFrom) params.set('date_from', ivdFilter.dateFrom);
