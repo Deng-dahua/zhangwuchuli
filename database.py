@@ -621,6 +621,7 @@ class BankTransaction(Base):
     payment_method = Column(String(30), comment="结算方式（旧）")
     reference_no = Column(String(50), comment="银行流水号（旧）")
     raw_data = Column(Text, comment="原始数据JSON（旧）")
+    journal_voucher_no = Column(String(30), comment="关联序时账凭证号")
     _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     remark = Column(Text, comment="备注（旧）")
     created_at = Column(DateTime, default=datetime.now)

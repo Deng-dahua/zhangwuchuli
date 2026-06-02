@@ -2030,6 +2030,57 @@ def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(1), d
     return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
 
+@app.post("/api/purchase-invoices/{invoice_id}/to-journal")
+def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    """将单张取得发票生成进项抵扣记录并生成凭证"""
+    inv = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.id == invoice_id,
+        PurchaseInvoice.company_id == company_id
+    ).first()
+    if not inv:
+        raise HTTPException(404, "发票不存在")
+
+    period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
+
+    # 查找或创建进项抵扣记录
+    ded = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        InputVATDeduction.invoice_no == inv.invoice_no
+    ).first()
+
+    if not ded:
+        ded = InputVATDeduction(
+            company_id=company_id,
+            purchase_invoice_id=inv.id,
+            invoice_code=inv.invoice_code or "",
+            invoice_no=inv.invoice_no or "",
+            invoice_date=inv.invoice_date,
+            seller_name=inv.seller_name or "",
+            seller_tax_id=inv.seller_tax_no or "",
+            amount=inv.amount or 0,
+            tax_amount=inv.tax_amount or 0,
+            deductible_tax_amount=inv.tax_amount or 0,
+            total_amount=inv.total_amount or 0,
+            invoice_category=inv.invoice_category or "增值税专用发票",
+            goods_name=inv.goods_name or "",
+            deduction_period=period,
+            deduction_status="待抵扣",
+        )
+        db.add(ded)
+    else:
+        if not ded.deduction_period:
+            ded.deduction_period = period
+        if not ded.deduction_status:
+            ded.deduction_status = "待抵扣"
+
+    db.flush()
+
+    # 按月汇总生成进项抵扣凭证
+    count = auto_generate_input_vat_for_period(db, company_id, period)
+    db.commit()
+    return {"message": f"已为 {period} 生成进项抵扣凭证 ({count} 条)", "period": period}
+
+
 import json
 
 # ==================== 银行配置 ====================
@@ -2200,7 +2251,7 @@ def list_bank_transactions(
         "reference_no": tx.reference_no or "",
         "raw_data": tx.raw_data or "{}",
         "remark": tx.remark or "",
-        "journal_voucher_no": "",  # 银行流水暂无自动关联序时账，预留字段
+        "journal_voucher_no": tx.journal_voucher_no or "",
         "created_at": str(tx.created_at) if tx.created_at else ""
     } for tx in txs]
 
@@ -2312,6 +2363,63 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session 
     db.delete(tx)
     db.commit()
     return {"message": "删除成功"}
+
+
+@app.post("/api/bank-transactions/{tx_id}/to-journal")
+def bank_transaction_to_journal(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    """为单条银行流水生成记账凭证"""
+    tx = db.query(BankTransaction).filter(
+        BankTransaction.id == tx_id,
+        BankTransaction.company_id == company_id
+    ).first()
+    if not tx:
+        raise HTTPException(404, "流水记录不存在")
+
+    # 已有凭证则跳过
+    if tx.journal_voucher_no:
+        raise HTTPException(400, "该流水已生成凭证：" + tx.journal_voucher_no)
+
+    period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
+    max_no = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.voucher_word == "记"
+    ).order_by(JournalEntry.voucher_no.desc()).first()
+    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+
+    date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
+    counterparty = tx.counterparty_name or tx.summary or "银行流水"
+    # 确保1002银行存款科目存在
+    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "1002").first():
+        db.add(Account(
+            company_id=company_id, code="1002", name="银行存款",
+            category="资产", balance_direction="借", level=1, parent_code="1",
+        ))
+        db.flush()
+
+    is_debit = tx.debit_amount and tx.debit_amount > 0
+    amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+
+    entry = JournalEntry(
+        company_id=company_id,
+        entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+        period=period,
+        voucher_word="记",
+        voucher_no=next_voucher_no,
+        summary=f"银行流水-{counterparty}",
+        account_code="1002",
+        account_name="银行存款",
+        debit_amount=amount if is_debit else 0,
+        credit_amount=0 if is_debit else amount,
+        contact_project=counterparty,
+        source="手动录入",
+    )
+    db.add(entry)
+
+    voucher_str = f"记-{next_voucher_no}"
+    tx.journal_voucher_no = voucher_str
+    db.commit()
+    return {"message": f"已生成凭证，凭证号：{voucher_str}", "voucher_no": voucher_str, "period": period}
 
 
 # ==================== 序时账 ====================
@@ -3240,6 +3348,22 @@ def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(1)
     ).delete(synchronize_session=False)
     db.commit()
     return {"message": f"已删除 {deleted} 条记录", "deleted": deleted}
+
+
+@app.post("/api/input-vat-deductions/{item_id}/to-journal")
+def input_vat_deduction_to_journal(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    """为进项抵扣记录所在期间重新生成凭证"""
+    it = db.query(InputVATDeduction).filter(
+        InputVATDeduction.id == item_id,
+        InputVATDeduction.company_id == company_id
+    ).first()
+    if not it:
+        raise HTTPException(404, "抵扣记录不存在")
+
+    period = it.deduction_period or (it.invoice_date.strftime("%Y-%m") if it.invoice_date else datetime.now().strftime("%Y-%m"))
+    count = auto_generate_input_vat_for_period(db, company_id, period)
+    db.commit()
+    return {"message": f"已为 {period} 生成进项抵扣凭证 ({count} 条)", "period": period}
 
 
 # ==================== 列映射模板 ====================
