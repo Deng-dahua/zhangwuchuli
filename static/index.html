@@ -4168,7 +4168,7 @@ async function generateVoucherFromInvoices() {
   if (!confirm(`确认根据选中的 ${ids.length} 张发票自动生成凭证？\n\n会计分录：\n  借：应收账款\n  贷：主营业务收入\n  贷：应交增值税`)) return;
 
   try {
-    const result = await api('/api/sales-invoices/auto-voucher', {
+    const result = await api('/api/vouchers/auto-from-sales-invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)

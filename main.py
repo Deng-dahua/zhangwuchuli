@@ -2442,7 +2442,7 @@ def generate_voucher_from_sales_invoices(ids: list[int], company_id: int = Query
     }
 
 
-@app.post("/api/sales-invoices/auto-voucher")
+@app.post("/api/vouchers/auto-from-sales-invoices")
 def auto_voucher_from_sales_invoices(
     ids: list[int],
     debit_account: str = Query("1122", description="借方科目编码，默认应收账款"),
