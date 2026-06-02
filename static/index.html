@@ -480,6 +480,7 @@
     <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>数据看板</div>
 
     <div class="nav-group-title">账簿查询</div>
+    <div class="nav-item" data-page="journal"><span class="icon">📋</span>序时账</div>
     <div class="nav-item" data-page="general-ledger"><span class="icon">📒</span>总账</div>
     <div class="nav-item" data-page="detail-ledger"><span class="icon">📄</span>明细账</div>
 
@@ -553,6 +554,7 @@ const pages = {
   'suppliers': '供应商档案',
   'general-ledger': '总账',
   'detail-ledger': '明细账',
+  'journal': '序时账',
   'profit-loss': '利润表',
   'balance-sheet': '资产负债表',
   'account-balance': '科目余额表',
@@ -833,6 +835,7 @@ function navigateTo(page) {
   switch (page) {
     case 'chat': renderChat(); break;
     case 'dashboard': renderDashboard(); break;
+    case 'journal': renderJournal(); break;
     case 'general-ledger': renderGeneralLedger(); break;
     case 'detail-ledger': renderDetailLedger(); break;
     case 'profit-loss': renderProfitLoss(); break;
@@ -939,6 +942,217 @@ async function renderDashboard() {
     `;
   } catch (e) {
     el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
+  }
+}
+// ==================== 序时账 ====================
+let jeFilter = { period: '', voucher_word: '', keyword: '', date_from: '', date_to: '', is_reviewed: '' };
+
+async function renderJournal() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
+  try {
+    const stats = await api('/api/journal-entries/stats');
+    el.innerHTML = `
+      <div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
+        <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value">${stats.total_count}</div><div class="stat-sub">条</div></div>
+        <div class="stat-card"><div class="stat-label">借方合计</div><div class="stat-value" style="color:var(--primary)">¥${fmt(stats.total_debit)}</div></div>
+        <div class="stat-card"><div class="stat-label">贷方合计</div><div class="stat-value" style="color:var(--success)">¥${fmt(stats.total_credit)}</div></div>
+        <div class="stat-card"><div class="stat-label">已复核</div><div class="stat-value" style="color:var(--success)">${stats.reviewed_count}</div><div class="stat-sub">条</div></div>
+        <div class="stat-card"><div class="stat-label">未复核</div><div class="stat-value" style="color:var(--warning)">${stats.unreviewed_count}</div><div class="stat-sub">条</div></div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">📋 序时账</div>
+        <div class="filter-bar">
+          <div class="form-group"><label>期间</label><input class="form-control" id="je-period" value="${jeFilter.period}" style="width:110px" placeholder="YYYY-MM"></div>
+          <div class="form-group"><label>凭证字</label><select class="form-control" id="je-word" style="width:90px"><option value="">全部</option><option value="记" ${jeFilter.voucher_word==='记'?'selected':''}>记</option><option value="收" ${jeFilter.voucher_word==='收'?'selected':''}>收</option><option value="付" ${jeFilter.voucher_word==='付'?'selected':''}>付</option><option value="转" ${jeFilter.voucher_word==='转'?'selected':''}>转</option></select></div>
+          <div class="form-group"><label>复核</label><select class="form-control" id="je-reviewed" style="width:90px"><option value="">全部</option><option value="1" ${jeFilter.is_reviewed==='1'?'selected':''}>已复核</option><option value="0" ${jeFilter.is_reviewed==='0'?'selected':''}>未复核</option></select></div>
+          <div class="form-group"><label>日期从</label><input class="form-control" id="je-from" type="date" value="${jeFilter.date_from}" style="width:140px"></div>
+          <div class="form-group"><label>日期至</label><input class="form-control" id="je-to" type="date" value="${jeFilter.date_to}" style="width:140px"></div>
+          <div class="form-group"><label>关键词</label><input class="form-control" id="je-keyword" value="${jeFilter.keyword}" placeholder="摘要/科目" style="width:160px"></div>
+          <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadJournalList()">🔍 查询</button></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary" onclick="showJournalForm()">＋ 新增记录</button>
+          <button class="btn btn-secondary" id="jeBatchDelBtn" style="display:none" onclick="batchDeleteJournal()">🗑 批量删除</button>
+        </div>
+        <div class="table-wrap" id="je-table">请点击查询</div>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
+  }
+}
+
+function collectJeFilter() {
+  return {
+    period: document.getElementById('je-period')?.value || '',
+    voucher_word: document.getElementById('je-word')?.value || '',
+    is_reviewed: document.getElementById('je-reviewed')?.value || '',
+    date_from: document.getElementById('je-from')?.value || '',
+    date_to: document.getElementById('je-to')?.value || '',
+    keyword: document.getElementById('je-keyword')?.value || ''
+  };
+}
+
+async function loadJournalList() {
+  jeFilter = collectJeFilter();
+  const el = document.getElementById('je-table');
+  el.innerHTML = '加载中...';
+  const params = new URLSearchParams();
+  if (jeFilter.period) params.set('period', jeFilter.period);
+  if (jeFilter.voucher_word) params.set('voucher_word', jeFilter.voucher_word);
+  if (jeFilter.is_reviewed) params.set('is_reviewed', jeFilter.is_reviewed);
+  if (jeFilter.date_from) params.set('date_from', jeFilter.date_from);
+  if (jeFilter.date_to) params.set('date_to', jeFilter.date_to);
+  if (jeFilter.keyword) params.set('keyword', jeFilter.keyword);
+  try {
+    const data = await api('/api/journal-entries?' + params.toString());
+    if (!data.length) { el.innerHTML = '<div class="empty-state"><p>暂无记录</p></div>'; return; }
+    el.innerHTML = `
+      <table>
+        <thead><tr>
+          <th style="width:40px"><input type="checkbox" id="jeSelectAll" onchange="toggleJeSelectAll()"></th>
+          <th>日期</th><th>凭证字</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th>
+          <th class="num">借方金额</th><th class="num">贷方金额</th><th>制单人</th><th>复核</th><th>操作</th>
+        </tr></thead>
+        <tbody>
+          ${data.map(r => `
+            <tr>
+              <td><input type="checkbox" class="je-check" data-id="${r.id}" onchange="updateJeBatchBtn()"></td>
+              <td>${r.entry_date}</td>
+              <td style="text-align:center">${r.voucher_word}</td>
+              <td style="text-align:center">${r.voucher_no}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(r.summary)}">${r.summary || '-'}</td>
+              <td>${r.account_code}</td>
+              <td>${r.account_name || '-'}</td>
+              <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-'}</td>
+              <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-'}</td>
+              <td>${r.prepared_by || '-'}</td>
+              <td style="text-align:center">${r.is_reviewed ? '<span style="color:var(--success)">✔</span>' : '<span style="color:var(--warning)">○</span>'}</td>
+              <td>
+                <button class="btn btn-sm btn-secondary" onclick="showJournalForm(${r.id})">编辑</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteJournal(${r.id})">删除</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+function toggleJeSelectAll() {
+  const all = document.getElementById('jeSelectAll');
+  document.querySelectorAll('.je-check').forEach(cb => cb.checked = all.checked);
+  updateJeBatchBtn();
+}
+
+function updateJeBatchBtn() {
+  const count = document.querySelectorAll('.je-check:checked').length;
+  const btn = document.getElementById('jeBatchDelBtn');
+  if (btn) {
+    btn.style.display = count > 0 ? '' : 'none';
+    btn.textContent = '🗑 批量删除（' + count + '）';
+  }
+}
+
+async function batchDeleteJournal() {
+  const checked = document.querySelectorAll('.je-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条记录？此操作不可恢复。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/journal-entries/batch-delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
+    });
+    toast(result.message, 'success');
+    loadJournalList();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function showJournalForm(entryId) {
+  const isEdit = entryId && entryId !== 'null';
+  let entry = null;
+  if (isEdit) {
+    entry = await api('/api/journal-entries/' + entryId);
+  }
+  const title = isEdit ? '编辑序时账记录' : '新增序时账记录';
+  const gw = entry ? entry.voucher_word : '记';
+  const today = entry ? entry.entry_date : new Date().toISOString().slice(0,10);
+  const period = entry ? entry.period : (currentPeriod || today.slice(0,7));
+  let html = '<div class="modal-header"><h3>' + title + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">';
+  html += '<div class="form-group"><label>日期 <span style="color:var(--danger)">*</span></label><input class="form-input" id="je-entry-date" type="date" value="' + today + '"></div>';
+  html += '<div class="form-group"><label>期间 <span style="color:var(--danger)">*</span></label><input class="form-input" id="je-period-input" value="' + period + '"></div>';
+  html += '<div class="form-group"><label>凭证字</label><select class="form-input" id="je-word-input"><option value="记"' + (gw==='记'?' selected':'') + '>记</option><option value="收"' + (gw==='收'?' selected':'') + '>收</option><option value="付"' + (gw==='付'?' selected':'') + '>付</option><option value="转"' + (gw==='转'?' selected':'') + '>转</option></select></div>';
+  html += '<div class="form-group"><label>凭证号 <span style="color:var(--danger)">*</span></label><input class="form-input" id="je-voucher-no" type="number" value="' + (entry ? entry.voucher_no : '') + '"></div>';
+  html += '<div class="form-group"><label>附单据</label><input class="form-input" id="je-attach" type="number" value="' + (entry ? entry.attach_count : '0') + '"></div>';
+  html += '<div class="form-group"><label>制单人</label><input class="form-input" id="je-prepared" value="' + (entry ? escapeHtml(entry.prepared_by) : '') + '"></div>';
+  html += '<div class="form-group"><label>复核人</label><input class="form-input" id="je-reviewed-by" value="' + (entry ? escapeHtml(entry.reviewed_by) : '') + '"></div>';
+  html += '<div class="form-group"><label>复核状态</label><select class="form-input" id="je-is-reviewed"><option value="0"' + (entry && !entry.is_reviewed ? ' selected' : '') + '>未复核</option><option value="1"' + (entry && entry.is_reviewed ? ' selected' : '') + '>已复核</option></select></div>';
+  html += '</div>';
+  html += '<div class="form-group"><label>摘要</label><textarea class="form-input" id="je-summary" rows="3" style="width:100%">' + (entry ? escapeHtml(entry.summary) : '') + '</textarea></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px">';
+  html += '<div class="form-group"><label>科目编码 <span style="color:var(--danger)">*</span></label><input class="form-input" id="je-account-code" value="' + (entry ? entry.account_code : '') + '"></div>';
+  html += '<div class="form-group"><label>科目名称</label><input class="form-input" id="je-account-name" value="' + (entry ? escapeHtml(entry.account_name) : '') + '"></div>';
+  html += '<div class="form-group"><label>借方金额</label><input class="form-input" id="je-debit" type="number" step="0.01" value="' + (entry ? entry.debit_amount : '') + '"></div>';
+  html += '<div class="form-group"><label>贷方金额</label><input class="form-input" id="je-credit" type="number" step="0.01" value="' + (entry ? entry.credit_amount : '') + '"></div>';
+  html += '<div class="form-group"><label>备注</label><input class="form-input" id="je-remark" value="' + (entry ? escapeHtml(entry.remark) : '') + '"></div>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveJournal(' + (isEdit ? entryId : 'null') + ')">保存</button></div>';
+  showModal(html);
+}
+
+async function saveJournal(entryId) {
+  const isEdit = entryId && entryId !== 'null';
+  const body = {
+    entry_date: document.getElementById('je-entry-date').value,
+    period: document.getElementById('je-period-input').value,
+    voucher_word: document.getElementById('je-word-input').value,
+    voucher_no: parseInt(document.getElementById('je-voucher-no').value) || 0,
+    attach_count: parseInt(document.getElementById('je-attach').value) || 0,
+    summary: document.getElementById('je-summary').value,
+    account_code: document.getElementById('je-account-code').value,
+    account_name: document.getElementById('je-account-name').value,
+    debit_amount: parseFloat(document.getElementById('je-debit').value) || 0,
+    credit_amount: parseFloat(document.getElementById('je-credit').value) || 0,
+    prepared_by: document.getElementById('je-prepared').value,
+    reviewed_by: document.getElementById('je-reviewed-by').value,
+    is_reviewed: document.getElementById('je-is-reviewed').value === '1',
+    remark: document.getElementById('je-remark').value,
+  };
+  if (!body.entry_date || !body.period || !body.voucher_no || !body.account_code) {
+    toast('日期、期间、凭证号、科目编码为必填项', 'error'); return;
+  }
+  try {
+    if (isEdit) {
+      await api('/api/journal-entries/' + entryId, { method: 'PUT', body: JSON.stringify(body) });
+      toast('更新成功', 'success');
+    } else {
+      await api('/api/journal-entries', { method: 'POST', body: JSON.stringify(body) });
+      toast('创建成功', 'success');
+    }
+    closeModal();
+    loadJournalList();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function deleteJournal(id) {
+  if (!confirm('确认删除此记录？')) return;
+  try {
+    await api('/api/journal-entries/' + id, { method: 'DELETE' });
+    toast('删除成功', 'success');
+    loadJournalList();
+  } catch (e) {
+    toast(e.message, 'error');
   }
 }
 // ==================== 总账 ====================

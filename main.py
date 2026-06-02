@@ -30,7 +30,7 @@ from database import (
     Payment,
     SalesInvoice, PurchaseInvoice,
     BankConfig, BankTransaction,
-    InputVATDeduction, ColumnTemplate
+    InputVATDeduction, ColumnTemplate, JournalEntry
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -2380,6 +2380,164 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session 
     db.delete(tx)
     db.commit()
     return {"message": "删除成功"}
+
+
+# ==================== 序时账 ====================
+
+class JournalEntryCreate(BaseModel):
+    entry_date: date
+    period: str
+    voucher_word: str = "记"
+    voucher_no: int
+    attach_count: Optional[int] = 0
+    summary: Optional[str] = None
+    account_code: str
+    account_name: Optional[str] = None
+    debit_amount: Optional[float] = 0.0
+    credit_amount: Optional[float] = 0.0
+    prepared_by: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    is_reviewed: Optional[bool] = False
+    remark: Optional[str] = None
+
+
+class JournalEntryUpdate(BaseModel):
+    entry_date: Optional[date] = None
+    period: Optional[str] = None
+    voucher_word: Optional[str] = None
+    voucher_no: Optional[int] = None
+    attach_count: Optional[int] = None
+    summary: Optional[str] = None
+    account_code: Optional[str] = None
+    account_name: Optional[str] = None
+    debit_amount: Optional[float] = None
+    credit_amount: Optional[float] = None
+    prepared_by: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    is_reviewed: Optional[bool] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/journal-entries")
+def list_journal_entries(
+    company_id: int = Query(1),
+    period: Optional[str] = None,
+    voucher_word: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    is_reviewed: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
+    if period:
+        q = q.filter(JournalEntry.period == period)
+    if voucher_word:
+        q = q.filter(JournalEntry.voucher_word == voucher_word)
+    if is_reviewed is not None:
+        q = q.filter(JournalEntry.is_reviewed == is_reviewed)
+    if date_from:
+        q = q.filter(JournalEntry.entry_date >= date_from)
+    if date_to:
+        q = q.filter(JournalEntry.entry_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            JournalEntry.summary.contains(keyword),
+            JournalEntry.account_name.contains(keyword),
+            JournalEntry.account_code.contains(keyword),
+        ))
+    entries = q.order_by(JournalEntry.entry_date.asc(), JournalEntry.voucher_word.asc(), JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
+    return [{
+        "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
+        "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
+        "attach_count": e.attach_count or 0, "summary": e.summary or "",
+        "account_code": e.account_code, "account_name": e.account_name or "",
+        "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
+        "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
+        "is_reviewed": e.is_reviewed, "remark": e.remark or "",
+        "created_at": str(e.created_at) if e.created_at else None,
+    } for e in entries]
+
+
+@app.get("/api/journal-entries/stats")
+def journal_entry_stats(
+    company_id: int = Query(1),
+    period: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    base = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
+    if period:
+        base = base.filter(JournalEntry.period == period)
+    total_count = base.count()
+    total_debit = base.filter(JournalEntry.debit_amount > 0).with_entities(func.sum(JournalEntry.debit_amount)).scalar() or 0
+    total_credit = base.filter(JournalEntry.credit_amount > 0).with_entities(func.sum(JournalEntry.credit_amount)).scalar() or 0
+    reviewed_count = base.filter(JournalEntry.is_reviewed == True).count()
+    unreviewed_count = base.filter(JournalEntry.is_reviewed == False).count()
+    period_count = base.with_entities(func.count(func.distinct(JournalEntry.period))).scalar() or 0
+    return {
+        "total_count": total_count,
+        "total_debit": round(total_debit, 2),
+        "total_credit": round(total_credit, 2),
+        "reviewed_count": reviewed_count,
+        "unreviewed_count": unreviewed_count,
+        "period_count": period_count,
+    }
+
+
+@app.post("/api/journal-entries")
+def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = JournalEntry(company_id=company_id, **data.model_dump())
+    db.add(e)
+    db.commit()
+    db.refresh(e)
+    return {"id": e.id, "message": "序时账记录创建成功"}
+
+
+@app.get("/api/journal-entries/{entry_id}")
+def get_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(404, detail="记录不存在")
+    return {
+        "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
+        "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
+        "attach_count": e.attach_count or 0, "summary": e.summary or "",
+        "account_code": e.account_code, "account_name": e.account_name or "",
+        "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
+        "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
+        "is_reviewed": e.is_reviewed, "remark": e.remark or "",
+    }
+
+
+@app.put("/api/journal-entries/{entry_id}")
+def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(404, detail="记录不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(e, k, v)
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/journal-entries/{entry_id}")
+def delete_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(404, detail="记录不存在")
+    db.delete(e)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+@app.post("/api/journal-entries/batch-delete")
+def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.id.in_(req.ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条记录", "count": deleted}
 
 
 # ==================== 进项抵扣 ====================

@@ -719,6 +719,35 @@ class ColumnTemplate(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class JournalEntry(Base):
+    """序时账 - 按日期顺序记录所有会计分录"""
+    __tablename__ = "journal_entries"
+    __table_args__ = (
+        Index('idx_je_company_date', 'company_id', 'entry_date'),
+        Index('idx_je_company_period', 'company_id', 'period'),
+        Index('idx_je_company_voucher', 'company_id', 'voucher_word', 'voucher_no'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    entry_date = Column(Date, nullable=False, comment="日期")
+    period = Column(String(7), nullable=False, comment="会计期间 YYYY-MM")
+    voucher_word = Column(String(10), nullable=False, default="记", comment="凭证字：记/收/付/转")
+    voucher_no = Column(Integer, nullable=False, comment="凭证号")
+    attach_count = Column(Integer, default=0, comment="附单据数")
+    summary = Column(Text, comment="摘要")
+    account_code = Column(String(20), nullable=False, comment="科目编码")
+    account_name = Column(String(100), comment="科目名称")
+    debit_amount = Column(Float, default=0.0, comment="借方金额")
+    credit_amount = Column(Float, default=0.0, comment="贷方金额")
+    prepared_by = Column(String(50), comment="制单人")
+    reviewed_by = Column(String(50), comment="复核人")
+    is_reviewed = Column(Boolean, default=False, comment="是否复核")
+    reviewed_at = Column(DateTime, comment="复核时间")
+    remark = Column(Text, comment="备注")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # ==================== 数据库迁移与初始化 ====================
 
 def migrate_schema(db):
