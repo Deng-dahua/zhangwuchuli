@@ -1069,11 +1069,11 @@ async function renderJournal() {
         html += '<td>' + (r.account_name || '-') + '</td>';
         html += '<td>' + (r.contact_project || '-') + '</td>';
         html += '<td>' + (r.spec_model || '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.quantity > 0 ? r.quantity : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
         html += '<td>' + (r.unit || '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.unit_price > 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
+        html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')" style="margin-right:4px">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
@@ -1390,8 +1390,8 @@ async function loadDetailLedger() {
                 <td>${r.voucher_date}</td>
                 <td>${r.voucher_no}</td>
                 <td>${r.summary || ''}</td>
-                <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : ''}</td>
-                <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : ''}</td>
+                <td class="num">${r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : ''}</td>
+                <td class="num">${r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : ''}</td>
                 <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
               </tr>
             `).join('')}
