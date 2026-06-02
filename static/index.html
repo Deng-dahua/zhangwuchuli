@@ -225,6 +225,8 @@
     /* 科目缩进 */
     .indent-1 { padding-left: 8px; }
     .indent-2 { padding-left: 24px; }
+    .indent-3 { padding-left: 40px; }
+    .indent-4 { padding-left: 56px; }
 
     /* ====== AI 助手聊天 ====== */
     .chat-wrapper { display: flex; flex-direction: column; height: calc(100vh - 120px); background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
@@ -1608,7 +1610,7 @@ async function loadAccounts() {
           ${data.map(a => `
             <tr>
               <td style="font-weight:500">${a.code}</td>
-              <td class="${a.level === 2 ? 'indent-2' : ''}">${a.name.trim()}</td>
+              <td class="${a.level >= 2 ? 'indent-' + a.level : ''}">${a.name.trim()}</td>
               <td><span class="badge" style="background:var(--primary-light);color:var(--primary)">${a.category}</span></td>
               <td style="text-align:center">${a.balance_direction}</td>
               <td style="text-align:center">${a.level}</td>
