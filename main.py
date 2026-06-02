@@ -2442,6 +2442,151 @@ def generate_voucher_from_sales_invoices(ids: list[int], company_id: int = Query
     }
 
 
+@app.post("/api/sales-invoices/auto-voucher")
+def auto_voucher_from_sales_invoices(
+    ids: list[int],
+    debit_account: str = Query("1122", description="借方科目编码，默认应收账款"),
+    company_id: int = Query(1),
+    db: Session = Depends(get_db)
+):
+    """根据开具发票记录，自动生成并保存凭证。
+    会计分录：
+      借：应收账款（或指定科目）   price_tax_total
+      贷：主营业务收入 6001       amount
+      贷：应交增值税 221001       tax_amount（若有税额）
+    """
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.id.in_(ids)
+    ).all()
+
+    if not invoices:
+        raise HTTPException(status_code=404, detail="未找到选中的发票")
+
+    # 校验借方科目存在
+    debit_acc = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == debit_account
+    ).first()
+    if not debit_acc:
+        raise HTTPException(status_code=400, detail=f"借方科目 {debit_account} 不存在")
+
+    # 校验贷方科目存在
+    revenue_acc = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == "6001"
+    ).first()
+    if not revenue_acc:
+        raise HTTPException(status_code=400, detail="主营业务收入科目(6001)不存在，请先在科目表中添加")
+
+    tax_acc = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == "221001"
+    ).first()
+
+    # 计算合计
+    total_amount = round(sum(inv.amount or 0 for inv in invoices), 2)
+    total_tax = round(sum(inv.tax_amount or 0 for inv in invoices), 2)
+    total_price_tax = round(sum(inv.total_amount or 0 for inv in invoices), 2)
+
+    # 如果 total_price_tax = 0，用 amount + tax 补算
+    if total_price_tax == 0:
+        total_price_tax = round(total_amount + total_tax, 2)
+
+    # 凭证日期 = 最新发票日期
+    invoice_date = max(
+        (inv.invoice_date for inv in invoices if inv.invoice_date),
+        default=date.today()
+    )
+    if isinstance(invoice_date, str):
+        from datetime import datetime
+        invoice_date = datetime.strptime(invoice_date[:10], "%Y-%m-%d").date()
+
+    period = invoice_date.strftime("%Y-%m")
+    summary_text = f"开具发票{len(invoices)}张"
+
+    # 组装明细
+    details_data = []
+    line = 1
+
+    # 借：应收账款
+    details_data.append(VoucherDetailIn(
+        line_no=line, summary=summary_text,
+        account_code=debit_account,
+        debit_amount=total_price_tax, credit_amount=0
+    ))
+    line += 1
+
+    # 贷：主营业务收入
+    details_data.append(VoucherDetailIn(
+        line_no=line, summary=summary_text,
+        account_code="6001",
+        debit_amount=0, credit_amount=total_amount
+    ))
+    line += 1
+
+    # 贷：应交增值税（有税额时才添加）
+    if total_tax > 0 and tax_acc:
+        details_data.append(VoucherDetailIn(
+            line_no=line, summary=summary_text,
+            account_code="221001",
+            debit_amount=0, credit_amount=total_tax
+        ))
+        line += 1
+
+    # 借贷平衡校验
+    check_debit = sum(d.debit_amount for d in details_data)
+    check_credit = sum(d.credit_amount for d in details_data)
+    if abs(check_debit - check_credit) > 0.01:
+        raise HTTPException(status_code=400, detail=f"借贷不平衡：借方 {check_debit:.2f}，贷方 {check_credit:.2f}，请检查发票金额数据")
+
+    # 生成凭证号
+    period_no = period.replace("-", "")
+    count = db.query(Voucher).filter(
+        Voucher.company_id == company_id,
+        Voucher.period == period
+    ).count()
+    voucher_no = f"记-{period_no}-{str(count + 1).zfill(4)}"
+
+    # 保存凭证
+    voucher = Voucher(
+        company_id=company_id,
+        voucher_no=voucher_no,
+        voucher_date=invoice_date,
+        summary=summary_text,
+        total_debit=check_debit,
+        total_credit=check_credit,
+        creator="管理员",
+        period=period,
+        attachments=0,
+        status="草稿"
+    )
+    db.add(voucher)
+    db.flush()
+
+    for d in details_data:
+        detail = VoucherDetail(
+            voucher_id=voucher.id,
+            line_no=d.line_no,
+            summary=d.summary,
+            account_code=d.account_code,
+            debit_amount=d.debit_amount,
+            credit_amount=d.credit_amount
+        )
+        db.add(detail)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "voucher_no": voucher_no,
+        "period": period,
+        "voucher_date": str(invoice_date),
+        "invoice_count": len(invoices),
+        "total_price_tax": total_price_tax,
+        "total_amount": total_amount,
+        "total_tax": total_tax,
+        "message": f"凭证 {voucher_no} 已生成，共{len(invoices)}张发票，金额 {total_price_tax:.2f} 元"
+    }
+
+
 # ==================== 取得发票（采购发票）====================
 
 class PurchaseInvoiceCreate(BaseModel):

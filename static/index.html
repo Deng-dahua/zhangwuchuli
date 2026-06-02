@@ -4163,32 +4163,25 @@ async function generateVoucherFromInvoices() {
   if (checked.length === 0) return;
 
   const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+
+  // 确认操作
+  if (!confirm(`确认根据选中的 ${ids.length} 张发票自动生成凭证？\n\n会计分录：\n  借：应收账款\n  贷：主营业务收入\n  贷：应交增值税`)) return;
+
   try {
-    const data = await api('/api/sales-invoices/generate-voucher', {
+    const result = await api('/api/sales-invoices/auto-voucher', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)
     });
 
-    // 转换后端返回的数据格式为前端表单格式
-    const editData = {
-      period: data.period,
-      summary: data.summary,
-      details: data.details.map((d, idx) => ({
-        line_no: idx + 1,
-        summary: d.summary,
-        account_code: d.account_code || '',
-        debit_amount: d.debit || 0,
-        credit_amount: d.credit || 0
-      }))
-    };
+    toast(`✅ ${result.message}`, 'success');
 
-    // 直接调用填制凭证表单，并传入预填充数据
-    renderVoucherForm(editData);
-
-    toast(`已根据${data.invoice_count}张发票生成凭证，请选择科目后保存`, 'success');
+    // 取消选中
+    document.querySelectorAll('.si-check:checked').forEach(cb => cb.checked = false);
+    document.getElementById('siSelectAll').checked = false;
+    updateSiBatchBtn();
   } catch (e) {
-    toast(e.message, 'error');
+    toast('❌ 生成凭证失败：' + e.message, 'error');
   }
 }
 
