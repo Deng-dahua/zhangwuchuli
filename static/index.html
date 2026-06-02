@@ -993,8 +993,6 @@ async function renderDashboard() {
   }
 }
 // ==================== 序时账 ====================
-let jeFilter = { period: '', voucher_word: '', keyword: '', date_from: '', date_to: '', is_reviewed: '' };
-
 async function renderJournal() {
   const el = document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
@@ -1010,51 +1008,21 @@ async function renderJournal() {
       </div>
       <div class="card" style="margin-bottom:0">
         <div class="card-title">📋 序时账</div>
-        <div class="filter-bar">
-          <div class="form-group"><label>期间</label><input class="form-control" id="je-period" value="${jeFilter.period}" style="width:110px" placeholder="YYYY-MM"></div>
-          <div class="form-group"><label>凭证字</label><select class="form-control" id="je-word" style="width:90px"><option value="">全部</option><option value="记" ${jeFilter.voucher_word==='记'?'selected':''}>记</option><option value="收" ${jeFilter.voucher_word==='收'?'selected':''}>收</option><option value="付" ${jeFilter.voucher_word==='付'?'selected':''}>付</option><option value="转" ${jeFilter.voucher_word==='转'?'selected':''}>转</option></select></div>
-          <div class="form-group"><label>复核</label><select class="form-control" id="je-reviewed" style="width:90px"><option value="">全部</option><option value="1" ${jeFilter.is_reviewed==='1'?'selected':''}>已复核</option><option value="0" ${jeFilter.is_reviewed==='0'?'selected':''}>未复核</option></select></div>
-          <div class="form-group"><label>日期从</label><input class="form-control" id="je-from" type="date" value="${jeFilter.date_from}" style="width:140px"></div>
-          <div class="form-group"><label>日期至</label><input class="form-control" id="je-to" type="date" value="${jeFilter.date_to}" style="width:140px"></div>
-          <div class="form-group"><label>关键词</label><input class="form-control" id="je-keyword" value="${jeFilter.keyword}" placeholder="摘要/科目" style="width:160px"></div>
-          <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadJournalList()">🔍 查询</button></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn btn-primary" onclick="showJournalForm()">＋ 新增记录</button>
-          <button class="btn btn-secondary" id="jeBatchDelBtn" style="display:none" onclick="batchDeleteJournal()">🗑 批量删除</button>
-        </div>
-        <div class="table-wrap" id="je-table">请点击查询</div>
+        <div class="table-wrap" id="je-table"></div>
       </div>
     `;
   } catch (e) {
     el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
   }
+  loadJournalList();
 }
 
-function collectJeFilter() {
-  return {
-    period: document.getElementById('je-period')?.value || '',
-    voucher_word: document.getElementById('je-word')?.value || '',
-    is_reviewed: document.getElementById('je-reviewed')?.value || '',
-    date_from: document.getElementById('je-from')?.value || '',
-    date_to: document.getElementById('je-to')?.value || '',
-    keyword: document.getElementById('je-keyword')?.value || ''
-  };
-}
 
 async function loadJournalList() {
-  jeFilter = collectJeFilter();
   const el = document.getElementById('je-table');
   el.innerHTML = '加载中...';
-  const params = new URLSearchParams();
-  if (jeFilter.period) params.set('period', jeFilter.period);
-  if (jeFilter.voucher_word) params.set('voucher_word', jeFilter.voucher_word);
-  if (jeFilter.is_reviewed) params.set('is_reviewed', jeFilter.is_reviewed);
-  if (jeFilter.date_from) params.set('date_from', jeFilter.date_from);
-  if (jeFilter.date_to) params.set('date_to', jeFilter.date_to);
-  if (jeFilter.keyword) params.set('keyword', jeFilter.keyword);
   try {
-    const data = await api('/api/journal-entries?' + params.toString());
+    const data = await api('/api/journal-entries');
     if (!data.length) { el.innerHTML = '<div class="empty-state"><p>暂无记录</p></div>'; return; }
     el.innerHTML = `
       <table>
