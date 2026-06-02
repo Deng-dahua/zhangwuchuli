@@ -2497,8 +2497,8 @@ def journal_entry_stats(
     if period:
         base = base.filter(JournalEntry.period == period)
     total_count = base.count()
-    total_debit = base.filter(JournalEntry.debit_amount > 0).with_entities(func.sum(JournalEntry.debit_amount)).scalar() or 0
-    total_credit = base.filter(JournalEntry.credit_amount > 0).with_entities(func.sum(JournalEntry.credit_amount)).scalar() or 0
+    total_debit = base.with_entities(func.sum(JournalEntry.debit_amount)).scalar() or 0
+    total_credit = base.with_entities(func.sum(JournalEntry.credit_amount)).scalar() or 0
     reviewed_count = base.filter(JournalEntry.is_reviewed == True).count()
     unreviewed_count = base.filter(JournalEntry.is_reviewed == False).count()
     period_count = base.with_entities(func.count(func.distinct(JournalEntry.period))).scalar() or 0
