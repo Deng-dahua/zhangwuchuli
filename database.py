@@ -995,10 +995,10 @@ def migrate_schema(db):
                 try:
                     db.execute(TextClause(f"ALTER TABLE journal_entries ADD COLUMN {col_name} {col_def}"))
                     db.commit()
-                    print(f"  ✓ 已添加 journal_entries.{col_name}")
+                    print(f"  [OK] 已添加 journal_entries.{col_name}")
                 except Exception as e:
                     db.rollback()
-                    print(f"  ✗ journal_entries.{col_name} 迁移失败: {e}")
+                    print(f"  [X] journal_entries.{col_name} 迁移失败: {e}")
 
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
