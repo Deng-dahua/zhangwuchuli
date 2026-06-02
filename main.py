@@ -2673,6 +2673,14 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
     goods = inv.goods_name or ""
     summary = f"销售{goods or '货物'}给{buyer}"
 
+    # 防重复：检查是否已有该发票生成的凭证
+    existing = db.query(JournalEntry).filter(
+        JournalEntry.company_id == inv.company_id,
+        JournalEntry.summary == summary
+    ).first()
+    if existing:
+        raise HTTPException(400, "该发票已生成凭证，请先删除已有凭证后再重新生成")
+
     rev_code, rev_name = ensure_revenue_sub(goods)
 
     entries = [
