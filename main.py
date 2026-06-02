@@ -777,6 +777,12 @@ def get_voucher(voucher_id: int, company_id: int = Query(1), db: Session = Depen
     v = db.query(Voucher).filter(Voucher.id == voucher_id).first()
     if not v:
         raise HTTPException(404, detail="凭证不存在")
+    # account_code 是应用层关联，非外键，需手动查科目名称
+    codes = {d.account_code for d in v.details if d.account_code}
+    account_map = {}
+    if codes:
+        accounts = db.query(Account).filter(Account.code.in_(codes), Account.company_id == company_id).all()
+        account_map = {a.code: a.name for a in accounts}
     return {
         "id": v.id,
         "voucher_no": v.voucher_no,
@@ -795,7 +801,7 @@ def get_voucher(voucher_id: int, company_id: int = Query(1), db: Session = Depen
                 "line_no": d.line_no,
                 "summary": d.summary,
                 "account_code": d.account_code,
-                "account_name": d.account.name if d.account else "",
+                "account_name": account_map.get(d.account_code, ""),
                 "debit_amount": d.debit_amount,
                 "credit_amount": d.credit_amount
             } for d in sorted(v.details, key=lambda x: x.line_no)
