@@ -212,50 +212,6 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
-# ==================== 记账凭证 ====================
-
-class Voucher(Base):
-    """记账凭证"""
-    __tablename__ = "vouchers"
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
-    voucher_no = Column(String(30), nullable=False, comment="凭证号")
-    voucher_date = Column(Date, nullable=False, comment="凭证日期")
-    summary = Column(String(200), nullable=False, comment="摘要")
-    total_debit = Column(Float, default=0.0, comment="借方合计")
-    total_credit = Column(Float, default=0.0, comment="贷方合计")
-    creator = Column(String(50), default="管理员", comment="制单人")
-    checker = Column(String(50), nullable=True, comment="审核人")
-    status = Column(String(20), default="草稿", comment="状态：草稿/已审核/已过账")
-    period = Column(String(7), nullable=False, comment="会计期间 YYYY-MM")
-    attachments = Column(Integer, default=0, comment="附件张数")
-    created_at = Column(DateTime, default=datetime.now)
-
-    __table_args__ = (
-        UniqueConstraint('company_id', 'voucher_no', name='uq_vch_company_no'),
-        Index('idx_vch_company_period', 'company_id', 'period'),
-    )
-
-    details = relationship("VoucherDetail", back_populates="voucher", cascade="all, delete-orphan")
-
-
-class VoucherDetail(Base):
-    """凭证明细行"""
-    __tablename__ = "voucher_details"
-    id = Column(Integer, primary_key=True, index=True)
-    voucher_id = Column(Integer, ForeignKey("vouchers.id"), nullable=False)
-    line_no = Column(Integer, nullable=False, comment="行号")
-    summary = Column(String(200), nullable=True, comment="摘要")
-    account_code = Column(String(20), nullable=False, comment="科目编码（应用层关联）")
-    debit_amount = Column(Float, default=0.0, comment="借方金额")
-    credit_amount = Column(Float, default=0.0, comment="贷方金额")
-    department_code = Column(String(20), comment="部门辅助核算")
-    customer_code = Column(String(20), comment="客户辅助核算")
-    supplier_code = Column(String(20), comment="供应商辅助核算")
-
-    voucher = relationship("Voucher", back_populates="details")
-
-
 # ==================== 会计期间 ====================
 
 class Period(Base):
@@ -575,8 +531,6 @@ class SalesInvoice(Base):
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
     _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
-    voucher_id = Column(Integer, ForeignKey("vouchers.id"), nullable=True, comment="关联凭证ID，已生成凭证则非空")
-    voucher_no = Column(String(30), nullable=True, comment="关联凭证号（冗余）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -812,8 +766,6 @@ def migrate_schema(db):
         "customers": "ALTER TABLE customers ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
         "suppliers": "ALTER TABLE suppliers ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
         "accounts": "ALTER TABLE accounts ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
-        "vouchers": "ALTER TABLE vouchers ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
-        "voucher_details": "ALTER TABLE voucher_details ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
         "periods": "ALTER TABLE periods ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
     }
 
@@ -993,25 +945,6 @@ def migrate_schema(db):
             db.rollback()
             print(f"添加 {table_name}._fingerprint 跳过: {e}")
 
-    # ── 11. 添加凭证关联列（发票→凭证去重追踪） ──
-    voucher_link_cols = {
-        "sales_invoices": [
-            ("voucher_id", "ALTER TABLE sales_invoices ADD COLUMN voucher_id INTEGER REFERENCES vouchers(id)"),
-            ("voucher_no", "ALTER TABLE sales_invoices ADD COLUMN voucher_no VARCHAR(30)"),
-        ],
-    }
-    for table_name, cols in voucher_link_cols.items():
-        if table_name in inspector.get_table_names():
-            existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-            for col_name, sql in cols:
-                if col_name not in existing_cols:
-                    try:
-                        db.execute(TextClause(sql))
-                        db.commit()
-                        print(f"已为 {table_name} 添加 {col_name} 列")
-                    except Exception as e:
-                        db.rollback()
-                        print(f"添加 {table_name}.{col_name} 跳过: {e}")
 
 
 # 基础科目数据模板（中小制造业标准科目表）
