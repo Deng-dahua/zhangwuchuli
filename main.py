@@ -3260,6 +3260,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 except: pass
 
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
+        new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -3449,6 +3450,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         db.add(inv)
                         if used_fingerprints is not None:
                             used_fingerprints[fp] = i+2
+                        new_invoices.append(inv)
                         # 收集购买方信息，导入后自动添加客户档案
                         buyer_nm = mapped.get("buyer_name", "").strip()
                         buyer_tn = mapped.get("buyer_tax_no", "").strip()
@@ -3612,6 +3614,19 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             db.rollback()
             errors.append("数据重复，已跳过已存在的记录")
             imported = 0
+
+        # 开具发票导入后自动生成序时账凭证
+        if module == "sales-invoice" and new_invoices:
+            try:
+                import_count = 0
+                for inv in new_invoices:
+                    auto_generate_single_invoice(db, inv)
+                    import_count += 1
+                if import_count > 0:
+                    infos.append(f"自动生成 {import_count} 条序时账凭证")
+            except Exception as e:
+                db.rollback()
+                infos.append(f"凭证生成失败: {str(e)}")
 
         return {
             "imported": imported,
