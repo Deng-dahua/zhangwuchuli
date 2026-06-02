@@ -1023,7 +1023,16 @@ async function loadJournalList() {
   el.innerHTML = '加载中...';
   try {
     const data = await api('/api/journal-entries');
-    if (!data.length) { el.innerHTML = '<div class="empty-state"><p>暂无记录</p></div>'; return; }
+    if (!data.length) {
+      el.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>期间</th><th>凭证号</th><th>摘要</th><th>科目</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th>
+          </tr></thead>
+          <tbody><tr><td colspan="11" style="text-align:center;color:#999;padding:24px">暂无记录</td></tr></tbody>
+        </table>`;
+      return;
+    }
     el.innerHTML = `
       <table>
         <thead><tr>
