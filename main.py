@@ -2576,9 +2576,53 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
     if inv.status != "正常":
         raise HTTPException(400, f"发票状态为「{inv.status}」，不能生成凭证")
 
+    def get_full_name(code):
+        """构建科目的全级次名称，如 221001001 → 应交税费/应交增值税/销项税额"""
+        parts = []
+        cur = code
+        while cur:
+            acc = db.query(Account).filter(
+                Account.company_id == inv.company_id,
+                Account.code == cur
+            ).first()
+            if not acc:
+                break
+            parts.insert(0, acc.name)
+            cur = acc.parent_code
+        return "/".join(parts) if parts else code
+
+    def ensure_revenue_sub(goods_name):
+        """确保主营业务收入下存在对应货物的子科目，返回 (code, full_name)"""
+        if not goods_name:
+            return ("6001", get_full_name("6001"))
+        existing = db.query(Account).filter(
+            Account.company_id == inv.company_id,
+            Account.parent_code == "6001",
+            Account.name == goods_name
+        ).first()
+        if existing:
+            return (existing.code, get_full_name(existing.code))
+        max_sub = db.query(Account.code).filter(
+            Account.company_id == inv.company_id,
+            Account.parent_code == "6001"
+        ).order_by(Account.code.desc()).first()
+        next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+        new_code = f"6001{next_num:03d}"
+        new_acc = Account(
+            company_id=inv.company_id,
+            code=new_code,
+            name=goods_name,
+            category="收入",
+            balance_direction="贷",
+            level=2,
+            parent_code="6001",
+        )
+        db.add(new_acc)
+        db.flush()
+        return (new_code, get_full_name(new_code))
+
     period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
 
-    # 计算下一个凭证号（同一期间、同一凭证字）
     max_no = db.query(JournalEntry.voucher_no).filter(
         JournalEntry.company_id == inv.company_id,
         JournalEntry.period == period,
@@ -2589,7 +2633,9 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
     date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
     buyer = inv.buyer_name or "客户"
     goods = inv.goods_name or ""
-    summary = f"销售货物给{buyer}"
+    summary = f"销售{goods or '货物'}给{buyer}"
+
+    rev_code, rev_name = ensure_revenue_sub(goods)
 
     entries = [
         JournalEntry(
@@ -2600,7 +2646,7 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             voucher_no=next_voucher_no,
             summary=summary,
             account_code="1122",
-            account_name="应收账款",
+            account_name=get_full_name("1122"),
             debit_amount=inv.total_amount,
             credit_amount=0,
             contact_project=buyer,
@@ -2616,11 +2662,11 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             voucher_word="记",
             voucher_no=next_voucher_no,
             summary=summary,
-            account_code="6001",
-            account_name="主营业务收入",
+            account_code=rev_code,
+            account_name=rev_name,
             debit_amount=0,
             credit_amount=inv.amount,
-            contact_project=buyer,
+            contact_project="",
             spec_model=inv.spec or "",
             quantity=inv.quantity or 0,
             unit=inv.unit or "",
@@ -2634,10 +2680,10 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             voucher_no=next_voucher_no,
             summary=f"{summary}（增值税）",
             account_code="221001001",
-            account_name="销项税额",
+            account_name=get_full_name("221001001"),
             debit_amount=0,
             credit_amount=inv.tax_amount,
-            contact_project=buyer,
+            contact_project="",
             spec_model=inv.spec or "",
             quantity=inv.quantity or 0,
             unit=inv.unit or "",
