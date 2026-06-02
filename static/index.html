@@ -888,6 +888,7 @@ function navigateTo(page) {
     case 'detail-ledger': renderDetailLedger(); break;
     case 'profit-loss': renderProfitLoss(); break;
     case 'balance-sheet': renderBalanceSheet(); break;
+    case 'account-balance': renderAccountBalance(); break;
     case 'accounts': renderAccounts(); break;
     case 'periods': renderPeriods(); break;
     case 'company': showCompanyManager(); break;
@@ -1492,6 +1493,83 @@ async function loadBalanceSheet() {
         </div>
       </div>
     `;
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+// ==================== 科目余额表 ====================
+async function renderAccountBalance() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">📒 科目余额表</div>
+      <div class="filter-bar">
+        <div class="form-group"><label>期间</label><input class="form-control" id="tb-period" value="${currentPeriod}" style="width:130px"></div>
+        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button></div>
+      </div>
+      <div id="tb-table">请点击生成报表</div>
+    </div>
+  `;
+}
+
+async function loadAccountBalance() {
+  const period = document.getElementById('tb-period').value;
+  const el = document.getElementById('tb-table');
+  el.innerHTML = '加载中...';
+  try {
+    const data = await api(`/api/trial-balance?period=${period}`);
+    
+    // 统计
+    const totalBeginDebit = data.reduce((s, r) => s + r.begin_debit, 0);
+    const totalBeginCredit = data.reduce((s, r) => s + r.begin_credit, 0);
+    const totalPeriodDebit = data.reduce((s, r) => s + r.period_debit, 0);
+    const totalPeriodCredit = data.reduce((s, r) => s + r.period_credit, 0);
+    const totalEndDebit = data.reduce((s, r) => s + r.end_debit, 0);
+    const totalEndCredit = data.reduce((s, r) => s + r.end_credit, 0);
+
+    const hasData = data.filter(r => r.period_debit !== 0 || r.period_credit !== 0 || r.begin_debit !== 0 || r.begin_credit !== 0);
+
+    let html = `<div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">报告期间：${period}</div>`;
+    html += '<div class="table-wrap" style="max-height:calc(100vh - 280px);overflow:auto"><table>';
+    html += '<thead><tr>';
+    html += '<th>科目编码</th><th>科目名称</th><th style="text-align:center">方向</th>';
+    html += '<th class="num">期初借方</th><th class="num">期初贷方</th>';
+    html += '<th class="num">本期借方</th><th class="num">本期贷方</th>';
+    html += '<th class="num">期末借方</th><th class="num">期末贷方</th>';
+    html += '</tr></thead><tbody>';
+
+    if (hasData.length === 0) {
+      html += '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px">该期间无发生额</td></tr>';
+    } else {
+      hasData.forEach(r => {
+        html += '<tr>';
+        html += `<td>${r.account_code}</td>`;
+        html += `<td>${r.account_name}</td>`;
+        html += `<td style="text-align:center">${r.balance_direction}</td>`;
+        html += `<td class="num">${r.begin_debit !== 0 ? '¥' + fmt(r.begin_debit) : ''}</td>`;
+        html += `<td class="num">${r.begin_credit !== 0 ? '¥' + fmt(r.begin_credit) : ''}</td>`;
+        html += `<td class="num">${r.period_debit !== 0 ? '¥' + fmt(r.period_debit) : ''}</td>`;
+        html += `<td class="num">${r.period_credit !== 0 ? '¥' + fmt(r.period_credit) : ''}</td>`;
+        html += `<td class="num" style="font-weight:600">${r.end_debit !== 0 ? '¥' + fmt(r.end_debit) : ''}</td>`;
+        html += `<td class="num" style="font-weight:600">${r.end_credit !== 0 ? '¥' + fmt(r.end_credit) : ''}</td>`;
+        html += '</tr>';
+      });
+
+      // 合计行
+      html += '<tr style="font-weight:700;background:var(--gray-50);border-top:2px solid var(--gray-200)">';
+      html += '<td colspan="3" style="text-align:center">合计</td>';
+      html += `<td class="num">¥${fmt(totalBeginDebit)}</td>`;
+      html += `<td class="num">¥${fmt(totalBeginCredit)}</td>`;
+      html += `<td class="num" style="color:var(--primary)">¥${fmt(totalPeriodDebit)}</td>`;
+      html += `<td class="num" style="color:var(--success)">¥${fmt(totalPeriodCredit)}</td>`;
+      html += `<td class="num">¥${fmt(totalEndDebit)}</td>`;
+      html += `<td class="num">¥${fmt(totalEndCredit)}</td>`;
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
   } catch (e) {
     el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
   }

@@ -2512,6 +2512,66 @@ def journal_entry_stats(
     }
 
 
+# ==================== 科目余额表 ====================
+@app.get("/api/trial-balance")
+def trial_balance(
+    company_id: int = Query(1),
+    period: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """科目余额表：按科目汇总本期发生额，计算期末余额"""
+    accounts = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.is_active == True
+    ).order_by(Account.code).all()
+
+    # 本期发生额汇总
+    base = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
+    if period:
+        base = base.filter(JournalEntry.period == period)
+
+    period_map = {}
+    for e in base.all():
+        code = e.account_code
+        if code not in period_map:
+            period_map[code] = {"debit": 0.0, "credit": 0.0}
+        period_map[code]["debit"] += e.debit_amount or 0
+        period_map[code]["credit"] += e.credit_amount or 0
+
+    result = []
+    for acc in accounts:
+        pt = period_map.get(acc.code, {"debit": 0.0, "credit": 0.0})
+        pdr = round(pt["debit"], 2)
+        pcr = round(pt["credit"], 2)
+
+        # 期末余额：按科目余额方向计算
+        direction = acc.balance_direction  # '借' or '贷'
+        if direction == "借":
+            net = pdr - pcr  # 资产/成本/费用类
+            end_debit = round(net, 2) if net >= 0 else 0
+            end_credit = round(-net, 2) if net < 0 else 0
+        else:
+            net = pcr - pdr  # 负债/权益/收入类
+            end_credit = round(net, 2) if net >= 0 else 0
+            end_debit = round(-net, 2) if net < 0 else 0
+
+        result.append({
+            "account_code": acc.code,
+            "account_name": acc.name,
+            "category": acc.category,
+            "balance_direction": direction,
+            "level": acc.level,
+            "begin_debit": 0,
+            "begin_credit": 0,
+            "period_debit": pdr,
+            "period_credit": pcr,
+            "end_debit": end_debit,
+            "end_credit": end_credit,
+        })
+
+    return result
+
+
 @app.post("/api/journal-entries")
 def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     e = JournalEntry(company_id=company_id, **data.model_dump())
