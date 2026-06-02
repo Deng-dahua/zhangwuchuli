@@ -1022,6 +1022,248 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] 221001001 销项税额 迁移失败: {e}")
 
+    # ── 13. 自动为"正常"状态的开具发票生成序时账凭证 ──
+    if "sales_invoices" in inspector.get_table_names() and "journal_entries" in inspector.get_table_names():
+        try:
+            auto_generate_journals(db)
+        except Exception as e:
+            db.rollback()
+            print(f"  [X] 开具发票→凭证自动生成失败: {e}")
+
+
+def auto_generate_journals(db):
+    """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
+    from datetime import datetime as dt
+    companies = db.query(Company).filter(Company.is_active == True).all()
+    total = 0
+    for comp in companies:
+        invoices = db.query(SalesInvoice).filter(
+            SalesInvoice.company_id == comp.id,
+            SalesInvoice.status == "正常"
+        ).order_by(SalesInvoice.invoice_date.asc()).all()
+
+        for inv in invoices:
+            buyer = inv.buyer_name or "客户"
+            goods = inv.goods_name or ""
+            summary = f"销售{goods or '货物'}给{buyer}"
+
+            # 跳过已生成凭证的发票
+            existing = db.query(JournalEntry).filter(
+                JournalEntry.company_id == comp.id,
+                JournalEntry.summary == summary
+            ).first()
+            if existing:
+                continue
+
+            def get_full_name(code):
+                """构建科目的全级次名称"""
+                parts = []
+                cur = code
+                while cur:
+                    acc = db.query(Account).filter(
+                        Account.company_id == comp.id,
+                        Account.code == cur
+                    ).first()
+                    if not acc:
+                        break
+                    parts.insert(0, acc.name)
+                    cur = acc.parent_code
+                return "/".join(parts) if parts else code
+
+            def ensure_revenue_sub(gn):
+                """确保主营业务收入下存在对应货物的子科目"""
+                if not gn:
+                    return ("6001", get_full_name("6001"))
+                ext = db.query(Account).filter(
+                    Account.company_id == comp.id,
+                    Account.parent_code == "6001",
+                    Account.name == gn
+                ).first()
+                if ext:
+                    return (ext.code, get_full_name(ext.code))
+                max_sub = db.query(Account.code).filter(
+                    Account.company_id == comp.id,
+                    Account.parent_code == "6001"
+                ).order_by(Account.code.desc()).first()
+                next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+                new_code = f"6001{next_num:03d}"
+                new_acc = Account(
+                    company_id=comp.id, code=new_code, name=gn,
+                    category="收入", balance_direction="贷",
+                    level=2, parent_code="6001",
+                )
+                db.add(new_acc)
+                db.flush()
+                return (new_code, get_full_name(new_code))
+
+            period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else dt.now().strftime("%Y-%m")
+            date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
+
+            # 计算下一个凭证号
+            max_no = db.query(JournalEntry.voucher_no).filter(
+                JournalEntry.company_id == comp.id,
+                JournalEntry.period == period,
+                JournalEntry.voucher_word == "记"
+            ).order_by(JournalEntry.voucher_no.desc()).first()
+            next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+
+            rev_code, rev_name = ensure_revenue_sub(goods)
+
+            entries = [
+                JournalEntry(
+                    company_id=comp.id,
+                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
+                    summary=summary, account_code="1122",
+                    account_name=get_full_name("1122"),
+                    debit_amount=inv.total_amount, credit_amount=0,
+                    contact_project=buyer,
+                    spec_model=inv.spec or "", quantity=inv.quantity or 0,
+                    unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                ),
+                JournalEntry(
+                    company_id=comp.id,
+                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
+                    summary=summary, account_code=rev_code, account_name=rev_name,
+                    debit_amount=0, credit_amount=inv.amount,
+                    contact_project="",
+                    spec_model=inv.spec or "", quantity=inv.quantity or 0,
+                    unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                ),
+                JournalEntry(
+                    company_id=comp.id,
+                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
+                    summary=f"{summary}（增值税）",
+                    account_code="221001001",
+                    account_name=get_full_name("221001001"),
+                    debit_amount=0, credit_amount=inv.tax_amount,
+                    contact_project="",
+                    spec_model=inv.spec or "", quantity=inv.quantity or 0,
+                    unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                ),
+            ]
+            for e in entries:
+                db.add(e)
+            db.flush()  # 让下一张发票能看到当前凭证号
+            total += 1
+
+    if total > 0:
+        db.commit()
+        print(f"  [OK] 自动为 {total} 张开具发票生成凭证")
+    else:
+        print(f"  [OK] 开具发票→凭证: 无需生成（均已存在或无发票）")
+
+
+def auto_generate_single_invoice(db, inv):
+    """为单张开具发票生成凭证（供创建发票API调用）"""
+    from datetime import datetime as dt
+    if inv.status != "正常":
+        return
+
+    buyer = inv.buyer_name or "客户"
+    goods = inv.goods_name or ""
+    summary = f"销售{goods or '货物'}给{buyer}"
+
+    # 跳过已生成凭证的发票
+    existing = db.query(JournalEntry).filter(
+        JournalEntry.company_id == inv.company_id,
+        JournalEntry.summary == summary
+    ).first()
+    if existing:
+        return
+
+    def get_full_name(code):
+        parts = []
+        cur = code
+        while cur:
+            acc = db.query(Account).filter(
+                Account.company_id == inv.company_id,
+                Account.code == cur
+            ).first()
+            if not acc:
+                break
+            parts.insert(0, acc.name)
+            cur = acc.parent_code
+        return "/".join(parts) if parts else code
+
+    def ensure_revenue_sub(gn):
+        if not gn:
+            return ("6001", get_full_name("6001"))
+        ext = db.query(Account).filter(
+            Account.company_id == inv.company_id,
+            Account.parent_code == "6001",
+            Account.name == gn
+        ).first()
+        if ext:
+            return (ext.code, get_full_name(ext.code))
+        max_sub = db.query(Account.code).filter(
+            Account.company_id == inv.company_id,
+            Account.parent_code == "6001"
+        ).order_by(Account.code.desc()).first()
+        next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+        new_code = f"6001{next_num:03d}"
+        new_acc = Account(
+            company_id=inv.company_id, code=new_code, name=gn,
+            category="收入", balance_direction="贷",
+            level=2, parent_code="6001",
+        )
+        db.add(new_acc)
+        db.flush()
+        return (new_code, get_full_name(new_code))
+
+    period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else dt.now().strftime("%Y-%m")
+    date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
+
+    max_no = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == inv.company_id,
+        JournalEntry.period == period,
+        JournalEntry.voucher_word == "记"
+    ).order_by(JournalEntry.voucher_no.desc()).first()
+    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+
+    rev_code, rev_name = ensure_revenue_sub(goods)
+
+    entries = [
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary, account_code="1122",
+            account_name=get_full_name("1122"),
+            debit_amount=inv.total_amount, credit_amount=0,
+            contact_project=buyer,
+            spec_model=inv.spec or "", quantity=inv.quantity or 0,
+            unit=inv.unit or "", unit_price=inv.unit_price or 0,
+        ),
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary, account_code=rev_code, account_name=rev_name,
+            debit_amount=0, credit_amount=inv.amount,
+            contact_project="",
+            spec_model=inv.spec or "", quantity=inv.quantity or 0,
+            unit=inv.unit or "", unit_price=inv.unit_price or 0,
+        ),
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=f"{summary}（增值税）",
+            account_code="221001001",
+            account_name=get_full_name("221001001"),
+            debit_amount=0, credit_amount=inv.tax_amount,
+            contact_project="",
+            spec_model=inv.spec or "", quantity=inv.quantity or 0,
+            unit=inv.unit or "", unit_price=inv.unit_price or 0,
+        ),
+    ]
+    for e in entries:
+        db.add(e)
+    db.commit()
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),

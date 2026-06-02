@@ -30,7 +30,8 @@ from database import (
     Payment,
     SalesInvoice, PurchaseInvoice,
     BankConfig, BankTransaction,
-    InputVATDeduction, ColumnTemplate, JournalEntry
+    InputVATDeduction, ColumnTemplate, JournalEntry,
+    auto_generate_single_invoice
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -1761,6 +1762,8 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
     db.add(inv)
     db.commit()
     db.refresh(inv)
+    # 自动生成序时账凭证
+    auto_generate_single_invoice(db, inv)
     return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "开具发票创建成功"}
 
 
@@ -1831,6 +1834,9 @@ def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: 
         setattr(inv, k, v)
     inv.updated_at = datetime.now()
     db.commit()
+    db.refresh(inv)
+    # 状态改为"正常"时自动生成凭证
+    auto_generate_single_invoice(db, inv)
     return {"message": "更新成功"}
 
 
