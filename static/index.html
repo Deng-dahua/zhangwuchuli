@@ -1244,10 +1244,11 @@ async function renderGeneralLedger() {
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
       <div class="card-title">📒 总账</div>
-      <div class="filter-bar">
-        <div class="form-group"><label>起始期间</label>${_periodSelectsHTML('gl-from', yearMonth)}</div>
-        <div class="form-group"><label>截止期间</label>${_periodSelectsHTML('gl-to', yearMonth)}</div>
-        <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button></div>
+      <div class="filter-bar" style="gap:8px;">
+        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('gl-from', yearMonth)}
+        <span style="color:#9ca3af">至</span>
+        ${_periodSelectsHTML('gl-to', yearMonth)}<span style="font-size:13px;color:#6b7280">截止</span>
+        <button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button>
       </div>
       <div class="table-wrap" id="gl-table">请点击查询</div>
     </div>
