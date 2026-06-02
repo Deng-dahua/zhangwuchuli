@@ -95,6 +95,9 @@
     .btn-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
     .btn-outline { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
     .btn-outline:hover { background: var(--primary-light); }
+    .link-action { color: var(--primary); cursor: pointer; margin-right: 12px; }
+    .link-action:hover { text-decoration: underline; }
+    .link-danger { color: var(--danger); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
     /* 表格 */
@@ -2084,30 +2087,24 @@ async function deleteDept(id) {
 async function renderEmployees() {
   const el = document.getElementById('content-area');
   try {
-    const [data, depts] = await Promise.all([api('/api/employees'), api('/api/departments')]);
+    const data = await api('/api/employees');
     el.innerHTML = `
       <div class="card">
         <div class="card-title">👥 人员档案</div>
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>职位</th><th>身份证号</th><th>电话</th><th>入职日期</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="9"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
-                const dept = depts.find(d => d.code === e.department_code);
+              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
                 return `
                 <tr>
                   <td>${e.code}</td>
                   <td>${e.name}</td>
-                  <td>${dept?.name || '-'}</td>
-                  <td>${e.position || '-'}</td>
                   <td>${e.id_card || '-'}</td>
-                  <td>${e.phone || '-'}</td>
-                  <td>${e.entry_date || '-'}</td>
-                  <td><span class="badge ${e.is_active ? 'badge-audited' : 'badge-draft'}">${e.is_active ? '在职' : '离职'}</span></td>
                   <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.department_code||'')}','${esc(e.position||'')}','${esc(e.id_card||'')}','${esc(e.phone||'')}','${esc(e.email||'')}',${e.salary||0},'${e.entry_date||''}',${e.is_active})">编辑</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteEmp(${e.id})">删除</button>
+                    <span class="link-action" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}','${esc(e.email||'')}',${e.salary||0})">编辑</span>
+                    <span class="link-action link-danger" onclick="deleteEmp(${e.id})">删除</span>
                   </td>
                 </tr>
               `}).join('')}
@@ -2121,7 +2118,7 @@ async function renderEmployees() {
   }
 }
 
-function showEmpForm(id, code, name, deptCode, position, idCard, phone, email, salary, entryDate, isActive) {
+function showEmpForm(id, code, name, idCard, email, salary) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}人员</h3>
@@ -2129,37 +2126,14 @@ function showEmpForm(id, code, name, deptCode, position, idCard, phone, email, s
       <div class="form-field"><label>工号 <span style="color:red">*</span></label><input id="emp-code" value="${code||''}"></div>
       <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
       <div class="form-field"><label>身份证号</label><input id="emp-idcard" value="${idCard||''}" placeholder="18位身份证号"></div>
-      <div class="form-field"><label>部门</label><select id="emp-dept"><option value="">--选择部门--</option></select></div>
-      <div class="form-field"><label>职位</label><input id="emp-position" value="${position||''}"></div>
-      <div class="form-field"><label>电话</label><input id="emp-phone" value="${phone||''}"></div>
       <div class="form-field"><label>邮箱</label><input id="emp-email" value="${email||''}" placeholder="email@example.com"></div>
       <div class="form-field"><label>基本工资</label><input id="emp-salary" type="number" step="0.01" value="${salary||0}"></div>
-      <div class="form-field"><label>入职日期</label><input id="emp-entry-date" type="date" value="${entryDate||''}"></div>
-      ${isEdit ? `<div class="form-field"><label>状态</label><select id="emp-active"><option value="1" ${isActive?'selected':''}>在职</option><option value="0" ${!isActive?'selected':''}>离职</option></select></div>` : ''}
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveEmp(${id||0})">保存</button>
       <button class="btn btn-secondary" onclick="closeModal()">取消</button>
     </div>
   `);
-  // 加载部门下拉
-  loadDeptSelect('emp-dept', deptCode);
-}
-
-async function loadDeptSelect(selectId, selectedCode) {
-  try {
-    const depts = await api('/api/departments');
-    const sel = document.getElementById(selectId);
-    if (sel) {
-      depts.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.code;
-        opt.textContent = d.name;
-        if (d.code === selectedCode) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    }
-  } catch (e) {}
 }
 
 async function saveEmp(id) {
@@ -2167,17 +2141,9 @@ async function saveEmp(id) {
     code: document.getElementById('emp-code').value.trim(),
     name: document.getElementById('emp-name').value.trim(),
     id_card: document.getElementById('emp-idcard')?.value.trim() || null,
-    department_code: document.getElementById('emp-dept').value || null,
-    position: document.getElementById('emp-position').value.trim(),
-    phone: document.getElementById('emp-phone').value.trim(),
     email: document.getElementById('emp-email')?.value.trim() || null,
-    salary: parseFloat(document.getElementById('emp-salary')?.value) || 0,
-    entry_date: document.getElementById('emp-entry-date')?.value || null
+    salary: parseFloat(document.getElementById('emp-salary')?.value) || 0
   };
-  if (id) {
-    const activeEl = document.getElementById('emp-active');
-    if (activeEl) body.is_active = activeEl.value === '1';
-  }
   if (!body.code || !body.name) { toast('请填写工号和姓名', 'error'); return; }
   try {
     if (id) {

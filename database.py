@@ -129,22 +129,11 @@ class Employee(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
     code = Column(String(20), nullable=False, comment="工号")
     name = Column(String(50), nullable=False, comment="姓名")
-    department_code = Column(String(20), nullable=True, comment="所属部门编码")
-    position = Column(String(50), comment="职位")
     id_card = Column(String(30), comment="身份证号")
-    phone = Column(String(30), comment="联系电话")
     email = Column(String(100), comment="邮箱")
     salary = Column(Float, default=0.0, comment="基本工资")
-    entry_date = Column(Date, comment="入职日期")
     leave_date = Column(Date, comment="离职日期")
-    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
-
-    # 部门关联（通过company_id+department_code，由应用层保证）
-    department = relationship("Department",
-        primaryjoin="and_(foreign(Employee.department_code)==Department.code, "
-                    "foreign(Employee.company_id)==Department.company_id)",
-        viewonly=True, uselist=False)
 
 
 # ==================== 客户档案 ====================

@@ -80,25 +80,16 @@ class DepartmentUpdate(BaseModel):
 class EmployeeCreate(BaseModel):
     code: str
     name: str
-    department_code: Optional[str] = None
-    position: Optional[str] = None
     id_card: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
     salary: Optional[float] = 0.0
-    entry_date: Optional[date] = None
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
-    department_code: Optional[str] = None
-    position: Optional[str] = None
     id_card: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
     salary: Optional[float] = None
-    entry_date: Optional[date] = None
     leave_date: Optional[date] = None
-    is_active: Optional[bool] = None
 
 # 客户
 class BatchDelete(BaseModel):
@@ -355,10 +346,6 @@ def delete_department(dept_id: int, company_id: int = Query(1), db: Session = De
     d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
-    # 检查是否有员工关联
-    emp = db.query(Employee).filter(Employee.company_id == company_id, Employee.department_code == d.code).first()
-    if emp:
-        raise HTTPException(400, detail="该部门下有员工，请先迁移员工后再删除")
     db.delete(d)
     db.commit()
     return {"message": "删除成功"}
@@ -369,8 +356,6 @@ def delete_department(dept_id: int, company_id: int = Query(1), db: Session = De
 @app.get("/api/employees")
 def list_employees(
     keyword: Optional[str] = None,
-    department_code: Optional[str] = None,
-    is_active: Optional[bool] = None,
     company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
@@ -378,25 +363,14 @@ def list_employees(
     if keyword:
         q = q.filter(or_(
             Employee.code.contains(keyword),
-            Employee.name.contains(keyword),
-            Employee.position.contains(keyword)
+            Employee.name.contains(keyword)
         ))
-    if department_code:
-        q = q.filter(Employee.department_code == department_code)
-    if is_active is not None:
-        q = q.filter(Employee.is_active == is_active)
     emps = q.order_by(Employee.code).all()
     return [
         {
             "id": e.id, "code": e.code, "name": e.name,
-            "department_code": e.department_code,
-            "department_name": e.department.name if e.department else "",
-            "position": e.position,
             "id_card": e.id_card or "",
-            "phone": e.phone,
             "email": e.email or "", "salary": e.salary or 0,
-            "entry_date": str(e.entry_date) if e.entry_date else "",
-            "is_active": e.is_active
         } for e in emps
     ]
 
@@ -404,11 +378,6 @@ def list_employees(
 def create_employee(data: EmployeeCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.code).first():
         raise HTTPException(400, detail=f"工号 {data.code} 已存在")
-    # 校验部门是否存在
-    if data.department_code:
-        dept = db.query(Department).filter(Department.company_id == company_id, Department.code == data.department_code).first()
-        if not dept:
-            raise HTTPException(400, detail=f"部门 {data.department_code} 不存在")
     e = Employee(**data.model_dump())
     db.add(e)
     db.commit()
@@ -419,10 +388,6 @@ def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(1
     e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
-    if data.department_code:
-        dept = db.query(Department).filter(Department.company_id == company_id, Department.code == data.department_code).first()
-        if not dept:
-            raise HTTPException(400, detail=f"部门 {data.department_code} 不存在")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(e, k, v)
     db.commit()
@@ -4770,13 +4735,9 @@ def handle_create_employee(sess, msg, db, sid):
 
 def save_employee(data, db, sess, sid):
     try:
-        dept_code = None
-        if data.get("department_name"):
-            d = db.query(Department).filter(Department.company_id == company_id, Department.name.contains(data["department_name"])).first()
-            if d: dept_code = d.code
         if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.get("code", "")).first():
             return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
-        e = Employee(code=data.get("code", ""), name=data.get("name", ""), department_code=dept_code, position=data.get("position"), phone=data.get("phone"))
+        e = Employee(code=data.get("code", ""), name=data.get("name", ""), id_card=data.get("id_card"), email=data.get("email"))
         db.add(e); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
         return {"reply": f"🎉 员工 **{e.name}** 添加成功！", "session_id": sid, "action": {"type": "reload", "page": "employees"}}
