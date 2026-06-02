@@ -2399,6 +2399,11 @@ class JournalEntryCreate(BaseModel):
     reviewed_by: Optional[str] = None
     is_reviewed: Optional[bool] = False
     remark: Optional[str] = None
+    contact_project: Optional[str] = None
+    spec_model: Optional[str] = None
+    quantity: Optional[float] = 0.0
+    unit: Optional[str] = None
+    unit_price: Optional[float] = 0.0
 
 
 class JournalEntryUpdate(BaseModel):
@@ -2416,6 +2421,11 @@ class JournalEntryUpdate(BaseModel):
     reviewed_by: Optional[str] = None
     is_reviewed: Optional[bool] = None
     remark: Optional[str] = None
+    contact_project: Optional[str] = None
+    spec_model: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
 
 
 @app.get("/api/journal-entries")

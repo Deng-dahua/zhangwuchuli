@@ -744,6 +744,11 @@ class JournalEntry(Base):
     is_reviewed = Column(Boolean, default=False, comment="是否复核")
     reviewed_at = Column(DateTime, comment="复核时间")
     remark = Column(Text, comment="备注")
+    contact_project = Column(String(100), comment="往来项目")
+    spec_model = Column(String(100), comment="规格型号")
+    quantity = Column(Float, default=0.0, comment="数量")
+    unit = Column(String(20), comment="单位")
+    unit_price = Column(Float, default=0.0, comment="单价")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -976,6 +981,25 @@ def migrate_schema(db):
 
 
 
+    # ── 11. JournalEntry 新增5个字段 ──
+    if "journal_entries" in inspector.get_table_names():
+        je_cols = {c["name"] for c in inspector.get_columns("journal_entries")}
+        for col_name, col_def in [
+            ("contact_project", "TEXT"),
+            ("spec_model", "TEXT"),
+            ("quantity", "REAL DEFAULT 0.0"),
+            ("unit", "TEXT"),
+            ("unit_price", "REAL DEFAULT 0.0"),
+        ]:
+            if col_name not in je_cols:
+                try:
+                    db.execute(TextClause(f"ALTER TABLE journal_entries ADD COLUMN {col_name} {col_def}"))
+                    db.commit()
+                    print(f"  ✓ 已添加 journal_entries.{col_name}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"  ✗ journal_entries.{col_name} 迁移失败: {e}")
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
@@ -1107,6 +1131,7 @@ def verify_dedup_columns(db):
         except Exception as e:
             db.rollback()
             print(f"[DEDUP-FAIL] {name}._fingerprint 自检失败: {e}")
+
 
 
 def init_db():
