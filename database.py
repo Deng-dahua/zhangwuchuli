@@ -749,6 +749,7 @@ class JournalEntry(Base):
     quantity = Column(Float, default=0.0, comment="数量")
     unit = Column(String(20), comment="单位")
     unit_price = Column(Float, default=0.0, comment="单价")
+    source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/开具发票/进项抵扣/银行流水")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1000,6 +1001,18 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] journal_entries.{col_name} 迁移失败: {e}")
 
+    # ── 11.5. JournalEntry 新增 source 列 ──
+    if "journal_entries" in inspector.get_table_names():
+        je_cols = {c["name"] for c in inspector.get_columns("journal_entries")}
+        if "source" not in je_cols:
+            try:
+                db.execute(TextClause("ALTER TABLE journal_entries ADD COLUMN source VARCHAR(50) DEFAULT '手动录入'"))
+                db.commit()
+                print("  [OK] 已添加 journal_entries.source")
+            except Exception as e:
+                db.rollback()
+                print(f"  [X] journal_entries.source 迁移失败: {e}")
+
     # ── 12. 已有公司补充 销项税额 科目（221001001） ──
     if "accounts" in inspector.get_table_names():
         companies = db.query(Company).filter(Company.is_active == True).all()
@@ -1021,6 +1034,28 @@ def migrate_schema(db):
                 except Exception as e:
                     db.rollback()
                     print(f"  [X] 221001001 销项税额 迁移失败: {e}")
+
+    # ── 12.5. 已有公司补充 待认证进项税额 科目（222101） ──
+    if "accounts" in inspector.get_table_names():
+        companies = db.query(Company).filter(Company.is_active == True).all()
+        for comp in companies:
+            existing = db.query(Account).filter(
+                Account.company_id == comp.id,
+                Account.code == "222101"
+            ).first()
+            if not existing:
+                try:
+                    db.add(Account(
+                        company_id=comp.id,
+                        code="222101", name="待认证进项税额",
+                        category="负债", balance_direction="贷",
+                        level=2, parent_code="2210"
+                    ))
+                    db.commit()
+                    print(f"  [OK] 为 {comp.name} 添加科目 222101 待认证进项税额")
+                except Exception as e:
+                    db.rollback()
+                    print(f"  [X] 222101 待认证进项税额 迁移失败: {e}")
 
     # ── 13. 自动为"正常"状态的开具发票生成序时账凭证 ──
     if "sales_invoices" in inspector.get_table_names() and "journal_entries" in inspector.get_table_names():
@@ -1131,6 +1166,7 @@ def auto_generate_journals(db):
                     contact_project=buyer,
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                    source="开具发票",
                 ),
                 JournalEntry(
                     company_id=comp.id,
@@ -1141,6 +1177,7 @@ def auto_generate_journals(db):
                     contact_project="",
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                    source="开具发票",
                 ),
                 JournalEntry(
                     company_id=comp.id,
@@ -1153,6 +1190,7 @@ def auto_generate_journals(db):
                     contact_project="",
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                    source="开具发票",
                 ),
             ]
             for e in entries:
@@ -1247,6 +1285,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project=buyer,
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
+            source="开具发票",
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -1257,6 +1296,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project="",
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
+            source="开具发票",
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -1269,6 +1309,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project="",
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
+            source="开具发票",
         ),
     ]
     for e in entries:
@@ -1276,31 +1317,50 @@ def auto_generate_single_invoice(db, inv):
     db.commit()
 
 
-def auto_generate_single_input_vat(db, ded):
-    """为单条进项抵扣记录生成凭证（供创建/导入API调用）"""
+def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
+    """为一个期间的进项抵扣汇总生成凭证（每月一笔认证汇总凭证）
+    借：221001002 进项税额 = 贷：222101 待认证进项税额
+    
+    如果 total_tax 为 None，自动从数据库汇总（优先用 deduction_period，为空则用 invoice_date 年月）
+    """
     from datetime import datetime as dt
-    from sqlalchemy import func
+    from sqlalchemy import func, or_, and_
 
-    seller = ded.seller_name or "供应商"
-    goods = ded.goods_name or ""
-    summary = f"购入{goods or '货物'}自{seller}"
-    contact_key = f"{seller} [{ded.invoice_no or ded.id}]"
+    # 删除该期间已有的进项抵扣凭证
+    db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.source == "进项抵扣"
+    ).delete()
+    db.flush()
 
-    # 去重：按 contact_key 判重（供应商+发票号唯一标识一条记录）
-    existing = db.query(JournalEntry).filter(
-        JournalEntry.company_id == ded.company_id,
-        JournalEntry.contact_project == contact_key,
-        JournalEntry.account_code == "2202"
-    ).first()
-    if existing:
-        return False
+    # 汇总该期间所有进项抵扣的可抵扣税额
+    if total_tax is None:
+        # 匹配逻辑：deduction_period == period，或 deduction_period 为空但 invoice_date 年月 == period
+        total_tax = db.query(func.coalesce(func.sum(InputVATDeduction.deductible_tax_amount), 0)).filter(
+            InputVATDeduction.company_id == company_id,
+            or_(
+                InputVATDeduction.deduction_period == period,
+                and_(
+                    InputVATDeduction.deduction_period == None,
+                    func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period
+                ),
+                and_(
+                    InputVATDeduction.deduction_period == "",
+                    func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period
+                ),
+            )
+        ).scalar()
+
+    if not total_tax or total_tax <= 0:
+        return 0
 
     def get_full_name(code):
         parts = []
         cur = code
         while cur:
             acc = db.query(Account).filter(
-                Account.company_id == ded.company_id,
+                Account.company_id == company_id,
                 Account.code == cur
             ).first()
             if not acc:
@@ -1310,115 +1370,93 @@ def auto_generate_single_input_vat(db, ded):
         return "/".join(parts) if parts else code
 
     # 确保 221001002 进项税额 科目存在
-    input_tax_acc = db.query(Account).filter(
-        Account.company_id == ded.company_id,
-        Account.code == "221001002"
-    ).first()
-    if not input_tax_acc:
-        input_tax_acc = Account(
-            company_id=ded.company_id, code="221001002", name="进项税额",
-            category="负债", balance_direction="借",
-            level=3, parent_code="221001",
-        )
-        db.add(input_tax_acc)
+    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "221001002").first():
+        db.add(Account(
+            company_id=company_id, code="221001002", name="进项税额",
+            category="负债", balance_direction="借", level=3, parent_code="221001",
+        ))
         db.flush()
 
-    def ensure_purchase_sub(gn):
-        """确保库存商品下存在对应货物的子科目"""
-        if not gn:
-            return ("1403", get_full_name("1403"))
-        ext = db.query(Account).filter(
-            Account.company_id == ded.company_id,
-            Account.parent_code == "1403",
-            Account.name == gn
-        ).first()
-        if ext:
-            return (ext.code, get_full_name(ext.code))
-        max_sub = db.query(Account.code).filter(
-            Account.company_id == ded.company_id,
-            Account.parent_code == "1403"
-        ).order_by(Account.code.desc()).first()
-        next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
-        new_code = f"1403{next_num:03d}"
-        new_acc = Account(
-            company_id=ded.company_id, code=new_code, name=gn,
-            category="资产", balance_direction="借",
-            level=2, parent_code="1403",
-        )
-        db.add(new_acc)
+    # 确保 222101 待认证进项税额 科目存在
+    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "222101").first():
+        db.add(Account(
+            company_id=company_id, code="222101", name="待认证进项税额",
+            category="负债", balance_direction="贷", level=2, parent_code="2210",
+        ))
         db.flush()
-        return (new_code, get_full_name(new_code))
 
-    # 期间：优先用抵扣所属期，其次用发票日期
-    period = ded.deduction_period if ded.deduction_period else (
-        ded.invoice_date.strftime("%Y-%m") if ded.invoice_date else dt.now().strftime("%Y-%m")
-    )
-    date_str = ded.invoice_date.strftime("%Y-%m-%d") if ded.invoice_date else period + "-01"
-
-    # 凭证号自动递增
+    # 凭证号取 period 最大号+1
+    entry_date = dt.strptime(period + "-01", "%Y-%m-%d").date()
     max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == ded.company_id,
+        JournalEntry.company_id == company_id,
         JournalEntry.period == period,
         JournalEntry.voucher_word == "记"
     ).order_by(JournalEntry.voucher_no.desc()).first()
     next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
 
-    pur_code, pur_name = ensure_purchase_sub(goods)
-    tax_amt = ded.deductible_tax_amount or ded.tax_amount or 0
-    amt_val = ded.amount or 0
-    total_amt = ded.total_amount or (amt_val + tax_amt)
+    summary = f"{period}月进项认证汇总"
+    tax_name = get_full_name("221001002")
+    pending_name = get_full_name("222101")
 
     entries = [
         JournalEntry(
-            company_id=ded.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            company_id=company_id, entry_date=entry_date,
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary, account_code=pur_code, account_name=pur_name,
-            debit_amount=amt_val, credit_amount=0,
-            contact_project=contact_key,
+            summary=summary, account_code="221001002", account_name=tax_name,
+            debit_amount=total_tax, credit_amount=0,
+            contact_project="", source="进项抵扣",
         ),
         JournalEntry(
-            company_id=ded.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            company_id=company_id, entry_date=entry_date,
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=f"{summary}（增值税）",
-            account_code="221001002",
-            account_name=get_full_name("221001002"),
-            debit_amount=tax_amt, credit_amount=0,
-            contact_project="",
-        ),
-        JournalEntry(
-            company_id=ded.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary, account_code="2202",
-            account_name=get_full_name("2202"),
-            debit_amount=0, credit_amount=total_amt,
-            contact_project=contact_key,
+            summary=summary, account_code="222101", account_name=pending_name,
+            debit_amount=0, credit_amount=total_tax,
+            contact_project="", source="进项抵扣",
         ),
     ]
     for e in entries:
         db.add(e)
     db.commit()
-    return True
+
+    return 1  # 返回生成的凭证数（1号 = 2条分录）
 
 
 def auto_generate_input_vat_journals(db):
-    """为所有进项抵扣记录自动生成记账凭证（未生成过的）"""
+    """为所有进项抵扣记录按月汇总生成凭证
+    period 优先用 deduction_period，为空则用 invoice_date 的年月
+    """
+    from sqlalchemy import distinct, func
+
     companies = db.query(Company).filter(Company.is_active == True).all()
     total = 0
     for comp in companies:
         deductions = db.query(InputVATDeduction).filter(
             InputVATDeduction.company_id == comp.id
-        ).order_by(InputVATDeduction.invoice_date.asc()).all()
+        ).all()
 
-        for ded in deductions:
+        if not deductions:
+            continue
+
+        # 按期间分组（deduction_period 优先，否则用 invoice_date 年月）
+        period_groups = {}
+        for d in deductions:
+            period = d.deduction_period
+            if not period:
+                if d.invoice_date:
+                    period = d.invoice_date.strftime("%Y-%m")
+                else:
+                    from datetime import datetime
+                    period = datetime.now().strftime("%Y-%m")
+            if period not in period_groups:
+                period_groups[period] = 0
+            period_groups[period] += d.deductible_tax_amount or 0
+
+        for period, total_tax in period_groups.items():
             try:
-                if auto_generate_single_input_vat(db, ded):
-                    total += 1
+                total += auto_generate_input_vat_for_period(db, comp.id, period)
             except Exception as e:
                 db.rollback()
-                print(f"  [X] 进项抵扣→凭证生成失败: {e}")
+                print(f"  [X] 进项抵扣→凭证({period})生成失败: {e}")
 
     return total
 
@@ -1449,6 +1487,7 @@ ACCOUNTS_TEMPLATE = [
     ("221001", "应交增值税", "负债", "贷", 2, "2210"),
     ("221001001", "销项税额", "负债", "贷", 3, "221001"),
     ("221001002", "进项税额", "负债", "借", 3, "221001"),
+    ("222101", "待认证进项税额", "负债", "贷", 2, "2210"),
     ("221002", "应交企业所得税", "负债", "贷", 2, "2210"),
     ("221003", "应交个人所得税", "负债", "贷", 2, "2210"),
     ("2211", "应付职工薪酬", "负债", "贷", 1),

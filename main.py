@@ -32,7 +32,7 @@ from database import (
     BankConfig, BankTransaction,
     InputVATDeduction, ColumnTemplate, JournalEntry,
     auto_generate_single_invoice,
-    auto_generate_single_input_vat, auto_generate_input_vat_journals
+    auto_generate_input_vat_for_period, auto_generate_input_vat_journals
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -1974,23 +1974,31 @@ def list_purchase_invoices(
             PurchaseInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).all()
-    # 构建凭证号映射（进项发票 → 进项抵扣 → 序时账，通过contact_project+科目2202判重）
+    # 构建凭证号映射（进项发票 → 进项抵扣 → 序时账，按期间匹配 source="进项抵扣" 汇总凭证）
+    invoice_nos = [inv.invoice_no for inv in invoices if inv.invoice_no]
+    ded_period_map = {}
+    if invoice_nos:
+        for ded in db.query(InputVATDeduction).filter(
+            InputVATDeduction.company_id == company_id,
+            InputVATDeduction.invoice_no.in_(invoice_nos)
+        ).all():
+            if ded.deduction_period:
+                ded_period_map[ded.invoice_no] = ded.deduction_period
+    period_vouchers = {}
+    periods_set = list(set(ded_period_map.values()))
+    if periods_set:
+        for je in db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "进项抵扣",
+            JournalEntry.period.in_(periods_set),
+            JournalEntry.account_code == "221001002"
+        ).all():
+            period_vouchers[je.period] = f"{je.voucher_word}-{je.voucher_no}"
     voucher_map = {}
     for inv in invoices:
-        ded = db.query(InputVATDeduction).filter(
-            InputVATDeduction.company_id == company_id,
-            InputVATDeduction.invoice_no == inv.invoice_no
-        ).first()
-        if ded:
-            seller = ded.seller_name or "供应商"
-            contact_key = f"{seller} [{ded.invoice_no or ded.id}]"
-            je = db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.contact_project == contact_key,
-                JournalEntry.account_code == "2202"
-            ).first()
-            if je:
-                voucher_map[inv.id] = f"{je.voucher_word}-{je.voucher_no}"
+        period = ded_period_map.get(inv.invoice_no)
+        if period and period in period_vouchers:
+            voucher_map[inv.id] = period_vouchers[period]
     return [{
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -2518,6 +2526,7 @@ def list_journal_entries(
         "spec_model": e.spec_model or "",
         "quantity": e.quantity or 0, "unit": e.unit or "",
         "unit_price": e.unit_price or 0,
+        "source": e.source or "手动录入",
         "created_at": str(e.created_at) if e.created_at else None,
     } for e in entries]
 
@@ -2996,18 +3005,21 @@ def list_input_vat_deductions(
             InputVATDeduction.seller_tax_id.contains(keyword),
         ))
     items = q.order_by(InputVATDeduction.invoice_date.desc(), InputVATDeduction.check_time.desc()).all()
-    # 构建凭证号映射（进项抵扣 → 序时账，通过contact_project+科目2202判重）
+    # 构建凭证号映射（进项抵扣 → 序时账，按期间匹配 source="进项抵扣" 的汇总凭证）
+    periods_set = list(set(it.deduction_period for it in items if it.deduction_period))
+    period_vouchers = {}
+    if periods_set:
+        for je in db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "进项抵扣",
+            JournalEntry.period.in_(periods_set),
+            JournalEntry.account_code == "221001002"
+        ).all():
+            period_vouchers[je.period] = f"{je.voucher_word}-{je.voucher_no}"
     voucher_map = {}
     for it in items:
-        seller = it.seller_name or "供应商"
-        contact_key = f"{seller} [{it.invoice_no or it.id}]"
-        je = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.contact_project == contact_key,
-            JournalEntry.account_code == "2202"
-        ).first()
-        if je:
-            voucher_map[it.id] = f"{je.voucher_word}-{je.voucher_no}"
+        if it.deduction_period and it.deduction_period in period_vouchers:
+            voucher_map[it.id] = period_vouchers[it.deduction_period]
     return [{
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
         "check_status": it.check_status or "未勾选",
@@ -3048,9 +3060,12 @@ def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = 
     db.add(item)
     db.commit()
     db.refresh(item)
-    # 自动生成序时账凭证
+    # 自动生成序时账凭证（按期间汇总）
     try:
-        auto_generate_single_input_vat(db, item)
+        period = item.deduction_period
+        if not period:
+            period = item.invoice_date.strftime("%Y-%m") if item.invoice_date else datetime.now().strftime("%Y-%m")
+        auto_generate_input_vat_for_period(db, company_id, period)
     except Exception as e:
         db.rollback()
     return {"id": item.id, "message": "进项抵扣记录创建成功"}
@@ -3125,9 +3140,12 @@ def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, comp
         setattr(it, k, v)
     it.updated_at = datetime.now()
     db.commit()
-    # 自动更新序时账凭证
+    # 自动更新序时账凭证（按期间汇总）
     try:
-        auto_generate_single_input_vat(db, it)
+        period = it.deduction_period
+        if not period:
+            period = it.invoice_date.strftime("%Y-%m") if it.invoice_date else datetime.now().strftime("%Y-%m")
+        auto_generate_input_vat_for_period(db, company_id, period)
     except Exception as e:
         db.rollback()
     return {"message": "更新成功"}
@@ -3803,15 +3821,20 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 db.rollback()
                 infos.append(f"凭证生成失败: {str(e)}")
 
-        # 进项抵扣导入后自动生成序时账凭证
+        # 进项抵扣导入后自动生成序时账凭证（按期间汇总）
         if module == "input-vat-deduction" and new_deductions:
             try:
+                from sqlalchemy import distinct as sqldistinct
+                periods_affected = db.query(sqldistinct(InputVATDeduction.deduction_period)).filter(
+                    InputVATDeduction.company_id == company_id,
+                    InputVATDeduction.deduction_period.isnot(None),
+                    InputVATDeduction.deduction_period != ""
+                ).all()
                 ded_count = 0
-                for ded in new_deductions:
-                    auto_generate_single_input_vat(db, ded)
-                    ded_count += 1
+                for (period,) in periods_affected:
+                    ded_count += auto_generate_input_vat_for_period(db, company_id, period)
                 if ded_count > 0:
-                    infos.append(f"自动生成 {ded_count} 条进项序时账凭证")
+                    infos.append(f"自动生成 {ded_count} 号进项汇总凭证")
             except Exception as e:
                 db.rollback()
                 infos.append(f"进项凭证生成失败: {str(e)}")

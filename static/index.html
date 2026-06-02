@@ -1054,11 +1054,11 @@ async function renderJournal() {
     // 表格
     html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
-    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>操作</th>';
+    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="14" style="text-align:center;color:#9ca3af;padding:40px">暂无记录</td></tr>';
+      html += '<tr><td colspan="15" style="text-align:center;color:#9ca3af;padding:40px">暂无记录</td></tr>';
     } else {
       items.forEach(r => {
         html += '<tr>';
@@ -1075,6 +1075,9 @@ async function renderJournal() {
         html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
         html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
         html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+        const src = r.source || '手动录入';
+        const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
+        html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')" style="margin-right:4px">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
