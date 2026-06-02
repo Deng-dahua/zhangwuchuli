@@ -30,6 +30,7 @@ from database import (
     SalesInvoice, PurchaseInvoice,
     BankConfig, BankTransaction,
     InputVATDeduction, ColumnTemplate, JournalEntry,
+    CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals
 )
@@ -51,6 +52,16 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 class CompanyUpdate(BaseModel):
     company_name: Optional[str] = None
     uscc: Optional[str] = None
+    registered_capital: Optional[float] = None
+    established_date: Optional[date] = None
+    legal_representative: Optional[str] = None
+    legal_representative_id: Optional[str] = None
+    address: Optional[str] = None
+    business_scope: Optional[str] = None
+    shareholders: Optional[List[dict]] = None
+    directors: Optional[List[dict]] = None
+    supervisors: Optional[List[dict]] = None
+    finance_contacts: Optional[List[dict]] = None
 
 # 部门
 class DepartmentCreate(BaseModel):
@@ -143,6 +154,16 @@ def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
         "id": info.id,
         "company_name": info.name,
         "uscc": info.uscc or "",
+        "registered_capital": info.registered_capital,
+        "established_date": str(info.established_date) if info.established_date else "",
+        "legal_representative": info.legal_representative or "",
+        "legal_representative_id": info.legal_representative_id or "",
+        "address": info.address or "",
+        "business_scope": info.business_scope or "",
+        "shareholders": [{"name": s.name, "id_number": s.id_number or "", "ratio": s.ratio, "contribution_amount": s.contribution_amount} for s in info.shareholders],
+        "directors": [{"name": d.name, "id_number": d.id_number or ""} for d in info.directors],
+        "supervisors": [{"name": s.name, "id_number": s.id_number or ""} for s in info.supervisors],
+        "finance_contacts": [{"name": f.name, "id_number": f.id_number or "", "phone": f.phone or ""} for f in info.finance_contacts],
     }
 
 @app.put("/api/company")
@@ -152,18 +173,34 @@ def update_company(data: CompanyUpdate, company_id: int = Query(1), db: Session 
         info = Company(id=company_id, name=data.company_name or "")
         db.add(info)
         db.flush()
-    # 校验统一社会信用代码
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
             raise HTTPException(400, detail=f"公司统一社会信用代码：{msg}")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    # 更新主表字段
+    main_fields = {k: v for k, v in data.model_dump(exclude_unset=True).items()
+                   if k not in ("shareholders", "directors", "supervisors", "finance_contacts")}
+    for k, v in main_fields.items():
         if k == 'company_name':
             info.name = v
         else:
             setattr(info, k, v)
+    # 更新子表
+    _update_company_subtable(db, info, CompanyShareholder, data.shareholders)
+    _update_company_subtable(db, info, CompanyDirector, data.directors)
+    _update_company_subtable(db, info, CompanySupervisor, data.supervisors)
+    _update_company_subtable(db, info, CompanyFinanceContact, data.finance_contacts)
     db.commit()
     return {"message": "保存成功"}
+
+
+def _update_company_subtable(db, company, model, items):
+    """更新公司子表：清空旧数据，写入新数据"""
+    if items is None:
+        return
+    db.query(model).filter(model.company_id == company.id).delete()
+    for item in items:
+        db.add(model(company_id=company.id, **item))
 
 
 # ==================== 部门档案 ====================
@@ -632,17 +669,50 @@ def dashboard(company_id: int = Query(1), db: Session = Depends(get_db)):
 class CompanyCreate(BaseModel):
     name: str
     uscc: Optional[str] = None
+    registered_capital: Optional[float] = None
+    established_date: Optional[date] = None
+    legal_representative: Optional[str] = None
+    legal_representative_id: Optional[str] = None
+    address: Optional[str] = None
+    business_scope: Optional[str] = None
+    shareholders: Optional[List[dict]] = None
+    directors: Optional[List[dict]] = None
+    supervisors: Optional[List[dict]] = None
+    finance_contacts: Optional[List[dict]] = None
 
 class CompanyUpdateModel(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
+    registered_capital: Optional[float] = None
+    established_date: Optional[date] = None
+    legal_representative: Optional[str] = None
+    legal_representative_id: Optional[str] = None
+    address: Optional[str] = None
+    business_scope: Optional[str] = None
+    shareholders: Optional[List[dict]] = None
+    directors: Optional[List[dict]] = None
+    supervisors: Optional[List[dict]] = None
+    finance_contacts: Optional[List[dict]] = None
 
 
 @app.get("/api/companies")
 def list_companies(db: Session = Depends(get_db)):
     """获取公司列表（账套选择）"""
     companies = db.query(Company).order_by(Company.id).all()
-    return [{"id": c.id, "name": c.name, "uscc": c.uscc or "", "created_at": str(c.created_at.date()) if c.created_at else ""} for c in companies]
+    return [{
+        "id": c.id, "name": c.name, "uscc": c.uscc or "",
+        "registered_capital": c.registered_capital,
+        "established_date": str(c.established_date) if c.established_date else "",
+        "legal_representative": c.legal_representative or "",
+        "legal_representative_id": c.legal_representative_id or "",
+        "address": c.address or "",
+        "business_scope": c.business_scope or "",
+        "created_at": str(c.created_at.date()) if c.created_at else "",
+        "shareholders": [{"name": s.name, "id_number": s.id_number or "", "ratio": s.ratio, "contribution_amount": s.contribution_amount} for s in c.shareholders],
+        "directors": [{"name": d.name, "id_number": d.id_number or ""} for d in c.directors],
+        "supervisors": [{"name": s.name, "id_number": s.id_number or ""} for s in c.supervisors],
+        "finance_contacts": [{"name": f.name, "id_number": f.id_number or "", "phone": f.phone or ""} for f in c.finance_contacts],
+    } for c in companies]
 
 
 @app.post("/api/companies")
@@ -655,9 +725,17 @@ def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
         if not ok:
             raise HTTPException(400, detail=f"统一社会信用代码：{msg}")
 
-    company = Company(name=data.name, uscc=data.uscc)
+    main_fields = {k: v for k, v in data.model_dump(exclude_unset=True).items()
+                   if k not in ("shareholders", "directors", "supervisors", "finance_contacts")}
+    company = Company(**main_fields)
     db.add(company)
     db.flush()
+
+    # 子表
+    _update_company_subtable(db, company, CompanyShareholder, data.shareholders)
+    _update_company_subtable(db, company, CompanyDirector, data.directors)
+    _update_company_subtable(db, company, CompanySupervisor, data.supervisors)
+    _update_company_subtable(db, company, CompanyFinanceContact, data.finance_contacts)
 
     # 初始化公司基础数据（科目表、部门、期间）
     init_company_data(db, company.id)
@@ -677,8 +755,14 @@ def update_company_detail(company_id: int, data: CompanyUpdateModel, db: Session
         ok, msg = validate_uscc(data.uscc)
         if not ok:
             raise HTTPException(400, detail=f"统一社会信用代码：{msg}")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    main_fields = {k: v for k, v in data.model_dump(exclude_unset=True).items()
+                   if k not in ("shareholders", "directors", "supervisors", "finance_contacts")}
+    for k, v in main_fields.items():
         setattr(company, k, v)
+    _update_company_subtable(db, company, CompanyShareholder, data.shareholders)
+    _update_company_subtable(db, company, CompanyDirector, data.directors)
+    _update_company_subtable(db, company, CompanySupervisor, data.supervisors)
+    _update_company_subtable(db, company, CompanyFinanceContact, data.finance_contacts)
     db.commit()
     return {"message": "更新成功"}
 

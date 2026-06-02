@@ -35,7 +35,57 @@ class Company(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, comment="公司全称")
     uscc = Column(String(50), comment="统一社会信用代码")
+    registered_capital = Column(Float, comment="注册资本")
+    established_date = Column(Date, comment="成立日期")
+    legal_representative = Column(String(50), comment="法定代表人")
+    legal_representative_id = Column(String(30), comment="法定代表人身份证")
+    address = Column(String(200), comment="注册地址")
+    business_scope = Column(Text, comment="经营范围")
     created_at = Column(DateTime, default=datetime.now)
+
+    shareholders = relationship("CompanyShareholder", back_populates="company", cascade="all, delete-orphan")
+    directors = relationship("CompanyDirector", back_populates="company", cascade="all, delete-orphan")
+    supervisors = relationship("CompanySupervisor", back_populates="company", cascade="all, delete-orphan")
+    finance_contacts = relationship("CompanyFinanceContact", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanyShareholder(Base):
+    __tablename__ = "company_shareholders"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    name = Column(String(50), nullable=False, comment="股东姓名")
+    id_number = Column(String(30), comment="身份证号")
+    ratio = Column(Float, comment="持股比例(%)")
+    contribution_amount = Column(Float, comment="认缴出资额")
+    company = relationship("Company", back_populates="shareholders")
+
+
+class CompanyDirector(Base):
+    __tablename__ = "company_directors"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    name = Column(String(50), nullable=False, comment="董事姓名")
+    id_number = Column(String(30), comment="身份证号")
+    company = relationship("Company", back_populates="directors")
+
+
+class CompanySupervisor(Base):
+    __tablename__ = "company_supervisors"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    name = Column(String(50), nullable=False, comment="监事姓名")
+    id_number = Column(String(30), comment="身份证号")
+    company = relationship("Company", back_populates="supervisors")
+
+
+class CompanyFinanceContact(Base):
+    __tablename__ = "company_finance_contacts"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    name = Column(String(50), nullable=False, comment="财务负责人姓名")
+    id_number = Column(String(30), comment="身份证号")
+    phone = Column(String(20), comment="联系电话")
+    company = relationship("Company", back_populates="finance_contacts")
 
 
 # ==================== 部门档案 ====================
@@ -690,6 +740,39 @@ def migrate_schema(db):
     # ── 1. 创建 companies 表（如果不存在） ──
     if "companies" not in inspector.get_table_names():
         Base.metadata.create_all(bind=engine, tables=[Company.__table__])
+
+    # ── 1.5. 为 companies 补充新增字段（必须在查询 Company 之前） ──
+    if "companies" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("companies")}
+        company_new_cols = {
+            "registered_capital": "ALTER TABLE companies ADD COLUMN registered_capital FLOAT",
+            "established_date": "ALTER TABLE companies ADD COLUMN established_date DATE",
+            "legal_representative": "ALTER TABLE companies ADD COLUMN legal_representative VARCHAR(50)",
+            "legal_representative_id": "ALTER TABLE companies ADD COLUMN legal_representative_id VARCHAR(30)",
+            "address": "ALTER TABLE companies ADD COLUMN address VARCHAR(200)",
+            "business_scope": "ALTER TABLE companies ADD COLUMN business_scope TEXT",
+        }
+        for col_name, sql in company_new_cols.items():
+            if col_name not in existing_cols:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 companies 添加 {col_name} 列")
+                except Exception as e:
+                    db.rollback()
+                    print(f"companies 添加 {col_name} 列失败: {e}")
+        # 创建子表
+        for sub_table in [CompanyShareholder.__table__, CompanyDirector.__table__,
+                          CompanySupervisor.__table__, CompanyFinanceContact.__table__]:
+            table_name = sub_table.name
+            if table_name not in inspector.get_table_names():
+                try:
+                    sub_table.create(bind=engine)
+                    db.commit()
+                    print(f"已创建子表 {table_name}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"创建子表 {table_name} 失败: {e}")
 
     # ── 2. 如果没有公司，将旧 company_info 数据迁移到 companies ──
     if db.query(Company).count() == 0:
