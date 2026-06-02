@@ -720,6 +720,21 @@ async function loadAllAccounts() {
 }
 
 // ==================== 路由 ====================
+// 每页独立容器，切换只 show/hide，不清空 DOM
+const _pageContainers = {};
+function _ensureContainer(page) {
+  if (_pageContainers[page]) return _pageContainers[page];
+  let el = document.getElementById('page-' + page);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'page-' + page;
+    el.style.display = 'none';
+    document.getElementById('content-area').appendChild(el);
+  }
+  _pageContainers[page] = el;
+  return el;
+}
+
 function navigateTo(page) {
   currentPage = page;
   localStorage.setItem('lastPage', page);
@@ -727,34 +742,41 @@ function navigateTo(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   document.getElementById('page-title').textContent = pages[page] || page;
-  const content = document.getElementById('content-area');
-  content.innerHTML = '';
 
-  switch (page) {
-    case 'chat': renderChat(); break;
-    case 'dashboard': renderDashboard(); break;
-    case 'journal': renderJournal(); break;
-    case 'general-ledger': renderGeneralLedger(); break;
-    case 'detail-ledger': renderDetailLedger(); break;
-    case 'profit-loss': renderProfitLoss(); break;
-    case 'balance-sheet': renderBalanceSheet(); break;
-    case 'account-balance': renderAccountBalance(); break;
-    case 'accounts': renderAccounts(); break;
-    case 'periods': renderPeriods(); break;
-    case 'company': showCompanyManager(); break;
-    case 'departments': renderDepartments(); break;
-    case 'employees': renderEmployees(); break;
-    case 'customers': renderCustomers(); break;
-    case 'suppliers': renderSuppliers(); break;
-    case 'fixed-assets': renderFixedAssets(); break;
-    case 'intangible-assets': renderIntangibleAssets(); break;
-    case 'inventory': renderInventory(); break;
-    case 'contracts': renderContracts(); break;
-    case 'payments': renderPayments(); break;
-    case 'sales-invoices': renderSalesInvoices(); break;
-    case 'purchase-invoices': renderPurchaseInvoices(); break;
-    case 'input-vat-deductions': renderInputVATDeductions(); break;
-    case 'bank-transactions': renderBankTransactions(); break;
+  // 隐藏所有页面容器，只显示当前页
+  document.querySelectorAll('#content-area > [id^="page-"]').forEach(el => el.style.display = 'none');
+  const container = _ensureContainer(page);
+  container.style.display = '';
+
+  // 初次渲染：容器为空才渲染（已渲染过的保留 DOM）
+  if (!container.dataset.rendered) {
+    container.dataset.rendered = '1';
+    switch (page) {
+      case 'chat': renderChat(container); break;
+      case 'dashboard': renderDashboard(container); break;
+      case 'journal': renderJournal(container); break;
+      case 'general-ledger': renderGeneralLedger(container); break;
+      case 'detail-ledger': renderDetailLedger(container); break;
+      case 'profit-loss': renderProfitLoss(container); break;
+      case 'balance-sheet': renderBalanceSheet(container); break;
+      case 'account-balance': renderAccountBalance(container); break;
+      case 'accounts': renderAccounts(container); break;
+      case 'periods': renderPeriods(container); break;
+      case 'company': showCompanyManager(container); break;
+      case 'departments': renderDepartments(container); break;
+      case 'employees': renderEmployees(container); break;
+      case 'customers': renderCustomers(container); break;
+      case 'suppliers': renderSuppliers(container); break;
+      case 'fixed-assets': renderFixedAssets(container); break;
+      case 'intangible-assets': renderIntangibleAssets(container); break;
+      case 'inventory': renderInventory(container); break;
+      case 'contracts': renderContracts(container); break;
+      case 'payments': renderPayments(container); break;
+      case 'sales-invoices': renderSalesInvoices(container); break;
+      case 'purchase-invoices': renderPurchaseInvoices(container); break;
+      case 'input-vat-deductions': renderInputVATDeductions(container); break;
+      case 'bank-transactions': renderBankTransactions(container); break;
+    }
   }
 }
 
@@ -1237,8 +1259,8 @@ async function deleteJournal(id) {
   }
 }
 // ==================== 总账 ====================
-async function renderGeneralLedger() {
-  const el = document.getElementById('content-area');
+async function renderGeneralLedger(container) {
+  const el = container || document.getElementById('content-area');
   const yearMonth = currentPeriod;
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
@@ -1264,7 +1286,7 @@ async function loadGeneralLedger() {
     if (!data.length) { el.innerHTML = '<div class="empty-state"><p>该期间无发生额</p></div>'; return; }
     el.innerHTML = `
       <table>
-        <thead><tr><th>科目编码</th><th>科目名称</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th style="text-align:center">余额方向</th><th class="num">期末余额</th></tr></thead>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th class="num">期初余额</th><th style="text-align:center">期初方向</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th style="text-align:center">期末方向</th><th class="num">期末余额</th></tr></thead>
         <tbody>
           ${data.map(r => {
             const lv = r.level || 1;
@@ -1275,10 +1297,12 @@ async function loadGeneralLedger() {
             <tr>
               <td><a href="#" onclick="goDetailLedger('${r.account_code}');return false" style="color:var(--primary)">${r.account_code}</a></td>
               <td style="padding-left:${pad}px;${bold}">${prefix}${r.account_name}</td>
+              <td class="num">${r.opening_balance >= 0 ? '¥' + fmt(r.opening_balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.opening_balance) + '</span>'}</td>
+              <td style="text-align:center">${r.opening_direction}</td>
               <td class="num">${r.total_debit > 0 ? '¥' + fmt(r.total_debit) : '-'}</td>
               <td class="num">${r.total_credit > 0 ? '¥' + fmt(r.total_credit) : '-'}</td>
-              <td style="text-align:center">${r.balance_direction}</td>
-              <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
+              <td style="text-align:center">${r.end_direction}</td>
+              <td class="num" style="font-weight:600">${r.end_balance >= 0 ? '¥' + fmt(r.end_balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.end_balance) + '</span>'}</td>
             </tr>
             `}).join('')}
         </tbody>
@@ -1298,8 +1322,8 @@ function goDetailLedger(code) {
 }
 
 // ==================== 明细账 ====================
-async function renderDetailLedger() {
-  const el = document.getElementById('content-area');
+async function renderDetailLedger(container) {
+  const el = container || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`).join('');
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
@@ -1319,6 +1343,23 @@ async function renderDetailLedger() {
   `;
 }
 
+// 明细账期初行
+function _dlOpenRow(data, ob) {
+  const dir = data.balance_direction;
+  // 期初余额方向：ob>=0 与科目方向一致，否则相反
+  const obDir = ob >= 0 ? dir : (dir === '借' ? '贷' : '借');
+  const obFmt = ob >= 0 ? '¥' + fmt(ob) : '-¥' + fmt(-ob);
+  return `<tr style="background:#f8fafc">
+      <td></td>
+      <td></td>
+      <td>上期结转</td>
+      <td class="num"></td>
+      <td class="num"></td>
+      <td style="text-align:center">${obDir}</td>
+      <td class="num" style="font-weight:600">${obFmt}</td>
+    </tr>`;
+}
+
 async function loadDetailLedger() {
   const code = document.getElementById('dl-account').value;
   const from = _readPeriod('dl-from');
@@ -1333,9 +1374,10 @@ async function loadDetailLedger() {
     el.innerHTML = `
       <div style="font-size:13px;margin-bottom:10px"><b>科目：</b>${data.account_code} ${data.account_name} &nbsp;&nbsp; <b>余额方向：</b>${data.balance_direction} &nbsp;&nbsp; <b>期初余额：</b>${obStr}</div>
       <table>
-        <thead><tr><th>日期</th><th>凭证号</th><th>摘要</th><th class="num">借方</th><th class="num">贷方</th><th class="num">余额</th></tr></thead>
+        <thead><tr><th>日期</th><th>凭证号</th><th>摘要</th><th class="num">借方</th><th class="num">贷方</th><th style="text-align:center">余额方向</th><th class="num">余额</th></tr></thead>
         <tbody>
-          ${data.rows.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>该期间无明细</p></div></td></tr>' :
+          ${_dlOpenRow(data, ob)}
+          ${data.rows.length === 0 ? '<tr><td colspan="7"><div class="empty-state"><p>该期间无明细</p></div></td></tr>' :
             data.rows.map(r => `
               <tr>
                 <td>${r.voucher_date}</td>
@@ -1343,6 +1385,7 @@ async function loadDetailLedger() {
                 <td>${r.summary || ''}</td>
                 <td class="num">${r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : ''}</td>
                 <td class="num">${r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : ''}</td>
+                <td style="text-align:center">${r.balance >= 0 ? '借' : '贷'}</td>
                 <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
               </tr>
             `).join('')}
