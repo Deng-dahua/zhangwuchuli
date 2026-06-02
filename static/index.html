@@ -1009,7 +1009,10 @@ async function renderJournal() {
       <div class="card" style="margin-bottom:0">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
           <span>📋 序时账</span>
-          <button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从销项发票生成</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn" style="color:var(--danger);border-color:var(--danger)" onclick="batchDeleteJe()">🗑 批量删除</button>
+            <button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从销项发票生成</button>
+          </div>
         </div>
         <div class="table-wrap" id="je-table"></div>
       </div>
@@ -1030,20 +1033,23 @@ async function loadJournalList() {
       el.innerHTML = `
         <table>
           <thead><tr>
-            <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th>
+            <th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>
+            <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th><th style="width:90px">操作</th>
           </tr></thead>
-          <tbody><tr><td colspan="12" style="text-align:center;color:#999;padding:24px">暂无记录</td></tr></tbody>
+          <tbody><tr><td colspan="14" style="text-align:center;color:#999;padding:24px">暂无记录</td></tr></tbody>
         </table>`;
       return;
     }
     el.innerHTML = `
       <table>
         <thead><tr>
-          <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th>
+          <th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>
+          <th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th class="num">单价</th><th class="num">借方金额</th><th class="num">贷方金额</th><th style="width:90px">操作</th>
         </tr></thead>
         <tbody>
           ${data.map(r => `
             <tr>
+              <td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="${r.id}" onchange="jeOnCheck()"></td>
               <td>${r.period}</td>
               <td style="text-align:center">${r.voucher_no}</td>
               <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(r.summary || '')}">${r.summary || '-'}</td>
@@ -1056,6 +1062,10 @@ async function loadJournalList() {
               <td class="num">${r.unit_price > 0 ? '¥' + fmt(r.unit_price) : '-'}</td>
               <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-'}</td>
               <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-'}</td>
+              <td style="text-align:center;white-space:nowrap">
+                <button class="btn btn-sm" onclick="editJeEntry(${r.id})" title="编辑" style="padding:2px 8px">✏️</button>
+                <button class="btn btn-sm" onclick="deleteJeEntry(${r.id})" title="删除" style="padding:2px 8px;color:var(--danger)">🗑</button>
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -1105,30 +1115,41 @@ async function generateFromInvoice(invoiceId) {
   }
 }
 
-function toggleJeSelectAll() {
-  const all = document.getElementById('jeSelectAll');
-  document.querySelectorAll('.je-check').forEach(cb => cb.checked = all.checked);
-  updateJeBatchBtn();
+function jeToggleAll(checkbox) {
+  document.querySelectorAll('.je-row-check').forEach(cb => cb.checked = checkbox.checked);
 }
 
-function updateJeBatchBtn() {
-  const count = document.querySelectorAll('.je-check:checked').length;
-  const btn = document.getElementById('jeBatchDelBtn');
-  if (btn) {
-    btn.style.display = count > 0 ? '' : 'none';
-    btn.textContent = '🗑 批量删除（' + count + '）';
-  }
+function jeOnCheck() {
+  const all = document.querySelectorAll('.je-row-check');
+  const checked = document.querySelectorAll('.je-row-check:checked');
+  const selectAll = document.getElementById('je-select-all');
+  if (selectAll) selectAll.checked = checked.length === all.length;
 }
 
-async function batchDeleteJournal() {
-  const checked = document.querySelectorAll('.je-check:checked');
-  if (checked.length === 0) return;
+async function batchDeleteJe() {
+  const checked = document.querySelectorAll('.je-row-check:checked');
+  if (checked.length === 0) { toast('请先选择记录', 'warning'); return; }
   if (!confirm('确认删除选中的 ' + checked.length + ' 条记录？此操作不可恢复。')) return;
   const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
   try {
     const result = await api('/api/journal-entries/batch-delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
     });
+    toast(result.message, 'success');
+    loadJournalList();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function editJeEntry(id) {
+  showJournalForm(id);
+}
+
+async function deleteJeEntry(id) {
+  if (!confirm('确认删除该记录？此操作不可恢复。')) return;
+  try {
+    const result = await api('/api/journal-entries/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
     loadJournalList();
   } catch (e) {
