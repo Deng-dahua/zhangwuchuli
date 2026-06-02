@@ -816,8 +816,8 @@ function fmt(n) {
 }
 
 // ==================== 数据看板 ====================
-async function renderDashboard() {
-  const el = document.getElementById('content-area');
+async function renderDashboard(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
     const data = await api('/api/dashboard');
@@ -869,8 +869,8 @@ async function renderDashboard() {
 
 let jeFilter = { keyword: '', periodFrom: '', periodTo: '' };
 
-async function renderJournal() {
-  const el = document.getElementById('content-area');
+async function renderJournal(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
     const [data, stats] = await Promise.all([
@@ -1286,7 +1286,7 @@ async function loadGeneralLedger() {
     if (!data.length) { el.innerHTML = '<div class="empty-state"><p>该期间无发生额</p></div>'; return; }
     el.innerHTML = `
       <table>
-        <thead><tr><th>科目编码</th><th>科目名称</th><th class="num">期初余额</th><th style="text-align:center">期初方向</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th style="text-align:center">期末方向</th><th class="num">期末余额</th></tr></thead>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th style="text-align:center">期末方向</th><th class="num">期末余额</th></tr></thead>
         <tbody>
           ${data.map(r => {
             const lv = r.level || 1;
@@ -1297,11 +1297,9 @@ async function loadGeneralLedger() {
             <tr>
               <td><a href="#" onclick="goDetailLedger('${r.account_code}');return false" style="color:var(--primary)">${r.account_code}</a></td>
               <td style="padding-left:${pad}px;${bold}">${prefix}${r.account_name}</td>
-              <td class="num">${r.opening_balance >= 0 ? '¥' + fmt(r.opening_balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.opening_balance) + '</span>'}</td>
-              <td style="text-align:center">${r.opening_direction}</td>
               <td class="num">${r.total_debit > 0 ? '¥' + fmt(r.total_debit) : '-'}</td>
               <td class="num">${r.total_credit > 0 ? '¥' + fmt(r.total_credit) : '-'}</td>
-              <td style="text-align:center">${r.end_direction}</td>
+              <td style="text-align:center">${r.end_balance == 0 ? '平' : r.end_direction}</td>
               <td class="num" style="font-weight:600">${r.end_balance >= 0 ? '¥' + fmt(r.end_balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.end_balance) + '</span>'}</td>
             </tr>
             `}).join('')}
@@ -1385,7 +1383,7 @@ async function loadDetailLedger() {
                 <td>${r.summary || ''}</td>
                 <td class="num">${r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : ''}</td>
                 <td class="num">${r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : ''}</td>
-                <td style="text-align:center">${r.balance >= 0 ? '借' : '贷'}</td>
+                <td style="text-align:center">${r.balance == 0 ? '平' : r.balance >= 0 ? '借' : '贷'}</td>
                 <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
               </tr>
             `).join('')}
@@ -1399,16 +1397,13 @@ async function loadDetailLedger() {
 
 // 清除筛选：重新渲染页面，期间下拉重置为空（显示占位符 年/月）
 async function clearFilters(page) {
-  switch(page) {
-    case 'gl': await renderGeneralLedger(); break;
-    case 'dl': await renderDetailLedger(); break;
-    case 'pl': await renderProfitLoss(); break;
-    case 'bs': await renderBalanceSheet(); break;
-    case 'tb': await renderAccountBalance(); break;
-  }
-  // 把起止下拉重置为占位符状态
+  // 只清下拉 + 清表格，不再重写整个页面
   var p = page === 'gl' ? 'gl' : page === 'dl' ? 'dl' : page === 'pl' ? 'pl' : page === 'bs' ? 'bs' : 'tb';
   document.querySelectorAll('select[id^="' + p + '-"]').forEach(function(s) { s.value = ''; });
+  // 清空表格区域
+  var tids = { 'gl':'gl-table', 'dl':'dl-table', 'pl':'pl-table', 'bs':'bs-table', 'tb':'tb-table' };
+  var tel = document.getElementById(tids[p] || '');
+  if (tel) tel.innerHTML = '';
 }
 
 // ===== 期间下拉辅助（年+月分开） =====
@@ -1444,8 +1439,8 @@ function _readPeriod(prefix) {
 }
 
 // ==================== 利润表 ====================
-async function renderProfitLoss() {
-  const el = document.getElementById('content-area');
+async function renderProfitLoss(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
@@ -1487,8 +1482,8 @@ async function loadProfitLoss() {
 }
 
 // ==================== 资产负债表 ====================
-async function renderBalanceSheet() {
-  const el = document.getElementById('content-area');
+async function renderBalanceSheet(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
@@ -1542,8 +1537,8 @@ async function loadBalanceSheet() {
 }
 
 // ==================== 科目余额表 ====================
-async function renderAccountBalance() {
-  const el = document.getElementById('content-area');
+async function renderAccountBalance(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
@@ -1633,8 +1628,8 @@ async function loadAccountBalance() {
 }
 
 // ==================== 会计科目 ====================
-async function renderAccounts() {
-  const el = document.getElementById('content-area');
+async function renderAccounts(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -1765,8 +1760,8 @@ async function deleteAccount(id) {
 }
 
 // ==================== 期间管理 ====================
-async function renderPeriods() {
-  const el = document.getElementById('content-area');
+async function renderPeriods(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card">加载中...</div>';
   try {
     const data = await api('/api/periods');
@@ -1790,7 +1785,7 @@ async function renderPeriods() {
       </div>
     `;
   } catch (e) {
-    document.getElementById('content-area').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
   }
 }
 
@@ -1807,8 +1802,8 @@ async function closePeriod(period) {
 }
 
 // ==================== 公司信息 ====================
-async function renderCompany() {
-  const el = document.getElementById('content-area');
+async function renderCompany(container) {
+  const el = container || document.getElementById('content-area');
   try {
     const data = await api('/api/company');
     let html = '<div class="card" style="margin-bottom:16px">' +
@@ -1845,8 +1840,8 @@ async function saveCompanyFull() {
 }
 
 // ==================== 部门档案 ====================
-async function renderDepartments() {
-  const el = document.getElementById('content-area');
+async function renderDepartments(container) {
+  const el = container || document.getElementById('content-area');
   try {
     const data = await api('/api/departments');
     el.innerHTML = `
@@ -1918,8 +1913,8 @@ async function deleteDept(id) {
 }
 
 // ==================== 人员档案 ====================
-async function renderEmployees() {
-  const el = document.getElementById('content-area');
+async function renderEmployees(container) {
+  const el = container || document.getElementById('content-area');
   try {
     const data = await api('/api/employees');
     el.innerHTML = `
@@ -2027,8 +2022,8 @@ async function deleteEmp(id) {
 }
 
 // ==================== 客户档案 ====================
-async function renderCustomers() {
-  const el = document.getElementById('content-area');
+async function renderCustomers(container) {
+  const el = container || document.getElementById('content-area');
   try {
     const data = await api('/api/customers');
     el.innerHTML = `
@@ -2132,8 +2127,8 @@ async function deleteCust(id) {
 }
 
 // ==================== 供应商档案 ====================
-async function renderSuppliers() {
-  const el = document.getElementById('content-area');
+async function renderSuppliers(container) {
+  const el = container || document.getElementById('content-area');
   try {
     const data = await api('/api/suppliers');
     el.innerHTML = `
@@ -2241,7 +2236,7 @@ let chatSessionId = null;
 let chatMessages = [];
 let chatLoading = false;
 
-async function renderChat() {
+async function renderChat(container) {
   if (!chatSessionId) {
     chatSessionId = 'sess_' + Date.now();
     chatMessages = [{
@@ -2250,7 +2245,7 @@ async function renderChat() {
     }];
   }
 
-  const el = document.getElementById('content-area');
+  const el = container || document.getElementById('content-area');
   el.innerHTML = `
     <div class="chat-wrapper">
       <div class="chat-header">
@@ -2500,10 +2495,11 @@ async function switchCompany() {
 }
 
 // ==================== 公司信息 ====================
-async function showCompanyManager() {
+async function showCompanyManager(container) {
+  const el = container || document.getElementById(\'content-area\');
   try {
     const c = await fetch('/api/company?company_id=' + currentCompanyId).then(r => r.json());
-    if (!c || !c.company_name) { document.getElementById('content-area').innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }
+    if (!c || !c.company_name) { el.innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }
 
     let html = '';
     html += '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
@@ -2566,7 +2562,7 @@ async function showCompanyManager() {
       html += '<div class="empty-state" style="padding:12px">暂无财务负责人信息</div>';
     }
 
-    document.getElementById('content-area').innerHTML = html;
+    el.innerHTML = html;
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -2668,7 +2664,7 @@ async function saveCompanyDetail() {
     });
     closeModal();
     toast('保存成功', 'success');
-    showCompanyManager();
+    showCompanyManager(container);
   } catch(e) { toast(e.message, 'error'); }
 }
 async function deleteCompany(id) {
@@ -2689,15 +2685,15 @@ async function deleteCompany(id) {
       return;
     }
     await loadCompanies();
-    showCompanyManager();
+    showCompanyManager(container);
   } catch (e) {
     toast(e.message, 'error');
   }
 }
 
 // ==================== 固定资产 ====================
-async function renderFixedAssets() {
-  const el = document.getElementById('content-area');
+async function renderFixedAssets(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="font-size:15px;font-weight:600">\U0001f3ed 固定资产</div>' +
@@ -2840,8 +2836,8 @@ async function depreciateAll() {
 }
 
 // ==================== 无形资产 ====================
-async function renderIntangibleAssets() {
-  const el = document.getElementById('content-area');
+async function renderIntangibleAssets(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="font-size:15px;font-weight:600">\U0001f4d1 无形资产</div>' +
@@ -2982,8 +2978,8 @@ async function amortizeAll() {
 // ==================== 库存管理 ====================
 let inventoryTxPage = 1;
 
-async function renderInventory() {
-  const el = document.getElementById('content-area');
+async function renderInventory(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card" style="margin-bottom:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
@@ -3194,8 +3190,8 @@ async function loadInventoryTransactions(page) {
 }
 
 // ==================== 合同管理 ====================
-async function renderContracts() {
-  const el = document.getElementById('content-area');
+async function renderContracts(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="font-size:15px;font-weight:600">\U0001f4dd 合同管理</div>' +
@@ -3450,8 +3446,8 @@ async function deletePayment(contractId, paymentId) {
 
 let currentPaymentTab = 'internal'; // 'internal' = 内部人员, 'external' = 外部单位
 
-async function renderPayments() {
-  const el = document.getElementById('content-area');
+async function renderPayments(container) {
+  const el = container || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card" style="margin-bottom:0;padding:24px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
@@ -3898,7 +3894,7 @@ async function showPaymentDetail(paymentId) {
 let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
-async function renderSalesInvoices() {
+async function renderSalesInvoices(container) {
   // 全局期间联动
   if (currentPeriod && !siFilter.dateFrom) { const r = periodToDateRange(currentPeriod); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
   try {
@@ -4012,7 +4008,7 @@ async function renderSalesInvoices() {
       });
     }
     html += '</tbody></table></div>';
-    document.getElementById('content-area').innerHTML = html;
+    el.innerHTML = html;
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -4315,7 +4311,7 @@ let piTab = 'all';
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
 let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
-async function renderPurchaseInvoices() {
+async function renderPurchaseInvoices(container) {
   // 全局期间联动
   if (currentPeriod && !piFilter.dateFrom) { const r = periodToDateRange(currentPeriod); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
   try {
@@ -4421,7 +4417,7 @@ async function renderPurchaseInvoices() {
       });
     }
     html += '</tbody></table></div>';
-    document.getElementById('content-area').innerHTML = html;
+    el.innerHTML = html;
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -4569,7 +4565,7 @@ async function loadBankConfigs() {
   return data;
 }
 
-async function renderBankTransactions() {
+async function renderBankTransactions(container) {
   // 全局期间联动
   let btDateFrom = '', btDateTo = '';
   if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
@@ -4618,7 +4614,7 @@ async function renderBankTransactions() {
   // 表格
   html += '<div id="bank-tx-table-container"></div>';
 
-  document.getElementById('content-area').innerHTML = html;
+  el.innerHTML = html;
   loadBankTxList();
 }
 
@@ -4890,7 +4886,7 @@ async function deleteBankConfig(id) {
 
 // ==================== 进项抵扣 - 认证台账 ====================
 
-async function renderInputVATDeductions() {
+async function renderInputVATDeductions(container) {
   // 全局期间联动
   if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
   const params = new URLSearchParams();
@@ -4970,7 +4966,7 @@ async function renderInputVATDeductions() {
   }
   html += '</tbody></table></div>';
 
-  document.getElementById('content-area').innerHTML = html;
+  el.innerHTML = html;
 }
 
 function toggleIVDSelectAll() {
