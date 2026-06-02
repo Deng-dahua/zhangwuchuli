@@ -1047,10 +1047,12 @@ def auto_generate_journals(db):
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"
 
-            # 跳过已生成凭证的发票
+            # 跳过已生成凭证的发票（按摘要+借方金额+日期三元组判重，确保不同发票不会合并）
             existing = db.query(JournalEntry).filter(
                 JournalEntry.company_id == comp.id,
-                JournalEntry.summary == summary
+                JournalEntry.summary == summary,
+                JournalEntry.debit_amount == inv.total_amount,
+                JournalEntry.account_code == "1122"
             ).first()
             if existing:
                 continue
@@ -1166,10 +1168,12 @@ def auto_generate_single_invoice(db, inv):
     goods = inv.goods_name or ""
     summary = f"销售{goods or '货物'}给{buyer}"
 
-    # 跳过已生成凭证的发票
+    # 跳过已生成凭证的发票（按摘要+借方金额+科目三元组判重，确保不同发票不会合并）
     existing = db.query(JournalEntry).filter(
         JournalEntry.company_id == inv.company_id,
-        JournalEntry.summary == summary
+        JournalEntry.summary == summary,
+        JournalEntry.debit_amount == inv.total_amount,
+        JournalEntry.account_code == "1122"
     ).first()
     if existing:
         return
