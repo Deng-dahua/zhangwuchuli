@@ -575,6 +575,8 @@ class SalesInvoice(Base):
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
     _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
+    voucher_id = Column(Integer, ForeignKey("vouchers.id"), nullable=True, comment="关联凭证ID，已生成凭证则非空")
+    voucher_no = Column(String(30), nullable=True, comment="关联凭证号（冗余）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -990,6 +992,26 @@ def migrate_schema(db):
         except Exception as e:
             db.rollback()
             print(f"添加 {table_name}._fingerprint 跳过: {e}")
+
+    # ── 11. 添加凭证关联列（发票→凭证去重追踪） ──
+    voucher_link_cols = {
+        "sales_invoices": [
+            ("voucher_id", "ALTER TABLE sales_invoices ADD COLUMN voucher_id INTEGER REFERENCES vouchers(id)"),
+            ("voucher_no", "ALTER TABLE sales_invoices ADD COLUMN voucher_no VARCHAR(30)"),
+        ],
+    }
+    for table_name, cols in voucher_link_cols.items():
+        if table_name in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+            for col_name, sql in cols:
+                if col_name not in existing_cols:
+                    try:
+                        db.execute(TextClause(sql))
+                        db.commit()
+                        print(f"已为 {table_name} 添加 {col_name} 列")
+                    except Exception as e:
+                        db.rollback()
+                        print(f"添加 {table_name}.{col_name} 跳过: {e}")
 
 
 # 基础科目数据模板（中小制造业标准科目表）

@@ -2464,6 +2464,21 @@ def auto_voucher_from_sales_invoices(
     if not invoices:
         raise HTTPException(status_code=404, detail="未找到选中的发票")
 
+    # ── 去重：过滤已生成凭证的发票 ──
+    fresh_invoices = [inv for inv in invoices if not inv.voucher_id]
+    skipped_invoices = [inv for inv in invoices if inv.voucher_id]
+    skipped_count = len(skipped_invoices)
+
+    if not fresh_invoices:
+        detail_parts = [f"选中的 {len(invoices)} 张发票均已生成过凭证"]
+        if skipped_invoices:
+            nos = [inv.voucher_no for inv in skipped_invoices if inv.voucher_no]
+            detail_parts.append(f"已有凭证号：{', '.join(nos)}")
+        raise HTTPException(status_code=400, detail="；".join(detail_parts))
+
+    # 用去重后的发票列表
+    invoices = fresh_invoices
+
     # 自动确保科目存在（缺了就建）
     def ensure_account(code: str, name: str, category: str, direction: str, level: int, parent_code: str = None) -> Account:
         acc = db.query(Account).filter(
@@ -2589,6 +2604,11 @@ def auto_voucher_from_sales_invoices(
     db.add(voucher)
     db.flush()
 
+    # 回写发票：关联凭证ID和凭证号，防止重复生成
+    for inv in invoices:
+        inv.voucher_id = voucher.id
+        inv.voucher_no = voucher_no
+
     for d in details_data:
         detail = VoucherDetail(
             voucher_id=voucher.id,
@@ -2608,10 +2628,12 @@ def auto_voucher_from_sales_invoices(
         "period": period,
         "voucher_date": str(invoice_date),
         "invoice_count": len(invoices),
+        "skipped_count": skipped_count,
         "total_price_tax": total_price_tax,
         "total_amount": total_amount,
         "total_tax": total_tax,
         "message": f"凭证 {voucher_no} 已生成，共{len(invoices)}张发票，金额 {total_price_tax:.2f} 元"
+            + (f"（跳过{skipped_count}张已生成过凭证的发票）" if skipped_count > 0 else "")
     }
 
 
