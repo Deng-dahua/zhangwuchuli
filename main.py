@@ -2473,6 +2473,10 @@ def list_journal_entries(
         "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
         "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
         "is_reviewed": e.is_reviewed, "remark": e.remark or "",
+        "contact_project": e.contact_project or "",
+        "spec_model": e.spec_model or "",
+        "quantity": e.quantity or 0, "unit": e.unit or "",
+        "unit_price": e.unit_price or 0,
         "created_at": str(e.created_at) if e.created_at else None,
     } for e in entries]
 
@@ -2524,6 +2528,11 @@ def get_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = D
         "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
         "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
         "is_reviewed": e.is_reviewed, "remark": e.remark or "",
+        "contact_project": e.contact_project or "",
+        "spec_model": e.spec_model or "",
+        "quantity": e.quantity or 0, "unit": e.unit or "",
+        "unit_price": e.unit_price or 0,
+        "created_at": str(e.created_at) if e.created_at else None,
     }
 
 
