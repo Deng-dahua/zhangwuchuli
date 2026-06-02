@@ -1607,7 +1607,7 @@ async function loadAccounts() {
           ${data.map(a => `
             <tr>
               <td style="font-weight:500">${a.code}</td>
-              <td style="${a.level >= 2 ? 'padding-left:' + ((a.level - 1) * 10) + 'px' : ''}">${a.name.trim()}</td>
+              <td>${a.name.trim()}</td>
               <td><span class="badge" style="background:var(--primary-light);color:var(--primary)">${a.category}</span></td>
               <td style="text-align:center">${a.balance_direction}</td>
               <td style="text-align:center">${a.level}</td>
