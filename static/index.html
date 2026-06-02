@@ -1508,9 +1508,10 @@ async function renderAccountBalance() {
         <div class="form-group"><label>期间</label><input class="form-control" id="tb-period" value="${currentPeriod}" style="width:130px"></div>
         <div class="form-group" style="justify-content:flex-end;margin-top:auto"><button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button></div>
       </div>
-      <div id="tb-table">请点击生成报表</div>
+      <div id="tb-table">加载中...</div>
     </div>
   `;
+  loadAccountBalance();
 }
 
 async function loadAccountBalance() {
