@@ -2464,7 +2464,7 @@ def list_journal_entries(
             JournalEntry.account_name.contains(keyword),
             JournalEntry.account_code.contains(keyword),
         ))
-    entries = q.order_by(JournalEntry.entry_date.asc(), JournalEntry.voucher_word.asc(), JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
+    entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
     return [{
         "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
         "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
@@ -2552,17 +2552,55 @@ def delete_journal_entry(entry_id: int, company_id: int = Query(1), db: Session 
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
+    period, vw = e.period, e.voucher_word
     db.delete(e)
+    db.flush()
+    _renumber_vouchers(db, company_id, period, vw)
     db.commit()
     return {"message": "删除成功"}
 
 
+def _renumber_vouchers(db, company_id, period, voucher_word):
+    """删除后自动重排同一期间+凭证字下的凭证号"""
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.voucher_word == voucher_word,
+    ).order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
+    # 按 voucher_no 分组保持完整性，逐组重编号
+    seen = set()
+    groups = []
+    for e in entries:
+        if e.voucher_no not in seen:
+            seen.add(e.voucher_no)
+            groups.append(e.voucher_no)
+    # 重新分配 voucher_no: 按原有顺序从1开始
+    new_no = 1
+    for old_no in groups:
+        db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period == period,
+            JournalEntry.voucher_word == voucher_word,
+            JournalEntry.voucher_no == old_no,
+        ).update({JournalEntry.voucher_no: new_no}, synchronize_session=False)
+        new_no += 1
+
+
 @app.post("/api/journal-entries/batch-delete")
 def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
+    # 先查出被删记录的 (period, voucher_word) 组合
+    deleted_records = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.id.in_(req.ids)
+    ).all()
+    combos = set((e.period, e.voucher_word) for e in deleted_records)
     deleted = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.id.in_(req.ids)
     ).delete(synchronize_session=False)
+    db.flush()
+    for period, vw in combos:
+        _renumber_vouchers(db, company_id, period, vw)
     db.commit()
     return {"message": f"成功删除 {deleted} 条记录", "count": deleted}
 

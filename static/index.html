@@ -1063,8 +1063,8 @@ async function loadJournalList() {
               <td class="num">${r.debit_amount > 0 ? '¥' + fmt(r.debit_amount) : '-'}</td>
               <td class="num">${r.credit_amount > 0 ? '¥' + fmt(r.credit_amount) : '-'}</td>
               <td style="text-align:center;white-space:nowrap">
-                <button class="btn btn-sm" onclick="editJeEntry(${r.id})" title="编辑" style="padding:2px 8px">✏️</button>
-                <button class="btn btn-sm" onclick="deleteJeEntry(${r.id})" title="删除" style="padding:2px 8px;color:var(--danger)">🗑</button>
+                <button class="btn btn-secondary btn-sm" onclick="editJeEntry(${r.id})">编辑</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteJeEntry(${r.id})">删除</button>
               </td>
             </tr>
           `).join('')}
