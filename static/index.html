@@ -1248,6 +1248,7 @@ async function renderGeneralLedger() {
         <span style="color:#9ca3af">至</span>
         ${_periodSelectsHTML('gl-to', yearMonth)}<span style="font-size:13px;color:#6b7280">截止</span>
         <button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button>
+        <button onclick="renderGeneralLedger()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
       </div>
       <div class="table-wrap" id="gl-table"></div>
     </div>
@@ -1307,6 +1308,7 @@ async function renderDetailLedger() {
         <span style="color:#9ca3af">至</span>
         ${_periodSelectsHTML('dl-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
         <button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button>
+        <button onclick="renderDetailLedger()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
       </div>
       <div class="table-wrap" id="dl-table"></div>
     </div>
@@ -1388,6 +1390,7 @@ async function renderProfitLoss() {
         <span style="color:#9ca3af">至</span>
         ${_periodSelectsHTML('pl-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
         <button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button>
+        <button onclick="renderProfitLoss()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
       </div>
       <div id="pl-table"></div>
     </div>
@@ -1430,6 +1433,7 @@ async function renderBalanceSheet() {
         <span style="color:#9ca3af">至</span>
         ${_periodSelectsHTML('bs-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
         <button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button>
+        <button onclick="renderBalanceSheet()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
       </div>
       <div id="bs-table"></div>
     </div>
@@ -1484,6 +1488,7 @@ async function renderAccountBalance() {
         <span style="color:#9ca3af">至</span>
         ${_periodSelectsHTML('tb-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
         <button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button>
+        <button onclick="renderAccountBalance()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
       </div>
       <div id="tb-table"></div>
     </div>
