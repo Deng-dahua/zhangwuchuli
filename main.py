@@ -2689,8 +2689,16 @@ def general_ledger(
     ).order_by(Account.code).all()
     acc_map = {a.code: a for a in accounts}
 
-    # 构建层级名称映射（与序时账一致）
-    hierarchy = _build_account_hierarchy(db, company_id)
+    # 构建层级名称链（纯名称，不带科目编码）
+    def _get_name_chain(acct):
+        parts = [acct.name]
+        cur = acct
+        while cur.parent_code and cur.parent_code in acc_map:
+            cur = acc_map[cur.parent_code]
+            parts.append(cur.name)
+        parts.reverse()
+        return " / ".join(parts)
+    name_map = {a.code: _get_name_chain(a) for a in accounts}
 
     # 树形汇总：父级 = 自身 + 所有子级合计
     children_map = {}
@@ -2734,7 +2742,7 @@ def general_ledger(
             balance = round(c["credit"] - c["debit"], 2)
         result.append({
             "account_code": acc.code,
-            "account_name": hierarchy.get(acc.code, f"{acc.code} {acc.name}"),
+            "account_name": name_map.get(acc.code, acc.name),
             "level": acc.level,
             "balance_direction": direction,
             "total_debit": round(p["debit"], 2),
