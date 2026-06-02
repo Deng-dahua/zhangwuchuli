@@ -1347,19 +1347,18 @@ async function loadDetailLedger() {
   }
 }
 
-// 清除筛选：重置期间为今日年月，再重新渲染对应页面
-function clearFilters(page) {
-  const now = new Date();
-  currentPeriod = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  localStorage.setItem('currentPeriod', currentPeriod);
-  updatePeriodLabel();
+// 清除筛选：重新渲染页面，期间下拉重置为空（显示占位符 年/月）
+async function clearFilters(page) {
   switch(page) {
-    case 'gl':      renderGeneralLedger(); break;
-    case 'dl':      renderDetailLedger(); break;
-    case 'pl':      renderProfitLoss(); break;
-    case 'bs':      renderBalanceSheet(); break;
-    case 'tb':      renderAccountBalance(); break;
+    case 'gl': await renderGeneralLedger(); break;
+    case 'dl': await renderDetailLedger(); break;
+    case 'pl': await renderProfitLoss(); break;
+    case 'bs': await renderBalanceSheet(); break;
+    case 'tb': await renderAccountBalance(); break;
   }
+  // 把起止下拉重置为占位符状态
+  var p = page === 'gl' ? 'gl' : page === 'dl' ? 'dl' : page === 'pl' ? 'pl' : page === 'bs' ? 'bs' : 'tb';
+  document.querySelectorAll('select[id^="' + p + '-"]').forEach(function(s) { s.value = ''; });
 }
 
 // ===== 期间下拉辅助（年+月分开） =====
