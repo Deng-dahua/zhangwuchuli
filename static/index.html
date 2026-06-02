@@ -379,65 +379,9 @@
           <label>公司全称</label>
           <input type="text" id="reg-name" placeholder="例如：存勤法税服务（广州）有限公司">
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>统一社会信用代码</label>
-            <input type="text" id="reg-uscc" placeholder="91XXXXXXXXXXXXXXXXXX">
-          </div>
-        </div>
         <div class="form-group">
-          <label>注册地址</label>
-          <input type="text" id="reg-address" placeholder="例如：广州市天河区XX路XX号">
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>法定代表人</label>
-            <input type="text" id="reg-legal-person" placeholder="法定代表人姓名">
-          </div>
-          <div class="form-group">
-            <label>法定代表人身份证</label>
-            <input type="text" id="reg-legal-person-id" placeholder="18位身份证号">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>注册资本</label>
-            <input type="text" id="reg-capital" placeholder="例如：100万元">
-          </div>
-          <div class="form-group">
-            <label>成立日期</label>
-            <input type="date" id="reg-established-date">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>经营范围</label>
-          <textarea id="reg-business-scope" placeholder="填写完整经营范围" rows="3"></textarea>
-        </div>
-
-        <!-- 股东信息 -->
-        <h2 style="margin-top:28px;">👥 股东信息</h2>
-        <div id="shareholders-list"></div>
-        <button type="button" class="add-btn" onclick="addShareholderRow()">＋ 添加股东</button>
-
-        <!-- 董事信息 -->
-        <h2 style="margin-top:28px;">🧑‍💼 董事信息</h2>
-        <div id="directors-list"></div>
-        <button type="button" class="add-btn" onclick="addDirectorRow()">＋ 添加董事</button>
-
-        <!-- 监事信息 -->
-        <h2 style="margin-top:28px;">🔍 监事信息</h2>
-        <div id="supervisors-list"></div>
-        <button type="button" class="add-btn" onclick="addSupervisorRow()">＋ 添加监事</button>
-
-        <!-- 财务负责人信息 -->
-        <h2 style="margin-top:28px;">💰 财务负责人</h2>
-        <div id="finance-list">
-          <div class="person-row">
-            <div class="person-row-inner">
-              <input class="fn-name" placeholder="财务负责人姓名">
-              <input class="fn-id" placeholder="身份证号">
-            </div>
-          </div>
+          <label>统一社会信用代码</label>
+          <input type="text" id="reg-uscc" placeholder="91XXXXXXXXXXXXXXXXXX">
         </div>
 
         <button type="submit" id="reg-submit-btn" style="margin-top:28px;">✅ 创建账套，进入系统</button>
@@ -693,61 +637,9 @@ async function handleCompanyRegister(e) {
   const name = document.getElementById('reg-name').value.trim();
   if (!name) { toast('请输入公司全称', 'error'); btn.disabled = false; btn.textContent = '✅ 创建账套，进入系统'; return; }
 
-  // 收集股东
-  const shareholders = [];
-  document.querySelectorAll('#shareholders-list .person-row').forEach(row => {
-    const nm = row.querySelector('.sh-name')?.value?.trim();
-    if (nm) shareholders.push({
-      name: nm,
-      id_number: row.querySelector('.sh-id')?.value?.trim() || '',
-      type: row.querySelector('.sh-type')?.value || '自然人',
-      share_ratio: parseFloat(row.querySelector('.sh-ratio')?.value) || 0
-    });
-  });
-
-  // 收集董事
-  const directors = [];
-  document.querySelectorAll('#directors-list .person-row').forEach(row => {
-    const nm = row.querySelector('.dr-name')?.value?.trim();
-    if (nm) directors.push({
-      name: nm,
-      id_number: row.querySelector('.dr-id')?.value?.trim() || ''
-    });
-  });
-
-  // 收集监事
-  const supervisors = [];
-  document.querySelectorAll('#supervisors-list .person-row').forEach(row => {
-    const nm = row.querySelector('.sv-name')?.value?.trim();
-    if (nm) supervisors.push({
-      name: nm,
-      id_number: row.querySelector('.sv-id')?.value?.trim() || ''
-    });
-  });
-
-  // 收集财务负责人
-  const finance_contacts = [];
-  document.querySelectorAll('#finance-list .person-row').forEach(row => {
-    const nm = row.querySelector('.fn-name')?.value?.trim();
-    if (nm) finance_contacts.push({
-      name: nm,
-      id_number: row.querySelector('.fn-id')?.value?.trim() || ''
-    });
-  });
-
   const body = {
     name: name,
-    uscc: document.getElementById('reg-uscc').value.trim() || null,
-    address: document.getElementById('reg-address').value.trim() || null,
-    legal_representative: document.getElementById('reg-legal-person').value.trim() || null,
-    legal_representative_id: document.getElementById('reg-legal-person-id').value.trim() || null,
-    registered_capital: document.getElementById('reg-capital').value.trim() || null,
-    business_scope: document.getElementById('reg-business-scope').value.trim() || null,
-    established_date: document.getElementById('reg-established-date')?.value || null,
-    shareholders: shareholders,
-    directors: directors,
-    supervisors: supervisors,
-    finance_contacts: finance_contacts
+    uscc: document.getElementById('reg-uscc').value.trim() || null
   };
 
   try {
@@ -763,56 +655,6 @@ async function handleCompanyRegister(e) {
     btn.disabled = false;
     btn.textContent = '✅ 创建账套，进入系统';
   }
-}
-
-function addShareholderRow() {
-  const list = document.getElementById('shareholders-list');
-  const row = document.createElement('div');
-  row.className = 'person-row shareholder-row';
-  row.innerHTML = '<div class="person-row-inner">' +
-    '<input class="sh-name" placeholder="股东姓名">' +
-    '<input class="sh-id" placeholder="身份证号">' +
-    '<select class="sh-type"><option value="自然人">自然人</option><option value="企业法人">企业法人</option></select>' +
-    '<input class="sh-ratio" type="number" step="0.01" min="0" max="100" placeholder="持股比例(%)" style="width:120px">' +
-    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
-    '</div>';
-  list.appendChild(row);
-}
-
-function addDirectorRow() {
-  const list = document.getElementById('directors-list');
-  const row = document.createElement('div');
-  row.className = 'person-row';
-  row.innerHTML = '<div class="person-row-inner">' +
-    '<input class="dr-name" placeholder="董事姓名">' +
-    '<input class="dr-id" placeholder="身份证号">' +
-    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
-    '</div>';
-  list.appendChild(row);
-}
-
-function addSupervisorRow() {
-  const list = document.getElementById('supervisors-list');
-  const row = document.createElement('div');
-  row.className = 'person-row';
-  row.innerHTML = '<div class="person-row-inner">' +
-    '<input class="sv-name" placeholder="监事姓名">' +
-    '<input class="sv-id" placeholder="身份证号">' +
-    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
-    '</div>';
-  list.appendChild(row);
-}
-
-function addFinanceRow() {
-  const list = document.getElementById('finance-list');
-  const row = document.createElement('div');
-  row.className = 'person-row';
-  row.innerHTML = '<div class="person-row-inner">' +
-    '<input class="fn-name" placeholder="财务负责人姓名">' +
-    '<input class="fn-id" placeholder="身份证号">' +
-    '<button type="button" class="del-btn" onclick="this.closest(\'.person-row\').remove()">✕</button>' +
-    '</div>';
-  list.appendChild(row);
 }
 
 function escapeHtml(str) {
@@ -1824,47 +1666,17 @@ async function renderCompany() {
   const el = document.getElementById('content-area');
   try {
     const data = await api('/api/company');
-    const shareholders = data.shareholders || [];
-    const directors = data.directors || [];
-    const supervisors = data.supervisors || [];
-    const financeContacts = data.finance_contacts || [];
-
     let html = '<div class="card" style="margin-bottom:16px">' +
       '<div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">' +
       '<span>🏢 公司基本信息</span>' +
       '<button class="btn btn-sm" onclick="exitCompany()" style="font-size:12px;padding:4px 10px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;">🚪 返回选择公司</button>' +
       '</div>' +
-      '<div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
-        '<div class="form-field" style="grid-column:1/-1"><label>公司全称</label><input id="comp-name" value="' + esc(data?.company_name||'') + '" placeholder="如：XX机械制造有限公司"></div>' +
+      '<div class="form-grid" style="display:grid;grid-template-columns:1fr;gap:16px">' +
+        '<div class="form-field"><label>公司全称</label><input id="comp-name" value="' + esc(data?.company_name||'') + '" placeholder="如：XX机械制造有限公司"></div>' +
         '<div class="form-field"><label>统一社会信用代码</label><input id="comp-uscc" value="' + esc(data?.uscc||'') + '" placeholder="18位统一社会信用代码"></div>' +
-        '<div class="form-field" style="grid-column:1/-1"><label>注册地址</label><input id="comp-address" value="' + esc(data?.address||'') + '"></div>' +
-        '<div class="form-field"><label>法定代表人</label><input id="comp-legal-rep" value="' + esc(data?.legal_representative||'') + '"></div>' +
-        '<div class="form-field"><label>法定代表人身份证</label><input id="comp-legal-rep-id" value="' + esc(data?.legal_representative_id||'') + '"></div>' +
-        '<div class="form-field"><label>注册资本</label><input id="comp-capital" value="' + esc(data?.registered_capital||'') + '" placeholder="如：500万元"></div>' +
-        '<div class="form-field"><label>成立日期</label><input id="comp-est-date" type="date" value="' + (data?.established_date||'') + '"></div>' +
-        '<div class="form-field" style="grid-column:1/-1"><label>经营范围</label><textarea id="comp-scope" rows="3" style="width:100%;border:1px solid var(--gray-300);border-radius:6px;padding:8px">' + esc(data?.business_scope||'') + '</textarea></div>' +
-        '<div class="form-field"><label>联系电话</label><input id="comp-phone" value="' + esc(data?.phone||'') + '"></div>' +
-        '<div class="form-field"><label>开户银行</label><input id="comp-bank" value="' + esc(data?.bank_name||'') + '"></div>' +
-        '<div class="form-field"><label>银行账号</label><input id="comp-bank-account" value="' + esc(data?.bank_account||'') + '"></div>' +
       '</div></div>';
 
-    // 股东信息
-    html += buildPersonSection('shareholders', '👥 股东信息', shareholders, ['name','id_number','type','share_ratio'],
-      [{k:'name',l:'姓名',p:'股东姓名'},{k:'id_number',l:'身份证号',p:'身份证号'},{k:'type',l:'类型',t:'select',opts:['自然人','企业法人']},{k:'share_ratio',l:'持股比例(%)',p:'如：60',t:'number'}]);
-
-    // 董事信息
-    html += buildPersonSection('directors', '🧑‍💼 董事信息', directors, ['name','id_number'],
-      [{k:'name',l:'姓名',p:'董事姓名'},{k:'id_number',l:'身份证号',p:'身份证号'}]);
-
-    // 监事信息
-    html += buildPersonSection('supervisors', '🔍 监事信息', supervisors, ['name','id_number'],
-      [{k:'name',l:'姓名',p:'监事姓名'},{k:'id_number',l:'身份证号',p:'身份证号'}]);
-
-    // 财务负责人
-    html += buildPersonSection('finance_contacts', '💰 财务负责人', financeContacts, ['name','id_number'],
-      [{k:'name',l:'姓名',p:'财务负责人姓名'},{k:'id_number',l:'身份证号',p:'身份证号'}]);
-
-    html += '<div style="margin-top:16px"><button class="btn btn-primary" onclick="saveCompanyFull()">💾 保存全部信息</button></div>';
+    html += '<div style="margin-top:16px"><button class="btn btn-primary" onclick="saveCompanyFull()">💾 保存</button></div>';
 
     el.innerHTML = html;
   } catch (e) {
@@ -1872,139 +1684,16 @@ async function renderCompany() {
   }
 }
 
-function buildPersonSection(key, title, list, fields, fieldDefs) {
-  let html = '<div class="card" style="margin-bottom:16px"><div class="card-title">' + title + '</div>';
-  if (list.length === 0) {
-    html += '<p style="color:#9ca3af;margin-bottom:12px">暂无记录</p>';
-  } else {
-    html += '<table style="width:100%;margin-bottom:12px"><thead><tr>';
-    for (const fd of fieldDefs) {
-      html += '<th>' + fd.l + '</th>';
-    }
-    html += '<th style="width:60px">操作</th></tr></thead><tbody>';
-    for (let i = 0; i < list.length; i++) {
-      html += '<tr>';
-      for (const fd of fieldDefs) {
-        const val = fd.k === 'type' ? list[i][fd.k] : list[i][fd.k] || '';
-        html += '<td><input class="form-control ' + key + '-field" data-idx="' + i + '" data-field="' + fd.k + '" value="' + esc(val) + '" style="width:100%"></td>';
-      }
-      html += '<td><button class="btn btn-sm btn-danger" onclick="removePersonRow(\'' + key + '\',' + i + ')">删除</button></td>';
-      html += '</tr>';
-    }
-    html += '</tbody></table>';
-  }
-  html += '<button class="btn btn-sm btn-secondary" onclick="addPersonRow(\'' + key + '\')">＋ 添加</button>';
-  html += '</div>';
-  return html;
-}
-
-function addPersonRow(key) {
-  const card = document.querySelector('.card:nth-child(' + (['shareholders','directors','supervisors','finance_contacts'].indexOf(key) + 2) + ')');
-  if (!card) return;
-  const tbody = card.querySelector('tbody');
-  const fieldDefs = key === 'shareholders'
-    ? [{k:'name',l:'姓名',p:'股东姓名'},{k:'id_number',l:'身份证号',p:'身份证号'},{k:'type',l:'类型',t:'select',opts:['自然人','企业法人']},{k:'share_ratio',l:'持股比例(%)',p:'如：60',t:'number'}]
-    : [{k:'name',l:'姓名',p:'姓名'},{k:'id_number',l:'身份证号',p:'身份证号'}];
-  if (!tbody) {
-    // No table exists yet, rebuild by refreshing
-    const emptyP = card.querySelector('p');
-    if (emptyP) emptyP.remove();
-    const table = document.createElement('table');
-    table.style.width = '100%';
-    table.style.marginBottom = '12px';
-    let thead = '<tr>';
-    for (const fd of fieldDefs) thead += '<th>' + fd.l + '</th>';
-    thead += '<th style="width:60px">操作</th></tr>';
-    table.innerHTML = '<thead>' + thead + '</thead><tbody></tbody>';
-    card.insertBefore(table, card.querySelector('button'));
-    const newTbody = table.querySelector('tbody');
-    const idx = 0;
-    let tr = '<tr>';
-    for (const fd of fieldDefs) {
-      tr += '<td><input class="form-control ' + key + '-field" data-idx="' + idx + '" data-field="' + fd.k + '" value="" style="width:100%"></td>';
-    }
-    tr += '<td><button class="btn btn-sm btn-danger" onclick="removePersonRow(\'' + key + '\',' + idx + ')">删除</button></td></tr>';
-    newTbody.innerHTML = tr;
-    return;
-  }
-  const idx = tbody.querySelectorAll('tr').length;
-  let tr = '<tr>';
-  for (const fd of fieldDefs) {
-    tr += '<td><input class="form-control ' + key + '-field" data-idx="' + idx + '" data-field="' + fd.k + '" value="" style="width:100%"></td>';
-  }
-  tr += '<td><button class="btn btn-sm btn-danger" onclick="removePersonRow(\'' + key + '\',' + idx + ')">删除</button></td></tr>';
-  tbody.insertAdjacentHTML('beforeend', tr);
-}
-
-function removePersonRow(key, idx) {
-  // Remove the row and re-index
-  const allRows = document.querySelectorAll('.' + key + '-field[data-idx="' + idx + '"]');
-  const tr = allRows[0]?.closest('tr');
-  if (tr) tr.remove();
-  // Re-index
-  const tbody = document.querySelector('.' + key + '-field')?.closest('tbody');
-  if (!tbody) return;
-  const rows = tbody.querySelectorAll('tr');
-  for (let i = 0; i < rows.length; i++) {
-    const inputs = rows[i].querySelectorAll('.' + key + '-field');
-    inputs.forEach(inp => { inp.dataset.idx = i; });
-  }
-  // If no rows left, show empty state
-  if (rows.length === 0) {
-    const table = tbody.closest('table');
-    const card = tbody.closest('.card');
-    if (table) table.remove();
-    const emptyP = document.createElement('p');
-    emptyP.style.cssText = 'color:#9ca3af;margin-bottom:12px';
-    emptyP.textContent = '暂无记录';
-    card.insertBefore(emptyP, card.querySelector('button'));
-  }
-}
-
-function collectPersonData(key) {
-  const items = [];
-  document.querySelectorAll('.' + key + '-field[data-field="name"]').forEach(inp => {
-    const idx = inp.dataset.idx;
-    const name = inp.value.trim();
-    if (!name) return;
-    const item = { name: name };
-    const row = inp.closest('tr');
-    row.querySelectorAll('.' + key + '-field').forEach(f => {
-      if (f.dataset.field !== 'name') {
-        const val = f.value.trim();
-        if (f.dataset.field === 'share_ratio') {
-          item[f.dataset.field] = parseFloat(val) || 0;
-        } else {
-          item[f.dataset.field] = val;
-        }
-      }
-    });
-    items.push(item);
-  });
-  return items;
-}
+// ==================== 部门档案 ====================
 
 async function saveCompanyFull() {
   const body = {
     company_name: document.getElementById('comp-name').value.trim(),
-    uscc: document.getElementById('comp-uscc').value.trim(),
-    legal_representative: document.getElementById('comp-legal-rep').value.trim(),
-    legal_representative_id: document.getElementById('comp-legal-rep-id').value.trim(),
-    phone: document.getElementById('comp-phone').value.trim(),
-    registered_capital: document.getElementById('comp-capital').value.trim(),
-    established_date: document.getElementById('comp-est-date').value || null,
-    bank_name: document.getElementById('comp-bank').value.trim(),
-    bank_account: document.getElementById('comp-bank-account').value.trim(),
-    address: document.getElementById('comp-address').value.trim(),
-    business_scope: document.getElementById('comp-scope').value.trim(),
-    shareholders: collectPersonData('shareholders'),
-    directors: collectPersonData('directors'),
-    supervisors: collectPersonData('supervisors'),
-    finance_contacts: collectPersonData('finance_contacts')
+    uscc: document.getElementById('comp-uscc').value.trim()
   };
   if (!body.company_name) { toast('请填写公司全称', 'error'); return; }
   try {
-    await api('/api/company/full', { method: 'PUT', body: JSON.stringify(body) });
+    await api('/api/company', { method: 'PUT', body: JSON.stringify(body) });
     toast('公司信息保存成功', 'success');
     renderCompany();
   } catch (e) { toast(e.message, 'error'); }
@@ -2646,13 +2335,12 @@ async function showCompanyManager() {
     html += '<button class="btn btn-primary" onclick="showCompanyForm()">\uff0b 新增公司</button>';
     html += '<button class="btn btn-secondary" onclick="showCompanyForm()">\uff0b 新建账套</button>';
     html += '</div>';
-    html += '<div class="table-wrap"><table><thead><tr><th>ID</th><th>公司名称</th><th>统一社会信用代码</th><th>税号</th><th>操作</th></tr></thead><tbody>';
+    html += '<div class="table-wrap"><table><thead><tr><th>ID</th><th>公司名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead><tbody>';
     for (const c of companies) {
       html += '<tr>' +
         '<td>' + c.id + '</td>' +
         '<td>' + c.name + '</td>' +
         '<td>' + (c.uscc || '') + '</td>' +
-        '<td>' + (c.tax_no || '') + '</td>' +
         '<td>' +
           '<button class="btn btn-sm btn-secondary" onclick="showCompanyForm(' + c.id + ')">\u7f16\u8f91</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="deleteCompany(' + c.id + ')">\u5220\u9664</button>' +
@@ -2671,12 +2359,8 @@ async function showCompanyForm(companyId) {
   let html = '<div class="modal-title">' + (companyId ? '\u7f16\u8f91\u516c\u53f8' : '\u65b0\u589e\u516c\u53f8') + '</div>';
   html += '<form id="company-form" class="form-grid">';
   const fields = [
-    ['name', '\u516c\u53f8\u540d\u79f0', 'text', 'required'],
+    ['name', '\u516c\u53f8\u5168\u79f0', 'text', 'required'],
     ['uscc', '\u7edf\u4e00\u793e\u4f1a\u4fe1\u7528\u4ee3\u7801', 'text', ''],
-    ['address', '\u5730\u5740', 'text', ''],
-    ['phone', '\u7535\u8bdd', 'text', ''],
-    ['bank_name', '\u5f00\u6237\u94f6\u884c', 'text', ''],
-    ['bank_account', '\u94f6\u884c\u8d26\u53f7', 'text', ''],
   ];
   for (const f of fields) {
     html += '<div class="form-group"><label>' + f[1] + '</label>';

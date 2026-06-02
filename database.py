@@ -33,70 +33,8 @@ class Company(Base):
     """公司主表 - 每一行代表一个独立的账套"""
     __tablename__ = "companies"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, comment="公司名称")
+    name = Column(String(100), nullable=False, comment="公司全称")
     uscc = Column(String(50), comment="统一社会信用代码")
-    tax_no = Column(String(50), comment="纳税人识别号")
-    address = Column(String(200), comment="注册地址")
-    phone = Column(String(30), comment="电话")
-    bank_name = Column(String(100), comment="开户银行")
-    bank_account = Column(String(50), comment="银行账号")
-    legal_representative = Column(String(50), comment="法定代表人")
-    legal_representative_id = Column(String(50), comment="法定代表人身份证号")
-    registered_capital = Column(String(50), comment="注册资本")
-    established_date = Column(Date, nullable=True, comment="成立日期")
-    business_scope = Column(Text, comment="经营范围")
-    is_active = Column(Boolean, default=True, comment="是否启用")
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-
-# ==================== 公司股东 ====================
-
-class CompanyShareholder(Base):
-    """股东信息 - 支持自然人和企业股东，可多人"""
-    __tablename__ = "company_shareholders"
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
-    name = Column(String(100), nullable=False, comment="股东名称（自然人姓名或企业名称）")
-    id_number = Column(String(50), comment="证件号（身份证或统一社会信用代码）")
-    shareholder_type = Column(String(20), default="自然人", comment="股东类型：自然人/企业")
-    share_ratio = Column(Float, comment="股权比例（%）")
-    created_at = Column(DateTime, default=datetime.now)
-
-
-# ==================== 公司董事 ====================
-
-class CompanyDirector(Base):
-    """董事信息 - 可多人"""
-    __tablename__ = "company_directors"
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
-    name = Column(String(50), nullable=False, comment="董事姓名")
-    id_number = Column(String(50), comment="董事身份证号")
-    created_at = Column(DateTime, default=datetime.now)
-
-
-# ==================== 公司监事 ====================
-
-class CompanySupervisor(Base):
-    """监事信息 - 可多人"""
-    __tablename__ = "company_supervisors"
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
-    name = Column(String(50), nullable=False, comment="监事姓名")
-    id_number = Column(String(50), comment="监事身份证号")
-    created_at = Column(DateTime, default=datetime.now)
-
-
-# ==================== 财务负责人 ====================
-
-class CompanyFinanceContact(Base):
-    """财务负责人信息 - 可多人"""
-    __tablename__ = "company_finance_contacts"
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
-    name = Column(String(50), nullable=False, comment="财务负责人姓名")
-    id_number = Column(String(50), comment="财务负责人身份证号")
     created_at = Column(DateTime, default=datetime.now)
 
 
@@ -820,25 +758,6 @@ def migrate_schema(db):
         except Exception:
             db.rollback()
 
-    # ── 5. 给 companies 表补充新字段（六员比对） ──
-    company_extra = {
-        "legal_representative_id": "ALTER TABLE companies ADD COLUMN legal_representative_id VARCHAR(50)",
-        "registered_capital":       "ALTER TABLE companies ADD COLUMN registered_capital VARCHAR(50)",
-        "business_scope":           "ALTER TABLE companies ADD COLUMN business_scope TEXT",
-        "established_date":          "ALTER TABLE companies ADD COLUMN established_date DATE",
-    }
-    if "companies" in inspector.get_table_names():
-        existing = {c["name"] for c in inspector.get_columns("companies")}
-        for col, sql in company_extra.items():
-            if col not in existing:
-                try:
-                    db.execute(TextClause(sql))
-                    db.commit()
-                    print(f"已为 companies 添加字段: {col}")
-                except Exception as e:
-                    db.rollback()
-                    print(f"companies 添加字段 {col} 失败（可能已存在）: {e}")
-
     # ── 6. 付款管理：重命名 payment_type 值 + 添加 scenario 列 ──
     if "payments" in inspector.get_table_names():
         existing_cols = {c["name"] for c in inspector.get_columns("payments")}
@@ -1004,7 +923,7 @@ def migrate_schema(db):
 
     # ── 12. 已有公司补充 销项税额 科目（221001001） ──
     if "accounts" in inspector.get_table_names():
-        companies = db.query(Company).filter(Company.is_active == True).all()
+        companies = db.query(Company).order_by(Company.id).all()
         for comp in companies:
             existing = db.query(Account).filter(
                 Account.company_id == comp.id,
@@ -1026,7 +945,7 @@ def migrate_schema(db):
 
     # ── 12.5. 已有公司补充 待认证进项税额 科目（222101） ──
     if "accounts" in inspector.get_table_names():
-        companies = db.query(Company).filter(Company.is_active == True).all()
+        companies = db.query(Company).order_by(Company.id).all()
         for comp in companies:
             existing = db.query(Account).filter(
                 Account.company_id == comp.id,
@@ -1068,7 +987,7 @@ def migrate_schema(db):
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
     from datetime import datetime as dt
-    companies = db.query(Company).filter(Company.is_active == True).all()
+    companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:
         invoices = db.query(SalesInvoice).filter(
@@ -1416,7 +1335,7 @@ def auto_generate_input_vat_journals(db):
     """
     from sqlalchemy import distinct, func
 
-    companies = db.query(Company).filter(Company.is_active == True).all()
+    companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:
         deductions = db.query(InputVATDeduction).filter(
@@ -1596,7 +1515,7 @@ def init_db():
         migrate_schema(db)
 
         # 为已有公司初始化基础数据（不再自动创建默认公司，由注册页负责）
-        companies = db.query(Company).filter(Company.is_active == True).all()
+        companies = db.query(Company).order_by(Company.id).all()
         for company in companies:
             init_company_data(db, company.id)
 
