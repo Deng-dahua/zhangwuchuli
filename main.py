@@ -31,7 +31,8 @@ from database import (
     SalesInvoice, PurchaseInvoice,
     BankConfig, BankTransaction,
     InputVATDeduction, ColumnTemplate, JournalEntry,
-    auto_generate_single_invoice
+    auto_generate_single_invoice,
+    auto_generate_single_input_vat, auto_generate_input_vat_journals
 )
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
@@ -3000,6 +3001,11 @@ def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = 
     db.add(item)
     db.commit()
     db.refresh(item)
+    # 自动生成序时账凭证
+    try:
+        auto_generate_single_input_vat(db, item)
+    except Exception as e:
+        db.rollback()
     return {"id": item.id, "message": "进项抵扣记录创建成功"}
 
 
@@ -3072,6 +3078,11 @@ def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, comp
         setattr(it, k, v)
     it.updated_at = datetime.now()
     db.commit()
+    # 自动更新序时账凭证
+    try:
+        auto_generate_single_input_vat(db, it)
+    except Exception as e:
+        db.rollback()
     return {"message": "更新成功"}
 
 
@@ -3376,6 +3387,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
 
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
+        new_deductions = []  # 收集新创建的进项抵扣，导入完成后自动生成凭证
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -3610,9 +3622,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             raw_data=json.dumps(extra) if extra else None,
                             _fingerprint=json.dumps(list(fp))
                         )
-                        db.add(inv)
-                        if used_fingerprints is not None:
-                            used_fingerprints[fp] = i+2
+                    db.add(inv)
+                    if used_fingerprints is not None:
+                        used_fingerprints[fp] = i+2
 
                 elif module == "input-vat-deduction":
                     # 进项抵扣导入：解析日期
@@ -3679,6 +3691,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         _fingerprint=json.dumps(list(fp))
                     )
                     db.add(inv)
+                    new_deductions.append(inv)
                     if used_fingerprints is not None:
                         used_fingerprints[fp] = i+2
 
@@ -3742,6 +3755,19 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             except Exception as e:
                 db.rollback()
                 infos.append(f"凭证生成失败: {str(e)}")
+
+        # 进项抵扣导入后自动生成序时账凭证
+        if module == "input-vat-deduction" and new_deductions:
+            try:
+                ded_count = 0
+                for ded in new_deductions:
+                    auto_generate_single_input_vat(db, ded)
+                    ded_count += 1
+                if ded_count > 0:
+                    infos.append(f"自动生成 {ded_count} 条进项序时账凭证")
+            except Exception as e:
+                db.rollback()
+                infos.append(f"进项凭证生成失败: {str(e)}")
 
         return {
             "imported": imported,
