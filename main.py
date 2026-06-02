@@ -2656,6 +2656,119 @@ def trial_balance(
     return result
 
 
+# ==================== 总账 ====================
+@app.get("/api/ledger/general")
+def general_ledger(
+    company_id: int = Query(1),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """总账：按科目汇总本期借方发生额、贷方发生额，并计算期末余额"""
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to
+    ).all()
+
+    # 截止期末前的所有累计（用于计算期末余额）
+    all_entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period <= period_to
+    ).all()
+
+    # 科目信息
+    accounts = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.is_active == True
+    ).all()
+    acc_map = {a.code: a for a in accounts}
+
+    # 本期汇总
+    period_bal = {}
+    for e in entries:
+        c = period_bal.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+
+    # 累计汇总（期初到期末）
+    cum_bal = {}
+    for e in all_entries:
+        c = cum_bal.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+
+    result = []
+    for code in sorted(period_bal.keys()):
+        p = period_bal[code]
+        c = cum_bal[code]
+        acc = acc_map.get(code)
+        direction = acc.balance_direction if acc else "借"
+        if direction == "借":
+            balance = round(c["debit"] - c["credit"], 2)
+        else:
+            balance = round(c["credit"] - c["debit"], 2)
+        result.append({
+            "account_code": code,
+            "account_name": acc.name if acc else code,
+            "balance_direction": direction,
+            "total_debit": round(p["debit"], 2),
+            "total_credit": round(p["credit"], 2),
+            "balance": balance,
+        })
+    return result
+
+
+# ==================== 明细账 ====================
+@app.get("/api/ledger/detail")
+def detail_ledger(
+    company_id: int = Query(1),
+    account_code: str = Query(...),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """明细账：按科目查询逐笔明细，附运行余额"""
+    account = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.code == account_code
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="科目不存在")
+
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.account_code == account_code,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to
+    ).order_by(JournalEntry.entry_date, JournalEntry.voucher_no, JournalEntry.id).all()
+
+    rows = []
+    balance = 0.0
+    for e in entries:
+        dr = e.debit_amount or 0
+        cr = e.credit_amount or 0
+        if account.balance_direction == "借":
+            balance += dr - cr
+        else:
+            balance += cr - dr
+        rows.append({
+            "voucher_date": str(e.entry_date) if e.entry_date else "",
+            "voucher_no": f"{e.voucher_word or '记'}-{str(e.voucher_no).zfill(4)}" if e.voucher_no else "",
+            "summary": e.summary or "",
+            "debit_amount": dr,
+            "credit_amount": cr,
+            "balance": round(balance, 2),
+        })
+
+    return {
+        "account_code": account.code,
+        "account_name": account.name,
+        "balance_direction": account.balance_direction,
+        "rows": rows,
+    }
+
+
 # ==================== 利润表 ====================
 @app.get("/api/reports/profit-loss")
 def profit_loss_report(
