@@ -2680,8 +2680,10 @@ def general_ledger(
     db: Session = Depends(get_db)
 ):
     """总账：调用统一余额计算函数，树形汇总显示全级次"""
-    period_raw = _compute_period_balances(company_id, period_from, period_to, db)
-    cum_raw   = _compute_period_balances(company_id, None, period_to, db)
+    prev = _prev_period(period_from)
+    period_raw  = _compute_period_balances(company_id, period_from, period_to, db)
+    cum_raw    = _compute_period_balances(company_id, None, period_to, db)
+    open_raw   = _compute_period_balances(company_id, None, prev, db)
 
     accounts = db.query(Account).filter(
         Account.company_id == company_id,
@@ -2735,19 +2737,30 @@ def general_ledger(
             continue
         p = period_agg[acc.code]
         c = cum_agg[acc.code]
+        o = open_raw.get(acc.code, {"debit": 0.0, "credit": 0.0})
         direction = acc.balance_direction
+        # 期初余额暂设为0
+        ob = 0.0
+        # 期末余额
         if direction == "借":
             balance = round(c["debit"] - c["credit"], 2)
         else:
             balance = round(c["credit"] - c["debit"], 2)
+        # 期初方向：余额>0与科目方向一致，<0相反
+        if ob >= 0:
+            opening_direction = direction
+        else:
+            opening_direction = "贷" if direction == "借" else "借"
         result.append({
             "account_code": acc.code,
             "account_name": name_map.get(acc.code, acc.name),
             "level": acc.level,
-            "balance_direction": direction,
+            "opening_balance": round(ob, 2),
+            "opening_direction": opening_direction,
             "total_debit": round(p["debit"], 2),
             "total_credit": round(p["credit"], 2),
-            "balance": balance,
+            "end_balance": balance,
+            "end_direction": direction,
         })
     return result
 
