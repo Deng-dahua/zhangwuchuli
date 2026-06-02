@@ -1723,6 +1723,20 @@ def list_sales_invoices(
             SalesInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(SalesInvoice.invoice_date.desc()).all()
+    # 构建凭证号映射（销项发票 → 序时账，通过摘要+借方金额+科目1122判重）
+    voucher_map = {}
+    for inv in invoices:
+        buyer = inv.buyer_name or "客户"
+        goods = inv.goods_name or ""
+        summary = f"销售{goods or '货物'}给{buyer}"
+        je = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.summary == summary,
+            JournalEntry.debit_amount == inv.total_amount,
+            JournalEntry.account_code == "1122"
+        ).first()
+        if je:
+            voucher_map[inv.id] = f"{je.voucher_word}-{je.voucher_no}"
     return [{
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -1751,6 +1765,7 @@ def list_sales_invoices(
         "invoice_risk_level": inv.invoice_risk_level or "",
         "issuer": inv.issuer or "",
         "remark": inv.remark or "",
+        "journal_voucher_no": voucher_map.get(inv.id, ""),
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
 
@@ -1959,6 +1974,23 @@ def list_purchase_invoices(
             PurchaseInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).all()
+    # 构建凭证号映射（进项发票 → 进项抵扣 → 序时账，通过contact_project+科目2202判重）
+    voucher_map = {}
+    for inv in invoices:
+        ded = db.query(InputVATDeduction).filter(
+            InputVATDeduction.company_id == company_id,
+            InputVATDeduction.invoice_no == inv.invoice_no
+        ).first()
+        if ded:
+            seller = ded.seller_name or "供应商"
+            contact_key = f"{seller} [{ded.invoice_no or ded.id}]"
+            je = db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.contact_project == contact_key,
+                JournalEntry.account_code == "2202"
+            ).first()
+            if je:
+                voucher_map[inv.id] = f"{je.voucher_word}-{je.voucher_no}"
     return [{
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -1991,6 +2023,7 @@ def list_purchase_invoices(
         "deduction_period": inv.deduction_period or "",
         "deduction_rate": inv.deduction_rate if inv.deduction_rate is not None else 100.0,
         "remark": inv.remark or "",
+        "journal_voucher_no": voucher_map.get(inv.id, ""),
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
 
@@ -2284,6 +2317,7 @@ def list_bank_transactions(
         "reference_no": tx.reference_no or "",
         "raw_data": tx.raw_data or "{}",
         "remark": tx.remark or "",
+        "journal_voucher_no": "",  # 银行流水暂无自动关联序时账，预留字段
         "created_at": str(tx.created_at) if tx.created_at else ""
     } for tx in txs]
 
@@ -2962,6 +2996,18 @@ def list_input_vat_deductions(
             InputVATDeduction.seller_tax_id.contains(keyword),
         ))
     items = q.order_by(InputVATDeduction.invoice_date.desc(), InputVATDeduction.check_time.desc()).all()
+    # 构建凭证号映射（进项抵扣 → 序时账，通过contact_project+科目2202判重）
+    voucher_map = {}
+    for it in items:
+        seller = it.seller_name or "供应商"
+        contact_key = f"{seller} [{it.invoice_no or it.id}]"
+        je = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project == contact_key,
+            JournalEntry.account_code == "2202"
+        ).first()
+        if je:
+            voucher_map[it.id] = f"{je.voucher_word}-{je.voucher_no}"
     return [{
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
         "check_status": it.check_status or "未勾选",
@@ -2991,6 +3037,7 @@ def list_input_vat_deductions(
         "deduction_date": str(it.deduction_date) if it.deduction_date else "",
         "deduction_method": it.deduction_method or "",
         "voucher_no": it.voucher_no or "", "remark": it.remark or "",
+        "journal_voucher_no": voucher_map.get(it.id, ""),
         "created_at": str(it.created_at) if it.created_at else ""
     } for it in items]
 

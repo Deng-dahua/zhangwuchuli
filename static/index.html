@@ -3993,11 +3993,11 @@ async function renderSalesInvoices() {
     // 表格
     html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="siSelectAll" onclick="toggleSiSelectAll()" title="全选"></th>';
-    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>操作</th>';
+    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>凭证号</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="28" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
+      html += '<tr><td colspan="29" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const stCls = i.status === '正常' ? 'badge-green' : i.status === '红冲' ? 'badge-red' : 'badge-gray';
@@ -4030,6 +4030,8 @@ async function renderSalesInvoices() {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
+        const jv = i.journal_voucher_no || '';
+        html += '<td>' + (jv ? '<span style="color:#1d4ed8;font-weight:500">' + jv + '</span>' : '-') + '</td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')" style="margin-right:4px">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteSalesInvoice(' + i.id + ')">删除</button>';
@@ -4396,11 +4398,11 @@ async function renderPurchaseInvoices() {
 
     html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
-    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>认证状态</th><th>认证日期</th><th>抵扣所属期</th><th>开票人</th><th>备注</th><th>操作</th>';
+    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>认证状态</th><th>认证日期</th><th>抵扣所属期</th><th>开票人</th><th>备注</th><th>凭证号</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="31" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
+      html += '<tr><td colspan="32" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const stCls = i.status === '正常' ? 'badge-green' : 'badge-gray';
@@ -4437,6 +4439,8 @@ async function renderPurchaseInvoices() {
         html += '<td>' + (i.deduction_period || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
+        const pjv = i.journal_voucher_no || '';
+        html += '<td>' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseInvoice(' + i.id + ')">删除</button>';
         html += '</td></tr>';
@@ -4688,6 +4692,7 @@ async function loadBankTxList() {
         <td>${tx.summary || '-'}</td>
         <td>${tx.transaction_remark || '-'}</td>
         <td>${tx.account_type || '-'}</td>
+        <td>${tx.journal_voucher_no || '-'}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="editBankTx(${tx.id})">编辑</button>
           <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankTx(${tx.id})">删除</button>
@@ -4699,8 +4704,8 @@ async function loadBankTxList() {
     <div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;overflow-x:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
-      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th style="width:100px">操作</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="18" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>记账凭证</th><th style="width:100px">操作</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="19" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
 }
 
@@ -4963,11 +4968,11 @@ async function renderInputVATDeductions() {
   const riskColors = { '正常': '#059669', '疑点': '#d97706', '异常': '#e02424', '失控': '#7c3aed' };
   html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
-  html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th>';
+  html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th>';
   html += '</tr></thead><tbody>';
 
   if (list.length === 0) {
-    html += '<tr><td colspan="19" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
+    html += '<tr><td colspan="20" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
   } else {
     list.forEach(it => {
       const stCls = it.invoice_status === '正常' ? 'badge-green' : it.invoice_status === '作废' ? 'badge-gray' : 'badge-red';
@@ -4990,6 +4995,8 @@ async function renderInputVATDeductions() {
       html += '<td><span class="' + stCls + '">' + (it.invoice_status || '-') + '</span></td>';
       html += '<td>' + (it.check_time ? it.check_time.slice(0,16).replace('T',' ') : '-') + '</td>';
       html += '<td><span style="color:' + (riskColors[it.risk_level] || '#333') + ';font-weight:500;">' + (it.risk_level || '-') + '</span></td>';
+      const jv2 = it.journal_voucher_no || '';
+      html += '<td>' + (jv2 ? '<span style="color:#1d4ed8;font-weight:500">' + jv2 + '</span>' : '-') + '</td>';
       html += '</tr>';
     });
   }
