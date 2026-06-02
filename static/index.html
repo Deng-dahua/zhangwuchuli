@@ -1007,7 +1007,10 @@ async function renderJournal() {
         <div class="stat-card"><div class="stat-label">未复核</div><div class="stat-value" style="color:var(--warning)">${stats.unreviewed_count}</div><div class="stat-sub">条</div></div>
       </div>
       <div class="card" style="margin-bottom:0">
-        <div class="card-title">📋 序时账</div>
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>📋 序时账</span>
+          <button class="btn btn-primary" onclick="showInvoicePicker()">＋ 从销项发票生成</button>
+        </div>
         <div class="table-wrap" id="je-table"></div>
       </div>
     `;
@@ -1059,6 +1062,45 @@ async function loadJournalList() {
     `;
   } catch (e) {
     el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+  }
+}
+
+async function showInvoicePicker() {
+  const data = await api('/api/sales-invoices');
+  if (!data.length) { alert('没有可用的销项发票'); return; }
+  let html = '<div style="padding:16px"><h3 style="margin-bottom:12px">选择销项发票生成凭证</h3><table style="width:100%;border-collapse:collapse">';
+  html += '<thead><tr style="background:#f5f5f5;text-align:left"><th style="padding:8px 12px">发票号</th><th style="padding:8px 12px">日期</th><th style="padding:8px 12px">购方</th><th style="padding:8px 12px">货物</th><th style="padding:8px 12px" class="num">价税合计</th><th style="padding:8px 12px">状态</th><th style="padding:8px 12px">操作</th></tr></thead><tbody>';
+  data.forEach(r => {
+    html += `<tr>
+      <td style="padding:6px 12px">${r.invoice_no || '-'}</td>
+      <td style="padding:6px 12px">${r.invoice_date || ''}</td>
+      <td style="padding:6px 12px">${r.buyer_name || ''}</td>
+      <td style="padding:6px 12px">${(r.goods_name||'').substring(0,30)}</td>
+      <td style="padding:6px 12px" class="num">¥${fmt(r.total_amount)}</td>
+      <td style="padding:6px 12px">${r.status}</td>
+      <td style="padding:6px 12px"><button class="btn btn-primary btn-sm" onclick="generateFromInvoice(${r.id})">生成</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  dlg.id = 'je-invoice-picker';
+  dlg.innerHTML = `<div style="background:#fff;border-radius:8px;max-width:900px;max-height:80vh;overflow:auto;position:relative">
+    <button style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer" onclick="document.getElementById('je-invoice-picker').remove()">×</button>
+    ${html}
+  </div>`;
+  document.body.appendChild(dlg);
+}
+
+async function generateFromInvoice(invoiceId) {
+  if (!confirm('确认从该销项发票生成记账凭证？')) return;
+  try {
+    const res = await api('/api/sales-invoices/' + invoiceId + '/to-journal', { method: 'POST' });
+    alert(res.message);
+    document.getElementById('je-invoice-picker')?.remove();
+    loadJournalList();
+  } catch (e) {
+    alert('生成失败：' + e.message);
   }
 }
 

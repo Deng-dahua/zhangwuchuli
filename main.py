@@ -2550,6 +2550,89 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
     return {"message": f"成功删除 {deleted} 条记录", "count": deleted}
 
 
+@app.post("/api/sales-invoices/{invoice_id}/to-journal")
+def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
+    """将单张销项发票生成记账凭证（分录）到序时账"""
+    inv = db.query(SalesInvoice).filter(SalesInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "发票不存在")
+    if inv.status != "正常":
+        raise HTTPException(400, f"发票状态为「{inv.status}」，不能生成凭证")
+
+    period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
+
+    # 计算下一个凭证号（同一期间、同一凭证字）
+    max_no = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == inv.company_id,
+        JournalEntry.period == period,
+        JournalEntry.voucher_word == "记"
+    ).order_by(JournalEntry.voucher_no.desc()).first()
+    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+
+    date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
+    buyer = inv.buyer_name or "客户"
+    goods = inv.goods_name or ""
+    summary = f"销售货物给{buyer}"
+
+    entries = [
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period,
+            voucher_word="记",
+            voucher_no=next_voucher_no,
+            summary=summary,
+            account_code="1122",
+            account_name="应收账款",
+            debit_amount=inv.total_amount,
+            credit_amount=0,
+            contact_project=buyer,
+            spec_model=inv.spec or "",
+            quantity=inv.quantity or 0,
+            unit=inv.unit or "",
+            unit_price=inv.unit_price or 0,
+        ),
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period,
+            voucher_word="记",
+            voucher_no=next_voucher_no,
+            summary=summary,
+            account_code="6001",
+            account_name="主营业务收入",
+            debit_amount=0,
+            credit_amount=inv.amount,
+            contact_project=buyer,
+            spec_model=inv.spec or "",
+            quantity=inv.quantity or 0,
+            unit=inv.unit or "",
+            unit_price=inv.unit_price or 0,
+        ),
+        JournalEntry(
+            company_id=inv.company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period,
+            voucher_word="记",
+            voucher_no=next_voucher_no,
+            summary=f"{summary}（增值税）",
+            account_code="221001",
+            account_name="应交增值税",
+            debit_amount=0,
+            credit_amount=inv.tax_amount,
+            contact_project=buyer,
+            spec_model=inv.spec or "",
+            quantity=inv.quantity or 0,
+            unit=inv.unit or "",
+            unit_price=inv.unit_price or 0,
+        ),
+    ]
+    for e in entries:
+        db.add(e)
+    db.commit()
+    return {"message": f"已生成凭证，凭证号：记-{next_voucher_no}", "voucher_no": next_voucher_no, "period": period}
+
+
 # ==================== 进项抵扣 ====================
 
 class InputVATDeductionCreate(BaseModel):
