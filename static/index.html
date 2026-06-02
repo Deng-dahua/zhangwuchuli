@@ -1323,8 +1323,10 @@ async function loadDetailLedger() {
   el.innerHTML = '加载中...';
   try {
     const data = await api(`/api/ledger/detail?account_code=${code}&period_from=${from}&period_to=${to}`);
+    const ob = data.opening_balance || 0;
+    const obStr = ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>';
     el.innerHTML = `
-      <div style="font-size:13px;margin-bottom:10px"><b>科目：</b>${data.account_code} ${data.account_name} &nbsp;&nbsp; <b>余额方向：</b>${data.balance_direction}</div>
+      <div style="font-size:13px;margin-bottom:10px"><b>科目：</b>${data.account_code} ${data.account_name} &nbsp;&nbsp; <b>余额方向：</b>${data.balance_direction} &nbsp;&nbsp; <b>期初余额：</b>${obStr}</div>
       <table>
         <thead><tr><th>日期</th><th>凭证号</th><th>摘要</th><th class="num">借方</th><th class="num">贷方</th><th class="num">余额</th></tr></thead>
         <tbody>

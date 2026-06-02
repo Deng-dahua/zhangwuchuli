@@ -2541,53 +2541,55 @@ def journal_entry_stats(
     }
 
 
-# ==================== 科目余额表 ====================
-@app.get("/api/trial-balance")
-def trial_balance(
-    company_id: int = Query(1),
-    period: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """科目余额表：层级展示 + 本期发生额 + 累计发生额（年初至今）+ 期末余额"""
+# ==================== 公用余额计算函数 ====================
+
+def _prev_period(period: str) -> str:
+    """计算上一个会计期间。'2025-03' → '2025-02'，'2025-01' → '2024-12'"""
+    y, m = map(int, period.split("-"))
+    m -= 1
+    if m == 0:
+        m = 12
+        y -= 1
+    return f"{y:04d}-{m:02d}"
+
+
+def _compute_period_balances(company_id: int, period_from, period_to, db) -> dict:
+    """
+    公用函数：计算指定期间范围内的科目借贷方发生额。
+    单数据源：所有报表均通过此函数从序时账取数，避免重复查询。
+    period_from: str 如 '2025-01' 或 None（无下限）
+    period_to:   str 如 '2025-12' 或 None（无上限）
+    返回: {account_code: {"debit": float, "credit": float}}
+    """
+    q = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
+    if period_from is not None:
+        q = q.filter(JournalEntry.period >= period_from)
+    if period_to is not None:
+        q = q.filter(JournalEntry.period <= period_to)
+    result = {}
+    for e in q.all():
+        c = result.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+    return result
+
+
+def _build_trial_balance_tree(company_id, period_raw, cum_raw, db):
+    """
+    公用函数：基于 period_raw / cum_raw，构建科目余额表的树形汇总结果列表。
+    与科目余额表前端返回格式一致。
+    """
     accounts = db.query(Account).filter(
         Account.company_id == company_id,
         Account.is_active == True
     ).order_by(Account.code).all()
     acc_map = {a.code: a for a in accounts}
 
-    # 构建父子树：code -> [child_codes]
     children_map = {}
     for a in accounts:
         if a.parent_code:
             children_map.setdefault(a.parent_code, []).append(a.code)
 
-    # 本期发生额汇总
-    period_base = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
-    if period:
-        period_base = period_base.filter(JournalEntry.period == period)
-    period_raw = {}
-    for e in period_base.all():
-        c = period_raw.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
-
-    # 累计发生额汇总（年初 → 当前期间）
-    cum_raw = {}
-    if period:
-        year = period.split("-")[0]
-        cum_base = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period >= f"{year}-01",
-            JournalEntry.period <= period
-        )
-        for e in cum_base.all():
-            c = cum_raw.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-            c["debit"] += e.debit_amount or 0
-            c["credit"] += e.credit_amount or 0
-    else:
-        cum_raw = dict(period_raw)
-
-    # 树形汇总函数：取自身 + 递归所有子级合计
     def aggregate(code, data_map):
         total = dict(data_map.get(code, {"debit": 0.0, "credit": 0.0}))
         for child in children_map.get(code, []):
@@ -2596,17 +2598,14 @@ def trial_balance(
             total["credit"] += child_data["credit"]
         return total
 
-    # 预计算汇总（缓存避免重复递归）
     period_agg = {a.code: aggregate(a.code, period_raw) for a in accounts}
     cum_agg = {a.code: aggregate(a.code, cum_raw) for a in accounts}
 
-    # 确定需要显示的科目：末级有数据的科目 + 其所有父级
     display_codes = set()
     for a in accounts:
         pt = period_agg[a.code]
         ct = cum_agg[a.code]
         if pt["debit"] != 0 or pt["credit"] != 0 or ct["debit"] != 0 or ct["credit"] != 0:
-            # 追溯父级链
             current = a.code
             while current:
                 display_codes.add(current)
@@ -2617,15 +2616,12 @@ def trial_balance(
     for acc in accounts:
         if acc.code not in display_codes:
             continue
-
         pt = period_agg[acc.code]
         ct = cum_agg[acc.code]
         pdr = round(pt["debit"], 2)
         pcr = round(pt["credit"], 2)
         cdr = round(ct["debit"], 2)
         ccr = round(ct["credit"], 2)
-
-        # 期末余额：按科目方向 + 累计发生额计算
         direction = acc.balance_direction
         if direction == "借":
             net = cdr - ccr
@@ -2635,7 +2631,6 @@ def trial_balance(
             net = ccr - cdr
             end_credit = round(net, 2) if net >= 0 else 0
             end_debit = round(-net, 2) if net < 0 else 0
-
         result.append({
             "account_code": acc.code,
             "account_name": acc.name,
@@ -2652,8 +2647,28 @@ def trial_balance(
             "end_debit": end_debit,
             "end_credit": end_credit,
         })
-
     return result
+
+
+# ==================== 科目余额表 ====================
+@app.get("/api/trial-balance")
+def trial_balance(
+    company_id: int = Query(1),
+    period: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """科目余额表：调用统一计算函数"""
+    # 本期发生额
+    period_raw = _compute_period_balances(company_id, period, period, db)
+    # 累计发生额（年初 → 当前期间）
+    cum_raw = {}
+    if period:
+        year = period.split("-")[0]
+        cum_raw = _compute_period_balances(company_id, f"{year}-01", period, db)
+    else:
+        cum_raw = dict(period_raw)
+
+    return _build_trial_balance_tree(company_id, period_raw, cum_raw, db)
 
 
 # ==================== 总账 ====================
@@ -2664,44 +2679,20 @@ def general_ledger(
     period_to: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """总账：按科目汇总本期借方发生额、贷方发生额，并计算期末余额"""
-    entries = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= period_from,
-        JournalEntry.period <= period_to
-    ).all()
+    """总账：调用统一余额计算函数"""
+    period_raw = _compute_period_balances(company_id, period_from, period_to, db)
+    cum_raw   = _compute_period_balances(company_id, None, period_to, db)
 
-    # 截止期末前的所有累计（用于计算期末余额）
-    all_entries = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period <= period_to
-    ).all()
-
-    # 科目信息
     accounts = db.query(Account).filter(
         Account.company_id == company_id,
         Account.is_active == True
     ).all()
     acc_map = {a.code: a for a in accounts}
 
-    # 本期汇总
-    period_bal = {}
-    for e in entries:
-        c = period_bal.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
-
-    # 累计汇总（期初到期末）
-    cum_bal = {}
-    for e in all_entries:
-        c = cum_bal.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
-
     result = []
-    for code in sorted(period_bal.keys()):
-        p = period_bal[code]
-        c = cum_bal[code]
+    for code in sorted(period_raw.keys()):
+        p = period_raw[code]
+        c = cum_raw.get(code, {"debit": 0.0, "credit": 0.0})
         acc = acc_map.get(code)
         direction = acc.balance_direction if acc else "借"
         if direction == "借":
@@ -2728,7 +2719,7 @@ def detail_ledger(
     period_to: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """明细账：按科目查询逐笔明细，附运行余额"""
+    """明细账：调用统一余额计算函数获取期初余额，交易明细仍从序时账取"""
     account = db.query(Account).filter(
         Account.company_id == company_id,
         Account.code == account_code
@@ -2736,6 +2727,16 @@ def detail_ledger(
     if not account:
         raise HTTPException(status_code=404, detail="科目不存在")
 
+    # 期初余额 = 截止上期期末的累计净额
+    prev = _prev_period(period_from)
+    opening_raw = _compute_period_balances(company_id, None, prev, db)
+    ob = opening_raw.get(account_code, {"debit": 0.0, "credit": 0.0})
+    if account.balance_direction == "借":
+        opening_balance = round(ob["debit"] - ob["credit"], 2)
+    else:
+        opening_balance = round(ob["credit"] - ob["debit"], 2)
+
+    # 本期交易明细（仍需逐笔，无法从余额表获取）
     entries = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.account_code == account_code,
@@ -2744,7 +2745,7 @@ def detail_ledger(
     ).order_by(JournalEntry.entry_date, JournalEntry.voucher_no, JournalEntry.id).all()
 
     rows = []
-    balance = 0.0
+    balance = opening_balance
     for e in entries:
         dr = e.debit_amount or 0
         cr = e.credit_amount or 0
@@ -2765,6 +2766,7 @@ def detail_ledger(
         "account_code": account.code,
         "account_name": account.name,
         "balance_direction": account.balance_direction,
+        "opening_balance": round(opening_balance, 2),
         "rows": rows,
     }
 
@@ -2777,20 +2779,8 @@ def profit_loss_report(
     period_to: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """利润表：按期间范围汇总收入/成本/费用/利润"""
-    # 查询指定期间范围内的所有凭证分录
-    entries = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= period_from,
-        JournalEntry.period <= period_to
-    ).all()
-
-    # 按科目编码汇总借方贷方
-    balances = {}
-    for e in entries:
-        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
+    """利润表：调用统一余额计算函数"""
+    balances = _compute_period_balances(company_id, period_from, period_to, db)
 
     def net(code_prefix, is_credit_nature=True):
         """汇总指定前缀科目的净额：收入类=贷方-借方，费用类=借方-贷方"""
@@ -2860,18 +2850,8 @@ def balance_sheet_report(
     period: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """资产负债表：资产 = 负债 + 所有者权益"""
-    # 截止期间前所有凭证分录的累计余额
-    entries = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period <= period
-    ).all()
-
-    balances = {}
-    for e in entries:
-        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
+    """资产负债表：调用统一余额计算函数"""
+    balances = _compute_period_balances(company_id, None, period, db)
 
     def bal_net(code_prefix, is_debit_nature=True):
         """资产类=借方-贷方，负债/权益类=贷方-借方"""
