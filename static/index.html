@@ -1264,15 +1264,15 @@ async function loadGeneralLedger() {
     if (!data.length) { el.innerHTML = '<div class="empty-state"><p>该期间无发生额</p></div>'; return; }
     el.innerHTML = `
       <table>
-        <thead><tr><th>科目编码</th><th>科目名称</th><th>余额方向</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th class="num">期末余额</th></tr></thead>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th class="num">借方发生额</th><th class="num">贷方发生额</th><th style="text-align:center">余额方向</th><th class="num">期末余额</th></tr></thead>
         <tbody>
           ${data.map(r => `
             <tr>
               <td><a href="#" onclick="goDetailLedger('${r.account_code}');return false" style="color:var(--primary)">${r.account_code}</a></td>
               <td>${r.account_name}</td>
-              <td style="text-align:center">${r.balance_direction}</td>
               <td class="num">${r.total_debit > 0 ? '¥' + fmt(r.total_debit) : '-'}</td>
               <td class="num">${r.total_credit > 0 ? '¥' + fmt(r.total_credit) : '-'}</td>
+              <td style="text-align:center">${r.balance_direction}</td>
               <td class="num" style="font-weight:600">${r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>'}</td>
             </tr>
           `).join('')}
