@@ -529,9 +529,21 @@
     <div class="topbar-right">
       <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
       <div class="period-badge" id="current-period-badge">
-        📅 <select id="global-period-select" onchange="onGlobalPeriodChange(this.value)" style="border:none;background:transparent;color:#1e40af;font-weight:600;font-size:13px;cursor:pointer;outline:none;max-width:170px">
-          <option value="">-- 手动选择期间 --</option>
+        📅
+        <select id="period-year" style="border:1px solid #bfdbfe;border-radius:4px;padding:2px 4px;font-size:13px;color:#1e40af;background:#eff6ff">
+          <option value="">年</option>
         </select>
+        <span style="color:#1e40af;font-weight:600">年</span>
+        <select id="period-month" style="border:1px solid #bfdbfe;border-radius:4px;padding:2px 4px;font-size:13px;color:#1e40af;background:#eff6ff">
+          <option value="">月</option>
+          <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+          <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+          <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+          <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+        </select>
+        <span style="color:#1e40af;font-weight:600">月</span>
+        <button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;margin-left:4px" onclick="onGlobalPeriodConfirm()">确定</button>
+        <span id="current-period-label" style="margin-left:8px;color:#059669;font-weight:600;font-size:13px"></span>
       </div>
     </div>
   </div>
@@ -806,14 +818,22 @@ function escapeHtml(str) {
 }
 
 async function loadCurrentPeriod() {
-  try {
-    const data = await api('/api/periods');
-    const sel = document.getElementById('global-period-select');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">-- 手动选择期间 --</option>' +
-      data.map(p => `<option value="${p.period}">${p.period} ${p.status === '开放' ? '●' : '🔒'}</option>`).join('');
-  } catch (e) {
-    currentPeriod = '';
+  // 仅填充年份下拉框
+  const yearSel = document.getElementById('period-year');
+  if (!yearSel) return;
+  let ops = '<option value="">年</option>';
+  for (let y = 2020; y <= 2030; y++) ops += `<option value="${y}">${y}</option>`;
+  yearSel.innerHTML = ops;
+
+  // 尝试恢复上次选择的期间
+  const saved = localStorage.getItem('currentPeriod');
+  if (saved && /^\d{4}-\d{2}$/.test(saved)) {
+    const [y, m] = saved.split('-');
+    yearSel.value = y;
+    const monthSel = document.getElementById('period-month');
+    if (monthSel) monthSel.value = m;
+    currentPeriod = saved;
+    updatePeriodLabel();
   }
 }
 
@@ -824,9 +844,19 @@ function periodToDateRange(period) {
   return { from: period + '-01', to: period + '-' + String(lastDay).padStart(2, '0') };
 }
 
-function onGlobalPeriodChange(period) {
-  currentPeriod = period;
-  // 清空四个模块的日期筛选，强制使用期间范围
+function updatePeriodLabel() {
+  const label = document.getElementById('current-period-label');
+  if (label) label.textContent = currentPeriod ? '当前：' + currentPeriod : '';
+}
+
+function onGlobalPeriodConfirm() {
+  const y = document.getElementById('period-year')?.value;
+  const m = document.getElementById('period-month')?.value;
+  if (!y || !m) { toast('请选择年和月', 'warning'); return; }
+  currentPeriod = y + '-' + m;
+  localStorage.setItem('currentPeriod', currentPeriod);
+  updatePeriodLabel();
+  toast('已切换到 ' + currentPeriod, 'success');
   siFilter.dateFrom = ''; siFilter.dateTo = '';
   piFilter.dateFrom = ''; piFilter.dateTo = '';
   ivdFilter.dateFrom = ''; ivdFilter.dateTo = '';
