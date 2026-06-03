@@ -890,7 +890,7 @@ async function renderJournal(container) {
       api('/api/journal-entries'),
       api('/api/journal-entries/stats')
     ]);
-    let html = '<div class="page-header"><h2>📋 序时账</h2></div>';
+    let html = '<div class="page-header"><h2>序时账</h2></div>';
 
     // 统计卡片
     html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
@@ -1959,7 +1959,6 @@ async function renderDepartments(container) {
     const data = await api('/api/departments');
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">部门档案</div>
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button></div>
         <div class="table-wrap">
           <table>
