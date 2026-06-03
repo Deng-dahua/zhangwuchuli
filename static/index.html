@@ -5543,7 +5543,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
 
   // 人员/客户/供应商：检查必需字段
   const requiredFields = {
-    employee: { fields: ['name', 'code'], label: '人员档案' },
+    employee: { fields: ['name'], label: '人员档案' },
     customer: { fields: ['name', 'code'], label: '客户档案' },
     supplier: { fields: ['name', 'code'], label: '供应商档案' }
   };
