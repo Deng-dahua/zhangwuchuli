@@ -4705,7 +4705,7 @@ async function renderBankTransactions(container) {
   }
 
   const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-  let html = '<div class="page-header"><h2>银行流水</h2></div>';
+  let html = '';
 
   // 统计卡片
   html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
