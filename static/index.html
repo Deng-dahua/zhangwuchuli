@@ -2571,17 +2571,24 @@ function closeModal() {
 }
 
 // 强制导入确认弹窗。返回 'yes'（是）、'no'（否）或 null（取消）
-function showForceConfirmDialog(skipped, total) {
+// dupErrors: 重复记录的详细信息数组
+function showForceConfirmDialog(skipped, total, dupErrors) {
   const ok = total - skipped;
   return new Promise((resolve) => {
+    const errHtml = (dupErrors && dupErrors.length > 0)
+      ? `<div style="margin-bottom:16px;font-size:13px;color:var(--gray-700);max-height:180px;overflow-y:auto;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;padding:10px 12px;line-height:1.7;">
+           ${dupErrors.map(e => `<div style="padding:2px 0;">• ${e}</div>`).join('')}
+         </div>`
+      : '';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'force-confirm-overlay';
-    overlay.innerHTML = `<div class="modal" style="max-width:480px;">
+    overlay.innerHTML = `<div class="modal" style="max-width:520px;">
       <div class="modal-title">导入确认</div>
       <div style="margin-bottom:12px;font-size:14px;color:var(--gray-700);line-height:1.6;">
         导入结果：成功 <b>${ok}</b> 条，跳过 <b style="color:#e53e3e;">${skipped}</b> 条重复记录。
       </div>
+      ${errHtml}
       <div style="margin-bottom:16px;font-size:14px;font-weight:600;color:var(--gray-800);">
         是否强制导入这${skipped}条重复记录？
       </div>
@@ -5673,7 +5680,9 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   // 只要有重复记录被跳过，就提示是否强制导入
   const hasDupSkipped = result.skipped > 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
   if (hasDupSkipped) {
-    const forceChoice = await showForceConfirmDialog(result.skipped, result.total);
+    // 只传"完全重复"相关的错误信息给弹窗
+    const dupErrors = result.errors ? result.errors.filter(e => e.includes('完全重复')) : [];
+    const forceChoice = await showForceConfirmDialog(result.skipped, result.total, dupErrors);
     if (forceChoice === 'yes') {
       formData.append('force', 'true');
       document.getElementById('upload-progress').style.display = 'block';
