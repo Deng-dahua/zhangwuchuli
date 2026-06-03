@@ -4431,27 +4431,26 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if not name:
                         errors.append(f"第{i+2}行: 姓名不能为空")
                         continue
-                    # 编码自动生成：取当前公司最大code+1，默认从1开始
-                    max_code = db.query(Employee.code).filter(
-                        Employee.company_id == company_id
-                    ).order_by(Employee.id.desc()).first()
-                    if max_code and max_code[0]:
-                        try:
-                            code = str(int(max_code[0]) + 1)
-                        except ValueError:
-                            code = "1"
-                    else:
-                        code = "1"
-                    existing = db.query(Employee).filter(Employee.company_id == company_id, Employee.code == code).first()
-                    if existing:
-                        existing.name = name
-                        existing.id_card = mapped.get("id_card", "") or None
-                    else:
-                        emp = Employee(
-                            company_id=company_id, code=code, name=name,
-                            id_card=mapped.get("id_card", "") or None
-                        )
-                        db.add(emp)
+                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    if 'emp_code_counter' not in locals():
+                        max_rec = db.query(Employee.code).filter(
+                            Employee.company_id == company_id
+                        ).order_by(Employee.id.desc()).first()
+                        if max_rec and max_rec[0]:
+                            try:
+                                emp_code_counter = int(max_rec[0])
+                            except ValueError:
+                                emp_code_counter = 0
+                        else:
+                            emp_code_counter = 0
+                    emp_code_counter += 1
+                    code = str(emp_code_counter)
+                    emp = Employee(
+                        company_id=company_id, code=code, name=name,
+                        id_card=mapped.get("id_card", "") or None
+                    )
+                    db.add(emp)
+                    db.flush()
 
                 elif module == "customer":
                     code = mapped.get("code", "").strip()
