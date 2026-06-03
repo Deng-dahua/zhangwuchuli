@@ -4,7 +4,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, make_transient
 from sqlalchemy import func, and_, or_
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
@@ -4808,25 +4808,26 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
         if force_import:
-            # force模式：逐对象提交，已存在的跳过
+            # force模式：用make_transient重置对象后逐行savepoint提交
             pending = list(db.new)
             db.rollback()
             actual = 0
             for obj in pending:
-                # 清除自动生成的主键以便重新插入
-                for col in obj.__table__.columns:
-                    if col.primary_key and getattr(col, 'autoincrement', False):
-                        setattr(obj, col.name, None)
-                sp = db.begin_nested()
                 try:
-                    db.add(obj)
-                    db.flush()
-                    sp.commit()
-                    actual += 1
-                except IntegrityError:
-                    sp.rollback()
+                    make_transient(obj)  # 清除SQLAlchemy内部状态，变为全新transient对象
+                    obj.id = None        # 清除自增主键
+                    sp = db.begin_nested()
+                    try:
+                        db.add(obj)
+                        db.flush()
+                        sp.commit()
+                        actual += 1
+                    except IntegrityError:
+                        sp.rollback()
+                    except Exception:
+                        sp.rollback()
                 except Exception:
-                    sp.rollback()
+                    pass  # make_transient本身失败则跳过该行
             imported = actual
             # force模式跳过自动凭证生成（对象已重新创建，引用失效）
             new_invoices = []
