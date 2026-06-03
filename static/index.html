@@ -3205,7 +3205,7 @@ async function deleteInventoryItem(id) {
 async function showInventoryTxForm() {
   let items = [];
   try { items = await api('/api/inventory-items'); } catch (e) {}
-  let html = '<div class="modal-title">\U0001f4dd 录入收发记录</div>';
+  let html = '<div class="modal-title">录入收发记录</div>';
   html += '<form id="inv-tx-form" class="form-grid">';
   html += '<div class="form-group"><label>\u5b58\u8d27*</label><select class="form-control" name="inventory_item_id" required><option value="">-- \u9009\u62e9\u5b58\u8d27 --</option>';
   for (const it of items) {
@@ -4695,7 +4695,7 @@ async function renderBankTransactions(container) {
   }
 
   const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-  let html = '<div class="page-header"><h2>💰 银行流水</h2></div>';
+  let html = '<div class="page-header"><h2>银行流水</h2></div>';
 
   // 统计卡片
   html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
