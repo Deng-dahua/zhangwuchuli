@@ -3035,6 +3035,7 @@ def _build_bs_side(balances, side):
             r("  开发支出", dev_exp, indent=1), r("  商誉", goodwill, indent=1),
             r("  长期待摊费用", lt_deferred, indent=1), r("  递延所得税资产", def_tax_asset, indent=1),
             r("  其他非流动资产", other_nc_a, indent=1),
+            r("", 0), r("", 0),
             r("非流动资产合计", total_nc, bold=True, highlight=True),
             r("资产总计", total_assets, bold=True, highlight=True),
         ]
