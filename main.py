@@ -3187,57 +3187,80 @@ def cash_flow_report(
 
 
 # ==================== 所有者权益变动表（企业会计准则一般企业—会企04号） ====================
+ZERO9 = [0.0]*9           # 9 列零值
+def _eq9(*indices_vals):  # (idx, val, ...) → 9 列数组
+    a = [0.0]*9
+    for i in range(0, len(indices_vals), 2):
+        a[indices_vals[i]] = round(indices_vals[i+1], 2)
+    return a
+
 @app.get("/api/reports/equity-changes")
 def equity_changes_report(
     company_id: int = Query(1),
     period: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """所有者权益变动表（会企04号）：本年金额 + 上年金额"""
-    # 本年年初 = 上年度末
+    """所有者权益变动表（会企04号标准格式）"""
     yb = _bs_year_begin(period)
     begin_b = _compute_period_balances(company_id, None, yb, db)
     end_b = _compute_period_balances(company_id, None, period, db)
 
-    # 利润表数据（本年累计）
     py = period.split("-")[0]
     pl_items = _build_pl(company_id, f"{py}-01", period, db)
     net_profit = next((it["current"] for it in pl_items if it["label"] == "四、净利润"), 0.0)
 
-    def eq_val(balances, prefix, is_debit_nature=True):
-        d = 0.0; c = 0.0
-        for code, v in balances.items():
-            if code.startswith(prefix):
-                d += v["debit"]; c += v["credit"]
-        return round(d - c, 2) if is_debit_nature else round(c - d, 2)
+    def eq_val(balances, prefix):
+        d = sum(v["debit"] for code, v in balances.items() if code.startswith(prefix))
+        c = sum(v["credit"] for code, v in balances.items() if code.startswith(prefix))
+        return round(c - d, 2)  # 权益类：贷-借
+
+    prefixes = ["4001", "4002", "4003", "4004", "4005", "4101", "4103", "4104"]
+    begin_each = [eq_val(begin_b, p) if p else 0.0 for p in prefixes]
+    end_each = [eq_val(end_b, p) if p else 0.0 for p in prefixes]
+    # 未分配利润期末 = 年初 + 净利润
+    end_each[7] = round(begin_each[7] + net_profit, 2)
+    # 合计辅助
+    def total9(arr): return round(sum(arr), 2)
+    begin9 = begin_each + [total9(begin_each)]
+    end9 = end_each + [total9(end_each)]
+    chg9 = [round(end9[i] - begin9[i], 2) for i in range(9)]
 
     cols = ["实收资本", "其他权益工具", "资本公积", "库存股", "其他综合收益", "专项储备", "盈余公积", "未分配利润", "所有者权益合计"]
-    prefixes = ["4001", "4002", "4003", "4004", "4005", "4101", "4103", "4104", None]
 
-    begin_vals = [eq_val(begin_b, p, False) if p else 0.0 for p in prefixes]
-    end_vals = [eq_val(end_b, p, False) if p else 0.0 for p in prefixes]
-    # 未分配利润期末 = 年初 + 净利润
-    end_vals[7] = round(begin_vals[7] + net_profit, 2)
-    # 合计
-    begin_total = round(sum(begin_vals), 2)
-    end_total = round(sum(end_vals), 2)
+    # 净利润只影响 未分配利润(7) 和 合计(8)
+    np9 = [0.0]*9; np9[7] = net_profit; np9[8] = net_profit
 
-    def eq_row(label, begin_vals_list, end_vals_list, bold=False):
-        return {"label": label, "begin": begin_vals_list, "end": end_vals_list, "bold": bold}
-    # 年初余额行
-    year_begin_row = [round(v, 2) for v in begin_vals] + [begin_total]
-    year_end_row = [round(v, 2) for v in end_vals] + [end_total]
-    # 变动额
-    changes = [round(end_vals[i] - begin_vals[i], 2) for i in range(8)] + [round(end_total - begin_total, 2)]
-
-    return {
-        "columns": cols,
-        "year_begin": year_begin_row,
-        "net_profit": net_profit,
-        "year_end": year_end_row,
-        "changes": changes,
-        "period": period
-    }
+    items = [
+        {"label": "一、上年年末余额", "vals": begin9, "bold": True, "indent": 0, "highlight": False},
+        {"label": "  加：会计政策变更", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "  前期差错更正", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "  其他", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "二、本年年初余额", "vals": begin9, "bold": True, "indent": 0, "highlight": False},
+        {"label": "三、本年增减变动金额（减少以\"-\"号填列）", "vals": chg9, "bold": True, "indent": 0, "highlight": False},
+        {"label": "  （一）综合收益总额", "vals": np9, "bold": False, "indent": 1, "highlight": True},
+        {"label": "  （二）所有者投入和减少资本", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "    1. 所有者投入的普通股", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    2. 其他权益工具持有者投入资本", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    3. 股份支付计入所有者权益的金额", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    4. 其他", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "  （三）利润分配", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "    1. 提取盈余公积", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    2. 对所有者（或股东）的分配", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    3. 其他", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "  （四）所有者权益内部结转", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "    1. 资本公积转增资本（或股本）", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    2. 盈余公积转增资本（或股本）", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    3. 盈余公积弥补亏损", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    4. 设定受益计划变动额结转留存收益", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    5. 其他综合收益结转留存收益", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    6. 其他", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "  （五）专项储备", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "    1. 本期提取", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "    2. 本期使用", "vals": ZERO9, "bold": False, "indent": 2, "highlight": False},
+        {"label": "  （六）其他", "vals": ZERO9, "bold": False, "indent": 1, "highlight": False},
+        {"label": "四、本年年末余额", "vals": end9, "bold": True, "indent": 0, "highlight": True},
+    ]
+    return {"columns": cols, "items": items, "period": period}
 
 
 @app.post("/api/journal-entries")

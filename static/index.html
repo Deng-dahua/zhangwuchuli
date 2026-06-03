@@ -1634,18 +1634,15 @@ async function loadEquityChanges() {
     var cols = data.columns;
     var th = '<th>项目</th>';
     for (var c = 0; c < cols.length; c++) { th += '<th class="num">' + cols[c] + '</th>'; }
-    function renderRow(label, vals, bold) {
-      var tr = '<tr' + (bold ? ' class="report-bold"' : '') + '><td>' + label + '</td>';
-      for (var i = 0; i < vals.length; i++) { tr += '<td class="num">' + plFmt(vals[i]) + '</td>'; }
-      return tr + '</tr>';
+    var rows = '';
+    for (var i = 0; i < data.items.length; i++) {
+      var it = data.items[i];
+      var cls = (it.bold ? 'report-bold' : '') + (it.highlight ? ' report-highlight' : '');
+      var indent = (it.indent || 0) * 16;
+      rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>';
+      for (var j = 0; j < it.vals.length; j++) { rows += '<td class="num">' + plFmt(it.vals[j]) + '</td>'; }
+      rows += '</tr>';
     }
-    var rows = renderRow('一、上年年末余额', data.year_begin, true);
-    rows += renderRow('二、本年年初余额', data.year_begin, true);
-    rows += renderRow('三、本年增减变动金额', data.changes, false);
-    rows += renderRow('  （一）综合收益总额', data.year_end.map(function(v, i) {
-      return i === 7 ? data.net_profit : (i === 8 ? data.net_profit : 0);
-    }), true);
-    rows += renderRow('四、本年年末余额', data.year_end, true);
     el.innerHTML =
       '<div style="font-size:12px;color:#6b7280;margin-bottom:12px">会企04号 | 截止期间：' + data.period + '</div>' +
       '<table class="report-table" style="min-width:900px"><thead><tr>' + th + '</tr></thead><tbody>' + rows + '</tbody></table>';
@@ -1749,7 +1746,7 @@ async function renderAccounts(container) {
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div class="card-title" style="margin:0">🗂️ 会计科目</div>
+        <div class="card-title" style="margin:0">会计科目</div>
         <button class="btn btn-primary" onclick="showAddAccount()">+ 新增科目</button>
       </div>
       <div class="filter-bar">
@@ -1883,7 +1880,7 @@ async function renderPeriods(container) {
     const data = await api('/api/periods');
     el.innerHTML = `
       <div class="card" style="margin-bottom:0">
-        <div class="card-title">📅 会计期间管理</div>
+        <div class="card-title">会计期间管理</div>
         <table>
           <thead><tr><th>会计期间</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>
@@ -1962,7 +1959,7 @@ async function renderDepartments(container) {
     const data = await api('/api/departments');
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">🏬 部门档案</div>
+        <div class="card-title">部门档案</div>
         <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button></div>
         <div class="table-wrap">
           <table>
@@ -2035,7 +2032,7 @@ async function renderEmployees(container) {
     const data = await api('/api/employees');
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">👥 人员档案</div>
+        <div class="card-title">人员档案</div>
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">📁 导入文件</button>
@@ -2144,7 +2141,7 @@ async function renderCustomers(container) {
     const data = await api('/api/customers');
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">🤝 客户档案</div>
+        <div class="card-title">客户档案</div>
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
@@ -2249,7 +2246,7 @@ async function renderSuppliers(container) {
     const data = await api('/api/suppliers');
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">📦 供应商档案</div>
+        <div class="card-title">供应商档案</div>
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
@@ -2612,6 +2609,7 @@ async function switchCompany() {
 
 // ==================== 公司信息 ====================
 async function showCompanyManager(container) {
+  var el = container || document.getElementById('content-area');
   try {
     const c = await fetch('/api/company?company_id=' + currentCompanyId).then(r => r.json());
     if (!c || !c.company_name) { el.innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }
@@ -2811,9 +2809,9 @@ async function renderFixedAssets(container) {
   const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<div style="font-size:15px;font-weight:600">\U0001f3ed 固定资产</div>' +
+      '<div style="font-size:15px;font-weight:600">固定资产</div>' +
       '<div style="display:flex;gap:8px">' +
-        '<button class="btn btn-success" onclick="depreciateAll()">\U0001f4c9 计提本月折旧</button>' +
+        '<button class="btn btn-success" onclick="depreciateAll()">计提本月折旧</button>' +
         '<button class="btn btn-primary" onclick="showFixedAssetForm()">\uff0b 新增资产</button>' +
       '</div>' +
     '</div>' +
@@ -2955,9 +2953,9 @@ async function renderIntangibleAssets(container) {
   const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<div style="font-size:15px;font-weight:600">\U0001f4d1 无形资产</div>' +
+      '<div style="font-size:15px;font-weight:600">无形资产</div>' +
       '<div style="display:flex;gap:8px">' +
-        '<button class="btn btn-success" onclick="amortizeAll()">\U0001f4c9 摊销本月</button>' +
+        '<button class="btn btn-success" onclick="amortizeAll()">摊销本月</button>' +
         '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">\uff0b 新增无形资产</button>' +
       '</div>' +
     '</div>' +
@@ -3098,16 +3096,16 @@ async function renderInventory(container) {
   el.innerHTML =
     '<div class="card" style="margin-bottom:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-        '<div style="font-size:15px;font-weight:600">\U0001f4e6 库存管理</div>' +
+        '<div style="font-size:15px;font-weight:600">库存管理</div>' +
         '<div style="display:flex;gap:8px">' +
           '<button class="btn btn-primary" onclick="showInventoryItemForm()">\uff0b 新增存货</button>' +
-          '<button class="btn btn-secondary" onclick="showInventoryTxForm()">\U0001f4dd 录入收发记录</button>' +
+          '<button class="btn btn-secondary" onclick="showInventoryTxForm()">录入收发记录</button>' +
         '</div>' +
       '</div>' +
       '<div class="table-wrap" id="inv-table">\u52a0\u8f7d\u4e2d...</div>' +
     '</div>' +
     '<div class="card">' +
-      '<div class="card-title">\U0001f4cb 最近收发记录</div>' +
+      '<div class="card-title">最近收发记录</div>' +
       '<div class="table-wrap" id="inv-tx-table"></div>' +
       '<div class="pagination" id="inv-tx-pagination"></div>' +
     '</div>';
@@ -3309,18 +3307,12 @@ async function renderContracts(container) {
   const el = container || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<div style="font-size:15px;font-weight:600">\U0001f4dd 合同管理</div>' +
+      '<div style="font-size:15px;font-weight:600">合同管理</div>' +
       '<button class="btn btn-primary" onclick="showContractForm()">\uff0b 新增合同</button>' +
     '</div>' +
     '<div class="filter-bar">' +
-      '<select class="form-control" id="contract-status-filter" style="width:120px">' +
-        '<option value="">\u5168\u90e8\u72b6\u6001</option>' +
-        '<option value="\u8349\u7a3f">\u8349\u7a3f</option>' +
-        '<option value="\u6267\u884c\u4e2d">\u6267\u884c\u4e2d</option>' +
-        '<option value="\u5df2\u5b8c\u7ed3">\u5df2\u5b8c\u7ed3</option>' +
-        '<option value="\u5df2\u7ec8\u6b62">\u5df2\u7ec8\u6b62</option>' +
-      '</select>' +
-      '<button class="btn btn-primary" onclick="loadContracts()">\U0001f50d 查询</button>' +
+      '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key==\'Enter\')loadContracts()">' +
+      '<button class="btn btn-primary" onclick="loadContracts()">搜索</button>' +
     '</div>' +
     '<div class="table-wrap" id="contract-table">\u52a0\u8f7d\u4e2d...</div>' +
   '</div>';
@@ -3328,9 +3320,9 @@ async function renderContracts(container) {
 }
 
 async function loadContracts() {
-  const status = document.getElementById('contract-status-filter')?.value || '';
-  let url = '/api/contracts';
-  if (status) url += '?status=' + encodeURIComponent(status);
+  var kw = document.getElementById('contractKeyword')?.value || '';
+  var url = '/api/contracts';
+  if (kw) url += '?keyword=' + encodeURIComponent(kw);
   try {
     const data = await api(url);
     let tbody = '';
@@ -3566,7 +3558,7 @@ async function renderPayments(container) {
   el.innerHTML =
     '<div class="card" style="margin-bottom:0;padding:24px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
-        '<div style="font-size:16px;font-weight:700;color:#1f2937">💰 付款管理</div>' +
+        '<div style="font-size:16px;font-weight:700;color:#1f2937">付款管理</div>' +
         '<div style="display:flex;gap:8px">' +
           '<button class="btn btn-primary" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">＋ 新增付款</button>' +
           '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">＋ 新增付款</button>' +
@@ -4010,6 +4002,7 @@ let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices(container) {
+  var el = container || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !siFilter.dateFrom) { const r = periodToDateRange(currentPeriod); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
   try {
@@ -4427,6 +4420,7 @@ let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' }
 let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
+  var el = container || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !piFilter.dateFrom) { const r = periodToDateRange(currentPeriod); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
   try {
@@ -4681,6 +4675,7 @@ async function loadBankConfigs() {
 }
 
 async function renderBankTransactions(container) {
+  var el = container || document.getElementById('content-area');
   // 全局期间联动
   let btDateFrom = '', btDateTo = '';
   if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
@@ -5002,6 +4997,7 @@ async function deleteBankConfig(id) {
 // ==================== 进项抵扣 - 认证台账 ====================
 
 async function renderInputVATDeductions(container) {
+  var el = container || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
   const params = new URLSearchParams();
