@@ -4292,6 +4292,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
                 except: pass
 
+        if force_import:
+            existing_fingerprints = None  # 强制导入跳过跨批次查重
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
         new_deductions = []  # 收集新创建的进项抵扣，导入完成后自动生成凭证
