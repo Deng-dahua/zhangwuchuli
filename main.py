@@ -3994,8 +3994,7 @@ async def analyze_file_headers(
             ]
         elif module == "supplier":
             field_order = [
-                "code", "name", "tax_no", "bank_name", "bank_account",
-                "uscc", "is_active", "remark"
+                "name", "uscc"
             ]
 
         return {
@@ -4478,34 +4477,31 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     db.flush()
 
                 elif module == "supplier":
-                    code = mapped.get("code", "").strip()
                     name = mapped.get("name", "").strip()
-                    if not code or not name:
-                        errors.append(f"第{i+2}行: 编码和名称不能为空")
+                    if not name:
+                        errors.append(f"第{i+2}行: 供应商名称不能为空")
                         continue
-                    is_active = mapped.get("is_active", "是")
-                    if isinstance(is_active, str):
-                        is_active = is_active.strip() not in ("否", "false", "False", "0", "停用")
-                    existing = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.code == code).first()
-                    if existing:
-                        existing.name = name
-                        existing.tax_no = mapped.get("tax_no", "") or None
-                        existing.bank_name = mapped.get("bank_name", "") or None
-                        existing.bank_account = mapped.get("bank_account", "") or None
-                        existing.uscc = mapped.get("uscc", "") or None
-                        existing.is_active = is_active
-                        existing.remark = mapped.get("remark", "") or None
-                    else:
-                        supp = Supplier(
-                            company_id=company_id, code=code, name=name,
-                            tax_no=mapped.get("tax_no", "") or None,
-                            bank_name=mapped.get("bank_name", "") or None,
-                            bank_account=mapped.get("bank_account", "") or None,
-                            uscc=mapped.get("uscc", "") or None,
-                            is_active=is_active,
-                            remark=mapped.get("remark", "") or None
-                        )
-                        db.add(supp)
+                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    if 'supp_code_counter' not in locals():
+                        max_rec = db.query(Supplier.code).filter(
+                            Supplier.company_id == company_id
+                        ).order_by(Supplier.id.desc()).first()
+                        if max_rec and max_rec[0]:
+                            try:
+                                supp_code_counter = int(max_rec[0])
+                            except ValueError:
+                                supp_code_counter = 0
+                        else:
+                            supp_code_counter = 0
+                    supp_code_counter += 1
+                    code = str(supp_code_counter)
+                    uscc = mapped.get("uscc", "") or None
+                    supp = Supplier(
+                        company_id=company_id, code=code, name=name,
+                        uscc=uscc
+                    )
+                    db.add(supp)
+                    db.flush()
 
                 imported += 1
             except Exception as e:
