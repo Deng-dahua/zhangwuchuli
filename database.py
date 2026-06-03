@@ -97,7 +97,7 @@ class Department(Base):
         Index('idx_dept_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="部门编码")
     name = Column(String(50), nullable=False, comment="部门名称")
     parent_code = Column(String(20), nullable=True, comment="上级部门编码")
@@ -118,7 +118,7 @@ class Employee(Base):
         Index('idx_emp_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="工号")
     name = Column(String(50), nullable=False, comment="姓名")
     id_card = Column(String(30), comment="身份证号")
@@ -139,7 +139,7 @@ class Customer(Base):
         Index('idx_cust_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="客户编码")
     name = Column(String(100), nullable=False, comment="客户名称")
     tax_no = Column(String(50), comment="税号")
@@ -167,7 +167,7 @@ class Supplier(Base):
         Index('idx_supp_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="供应商编码")
     name = Column(String(100), nullable=False, comment="供应商名称")
     tax_no = Column(String(50), comment="税号")
@@ -190,7 +190,7 @@ class Account(Base):
         UniqueConstraint('company_id', 'code', name='uq_acct_company_code'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="科目编码")
     name = Column(String(100), nullable=False, comment="科目名称")
     category = Column(String(20), nullable=False, comment="科目类别：资产/负债/权益/收入/费用/成本")
@@ -210,7 +210,7 @@ class Period(Base):
         UniqueConstraint('company_id', 'period', name='uq_period_company_period'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     period = Column(String(7), nullable=False, comment="YYYY-MM")
     status = Column(String(20), default="开放", comment="开放/已结账")
     closed_at = Column(DateTime, nullable=True)
@@ -227,7 +227,7 @@ class FixedAsset(Base):
         Index('idx_fa_company_dept', 'company_id', 'dept_code'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(30), nullable=False, comment="资产编码")
     name = Column(String(100), nullable=False, comment="资产名称")
     category = Column(String(30), nullable=False, comment="资产类别：房屋建筑物/机器设备/运输工具/电子设备/办公设备/其他")
@@ -261,7 +261,7 @@ class FixedAssetDepreciation(Base):
         Index('idx_fad_asset_period', 'asset_id', 'period'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     asset_id = Column(Integer, ForeignKey("fixed_assets.id"), nullable=False)
     period = Column(String(7), nullable=False, comment="折旧期间 YYYY-MM")
     depreciation_amount = Column(Float, default=0.0, comment="本期折旧额")
@@ -281,7 +281,7 @@ class IntangibleAsset(Base):
         UniqueConstraint('company_id', 'code', name='uq_ia_company_code'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(30), nullable=False, comment="资产编码")
     name = Column(String(100), nullable=False, comment="资产名称")
     category = Column(String(30), nullable=False, comment="类别：专利权/商标权/著作权/土地使用权/软件/特许权/其他")
@@ -305,7 +305,7 @@ class IntangibleAssetAmortization(Base):
     """无形资产摊销明细"""
     __tablename__ = "ia_amortizations"
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     asset_id = Column(Integer, ForeignKey("intangible_assets.id"), nullable=False)
     period = Column(String(7), nullable=False, comment="摊销期间")
     amortization_amount = Column(Float, default=0.0, comment="本期摊销额")
@@ -325,7 +325,7 @@ class InventoryItem(Base):
         UniqueConstraint('company_id', 'code', name='uq_ii_company_code'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(30), nullable=False, comment="商品编码")
     name = Column(String(100), nullable=False, comment="商品名称")
     spec = Column(String(100), comment="规格型号")
@@ -351,7 +351,7 @@ class InventoryTransaction(Base):
         Index('idx_it_company_date', 'company_id', 'transaction_date'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     item_code = Column(String(30), nullable=False, comment="商品编码")
     transaction_date = Column(Date, nullable=False, comment="业务日期")
     trans_type = Column(String(20), nullable=False, comment="类型：入库/出库/调拨入/调拨出/盘盈/盘亏/其他")
@@ -374,7 +374,7 @@ class InventoryBalance(Base):
         UniqueConstraint('company_id', 'item_code', 'period', name='uq_ib_company_item_period'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     item_code = Column(String(30), nullable=False, comment="商品编码")
     period = Column(String(7), nullable=False, comment="期间 YYYY-MM")
     begin_quantity = Column(Float, default=0.0, comment="期初数量")
@@ -396,7 +396,7 @@ class Contract(Base):
         Index('idx_contract_company_type', 'company_id', 'contract_type'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     contract_no = Column(String(50), nullable=False, comment="合同编号")
     name = Column(String(200), nullable=False, comment="合同名称")
     contract_type = Column(String(20), nullable=False, comment="类型：采购/销售/服务/租赁/其他")
@@ -419,7 +419,7 @@ class ContractPayment(Base):
     """合同收付款计划"""
     __tablename__ = "contract_payments"
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
     payment_no = Column(Integer, default=1, comment="期次")
     payment_type = Column(String(10), nullable=False, comment="收款/付款")
@@ -444,7 +444,7 @@ class Payment(Base):
         Index('idx_payment_company_supplier', 'company_id', 'supplier_id'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     payment_type = Column(String(10), nullable=False, default="外部单位", comment="类型：内部人员/外部单位")
     scenario = Column(String(20), comment="情形：备用金/报销/借支（内部人员）或 预付款/应付款（外部单位）")
     payment_no = Column(String(50), nullable=False, comment="付款单号")
@@ -484,7 +484,7 @@ class SalesInvoice(Base):
         Index('idx_si_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
     invoice_no = Column(String(30), nullable=True, comment="发票号码")
@@ -538,7 +538,7 @@ class PurchaseInvoice(Base):
         Index('idx_pi_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
     invoice_no = Column(String(30), nullable=True, comment="发票号码")
@@ -590,7 +590,7 @@ class BankConfig(Base):
     """银行配置 - 每个银行账号的列映射模板"""
     __tablename__ = "bank_configs"
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     bank_name = Column(String(100), nullable=False, comment="银行名称，如：中国工商银行")
     account_number = Column(String(50), comment="银行账号")
     account_name = Column(String(100), comment="账户名称")
@@ -612,7 +612,7 @@ class BankTransaction(Base):
         Index('idx_bt_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     bank_config_id = Column(Integer, ForeignKey("bank_configs.id"), nullable=True, comment="关联银行配置")
     transaction_date = Column(Date, nullable=False, comment="交易日期")
     transaction_time = Column(Time, nullable=True, comment="交易时间")
@@ -655,7 +655,7 @@ class InputVATDeduction(Base):
         Index('idx_ivd_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联取得发票ID")
     # 核心发票信息
     check_status = Column(String(10), default="未勾选", comment="勾选状态：已勾选/未勾选")
@@ -704,7 +704,7 @@ class ColumnTemplate(Base):
         UniqueConstraint('company_id', 'module', 'template_name', name='uq_ct_company_module_name'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     module = Column(String(30), nullable=False, comment="模块：sales-invoice/purchase-invoice/bank-transaction")
     template_name = Column(String(100), nullable=False, comment="模板名称，如：工行流水模板")
     bank_config_id = Column(Integer, ForeignKey("bank_configs.id"), nullable=True, comment="关联银行配置（银行流水专用）")
@@ -723,7 +723,7 @@ class JournalEntry(Base):
         Index('idx_je_company_voucher', 'company_id', 'voucher_word', 'voucher_no'),
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, default=1, comment="所属公司")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     entry_date = Column(Date, nullable=False, comment="日期")
     period = Column(String(7), nullable=False, comment="会计期间 YYYY-MM")
     voucher_word = Column(String(10), nullable=False, default="记", comment="凭证字：记/收/付/转")

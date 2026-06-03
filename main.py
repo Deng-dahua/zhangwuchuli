@@ -231,7 +231,7 @@ def list_departments(
 def create_department(data: DepartmentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     if db.query(Department).filter(Department.company_id == company_id, Department.code == data.code).first():
         raise HTTPException(400, detail=f"部门编码 {data.code} 已存在")
-    d = Department(**data.model_dump())
+    d = Department(company_id=company_id, **data.model_dump())
     db.add(d)
     db.commit()
     return {"message": "新增成功"}
@@ -401,7 +401,7 @@ def list_employees(
 def create_employee(data: EmployeeCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
     if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.code).first():
         raise HTTPException(400, detail=f"工号 {data.code} 已存在")
-    e = Employee(**data.model_dump())
+    e = Employee(company_id=company_id, **data.model_dump())
     db.add(e)
     db.commit()
     return {"message": "新增成功"}
@@ -479,7 +479,7 @@ def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Sessio
         ok, msg = validate_uscc(data.uscc)
         if not ok:
             raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
-    c = Customer(**data.model_dump())
+    c = Customer(company_id=company_id, **data.model_dump())
     db.add(c)
     db.commit()
     return {"message": "新增成功"}
@@ -574,7 +574,7 @@ def create_supplier(data: SupplierCreate, company_id: int = Query(1), db: Sessio
         ok, msg = validate_uscc(data.uscc)
         if not ok:
             raise HTTPException(400, detail=f"供应商统一社会信用代码：{msg}")
-    s = Supplier(**data.model_dump())
+    s = Supplier(company_id=company_id, **data.model_dump())
     db.add(s)
     db.commit()
     return {"message": "新增成功"}
@@ -701,7 +701,7 @@ def create_account(data: dict, company_id: int = Query(1), db: Session = Depends
         raise HTTPException(400, detail="科目编码和名称不能为空")
     if db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
         raise HTTPException(400, detail=f"科目编码 {code} 已存在")
-    acc = Account(code=code, name=name, category=category,
+    acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code)
     db.add(acc)
     db.commit()
@@ -5632,6 +5632,7 @@ def save_customer(data, db, sess, sid, company_id):
         if dup_q.first():
             return {"reply": "⚠️ 客户编码、名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
         c = Customer(
+            company_id=company_id,
             code=data.get("code", ""),
             name=name or "未命名客户",
             uscc=data.get("uscc"),
@@ -5698,7 +5699,7 @@ def save_supplier(data, db, sess, sid, company_id):
         dup_q = dup_q.filter(or_(*conds))
         if dup_q.first():
             return {"reply": "⚠️ 供应商编码、名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
-        s = Supplier(code=data.get("code", ""), name=name, uscc=uscc)
+        s = Supplier(company_id=company_id, code=data.get("code", ""), name=name, uscc=uscc)
         db.add(s); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
         return {"reply": f"🎉 供应商 **{s.name}**（{s.code}）添加成功！", "session_id": sid, "action": {"type": "reload", "page": "suppliers"}}
@@ -5751,7 +5752,7 @@ def save_employee(data, db, sess, sid, company_id):
     try:
         if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.get("code", "")).first():
             return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
-        e = Employee(code=data.get("code", ""), name=data.get("name", ""), id_card=data.get("id_card"), email=data.get("email"))
+        e = Employee(company_id=company_id, code=data.get("code", ""), name=data.get("name", ""), id_card=data.get("id_card"), email=data.get("email"))
         db.add(e); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
         return {"reply": f"🎉 员工 **{e.name}** 添加成功！", "session_id": sid, "action": {"type": "reload", "page": "employees"}}
