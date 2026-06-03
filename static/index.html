@@ -826,7 +826,7 @@ function fmt(n) {
 
 // ==================== 数据看板 ====================
 async function renderDashboard(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
     const data = await api('/api/dashboard');
@@ -879,7 +879,7 @@ async function renderDashboard(container) {
 let jeFilter = { keyword: '', periodFrom: '', periodTo: '' };
 
 async function renderJournal(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
     const [data, stats] = await Promise.all([
@@ -1269,7 +1269,7 @@ async function deleteJournal(id) {
 }
 // ==================== 总账 ====================
 async function renderGeneralLedger(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const yearMonth = currentPeriod;
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
@@ -1349,7 +1349,7 @@ function goDetailLedger(code) {
 
 // ==================== 明细账 ====================
 async function renderDetailLedger(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -1486,7 +1486,7 @@ function _readPeriod(prefix) {
 
 // ==================== 利润表 ====================
 async function renderProfitLoss(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -1526,7 +1526,7 @@ async function loadProfitLoss() {
 
 // ==================== 资产负债表 ====================
 async function renderBalanceSheet(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -1571,7 +1571,7 @@ async function loadBalanceSheet() {
 
 // ==================== 现金流量表 ====================
 async function renderCashFlow(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -1609,7 +1609,7 @@ async function loadCashFlow() {
 
 // ==================== 所有者权益变动表 ====================
 async function renderEquityChanges(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -1647,7 +1647,7 @@ async function loadEquityChanges() {
 
 // ==================== 科目余额表 ====================
 async function renderAccountBalance(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
@@ -1738,7 +1738,7 @@ async function loadAccountBalance() {
 
 // ==================== 会计科目 ====================
 async function renderAccounts(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card" style="margin-bottom:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -1869,7 +1869,7 @@ async function deleteAccount(id) {
 
 // ==================== 期间管理 ====================
 async function renderPeriods(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card">加载中...</div>';
   try {
     const data = await api('/api/periods');
@@ -1910,7 +1910,7 @@ async function closePeriod(period) {
 
 // ==================== 公司信息 ====================
 async function renderCompany(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/company');
     let html = '<div class="card" style="margin-bottom:16px">' +
@@ -1948,7 +1948,7 @@ async function saveCompanyFull() {
 
 // ==================== 部门档案 ====================
 async function renderDepartments(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/departments');
     el.innerHTML = `
@@ -2041,7 +2041,7 @@ async function batchDeleteDepts() {
 
 // ==================== 人员档案 ====================
 async function renderEmployees(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/employees');
     el.innerHTML = `
@@ -2149,7 +2149,7 @@ async function deleteEmp(id) {
 
 // ==================== 客户档案 ====================
 async function renderCustomers(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/customers');
     el.innerHTML = `
@@ -2253,7 +2253,7 @@ async function deleteCust(id) {
 
 // ==================== 供应商档案 ====================
 async function renderSuppliers(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/suppliers');
     el.innerHTML = `
@@ -2369,7 +2369,7 @@ async function renderChat(container) {
     }];
   }
 
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="chat-wrapper">
       <div class="chat-header">
@@ -2620,7 +2620,7 @@ async function switchCompany() {
 
 // ==================== 公司信息 ====================
 async function showCompanyManager(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const c = await fetch('/api/company?company_id=' + currentCompanyId).then(r => r.json());
     if (!c || !c.company_name) { el.innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }
@@ -2817,7 +2817,7 @@ async function deleteCompany(id) {
 
 // ==================== 固定资产 ====================
 async function renderFixedAssets(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="display:flex;gap:8px">' +
@@ -2960,7 +2960,7 @@ async function depreciateAll() {
 
 // ==================== 无形资产 ====================
 async function renderIntangibleAssets(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="display:flex;gap:8px">' +
@@ -3101,7 +3101,7 @@ async function amortizeAll() {
 let inventoryTxPage = 1;
 
 async function renderInventory(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card" style="margin-bottom:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
@@ -3312,7 +3312,7 @@ async function loadInventoryTransactions(page) {
 
 // ==================== 合同管理 ====================
 async function renderContracts(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<button class="btn btn-primary" onclick="showContractForm()">\uff0b 新增合同</button>' +
@@ -3561,7 +3561,7 @@ async function deleteContractPayment(contractId, paymentId) {
 let currentPaymentTab = 'internal'; // 'internal' = 内部人员, 'external' = 外部单位
 
 async function renderPayments(container) {
-  const el = container || document.getElementById('content-area');
+  const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card" style="margin-bottom:0;padding:24px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
@@ -4008,7 +4008,7 @@ let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !siFilter.dateFrom) { const r = periodToDateRange(currentPeriod); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
   try {
@@ -4426,7 +4426,7 @@ let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' }
 let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !piFilter.dateFrom) { const r = periodToDateRange(currentPeriod); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
   try {
@@ -4681,7 +4681,7 @@ async function loadBankConfigs() {
 }
 
 async function renderBankTransactions(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   let btDateFrom = '', btDateTo = '';
   if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
@@ -5003,7 +5003,7 @@ async function deleteBankConfig(id) {
 // ==================== 进项抵扣 - 认证台账 ====================
 
 async function renderInputVATDeductions(container) {
-  var el = container || document.getElementById('content-area');
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
   const params = new URLSearchParams();
