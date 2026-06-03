@@ -299,8 +299,8 @@ async def import_departments(
     if not rows:
         raise HTTPException(400, "文件为空")
     headers = [h.strip() for h in rows[0]]
-    ci = next((i for i, h in enumerate(headers) if h in ("编码", "code")), None)
-    ni = next((i for i, h in enumerate(headers) if h in ("名称", "name", "部门名称")), 1)
+    ci = next((i for i, h in enumerate(headers) if h in ("编码", "code", "部门编码")), None)
+    ni = next((i for i, h in enumerate(headers) if h in ("名称", "name", "部门名称", "部门")), 1)
 
     # 全行指纹去重：加载已有指纹
     def row_fingerprint(values_dict):
