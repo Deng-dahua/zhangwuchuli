@@ -3486,7 +3486,7 @@ async function showContractDetail(contractId) {
           '<td>' + (p.due_date || '') + '</td>' +
           '<td class="num">\uffe5' + fmt(p.amount) + '</td>' +
           '<td>' + pStatus + '</td>' +
-          '<td><button class="btn btn-sm btn-danger" onclick="deletePayment(' + contractId + ',' + p.id + ')">\u5220\u9664</button></td>' +
+          '<td><button class="btn btn-sm btn-danger" onclick="deleteContractPayment(' + contractId + ',' + p.id + ')">\u5220\u9664</button></td>' +
         '</tr>';
       }
       html += '</tbody></table></div>';
@@ -3549,7 +3549,7 @@ async function savePayment(contractId) {
   }
 }
 
-async function deletePayment(contractId, paymentId) {
+async function deleteContractPayment(contractId, paymentId) {
   if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u6536\u4ed8\u6b3e\u8ba1\u5212\uff1f')) return;
   try {
     await api('/api/contracts/' + contractId + '/payments/' + paymentId, { method: 'DELETE' });

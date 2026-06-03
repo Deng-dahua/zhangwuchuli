@@ -732,6 +732,7 @@ class JournalEntry(Base):
     unit = Column(String(20), comment="单位")
     unit_price = Column(Float, default=0.0, comment="单价")
     source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/开具发票/进项抵扣/银行流水")
+    ref_id = Column(Integer, comment="关联业务ID（开具发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1008,6 +1009,14 @@ def migrate_schema(db):
             except Exception as e:
                 db.rollback()
                 print(f"  [X] journal_entries.source 迁移失败: {e}")
+        if "ref_id" not in je_cols:
+            try:
+                db.execute(TextClause("ALTER TABLE journal_entries ADD COLUMN ref_id INTEGER"))
+                db.commit()
+                print("  [OK] 已添加 journal_entries.ref_id")
+            except Exception as e:
+                db.rollback()
+                print(f"  [X] journal_entries.ref_id 迁移失败: {e}")
 
     # ── 12. 已有公司补充 销项税额 科目（221001001） ──
     if "accounts" in inspector.get_table_names():
@@ -1100,12 +1109,11 @@ def auto_generate_journals(db):
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"
 
-            # 跳过已生成凭证的发票（按摘要+借方金额+日期三元组判重，确保不同发票不会合并）
+            # 跳过已生成凭证的发票（按发票ID精确去重，避免同金额发票被错误跳过）
             existing = db.query(JournalEntry).filter(
                 JournalEntry.company_id == comp.id,
-                JournalEntry.summary == summary,
-                JournalEntry.debit_amount == inv.total_amount,
-                JournalEntry.account_code == "1122"
+                JournalEntry.source == "开具发票",
+                JournalEntry.ref_id == inv.id
             ).first()
             if existing:
                 continue
@@ -1175,7 +1183,7 @@ def auto_generate_journals(db):
                     contact_project=buyer,
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票",
+                    source="开具发票", ref_id=inv.id,
                 ),
                 JournalEntry(
                     company_id=comp.id,
@@ -1186,7 +1194,7 @@ def auto_generate_journals(db):
                     contact_project="",
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票",
+                    source="开具发票", ref_id=inv.id,
                 ),
                 JournalEntry(
                     company_id=comp.id,
@@ -1199,7 +1207,7 @@ def auto_generate_journals(db):
                     contact_project="",
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票",
+                    source="开具发票", ref_id=inv.id,
                 ),
             ]
             for e in entries:
@@ -1222,12 +1230,11 @@ def auto_generate_single_invoice(db, inv):
     goods = inv.goods_name or ""
     summary = f"销售{goods or '货物'}给{buyer}"
 
-    # 跳过已生成凭证的发票（按摘要+借方金额+科目三元组判重，确保不同发票不会合并）
+    # 跳过已生成凭证的发票（按发票ID精确去重）
     existing = db.query(JournalEntry).filter(
         JournalEntry.company_id == inv.company_id,
-        JournalEntry.summary == summary,
-        JournalEntry.debit_amount == inv.total_amount,
-        JournalEntry.account_code == "1122"
+        JournalEntry.source == "开具发票",
+        JournalEntry.ref_id == inv.id
     ).first()
     if existing:
         return
@@ -1294,7 +1301,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project=buyer,
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票",
+            source="开具发票", ref_id=inv.id,
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -1305,7 +1312,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project="",
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票",
+            source="开具发票", ref_id=inv.id,
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -1318,7 +1325,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project="",
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票",
+            source="开具发票", ref_id=inv.id,
         ),
     ]
     for e in entries:

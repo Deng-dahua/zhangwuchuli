@@ -5499,7 +5499,7 @@ def handle_create_customer(sess, msg, db, sid):
 
     elif step >= 2:
         if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
-            return save_customer(data, db, sess, sid)
+            return save_customer(data, db, sess, sid, company_id)
         # 尝试提取联系方式
         contact_m = re.search(r"联系人[：:]*\s*(\S+)", msg)
         phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
@@ -5527,7 +5527,7 @@ def handle_create_customer(sess, msg, db, sid):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_customer(data, db, sess, sid):
+def save_customer(data, db, sess, sid, company_id):
     try:
         name = data.get("name", "")
         code = data.get("code", "")
@@ -5586,7 +5586,7 @@ def handle_create_supplier(sess, msg, db, sid):
 
     elif step >= 2:
         if re.search(r"^(完成|好了|结束|确认|提交|保存|ok|done)$", msg.strip(), re.IGNORECASE):
-            return save_supplier(data, db, sess, sid)
+            return save_supplier(data, db, sess, sid, company_id)
         sess["data"] = data
         lines = [f"  {k}：{v}" for k, v in data.items() if v and k in ("name", "code")]
         return {"reply": "已更新：\n" + "\n".join(lines) + "\n\n说「**完成**」保存。", "session_id": sid, "action": None}
@@ -5594,7 +5594,7 @@ def handle_create_supplier(sess, msg, db, sid):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_supplier(data, db, sess, sid):
+def save_supplier(data, db, sess, sid, company_id):
     try:
         name = data.get("name", "")
         code = data.get("code", "")
@@ -5642,7 +5642,7 @@ def handle_create_employee(sess, msg, db, sid):
 
     elif step >= 2:
         if re.search(r"^(完成|好了|结束|确认|ok|done)$", msg.strip(), re.IGNORECASE):
-            return save_employee(data, db, sess, sid)
+            return save_employee(data, db, sess, sid, company_id)
         dept_m = re.search(r"部门[：:]*\s*(\S+)", msg)
         pos_m = re.search(r"职位[：:]*\s*(\S+)", msg)
         phone_m = re.search(r"电话[：:]*\s*(\S+)", msg)
@@ -5656,7 +5656,7 @@ def handle_create_employee(sess, msg, db, sid):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_employee(data, db, sess, sid):
+def save_employee(data, db, sess, sid, company_id):
     try:
         if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.get("code", "")).first():
             return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
