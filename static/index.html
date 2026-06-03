@@ -5045,6 +5045,7 @@ async function renderInputVATDeductions(container) {
   html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
   html += '<button onclick="ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-success" id="ivdBatchCertBtn" onclick="batchCertifyIVD()">✅ 批量认证</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
@@ -5099,10 +5100,15 @@ function toggleIVDSelectAll() {
 
 function updateIVDBatchBtn() {
   const count = document.querySelectorAll('.ivd-check:checked').length;
-  const btn = document.getElementById('ivdBatchDelBtn');
-  if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
-    btn.disabled = count === 0;
+  const delBtn = document.getElementById('ivdBatchDelBtn');
+  const certBtn = document.getElementById('ivdBatchCertBtn');
+  if (delBtn) {
+    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.disabled = count === 0;
+  }
+  if (certBtn) {
+    certBtn.textContent = count > 0 ? '✅ 批量认证（' + count + '）' : '✅ 批量认证';
+    certBtn.disabled = count === 0;
   }
 }
 
@@ -5113,6 +5119,22 @@ async function batchDeleteIVD() {
   const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
   try {
     const result = await api('/api/input-vat-deductions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function batchCertifyIVD() {
+  const checked = document.querySelectorAll('.ivd-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认认证选中的 ' + checked.length + ' 条记录？认证后将标记为"已勾选"并设置勾选时间。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/input-vat-deductions/batch-certify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)
@@ -5281,19 +5303,26 @@ async function handleFileSelect(input, module) {
   if (module === 'department') {
     document.getElementById('upload-progress').style.display = 'block';
     document.getElementById('upload-progress').innerText = '正在导入部门...';
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('company_id', currentCompanyId || 1);
-    const resp = await fetch('/api/departments/import', { method: 'POST', body: fd });
-    const result = await resp.json();
-    document.getElementById('upload-progress').style.display = 'none';
-    if (resp.ok) {
-      toast(result.message || '导入成功', 'success');
-      closeModal();
-      renderDepartments();
-    } else {
-      toast(result.detail || '导入失败', 'error');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('company_id', currentCompanyId || 1);
+      const resp = await fetch('/api/departments/import?company_id=' + (currentCompanyId || 1), { method: 'POST', body: fd });
+      const result = await resp.json();
+      if (resp.ok) {
+        toast(result.message || '导入成功', 'success');
+        closeModal();
+        // 渲染到部门页面容器，避免覆盖当前页面
+        const deptContainer = document.getElementById('page-departments');
+        if (deptContainer) { renderDepartments(deptContainer); }
+        else { renderDepartments(); }
+      } else {
+        toast(result.detail || '导入失败', 'error');
+      }
+    } catch(e) {
+      toast('导入失败: ' + e.message, 'error');
     }
+    document.getElementById('upload-progress').style.display = 'none';
     return;
   }
 
@@ -5630,6 +5659,9 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       else if (module === 'sales-invoice') renderSalesInvoices();
       else if (module === 'purchase-invoice') renderPurchaseInvoices();
       else if (module === 'input-vat-deduction') renderInputVATDeductions();
+      else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
+      else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
+      else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
       return;
     }
   }
@@ -5649,6 +5681,9 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   else if (module === 'sales-invoice') renderSalesInvoices();
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
   else if (module === 'input-vat-deduction') renderInputVATDeductions();
+  else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
+  else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
+  else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
 }
 
 </script>

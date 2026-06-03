@@ -3806,6 +3806,61 @@ def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(1)
     return {"message": f"已删除 {deleted} 条记录", "deleted": deleted}
 
 
+@app.post("/api/input-vat-deductions/batch-certify")
+def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+    """批量认证：将选中记录标记为已勾选，设置勾选时间/认证日期"""
+    now = datetime.now()
+    today = date.today()
+    
+    items = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        InputVATDeduction.id.in_(ids)
+    ).all()
+    
+    if not items:
+        raise HTTPException(400, detail="未找到可认证记录")
+    
+    certified = 0
+    affected_periods = set()
+    for it in items:
+        changed = False
+        if it.check_status != "已勾选":
+            it.check_status = "已勾选"
+            it.check_time = now
+            changed = True
+        if not it.certification_date:
+            it.certification_date = today
+            changed = True
+        if it.deduction_status in (None, "", "待认证"):
+            it.deduction_status = "待抵扣"
+            changed = True
+        if changed:
+            it.updated_at = now
+            certified += 1
+            period = it.deduction_period
+            if not period and it.invoice_date:
+                period = it.invoice_date.strftime("%Y-%m")
+            if period:
+                affected_periods.add(period)
+    
+    db.commit()
+    
+    # 为受影响的期间重新生成进项抵扣凭证
+    voucher_count = 0
+    for period in affected_periods:
+        try:
+            voucher_count += auto_generate_input_vat_for_period(db, company_id, period)
+        except Exception:
+            pass
+    db.commit()
+    
+    return {
+        "message": f"已认证 {certified} 条记录" + (f"，生成 {voucher_count} 笔汇总凭证" if voucher_count else ""),
+        "certified": certified,
+        "voucher_count": voucher_count
+    }
+
+
 @app.post("/api/input-vat-deductions/{item_id}/to-journal")
 def input_vat_deduction_to_journal(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
     """为进项抵扣记录所在期间重新生成凭证"""
