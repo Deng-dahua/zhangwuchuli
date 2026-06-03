@@ -1140,7 +1140,6 @@ def migrate_schema(db):
 
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
-    from datetime import datetime, date as dt
     companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:
@@ -1203,7 +1202,7 @@ def auto_generate_journals(db):
                 db.flush()
                 return (new_code, get_full_name(new_code))
 
-            period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else dt.now().strftime("%Y-%m")
+            period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
             date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
 
             # 计算下一个凭证号
@@ -1219,7 +1218,7 @@ def auto_generate_journals(db):
             entries = [
                 JournalEntry(
                     company_id=comp.id,
-                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary, account_code="1122",
                     account_name=get_full_name("1122"),
@@ -1231,7 +1230,7 @@ def auto_generate_journals(db):
                 ),
                 JournalEntry(
                     company_id=comp.id,
-                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary, account_code=rev_code, account_name=rev_name,
                     debit_amount=0, credit_amount=inv.amount,
@@ -1242,7 +1241,7 @@ def auto_generate_journals(db):
                 ),
                 JournalEntry(
                     company_id=comp.id,
-                    entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+                    entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=f"{summary}（增值税）",
                     account_code="221001001",
@@ -1268,7 +1267,6 @@ def auto_generate_journals(db):
 
 def auto_generate_single_invoice(db, inv):
     """为单张开具发票生成凭证（供创建发票API调用）"""
-    from datetime import datetime, date as dt
 
     buyer = inv.buyer_name or "客户"
     goods = inv.goods_name or ""
@@ -1322,7 +1320,7 @@ def auto_generate_single_invoice(db, inv):
         db.flush()
         return (new_code, get_full_name(new_code))
 
-    period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else dt.now().strftime("%Y-%m")
+    period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
     date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
 
     max_no = db.query(JournalEntry.voucher_no).filter(
@@ -1337,7 +1335,7 @@ def auto_generate_single_invoice(db, inv):
     entries = [
         JournalEntry(
             company_id=inv.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary, account_code="1122",
             account_name=get_full_name("1122"),
@@ -1349,7 +1347,7 @@ def auto_generate_single_invoice(db, inv):
         ),
         JournalEntry(
             company_id=inv.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary, account_code=rev_code, account_name=rev_name,
             debit_amount=0, credit_amount=inv.amount,
@@ -1360,7 +1358,7 @@ def auto_generate_single_invoice(db, inv):
         ),
         JournalEntry(
             company_id=inv.company_id,
-            entry_date=dt.strptime(date_str, "%Y-%m-%d").date(),
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=f"{summary}（增值税）",
             account_code="221001001",
@@ -1383,8 +1381,6 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     
     如果 total_tax 为 None，自动从数据库汇总（优先用 deduction_period，为空则用 invoice_date 年月）
     """
-    from datetime import datetime, date as dt
-    from sqlalchemy import func, or_, and_
 
     # 删除该期间已有的进项抵扣凭证
     db.query(JournalEntry).filter(
@@ -1446,7 +1442,7 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
         db.flush()
 
     # 凭证号取 period 最大号+1
-    entry_date = dt.strptime(period + "-01", "%Y-%m-%d").date()
+    entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
     max_no = db.query(JournalEntry.voucher_no).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period == period,
