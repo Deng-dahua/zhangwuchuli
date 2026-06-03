@@ -273,10 +273,28 @@ async def import_departments(
     company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
-    """从 CSV 导入部门（编码+名称），编码为空时自动生成 BM001 格式"""
-    content = (await file.read()).decode("utf-8-sig")
-    reader = csv.reader(io.StringIO(content))
-    rows = list(reader)
+    """从 CSV/XLSX 导入部门（编码+名称），编码为空时自动生成 BM001 格式"""
+    ext = os.path.splitext(file.filename or "unknown")[1].lower()
+    content_bytes = await file.read()
+
+    rows = []
+    if ext in (".xlsx", ".xls"):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
+            ws = wb.active
+            for r in ws.iter_rows(values_only=True):
+                rows.append([str(c) if c is not None else "" for c in r])
+        except Exception as e:
+            raise HTTPException(400, f"无法解析 Excel 文件: {e}")
+    elif ext == ".csv":
+        try:
+            text = content_bytes.decode("utf-8-sig")
+            rows = list(csv.reader(io.StringIO(text)))
+        except UnicodeDecodeError as e:
+            raise HTTPException(400, f"文件编码错误，请使用 UTF-8 编码的 CSV: {e}")
+    else:
+        raise HTTPException(400, f"不支持的文件格式: {ext}，请上传 .csv 或 .xlsx")
+
     if not rows:
         raise HTTPException(400, "文件为空")
     headers = [h.strip() for h in rows[0]]
@@ -313,6 +331,9 @@ async def import_departments(
     imported = 0
     skipped = 0
     for row in rows[1:]:
+        # 跳过完全空行
+        if not any(str(c).strip() for c in row):
+            continue
         code = row[ci].strip() if (ci is not None and ci < len(row)) else ""
         name = row[ni].strip() if ni < len(row) else ""
         if not name:
@@ -4118,6 +4139,10 @@ async def analyze_file_headers(
             field_order = [
                 "name", "uscc"
             ]
+        elif module == "department":
+            field_order = [
+                "code", "name"
+            ]
 
         return {
             "file_name": fname,
@@ -4254,6 +4279,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             for rec in db.query(Supplier._fingerprint).filter(
                 Supplier.company_id == company_id,
                 Supplier._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
+        elif module == "department":
+            for rec in db.query(Department._fingerprint).filter(
+                Department.company_id == company_id,
+                Department._fingerprint.isnot(None)
             ).all():
                 try:
                     existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
@@ -4681,6 +4714,52 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         _fingerprint=json.dumps(list(fp))
                     )
                     db.add(supp)
+                    db.flush()
+                    if used_fingerprints is not None:
+                        used_fingerprints[fp] = i+2
+
+                elif module == "department":
+                    name = mapped.get("name", "").strip()
+                    if not name:
+                        errors.append(f"第{i+2}行: 部门名称不能为空")
+                        continue
+                    # 全行指纹去重
+                    fp = row_fingerprint({**mapped, **extra})
+                    if used_fingerprints is not None and fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        continue
+                    if existing_fingerprints is not None and fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（部门={name}），跳过")
+                        continue
+                    # 编码：优先用导入的编码，为空则自动生成 BM001 格式
+                    code = mapped.get("code", "").strip()
+                    if not code:
+                        if 'dept_code_counter' not in locals():
+                            existing_codes = db.query(Department.code).filter(
+                                Department.company_id == company_id,
+                                Department.code.like('BM%')
+                            ).all()
+                            dept_code_counter = 0
+                            for c in existing_codes:
+                                try:
+                                    num = int(c[0][2:])
+                                    if num > dept_code_counter:
+                                        dept_code_counter = num
+                                except: pass
+                        dept_code_counter += 1
+                        code = f"BM{dept_code_counter:03d}"
+                    # 编码去重：同编码覆盖更新
+                    existing = db.query(Department).filter(
+                        Department.company_id == company_id, Department.code == code
+                    ).first()
+                    if existing:
+                        existing.name = name
+                        existing._fingerprint = json.dumps(list(fp))
+                    else:
+                        db.add(Department(
+                            company_id=company_id, code=code, name=name,
+                            _fingerprint=json.dumps(list(fp))
+                        ))
                     db.flush()
                     if used_fingerprints is not None:
                         used_fingerprints[fp] = i+2
