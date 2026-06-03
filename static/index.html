@@ -927,8 +927,8 @@ async function renderJournal(container) {
       );
     }
 
-    // 表格
-    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:4px"><table><thead><tr>';
+    // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
+    html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
     html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -4122,7 +4122,7 @@ async function renderSalesInvoices(container) {
     }
 
     // 表格
-    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
+    html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="siSelectAll" onclick="toggleSiSelectAll()" title="全选"></th>';
     html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -4529,7 +4529,8 @@ async function renderPurchaseInvoices(container) {
       );
     }
 
-    html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table><thead><tr>';
+    // 表格
+    html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
     html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>认证状态</th><th>认证日期</th><th>抵扣所属期</th><th>开票人</th><th>备注</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -5090,13 +5091,12 @@ async function renderInputVATDeductions(container) {
   html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
   html += '<button onclick="ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
-  html += '<button class="btn btn-success" id="ivdBatchCertBtn" onclick="batchCertifyIVD()">✅ 批量认证</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
   // 表格
   const riskColors = { '正常': '#059669', '疑点': '#d97706', '异常': '#e02424', '失控': '#7c3aed' };
-  html += '<div class="table-wrap" style="max-height:calc(100vh - 300px);overflow-y:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
+  html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
   html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th style="width:90px">操作</th>';
   html += '</tr></thead><tbody>';
@@ -5685,6 +5685,10 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       formData2.append('column_mapping', JSON.stringify(mapping));
       formData2.append('company_id', currentCompanyId);
       formData2.append('force', 'true');
+      // 传递被跳过的行索引，后端只处理这些行
+      if (result.skipped_indices && result.skipped_indices.length > 0) {
+        formData2.append('skipped_indices', JSON.stringify(result.skipped_indices));
+      }
       if (bankConfigId) formData2.append('bank_config_id', bankConfigId);
 
       document.getElementById('upload-progress').style.display = 'block';

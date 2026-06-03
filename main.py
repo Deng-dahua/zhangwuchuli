@@ -4166,6 +4166,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
     column_mapping: str = Form(...),  # JSON: {标准字段: 文件列名}
     company_id: int = Form(1),
     force: Optional[str] = Form(None),  # 强制导入（忽略去重）
+    skipped_indices: Optional[str] = Form(None),  # 强制导入时仅处理这些行索引（JSON数组）
     db: Session = Depends(get_db)
 ):
     """根据列映射导入文件数据"""
@@ -4293,11 +4294,19 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
                 except: pass
 
+        # 接收前端传来的跳过行索引（force模式下仅处理指定行）
+        target_indices = None  # None=全部处理, set=只处理指定行
+        if force_import and skipped_indices:
+            try:
+                target_indices = set(json.loads(skipped_indices))
+            except: pass
+
         if force_import:
             existing_fingerprints = None  # 强制导入跳过跨批次查重
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
         new_deductions = []  # 收集新创建的进项抵扣，导入完成后自动生成凭证
+        skipped_indices_list = []  # 记录跳过的行号（用于force导入时回传）
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -4310,6 +4319,10 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 for col_name, val in row.items():
                     if col_name not in mapping.values():
                         extra[col_name] = val.strip()
+
+                # force模式下仅处理指定行（被跳过的重复行）
+                if target_indices is not None and i not in target_indices:
+                    continue
 
                 if module == "bank-transaction":
                     # 解析日期
@@ -4363,9 +4376,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
 
                     tx = BankTransaction(
@@ -4419,10 +4434,12 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         dup_row = used_fingerprints[fp]
                         key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
                         errors.append(f"第{i+2}行: 与第{dup_row}行完全重复（{key_info}），跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（{key_info}），跳过")
+                        skipped_indices_list.append(i)
                         continue
 
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
@@ -4572,9 +4589,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
 
                     inv = InputVATDeduction(
@@ -4614,9 +4633,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（姓名={name}），跳过")
+                        skipped_indices_list.append(i)
                         continue
                     # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
                     if 'emp_code_counter' not in locals():
@@ -4652,9 +4673,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（客户={name}），跳过")
+                        skipped_indices_list.append(i)
                         continue
                     # 编码自动生成 KH001 格式：首次查DB取最大code，后续内存递增
                     if 'cust_code_counter' not in locals():
@@ -4691,9 +4714,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（供应商={name}），跳过")
+                        skipped_indices_list.append(i)
                         continue
                     # 编码自动生成 GYS001 格式：首次查DB取最大code，后续内存递增
                     if 'supp_code_counter' not in locals():
@@ -4730,9 +4755,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     fp = row_fingerprint({**mapped, **extra})
                     if used_fingerprints is not None and fp in used_fingerprints:
                         errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        skipped_indices_list.append(i)
                         continue
                     if existing_fingerprints is not None and fp in existing_fingerprints:
                         errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（部门={name}），跳过")
+                        skipped_indices_list.append(i)
                         continue
                     # 编码：优先用导入的编码，为空则自动生成 BM001 格式
                     code = mapped.get("code", "").strip()
@@ -4809,28 +4836,61 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
         if force_import:
-            # force模式：用原始SQL INSERT OR IGNORE 绕过所有唯一约束
+            # force模式：先删数据库中对应的旧记录（按 _fingerprint），再插入新记录
+            # 这样即使没有唯一约束也不会重复插入
             pending = list(db.new)
             db.rollback()
             actual = 0
+            # 按模型类型分组处理
+            from collections import defaultdict
+            by_model = defaultdict(list)
             for obj in pending:
-                try:
-                    # 提取对象的所有列值（排除自增主键id）
+                by_model[type(obj)].append(obj)
+
+            for model_cls, objs in by_model.items():
+                # 收集所有待插入记录的 _fingerprint
+                fps = [getattr(obj, '_fingerprint', None) for obj in objs]
+                fps = [fp for fp in fps if fp]  # 过滤None
+                if not fps:
+                    # 没有 fingerprint 就直接插入
+                    for obj in objs:
+                        values = {}
+                        for col in obj.__table__.columns:
+                            if col.primary_key and col.autoincrement:
+                                continue
+                            values[col.name] = getattr(obj, col.name, None)
+                        try:
+                            stmt = model_cls.__table__.insert().values(**values)
+                            result = db.execute(stmt)
+                            if result.rowcount and result.rowcount > 0:
+                                actual += 1
+                        except Exception as ex:
+                            print(f"[FORCE-IMPORT] 行插入异常: {ex}")
+                    continue
+                # 先删数据库中这些 fingerprint 的旧记录
+                if hasattr(model_cls, '_fingerprint'):
+                    db.query(model_cls).filter(
+                        model_cls.company_id == company_id,
+                        model_cls._fingerprint.in_(fps)
+                    ).delete(synchronize_session=False)
+                    db.flush()
+                # 再插入新记录
+                for obj in objs:
                     values = {}
                     for col in obj.__table__.columns:
                         if col.primary_key and col.autoincrement:
                             continue
                         values[col.name] = getattr(obj, col.name, None)
-                    # 构建 INSERT OR IGNORE 语句，自动跳过约束冲突
-                    stmt = obj.__table__.insert().prefix_with('OR IGNORE').values(**values)
-                    result = db.execute(stmt)
-                    if result.rowcount and result.rowcount > 0:
-                        actual += 1
-                except Exception as ex:
-                    print(f"[FORCE-IMPORT] 行插入异常: {ex}")
+                    try:
+                        stmt = model_cls.__table__.insert().values(**values)
+                        result = db.execute(stmt)
+                        if result.rowcount and result.rowcount > 0:
+                            actual += 1
+                    except Exception as ex:
+                        print(f"[FORCE-IMPORT] 行插入异常: {ex}")
             db.commit()
             imported = actual
-            errors.append(f"强制导入完成：新增 {actual} 条（{len(pending) - actual} 条因已存在跳过）")
+            errors.append(f"强制导入完成：新增 {actual} 条（覆盖已存在的重复记录）")
             # force模式跳过自动凭证生成（对象已重新创建，引用失效）
             new_invoices = []
             new_deductions = []
@@ -4877,9 +4937,10 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             "imported": imported,
             "total": len(rows_data),
             "skipped": len(rows_data) - imported,
-            "errors": errors[:20],  # 最多返回20条错误
-            "infos": infos[:20],    # 非错误提示
-            "message": f"成功导入 {imported}/{len(rows_data)} 条记录"
+            "errors": errors[:20],
+            "infos": infos[:20],
+            "skipped_indices": skipped_indices_list,
+            "message": "成功导入 " + str(imported) + "/" + str(len(rows_data)) + " 条记录"
         }
     except Exception as e:
         db.rollback()
