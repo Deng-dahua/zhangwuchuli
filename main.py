@@ -4807,12 +4807,37 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             if customer_added > 0:
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
-        try:
-            db.commit()
-        except IntegrityError as e:
+        if force_import:
+            # force模式：逐对象提交，已存在的跳过
+            pending = list(db.new)
             db.rollback()
-            errors.append("数据重复，已跳过已存在的记录")
-            imported = 0
+            actual = 0
+            for obj in pending:
+                # 清除自动生成的主键以便重新插入
+                for col in obj.__table__.columns:
+                    if col.primary_key and getattr(col, 'autoincrement', False):
+                        setattr(obj, col.name, None)
+                sp = db.begin_nested()
+                try:
+                    db.add(obj)
+                    db.flush()
+                    sp.commit()
+                    actual += 1
+                except IntegrityError:
+                    sp.rollback()
+                except Exception:
+                    sp.rollback()
+            imported = actual
+            # force模式跳过自动凭证生成（对象已重新创建，引用失效）
+            new_invoices = []
+            new_deductions = []
+        else:
+            try:
+                db.commit()
+            except IntegrityError as e:
+                db.rollback()
+                errors.append("数据重复，已跳过已存在的记录")
+                imported = 0
 
         # 开具发票导入后自动生成序时账凭证
         if module == "sales-invoice" and new_invoices:
