@@ -2577,23 +2577,16 @@ function closeModal() {
 function showForceConfirmDialog(skipped, total, dupErrors) {
   const ok = total - skipped;
   return new Promise((resolve) => {
-    // 构建重复信息HTML
-    var dupHtml = '';
-    if (dupErrors && dupErrors.length > 0) {
-      var items = dupErrors.map(function(e) { return '<div style="padding:3px 0;">• ' + e + '</div>'; }).join('');
-      dupHtml = '<div style="margin-bottom:16px;font-size:13px;color:#374151;max-height:260px;overflow-y:auto;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;line-height:1.7;">' + items + '</div>';
-    }
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'force-confirm-overlay';
-    overlay.innerHTML = '<div class="modal" style="max-width:680px;max-height:88vh;overflow-y:auto;">' +
+    overlay.innerHTML = '<div class="modal" style="max-width:480px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px 20px;border-bottom:1px solid #e5e7eb;">' +
         '<div style="font-size:16px;font-weight:700;">导入确认</div>' +
         '<button onclick="resolveForceConfirm(null)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>' +
       '</div>' +
       '<div style="padding:16px 20px;">' +
-        '<div style="margin-bottom:12px;font-size:14px;color:#374151;line-height:1.6;">导入结果：成功 <b>' + ok + '</b> 条，跳过 <b style="color:#e53e3e;">' + skipped + '</b> 条重复记录。</div>' +
-        dupHtml +
+        '<div style="margin-bottom:16px;font-size:14px;color:#374151;line-height:1.6;">导入结果：成功 <b>' + ok + '</b> 条，跳过 <b style="color:#e53e3e;">' + skipped + '</b> 条重复记录。</div>' +
         '<div style="margin-bottom:16px;font-size:14px;font-weight:600;color:#1f2937;">是否强制导入这' + skipped + '条重复记录？</div>' +
         '<div style="margin-bottom:20px;display:flex;gap:28px;font-size:14px;">' +
           '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">' +
