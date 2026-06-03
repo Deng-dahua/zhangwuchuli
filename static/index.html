@@ -971,7 +971,7 @@ async function renderJournal(container) {
 
 async function showInvoicePicker() {
   const data = await api('/api/sales-invoices');
-  if (!data.length) { alert('没有可用的销项发票'); return; }
+  if (!data.length) { toast('没有可用的销项发票', 'warning'); return; }
   let html = '<div style="padding:16px"><h3 style="margin-bottom:12px">选择销项发票生成凭证</h3><table style="width:100%;border-collapse:collapse">';
   html += '<thead><tr style="background:#f5f5f5;text-align:left"><th style="padding:8px 12px">发票号</th><th style="padding:8px 12px">日期</th><th style="padding:8px 12px">购方</th><th style="padding:8px 12px">货物</th><th style="padding:8px 12px" class="num">价税合计</th><th style="padding:8px 12px">状态</th><th style="padding:8px 12px">操作</th></tr></thead><tbody>';
   data.forEach(r => {
@@ -997,14 +997,14 @@ async function showInvoicePicker() {
 }
 
 async function generateFromInvoice(invoiceId) {
-  if (!confirm('确认从该销项发票生成记账凭证？')) return;
+        if (!confirm('确认从该销项发票生成记账凭证？')) return;
   try {
     const res = await api('/api/sales-invoices/' + invoiceId + '/to-journal', { method: 'POST' });
-    alert(res.message);
-    document.getElementById('je-invoice-picker')?.remove();
+    toast(res.message, 'success');
+    closeModal();
     renderJournal();
   } catch (e) {
-    alert('生成失败：' + e.message);
+    toast('生成失败：' + e.message, 'error');
   }
 }
 
@@ -1012,10 +1012,10 @@ async function generateFromSalesInvoice(id) {
   if (!confirm('确认从该销项发票生成记账凭证？')) return;
   try {
     const res = await api('/api/sales-invoices/' + id + '/to-journal', { method: 'POST' });
-    alert(res.message);
+    toast(res.message, 'success');
     renderSalesInvoices();
   } catch (e) {
-    alert('生成失败：' + e.message);
+    toast('生成失败：' + e.message, 'error');
   }
 }
 
@@ -1023,10 +1023,10 @@ async function generateFromPurchaseInvoice(id) {
   if (!confirm('确认从该取得发票生成进项抵扣凭证？')) return;
   try {
     const res = await api('/api/purchase-invoices/' + id + '/to-journal', { method: 'POST' });
-    alert(res.message);
+    toast(res.message, 'success');
     renderPurchaseInvoices();
   } catch (e) {
-    alert('生成失败：' + e.message);
+    toast('生成失败：' + e.message, 'error');
   }
 }
 
@@ -1034,10 +1034,10 @@ async function generateFromInputVAT(id) {
   if (!confirm('确认重新生成该期间的进项抵扣凭证？')) return;
   try {
     const res = await api('/api/input-vat-deductions/' + id + '/to-journal', { method: 'POST' });
-    alert(res.message);
+    toast(res.message, 'success');
     renderInputVATDeductions();
   } catch (e) {
-    alert('生成失败：' + e.message);
+    toast('生成失败：' + e.message, 'error');
   }
 }
 
@@ -1045,10 +1045,10 @@ async function generateFromBankTx(id) {
   if (!confirm('确认从该银行流水生成记账凭证？')) return;
   try {
     const res = await api('/api/bank-transactions/' + id + '/to-journal', { method: 'POST' });
-    alert(res.message);
+    toast(res.message, 'success');
     loadBankTxList();
   } catch (e) {
-    alert('生成失败：' + e.message);
+    toast('生成失败：' + e.message, 'error');
   }
 }
 

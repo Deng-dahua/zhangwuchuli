@@ -5225,19 +5225,19 @@ def chat_endpoint(payload: ChatRequest, company_id: int = Query(1), db: Session 
 
     # ────────────── 录入凭证 ──────────────
     if intent == "create_voucher":
-        return handle_create_voucher(sess, message, db, sid)
+        return handle_create_voucher(sess, message, db, sid, company_id)
 
     # ────────────── 新增客户 ──────────────
     if intent == "create_customer":
-        return handle_create_customer(sess, message, db, sid)
+        return handle_create_customer(sess, message, db, sid, company_id)
 
     # ────────────── 新增供应商 ──────────────
     if intent == "create_supplier":
-        return handle_create_supplier(sess, message, db, sid)
+        return handle_create_supplier(sess, message, db, sid, company_id)
 
     # ────────────── 新增员工 ──────────────
     if intent == "create_employee":
-        return handle_create_employee(sess, message, db, sid)
+        return handle_create_employee(sess, message, db, sid, company_id)
 
     # ────────────── 查询类 ──────────────
     if intent == "query_profit_loss":
@@ -5641,9 +5641,21 @@ def handle_file_confirm(sess, message: str, db, sid: str):
     }
 
 
+# ──── 录入凭证流程 ────
+
+def handle_create_voucher(sess, msg, db, sid, company_id):
+    """AI 录入凭证：引导用户去序时账页面操作"""
+    sess["intent"] = None
+    return {
+        "reply": "📝 录入凭证请打开侧边栏「序时账」页面操作。\n\n在序时账页面可以：\n• 新增凭证\n• 编辑凭证\n• 从销项/进项/银行流水自动生成凭证\n\n💡 提示：你也可以上传文件，我会帮你识别并引导导入。",
+        "session_id": sid,
+        "action": {"type": "navigate", "page": "journal"}
+    }
+
+
 # ──── 客户录入流程 ────
 
-def handle_create_customer(sess, msg, db, sid):
+def handle_create_customer(sess, msg, db, sid, company_id):
     step = sess["step"]
     data = sess["data"]
 
@@ -5744,7 +5756,7 @@ def save_customer(data, db, sess, sid, company_id):
 
 # ──── 供应商录入流程 ────
 
-def handle_create_supplier(sess, msg, db, sid):
+def handle_create_supplier(sess, msg, db, sid, company_id):
     step = sess["step"]
     data = sess["data"]
 
@@ -5800,7 +5812,7 @@ def save_supplier(data, db, sess, sid, company_id):
 
 # ──── 员工录入流程 ────
 
-def handle_create_employee(sess, msg, db, sid):
+def handle_create_employee(sess, msg, db, sid, company_id):
     step = sess["step"]
     data = sess["data"]
 
