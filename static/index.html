@@ -2570,6 +2570,54 @@ function closeModal() {
   document.getElementById('modal-overlay')?.remove();
 }
 
+// 强制导入确认弹窗。返回 'yes'（是）、'no'（否）或 null（取消）
+function showForceConfirmDialog(skipped, total) {
+  const ok = total - skipped;
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'force-confirm-overlay';
+    overlay.innerHTML = `<div class="modal" style="max-width:480px;">
+      <div class="modal-title">导入确认</div>
+      <div style="margin-bottom:12px;font-size:14px;color:var(--gray-700);line-height:1.6;">
+        导入结果：成功 <b>${ok}</b> 条，跳过 <b style="color:#e53e3e;">${skipped}</b> 条重复记录。
+      </div>
+      <div style="margin-bottom:16px;font-size:14px;font-weight:600;color:var(--gray-800);">
+        是否强制导入这${skipped}条重复记录？
+      </div>
+      <div style="margin-bottom:20px;display:flex;gap:28px;font-size:14px;">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <input type="radio" name="force-import" value="yes" style="accent-color:var(--primary);"> 是（导入全部${total}条）
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <input type="radio" name="force-import" value="no" checked style="accent-color:var(--primary);"> 否（导入${ok}条）
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" onclick="resolveForceConfirm(null)" style="background:var(--gray-200);color:var(--gray-700);">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="resolveForceConfirm(true)">确定</button>
+      </div>
+    </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+    document.body.appendChild(overlay);
+    window._forceConfirmResolve = resolve;
+  });
+}
+
+function resolveForceConfirm(confirmed) {
+  const overlay = document.getElementById('force-confirm-overlay');
+  let choice = null;
+  if (confirmed) {
+    const selected = overlay?.querySelector('input[name="force-import"]:checked');
+    choice = selected ? selected.value : 'no';
+  }
+  overlay?.remove();
+  if (window._forceConfirmResolve) {
+    window._forceConfirmResolve(choice);
+    delete window._forceConfirmResolve;
+  }
+}
+
 function createModal(title, body, extraClass) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -5625,12 +5673,8 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   // 只要有重复记录被跳过，就提示是否强制导入
   const hasDupSkipped = result.skipped > 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
   if (hasDupSkipped) {
-    const confirmForce = confirm(
-      `导入结果：成功 ${result.imported} 条，跳过 ${result.skipped} 条重复记录。\n\n` +
-      (result.errors && result.errors.length > 0 ? '详情：\n' + result.errors.slice(0, 10).join('\n') + '\n\n' : '') +
-      '是否强制导入这些重复记录？'
-    );
-    if (confirmForce) {
+    const forceChoice = await showForceConfirmDialog(result.skipped, result.total);
+    if (forceChoice === 'yes') {
       formData.append('force', 'true');
       document.getElementById('upload-progress').style.display = 'block';
       document.getElementById('upload-progress').innerText = '正在强制导入数据...';
