@@ -272,29 +272,84 @@ async def import_departments(
     company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
-    """从 CSV 导入部门（编码+名称）"""
+    """从 CSV 导入部门（编码+名称），编码为空时自动生成 BM001 格式"""
     content = (await file.read()).decode("utf-8-sig")
     reader = csv.reader(io.StringIO(content))
     rows = list(reader)
     if not rows:
         raise HTTPException(400, "文件为空")
     headers = [h.strip() for h in rows[0]]
-    ci = next((i for i, h in enumerate(headers) if h in ("编码", "code")), 0)
+    ci = next((i for i, h in enumerate(headers) if h in ("编码", "code")), None)
     ni = next((i for i, h in enumerate(headers) if h in ("名称", "name", "部门名称")), 1)
+
+    # 全行指纹去重：加载已有指纹
+    def row_fingerprint(values_dict):
+        return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
+
+    existing_fps = set()
+    for rec in db.query(Department._fingerprint).filter(
+        Department.company_id == company_id,
+        Department._fingerprint.isnot(None)
+    ).all():
+        try:
+            existing_fps.add(tuple(tuple(x) for x in json.loads(rec[0])))
+        except: pass
+    used_fps = {}
+
+    # 获取当前最大编码（仅匹配 BM 前缀，提取数字部分）
+    existing_codes = db.query(Department.code).filter(
+        Department.company_id == company_id,
+        Department.code.like('BM%')
+    ).all()
+    code_counter = 0
+    for c in existing_codes:
+        try:
+            num = int(c[0][2:])
+            if num > code_counter:
+                code_counter = num
+        except: pass
+
     imported = 0
+    skipped = 0
     for row in rows[1:]:
-        code = row[ci].strip() if ci < len(row) else ""
+        code = row[ci].strip() if (ci is not None and ci < len(row)) else ""
         name = row[ni].strip() if ni < len(row) else ""
-        if not code or not name:
+        if not name:
             continue
-        existing = db.query(Department).filter(Department.company_id == company_id, Department.code == code).first()
+
+        # 指纹去重
+        row_data = {"code": code, "name": name}
+        fp = row_fingerprint(row_data)
+        if fp in used_fps:
+            skipped += 1
+            continue
+        if fp in existing_fps:
+            skipped += 1
+            continue
+
+        # 编码为空时自动生成 BM001 格式
+        if not code:
+            code_counter += 1
+            code = f"BM{code_counter:03d}"
+
+        existing = db.query(Department).filter(
+            Department.company_id == company_id, Department.code == code
+        ).first()
         if existing:
             existing.name = name
+            existing._fingerprint = json.dumps(list(fp))
         else:
-            db.add(Department(company_id=company_id, code=code, name=name))
+            db.add(Department(
+                company_id=company_id, code=code, name=name,
+                _fingerprint=json.dumps(list(fp))
+            ))
+        used_fps[fp] = True
         imported += 1
     db.commit()
-    return {"message": f"成功导入 {imported} 条部门", "count": imported}
+    msg = f"成功导入 {imported} 条部门"
+    if skipped > 0:
+        msg += f"，跳过 {skipped} 条重复"
+    return {"message": msg, "count": imported, "skipped": skipped}
 
 
 # ==================== 人员档案 ====================
@@ -4167,6 +4222,30 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 try:
                     existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
                 except: pass
+        elif module == "employee":
+            for rec in db.query(Employee._fingerprint).filter(
+                Employee.company_id == company_id,
+                Employee._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
+        elif module == "customer":
+            for rec in db.query(Customer._fingerprint).filter(
+                Customer.company_id == company_id,
+                Customer._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
+        elif module == "supplier":
+            for rec in db.query(Supplier._fingerprint).filter(
+                Supplier.company_id == company_id,
+                Supplier._fingerprint.isnot(None)
+            ).all():
+                try:
+                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
+                except: pass
 
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
@@ -4483,80 +4562,116 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if not name:
                         errors.append(f"第{i+2}行: 姓名不能为空")
                         continue
-                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    # 全行指纹去重
+                    fp = row_fingerprint({**mapped, **extra})
+                    if used_fingerprints is not None and fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        continue
+                    if existing_fingerprints is not None and fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（姓名={name}），跳过")
+                        continue
+                    # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
                     if 'emp_code_counter' not in locals():
-                        max_rec = db.query(Employee.code).filter(
-                            Employee.company_id == company_id
-                        ).order_by(Employee.id.desc()).first()
-                        if max_rec and max_rec[0]:
+                        existing_codes = db.query(Employee.code).filter(
+                            Employee.company_id == company_id,
+                            Employee.code.like('RY%')
+                        ).all()
+                        emp_code_counter = 0
+                        for c in existing_codes:
                             try:
-                                emp_code_counter = int(max_rec[0])
-                            except ValueError:
-                                emp_code_counter = 0
-                        else:
-                            emp_code_counter = 0
+                                num = int(c[0][2:])
+                                if num > emp_code_counter:
+                                    emp_code_counter = num
+                            except: pass
                     emp_code_counter += 1
-                    code = str(emp_code_counter)
+                    code = f"RY{emp_code_counter:03d}"
                     emp = Employee(
                         company_id=company_id, code=code, name=name,
-                        id_card=mapped.get("id_card", "") or None
+                        id_card=mapped.get("id_card", "") or None,
+                        _fingerprint=json.dumps(list(fp))
                     )
                     db.add(emp)
                     db.flush()
+                    if used_fingerprints is not None:
+                        used_fingerprints[fp] = i+2
 
                 elif module == "customer":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 客户名称不能为空")
                         continue
-                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    # 全行指纹去重
+                    fp = row_fingerprint({**mapped, **extra})
+                    if used_fingerprints is not None and fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        continue
+                    if existing_fingerprints is not None and fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（客户={name}），跳过")
+                        continue
+                    # 编码自动生成 KH001 格式：首次查DB取最大code，后续内存递增
                     if 'cust_code_counter' not in locals():
-                        max_rec = db.query(Customer.code).filter(
-                            Customer.company_id == company_id
-                        ).order_by(Customer.id.desc()).first()
-                        if max_rec and max_rec[0]:
+                        existing_codes = db.query(Customer.code).filter(
+                            Customer.company_id == company_id,
+                            Customer.code.like('KH%')
+                        ).all()
+                        cust_code_counter = 0
+                        for c in existing_codes:
                             try:
-                                cust_code_counter = int(max_rec[0])
-                            except ValueError:
-                                cust_code_counter = 0
-                        else:
-                            cust_code_counter = 0
+                                num = int(c[0][2:])
+                                if num > cust_code_counter:
+                                    cust_code_counter = num
+                            except: pass
                     cust_code_counter += 1
-                    code = str(cust_code_counter)
+                    code = f"KH{cust_code_counter:03d}"
                     uscc = mapped.get("uscc", "") or None
                     cust = Customer(
                         company_id=company_id, code=code, name=name,
-                        uscc=uscc
+                        uscc=uscc,
+                        _fingerprint=json.dumps(list(fp))
                     )
                     db.add(cust)
                     db.flush()
+                    if used_fingerprints is not None:
+                        used_fingerprints[fp] = i+2
 
                 elif module == "supplier":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 供应商名称不能为空")
                         continue
-                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    # 全行指纹去重
+                    fp = row_fingerprint({**mapped, **extra})
+                    if used_fingerprints is not None and fp in used_fingerprints:
+                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
+                        continue
+                    if existing_fingerprints is not None and fp in existing_fingerprints:
+                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（供应商={name}），跳过")
+                        continue
+                    # 编码自动生成 GYS001 格式：首次查DB取最大code，后续内存递增
                     if 'supp_code_counter' not in locals():
-                        max_rec = db.query(Supplier.code).filter(
-                            Supplier.company_id == company_id
-                        ).order_by(Supplier.id.desc()).first()
-                        if max_rec and max_rec[0]:
+                        existing_codes = db.query(Supplier.code).filter(
+                            Supplier.company_id == company_id,
+                            Supplier.code.like('GYS%')
+                        ).all()
+                        supp_code_counter = 0
+                        for c in existing_codes:
                             try:
-                                supp_code_counter = int(max_rec[0])
-                            except ValueError:
-                                supp_code_counter = 0
-                        else:
-                            supp_code_counter = 0
+                                num = int(c[0][3:])
+                                if num > supp_code_counter:
+                                    supp_code_counter = num
+                            except: pass
                     supp_code_counter += 1
-                    code = str(supp_code_counter)
+                    code = f"GYS{supp_code_counter:03d}"
                     uscc = mapped.get("uscc", "") or None
                     supp = Supplier(
                         company_id=company_id, code=code, name=name,
-                        uscc=uscc
+                        uscc=uscc,
+                        _fingerprint=json.dumps(list(fp))
                     )
                     db.add(supp)
                     db.flush()
+                    if used_fingerprints is not None:
+                        used_fingerprints[fp] = i+2
 
                 imported += 1
             except Exception as e:

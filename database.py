@@ -104,6 +104,7 @@ class Department(Base):
     description = Column(String(200), comment="部门说明")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
+    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 人员档案 ====================
@@ -122,6 +123,7 @@ class Employee(Base):
     salary = Column(Float, default=0.0, comment="基本工资")
     leave_date = Column(Date, comment="离职日期")
     created_at = Column(DateTime, default=datetime.now)
+    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 客户档案 ====================
@@ -147,6 +149,7 @@ class Customer(Base):
     is_active = Column(Boolean, default=True)
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
+    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 供应商档案 ====================
@@ -167,6 +170,7 @@ class Supplier(Base):
     is_active = Column(Boolean, default=True)
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
+    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 会计科目 ====================
@@ -1048,6 +1052,19 @@ def migrate_schema(db):
                 except Exception as e:
                     db.rollback()
                     print(f"  [X] 222101 待认证进项税额 迁移失败: {e}")
+
+    # ── 12.6. 为档案表补充 _fingerprint 去重列 ──
+    for tbl in ("departments", "employees", "customers", "suppliers"):
+        if tbl in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns(tbl)}
+            if "_fingerprint" not in existing_cols:
+                try:
+                    db.execute(TextClause(f"ALTER TABLE {tbl} ADD COLUMN _fingerprint TEXT"))
+                    db.commit()
+                    print(f"  [OK] {tbl} 添加 _fingerprint 列")
+                except Exception as e:
+                    db.rollback()
+                    print(f"  [X] {tbl} _fingerprint 迁移失败: {e}")
 
     # ── 13. 自动为"正常"状态的开具发票生成序时账凭证 ──
     if "sales_invoices" in inspector.get_table_names() and "journal_entries" in inspector.get_table_names():
