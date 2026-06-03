@@ -2826,7 +2826,78 @@ def detail_ledger(
     }
 
 
-# ==================== 利润表 ====================
+# ==================== 利润表（企业会计准则一般企业—会企02号） ====================
+def _pl_net(balances, code_prefix, is_credit_nature=True):
+    """汇总指定前缀科目的净额：收入/收益类=贷-借，费用/损失类=借-贷"""
+    total_dr = 0.0; total_cr = 0.0
+    for code, bal in balances.items():
+        if code.startswith(code_prefix):
+            total_dr += bal["debit"]; total_cr += bal["credit"]
+    return round(total_cr - total_dr, 2) if is_credit_nature else round(total_dr - total_cr, 2)
+
+def _pl_row(label, current=0.0, prior=0.0, bold=False, highlight=False, indent=0):
+    return {"label": label, "current": current, "prior": prior, "bold": bold, "highlight": highlight, "indent": indent}
+
+def _build_pl(company_id, from_period, to_period, db):
+    """构建单期利润表数据"""
+    b = _compute_period_balances(company_id, from_period, to_period, db)
+    # 一、营业收入
+    rev = _pl_net(b, "6001") + _pl_net(b, "6051")
+    cost = _pl_net(b, "6401", False) + _pl_net(b, "6402", False)
+    tax_sur = _pl_net(b, "6403", False)
+    sell_exp = _pl_net(b, "6601", False)
+    admin_exp = _pl_net(b, "6602", False)
+    rd_exp = _pl_net(b, "6604", False)
+    fin_exp = _pl_net(b, "6603", False)
+    fin_inc = _pl_net(b, "660301")  # 利息收入
+    fin_cost = _pl_net(b, "660302", False)  # 利息费用
+    inv_inc = _pl_net(b, "6111")
+    credit_loss = _pl_net(b, "6701", False)
+    asset_impair = _pl_net(b, "6702", False)
+    asset_disp = _pl_net(b, "6712")  # 资产处置收益（贷余）
+    other_inc = _pl_net(b, "6301")
+    other_exp = _pl_net(b, "6711", False)
+    income_tax = _pl_net(b, "6801", False)
+    # 中间计算
+    gross_p = round(rev - cost - tax_sur, 2)
+    op_p = round(gross_p - sell_exp - admin_exp - rd_exp - fin_exp + inv_inc + fin_inc + other_inc, 2)
+    total_p = round(op_p + other_inc - other_exp + asset_disp - credit_loss - asset_impair, 2)
+    net_p = round(total_p - income_tax, 2)
+    items = [
+        _pl_row("一、营业收入", rev, bold=True),
+        _pl_row("  减：营业成本", cost, indent=1),
+        _pl_row("  减：税金及附加", tax_sur, indent=1),
+        _pl_row("  减：销售费用", sell_exp, indent=1),
+        _pl_row("  减：管理费用", admin_exp, indent=1),
+        _pl_row("  减：研发费用", rd_exp, indent=1),
+        _pl_row("  减：财务费用", fin_exp, indent=1),
+        _pl_row("    其中：利息费用", fin_cost, indent=2),
+        _pl_row("        利息收入", fin_inc, indent=2),
+        _pl_row("  加：其他收益", other_inc, indent=1),
+        _pl_row("  加：投资收益", inv_inc, indent=1),
+        _pl_row("  加：资产处置收益", asset_disp, indent=1),
+        _pl_row("  减：信用减值损失", credit_loss, indent=1),
+        _pl_row("  减：资产减值损失", asset_impair, indent=1),
+        _pl_row("二、营业利润", op_p, bold=True, highlight=True),
+        _pl_row("  加：营业外收入", other_inc, indent=1),
+        _pl_row("  减：营业外支出", other_exp, indent=1),
+        _pl_row("三、利润总额", total_p, bold=True, highlight=True),
+        _pl_row("  减：所得税费用", income_tax, indent=1),
+        _pl_row("四、净利润", net_p, bold=True, highlight=True),
+        _pl_row("五、其他综合收益的税后净额", 0.0, bold=True),
+        _pl_row("六、综合收益总额", net_p, bold=True, highlight=True),
+        _pl_row("七、每股收益", 0.0, bold=True),
+        _pl_row("  （一）基本每股收益", 0.0, indent=1),
+        _pl_row("  （二）稀释每股收益", 0.0, indent=1),
+    ]
+    return items
+
+def _prior_same_period(period_from: str, period_to: str):
+    """计算上年同期：如 2026-01→2026-03 → 2025-01→2025-03"""
+    yf, mf = map(int, period_from.split("-"))
+    yt, mt = map(int, period_to.split("-"))
+    return f"{yf-1}-{mf:02d}", f"{yt-1}-{mt:02d}"
+
 @app.get("/api/reports/profit-loss")
 def profit_loss_report(
     company_id: int = Query(1),
@@ -2834,168 +2905,339 @@ def profit_loss_report(
     period_to: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """利润表：调用统一余额计算函数"""
-    balances = _compute_period_balances(company_id, period_from, period_to, db)
-
-    def net(code_prefix, is_credit_nature=True):
-        """汇总指定前缀科目的净额：收入类=贷方-借方，费用类=借方-贷方"""
-        total_dr = 0.0
-        total_cr = 0.0
-        for code, bal in balances.items():
-            if code.startswith(code_prefix):
-                total_dr += bal["debit"]
-                total_cr += bal["credit"]
-        if is_credit_nature:
-            return round(total_cr - total_dr, 2)
-        else:
-            return round(total_dr - total_cr, 2)
-
-    # 营业收入 = 6001 + 6051（贷方余额）
-    revenue = net("6001") + net("6051")
-    # 营业成本 = 6401 + 6402（借方余额）
-    cost = net("6401", False) + net("6402", False)
-    # 税金及附加 = 6403（借方余额）
-    tax_surcharge = net("6403", False)
-    # 销售费用 = 6601（借方余额）
-    selling_exp = net("6601", False)
-    # 管理费用 = 6602（借方余额）
-    admin_exp = net("6602", False)
-    # 财务费用 = 6603（借方余额）
-    finance_exp = net("6603", False)
-    # 投资收益 = 6111（贷方余额，损失则为负）
-    invest_income = net("6111")
-    # 营业外收入 = 6301（贷方余额）
-    other_income = net("6301")
-    # 营业外支出 = 6711（借方余额）
-    other_expense = net("6711", False)
-    # 所得税 = 6801（借方余额）
-    income_tax = net("6801", False)
-
-    gross_profit = round(revenue - cost - tax_surcharge, 2)
-    operating_profit = round(gross_profit - selling_exp - admin_exp - finance_exp + invest_income, 2)
-    total_profit = round(operating_profit + other_income - other_expense, 2)
-    net_profit = round(total_profit - income_tax, 2)
-
-    def item(label, amount, bold=False, highlight=False):
-        return {"label": label, "amount": amount, "bold": bold, "highlight": highlight}
-
-    items = [
-        item("一、营业收入", revenue, bold=True),
-        item("  减：营业成本", cost),
-        item("  减：税金及附加", tax_surcharge),
-        item("二、毛利润", gross_profit, bold=True, highlight=True),
-        item("  减：销售费用", selling_exp),
-        item("  减：管理费用", admin_exp),
-        item("  减：财务费用", finance_exp),
-        item("  加：投资收益", invest_income),
-        item("三、营业利润", operating_profit, bold=True, highlight=True),
-        item("  加：营业外收入", other_income),
-        item("  减：营业外支出", other_expense),
-        item("四、利润总额", total_profit, bold=True, highlight=True),
-        item("  减：所得税费用", income_tax),
-        item("五、净利润", net_profit, bold=True, highlight=True),
-    ]
-    return {"items": items}
+    """利润表（会企02号）：本期金额 + 上期金额"""
+    current_items = _build_pl(company_id, period_from, period_to, db)
+    prior_from, prior_to = _prior_same_period(period_from, period_to)
+    prior_items = _build_pl(company_id, prior_from, prior_to, db)
+    prior_map = {it["label"]: it["current"] for it in prior_items}
+    for it in current_items:
+        it["prior"] = prior_map.get(it["label"], 0.0)
+    return {"items": current_items, "period_from": period_from, "period_to": period_to}
 
 
-# ==================== 资产负债表 ====================
+# ==================== 资产负债表（企业会计准则一般企业—会企01号） ====================
+def _bs_year_begin(period: str):
+    """年初期间：2026-03 → 2025-12"""
+    y = int(period.split("-")[0])
+    return f"{y-1}-12"
+
+def _bs_net(balances, code_prefix, is_debit_nature=True):
+    """资产类=借-贷，负债/权益类=贷-借"""
+    total_dr = 0.0; total_cr = 0.0
+    for code, bal in balances.items():
+        if code.startswith(code_prefix):
+            total_dr += bal["debit"]; total_cr += bal["credit"]
+    return round(total_dr - total_cr, 2) if is_debit_nature else round(total_cr - total_dr, 2)
+
+def _bs_row(label, end=0.0, begin=0.0, bold=False, highlight=False, indent=0):
+    return {"label": label, "end": end, "begin": begin, "bold": bold, "highlight": highlight, "indent": indent}
+
+def _build_bs_side(balances, side):
+    """构建资产负债表一侧（资产 或 负债+权益）"""
+    r = _bs_row
+    b = balances
+    if side == "assets":
+        # 流动资产
+        cash = _bs_net(b, "1001") + _bs_net(b, "1002") + _bs_net(b, "1003")
+        fin_asset = _bs_net(b, "1101")
+        notes_recv = _bs_net(b, "1121")
+        ar = _bs_net(b, "1122")
+        ar_fin = _bs_net(b, "1124")
+        prepay = _bs_net(b, "1123")
+        other_recv = _bs_net(b, "1221")
+        inventory = _bs_net(b, "1403") + _bs_net(b, "1405") + _bs_net(b, "1406") + _bs_net(b, "1408") + _bs_net(b, "1411")
+        contract_asset = _bs_net(b, "1401")
+        held_for_sale_a = _bs_net(b, "1501")
+        noncurr_due_1y = _bs_net(b, "1502")
+        other_current_a = _bs_net(b, "1503")
+        total_current = round(cash + fin_asset + notes_recv + ar + ar_fin + prepay + other_recv + inventory + contract_asset + held_for_sale_a + noncurr_due_1y + other_current_a, 2)
+        # 非流动资产
+        debt_inv = _bs_net(b, "1504")
+        other_debt_inv = _bs_net(b, "1505")
+        lt_recv = _bs_net(b, "1511")
+        lt_equity = _bs_net(b, "1512")
+        other_equity = _bs_net(b, "1513")
+        other_nc_fin = _bs_net(b, "1514")
+        invest_prop = _bs_net(b, "1521")
+        fixed_asset = _bs_net(b, "1601")
+        accum_depr = _bs_net(b, "1602", False)
+        cip = _bs_net(b, "1604")
+        bio_asset = _bs_net(b, "1621")
+        oil_gas = _bs_net(b, "1631")
+        rou_asset = _bs_net(b, "1641")
+        intangible = _bs_net(b, "1701")
+        dev_exp = _bs_net(b, "1702")
+        goodwill = _bs_net(b, "1711")
+        lt_deferred = _bs_net(b, "1801")
+        def_tax_asset = _bs_net(b, "1811")
+        other_nc_a = _bs_net(b, "1901")
+        total_nc = round(debt_inv + other_debt_inv + lt_recv + lt_equity + other_equity + other_nc_fin + invest_prop + fixed_asset + accum_depr + cip + bio_asset + oil_gas + rou_asset + intangible + dev_exp + goodwill + lt_deferred + def_tax_asset + other_nc_a, 2)
+        total_assets = round(total_current + total_nc, 2)
+        return [
+            r("流动资产：", bold=True),
+            r("  货币资金", cash, indent=1), r("  交易性金融资产", fin_asset, indent=1),
+            r("  应收票据", notes_recv, indent=1), r("  应收账款", ar, indent=1),
+            r("  应收款项融资", ar_fin, indent=1), r("  预付款项", prepay, indent=1),
+            r("  其他应收款", other_recv, indent=1), r("  存货", inventory, indent=1),
+            r("  合同资产", contract_asset, indent=1), r("  持有待售资产", held_for_sale_a, indent=1),
+            r("  一年内到期的非流动资产", noncurr_due_1y, indent=1), r("  其他流动资产", other_current_a, indent=1),
+            r("流动资产合计", total_current, bold=True, highlight=True),
+            r("非流动资产：", bold=True),
+            r("  债权投资", debt_inv, indent=1), r("  其他债权投资", other_debt_inv, indent=1),
+            r("  长期应收款", lt_recv, indent=1), r("  长期股权投资", lt_equity, indent=1),
+            r("  其他权益工具投资", other_equity, indent=1), r("  其他非流动金融资产", other_nc_fin, indent=1),
+            r("  投资性房地产", invest_prop, indent=1),
+            r("  固定资产", round(fixed_asset + accum_depr, 2) if fixed_asset else 0.0, indent=1),
+            r("  在建工程", cip, indent=1), r("  生产性生物资产", bio_asset, indent=1),
+            r("  使用权资产", rou_asset, indent=1), r("  无形资产", intangible, indent=1),
+            r("  开发支出", dev_exp, indent=1), r("  商誉", goodwill, indent=1),
+            r("  长期待摊费用", lt_deferred, indent=1), r("  递延所得税资产", def_tax_asset, indent=1),
+            r("  其他非流动资产", other_nc_a, indent=1),
+            r("非流动资产合计", total_nc, bold=True, highlight=True),
+            r("资产总计", total_assets, bold=True, highlight=True),
+        ]
+    else:
+        # 流动负债
+        st_loan = _bs_net(b, "2001", False)
+        fin_liab = _bs_net(b, "2101", False)
+        notes_pay = _bs_net(b, "2201", False)
+        ap = _bs_net(b, "2202", False)
+        advance_rcv = _bs_net(b, "2203", False)
+        contract_liab = _bs_net(b, "2204", False)
+        payroll = _bs_net(b, "2211", False)
+        taxes = _bs_net(b, "2221", False)
+        other_pay = _bs_net(b, "2241", False)
+        held_for_sale_l = _bs_net(b, "2242", False)
+        nc_due_1y_l = _bs_net(b, "2243", False)
+        other_current_l = _bs_net(b, "2244", False)
+        total_current_l = round(st_loan + fin_liab + notes_pay + ap + advance_rcv + contract_liab + payroll + taxes + other_pay + held_for_sale_l + nc_due_1y_l + other_current_l, 2)
+        # 非流动负债
+        lt_loan = _bs_net(b, "2501", False)
+        bonds_pay = _bs_net(b, "2502", False)
+        lease_liab = _bs_net(b, "2601", False)
+        lt_pay = _bs_net(b, "2701", False)
+        estimated_liab = _bs_net(b, "2801", False)
+        deferred_inc = _bs_net(b, "2901", False)
+        def_tax_liab = _bs_net(b, "2902", False)
+        other_nc_l = _bs_net(b, "2903", False)
+        total_nc_l = round(lt_loan + bonds_pay + lease_liab + lt_pay + estimated_liab + deferred_inc + def_tax_liab + other_nc_l, 2)
+        total_liab = round(total_current_l + total_nc_l, 2)
+        # 所有者权益
+        paid_in = _bs_net(b, "4001", False)
+        other_equity_instr = _bs_net(b, "4002", False)
+        capital_surplus = _bs_net(b, "4003", False)
+        treasury_stock = _bs_net(b, "4004")
+        oci = _bs_net(b, "4005", False)
+        special_reserve = _bs_net(b, "4101", False)
+        surplus = _bs_net(b, "4103", False)
+        retained = _bs_net(b, "4104", False)
+        total_equity = round(paid_in + other_equity_instr + capital_surplus - treasury_stock + oci + special_reserve + surplus + retained, 2)
+        total_right = round(total_liab + total_equity, 2)
+        return [
+            r("流动负债：", bold=True),
+            r("  短期借款", st_loan, indent=1), r("  交易性金融负债", fin_liab, indent=1),
+            r("  应付票据", notes_pay, indent=1), r("  应付账款", ap, indent=1),
+            r("  预收款项", advance_rcv, indent=1), r("  合同负债", contract_liab, indent=1),
+            r("  应付职工薪酬", payroll, indent=1), r("  应交税费", taxes, indent=1),
+            r("  其他应付款", other_pay, indent=1), r("  持有待售负债", held_for_sale_l, indent=1),
+            r("  一年内到期的非流动负债", nc_due_1y_l, indent=1), r("  其他流动负债", other_current_l, indent=1),
+            r("流动负债合计", total_current_l, bold=True, highlight=True),
+            r("非流动负债：", bold=True),
+            r("  长期借款", lt_loan, indent=1), r("  应付债券", bonds_pay, indent=1),
+            r("  租赁负债", lease_liab, indent=1), r("  长期应付款", lt_pay, indent=1),
+            r("  预计负债", estimated_liab, indent=1), r("  递延收益", deferred_inc, indent=1),
+            r("  递延所得税负债", def_tax_liab, indent=1), r("  其他非流动负债", other_nc_l, indent=1),
+            r("非流动负债合计", total_nc_l, bold=True, highlight=True),
+            r("负债合计", total_liab, bold=True, highlight=True),
+            r("所有者权益（或股东权益）：", bold=True),
+            r("  实收资本（或股本）", paid_in, indent=1), r("  其他权益工具", other_equity_instr, indent=1),
+            r("  资本公积", capital_surplus, indent=1), r("  减：库存股", treasury_stock, indent=1),
+            r("  其他综合收益", oci, indent=1), r("  专项储备", special_reserve, indent=1),
+            r("  盈余公积", surplus, indent=1), r("  未分配利润", retained, indent=1),
+            r("所有者权益合计", total_equity, bold=True, highlight=True),
+            r("负债和所有者权益总计", total_right, bold=True, highlight=True),
+        ]
+
 @app.get("/api/reports/balance-sheet")
 def balance_sheet_report(
     company_id: int = Query(1),
     period: str = Query(...),
     db: Session = Depends(get_db)
 ):
-    """资产负债表：调用统一余额计算函数"""
-    balances = _compute_period_balances(company_id, None, period, db)
+    """资产负债表（会企01号）：期末余额 + 年初余额"""
+    end_balances = _compute_period_balances(company_id, None, period, db)
+    yb = _bs_year_begin(period)
+    begin_balances = _compute_period_balances(company_id, None, yb, db) if yb else {}
+    def _fill_bs(rows, bb):
+        for r in rows:
+            r["begin"] = bb.get(r["label"], 0.0) if isinstance(bb, dict) else 0.0
+        return rows
+    assets = _build_bs_side(end_balances, "assets")
+    liab_eq = _build_bs_side(end_balances, "liab_eq")
+    # 年初余额单独计算
+    assets_begin = _build_bs_side(begin_balances, "assets") if begin_balances else assets
+    liab_eq_begin = _build_bs_side(begin_balances, "liab_eq") if begin_balances else liab_eq
+    begin_map_a = {r["label"]: r["end"] for r in assets_begin}
+    begin_map_le = {r["label"]: r["end"] for r in liab_eq_begin}
+    for r in assets:
+        r["begin"] = begin_map_a.get(r["label"], 0.0)
+    for r in liab_eq:
+        r["begin"] = begin_map_le.get(r["label"], 0.0)
+    return {"assets": assets, "liabilities_equity": liab_eq, "period": period}
 
-    def bal_net(code_prefix, is_debit_nature=True):
-        """资产类=借方-贷方，负债/权益类=贷方-借方"""
-        total_dr = 0.0
-        total_cr = 0.0
-        for code, bal in balances.items():
-            if code.startswith(code_prefix):
-                total_dr += bal["debit"]
-                total_cr += bal["credit"]
-        if is_debit_nature:
-            return round(total_dr - total_cr, 2)
-        else:
-            return round(total_cr - total_dr, 2)
 
-    def row(label, amount, bold=False, highlight=False):
-        return {"label": label, "amount": amount, "bold": bold, "highlight": highlight}
+# ==================== 现金流量表（企业会计准则一般企业—会企03号） ====================
+def _prior_period_year(period: str):
+    """上年同期：2026 → 2025"""
+    y = int(period.split("-")[0])
+    return str(y - 1)
 
-    # 资产
-    cash = bal_net("1001") + bal_net("1002")
-    receivables = bal_net("1122")
-    prepayments = bal_net("1123")
-    other_recv = bal_net("1221")
-    inventory = bal_net("140") + bal_net("1411")
-    fixed_assets = bal_net("1601")
-    accum_depr = bal_net("1602", is_debit_nature=False)  # 累计折旧是贷方科目
-    intangible = bal_net("1701")
-    long_term = bal_net("1801")
+def _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db, inflow=True):
+    """计算涉及现金科目的对方科目发生额（直接法）"""
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to,
+    ).all()
+    # 按凭证号分组
+    vouchers = {}
+    for e in entries:
+        vouchers.setdefault(e.voucher_no, []).append(e)
+    total = 0.0
+    for vno, lines in vouchers.items():
+        has_cash = any(l.account_code and any(l.account_code.startswith(c) for c in cash_codes) for l in lines)
+        if not has_cash:
+            continue
+        # 此凭证涉及现金 → 对方科目汇总
+        for l in lines:
+            if l.account_code and any(l.account_code.startswith(c) for c in cash_codes):
+                if inflow:
+                    total += (l.credit_amount or 0)  # 现金流入：贷现金
+                else:
+                    total += (l.debit_amount or 0)  # 现金流出：借现金
+    return round(total, 2)
 
-    total_current = round(cash + receivables + prepayments + other_recv + inventory, 2)
-    total_noncurrent = round(fixed_assets + accum_depr + intangible + long_term, 2)
-    total_assets = round(total_current + total_noncurrent, 2)
 
-    # 负债
-    short_loan = bal_net("2001", is_debit_nature=False)
-    payables = bal_net("2202", is_debit_nature=False)
-    advance = bal_net("2203", is_debit_nature=False)
-    taxes = bal_net("2210", is_debit_nature=False)
-    payroll = bal_net("2211", is_debit_nature=False)
-    other_pay = bal_net("2221", is_debit_nature=False)
-    deferred = bal_net("2241", is_debit_nature=False)
-    long_loan = bal_net("2501", is_debit_nature=False)
+@app.get("/api/reports/cash-flow")
+def cash_flow_report(
+    company_id: int = Query(1),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """现金流量表（会企03号）：直接法"""
+    cash_codes = ["1001", "1002", "1003"]  # 库存现金、银行存款、其他货币资金
 
-    total_liab = round(short_loan + payables + advance + taxes + payroll + other_pay + deferred + long_loan, 2)
+    def cf_row(label, current=0.0, prior=0.0, bold=False, highlight=False, indent=0):
+        return {"label": label, "current": current, "prior": prior, "bold": bold, "highlight": highlight, "indent": indent}
 
-    # 所有者权益
-    paid_in = bal_net("4001", is_debit_nature=False)
-    capital_surplus = bal_net("4002", is_debit_nature=False)
-    surplus = bal_net("4101", is_debit_nature=False)
-    current_profit = bal_net("4103", is_debit_nature=False)
-    profit_dist = bal_net("4104", is_debit_nature=False)
-    total_equity = round(paid_in + capital_surplus + surplus + current_profit + profit_dist, 2)
+    # 期初/期末现金余额
+    begin_period = period_from[:4] + "-01"
+    balances_end = _compute_period_balances(company_id, None, period_to, db)
+    balances_begin = _compute_period_balances(company_id, None, _prev_period(begin_period), db)
+    cash_end = sum(_bs_net(balances_end, c) for c in cash_codes)
+    cash_begin = sum(_bs_net(balances_begin, c) for c in cash_codes)
 
-    total_right = round(total_liab + total_equity, 2)
+    # 经营活动
+    op_inflow1 = _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db, inflow=True)
+    op_outflow1 = _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db, inflow=False)
+    op_net = round(op_inflow1 - op_outflow1, 2)
 
-    assets = [
-        row("货币资金", cash),
-        row("应收账款", receivables),
-        row("预付款项", prepayments),
-        row("其他应收款", other_recv),
-        row("存货", inventory),
-        row("流动资产合计", total_current, bold=True, highlight=True),
-        row("固定资产", fixed_assets),
-        row("  减：累计折旧", accum_depr),
-        row("无形资产", intangible),
-        row("长期待摊费用", long_term),
-        row("非流动资产合计", total_noncurrent, bold=True, highlight=True),
-        row("资产总计", total_assets, bold=True, highlight=True),
+    items = [
+        cf_row("一、经营活动产生的现金流量：", bold=True),
+        cf_row("  销售商品、提供劳务收到的现金", op_inflow1, indent=1),
+        cf_row("  收到的税费返还", 0.0, indent=1),
+        cf_row("  收到其他与经营活动有关的现金", 0.0, indent=1),
+        cf_row("经营活动现金流入小计", op_inflow1, bold=True, highlight=True),
+        cf_row("  购买商品、接受劳务支付的现金", op_outflow1, indent=1),
+        cf_row("  支付给职工以及为职工支付的现金", 0.0, indent=1),
+        cf_row("  支付的各项税费", 0.0, indent=1),
+        cf_row("  支付其他与经营活动有关的现金", 0.0, indent=1),
+        cf_row("经营活动现金流出小计", op_outflow1, bold=True, highlight=True),
+        cf_row("经营活动产生的现金流量净额", op_net, bold=True, highlight=True),
+        cf_row("二、投资活动产生的现金流量：", bold=True),
+        cf_row("  收回投资收到的现金", 0.0, indent=1),
+        cf_row("  取得投资收益收到的现金", 0.0, indent=1),
+        cf_row("  处置固定资产、无形资产收回的现金净额", 0.0, indent=1),
+        cf_row("  处置子公司及其他营业单位收到的现金净额", 0.0, indent=1),
+        cf_row("  收到其他与投资活动有关的现金", 0.0, indent=1),
+        cf_row("投资活动现金流入小计", 0.0, bold=True, highlight=True),
+        cf_row("  购建固定资产、无形资产支付的现金", 0.0, indent=1),
+        cf_row("  投资支付的现金", 0.0, indent=1),
+        cf_row("  取得子公司及其他营业单位支付的现金净额", 0.0, indent=1),
+        cf_row("  支付其他与投资活动有关的现金", 0.0, indent=1),
+        cf_row("投资活动现金流出小计", 0.0, bold=True, highlight=True),
+        cf_row("投资活动产生的现金流量净额", 0.0, bold=True, highlight=True),
+        cf_row("三、筹资活动产生的现金流量：", bold=True),
+        cf_row("  吸收投资收到的现金", 0.0, indent=1),
+        cf_row("  取得借款收到的现金", 0.0, indent=1),
+        cf_row("  收到其他与筹资活动有关的现金", 0.0, indent=1),
+        cf_row("筹资活动现金流入小计", 0.0, bold=True, highlight=True),
+        cf_row("  偿还债务支付的现金", 0.0, indent=1),
+        cf_row("  分配股利、利润或偿付利息支付的现金", 0.0, indent=1),
+        cf_row("  支付其他与筹资活动有关的现金", 0.0, indent=1),
+        cf_row("筹资活动现金流出小计", 0.0, bold=True, highlight=True),
+        cf_row("筹资活动产生的现金流量净额", 0.0, bold=True, highlight=True),
+        cf_row("四、汇率变动对现金的影响", 0.0),
+        cf_row("五、现金及现金等价物净增加额", op_net, bold=True, highlight=True),
+        cf_row("  加：期初现金及现金等价物余额", cash_begin, indent=1),
+        cf_row("六、期末现金及现金等价物余额", cash_end, bold=True, highlight=True),
     ]
+    return {"items": items, "period_from": period_from, "period_to": period_to, "cash_begin": cash_begin, "cash_end": cash_end}
 
-    liabilities_equity = [
-        row("短期借款", short_loan),
-        row("应付账款", payables),
-        row("预收款项", advance),
-        row("应交税费", taxes),
-        row("应付职工薪酬", payroll),
-        row("其他应付款", other_pay),
-        row("递延收益", deferred),
-        row("长期借款", long_loan),
-        row("负债合计", total_liab, bold=True, highlight=True),
-        row("实收资本", paid_in),
-        row("资本公积", capital_surplus),
-        row("盈余公积", surplus),
-        row("未分配利润", current_profit),
-        row("  利润分配", profit_dist),
-        row("所有者权益合计", total_equity, bold=True, highlight=True),
-        row("负债及所有者权益总计", total_right, bold=True, highlight=True),
-    ]
 
-    return {"assets": assets, "liabilities_equity": liabilities_equity}
+# ==================== 所有者权益变动表（企业会计准则一般企业—会企04号） ====================
+@app.get("/api/reports/equity-changes")
+def equity_changes_report(
+    company_id: int = Query(1),
+    period: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """所有者权益变动表（会企04号）：本年金额 + 上年金额"""
+    # 本年年初 = 上年度末
+    yb = _bs_year_begin(period)
+    begin_b = _compute_period_balances(company_id, None, yb, db)
+    end_b = _compute_period_balances(company_id, None, period, db)
+
+    # 利润表数据（本年累计）
+    py = period.split("-")[0]
+    pl_items = _build_pl(company_id, f"{py}-01", period, db)
+    net_profit = next((it["current"] for it in pl_items if it["label"] == "四、净利润"), 0.0)
+
+    def eq_val(balances, prefix, is_debit_nature=True):
+        d = 0.0; c = 0.0
+        for code, v in balances.items():
+            if code.startswith(prefix):
+                d += v["debit"]; c += v["credit"]
+        return round(d - c, 2) if is_debit_nature else round(c - d, 2)
+
+    cols = ["实收资本", "其他权益工具", "资本公积", "库存股", "其他综合收益", "专项储备", "盈余公积", "未分配利润", "所有者权益合计"]
+    prefixes = ["4001", "4002", "4003", "4004", "4005", "4101", "4103", "4104", None]
+
+    begin_vals = [eq_val(begin_b, p, False) if p else 0.0 for p in prefixes]
+    end_vals = [eq_val(end_b, p, False) if p else 0.0 for p in prefixes]
+    # 未分配利润期末 = 年初 + 净利润
+    end_vals[7] = round(begin_vals[7] + net_profit, 2)
+    # 合计
+    begin_total = round(sum(begin_vals), 2)
+    end_total = round(sum(end_vals), 2)
+
+    def eq_row(label, begin_vals_list, end_vals_list, bold=False):
+        return {"label": label, "begin": begin_vals_list, "end": end_vals_list, "bold": bold}
+    # 年初余额行
+    year_begin_row = [round(v, 2) for v in begin_vals] + [begin_total]
+    year_end_row = [round(v, 2) for v in end_vals] + [end_total]
+    # 变动额
+    changes = [round(end_vals[i] - begin_vals[i], 2) for i in range(8)] + [round(end_total - begin_total, 2)]
+
+    return {
+        "columns": cols,
+        "year_begin": year_begin_row,
+        "net_profit": net_profit,
+        "year_end": year_end_row,
+        "changes": changes,
+        "period": period
+    }
 
 
 @app.post("/api/journal-entries")

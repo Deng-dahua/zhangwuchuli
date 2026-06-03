@@ -439,6 +439,8 @@
     <div class="nav-group-title">财务报表</div>
     <div class="nav-item" data-page="profit-loss"><span class="icon">📈</span>利润表</div>
     <div class="nav-item" data-page="balance-sheet"><span class="icon">⚖️</span>资产负债表</div>
+    <div class="nav-item" data-page="cash-flow"><span class="icon">💵</span>现金流量表</div>
+    <div class="nav-item" data-page="equity-changes"><span class="icon">📊</span>所有者权益变动表</div>
     <div class="nav-item" data-page="account-balance"><span class="icon">📒</span>科目余额表</div>
 
     <div class="nav-group-title">基础档案</div>
@@ -523,6 +525,8 @@ const pages = {
   'journal': '序时账',
   'profit-loss': '利润表',
   'balance-sheet': '资产负债表',
+  'cash-flow': '现金流量表',
+  'equity-changes': '所有者权益变动表',
   'account-balance': '科目余额表',
   'accounts': '会计科目',
   'periods': '期间管理',
@@ -708,7 +712,7 @@ function onGlobalPeriodConfirm() {
   updatePeriodLabel();
   toast('已切换到 ' + currentPeriod, 'success');
   // 同步所有已渲染页面的期间筛选框到新期间
-  ['gl-from','gl-to','dl-from','dl-to','pl-from','pl-to','bs-from','bs-to','tb-from','tb-to','je-from','je-to'].forEach(function(prefix) {
+  ['gl-from','gl-to','dl-from','dl-to','pl-from','pl-to','bs-from','bs-to','cf-from','cf-to','ec-from','tb-from','tb-to','je-from','je-to'].forEach(function(prefix) {
     var ey = document.getElementById(prefix + '-y');
     var em = document.getElementById(prefix + '-m');
     if (ey) ey.value = y;
@@ -766,6 +770,8 @@ function navigateTo(page) {
       case 'detail-ledger': renderDetailLedger(container); break;
       case 'profit-loss': renderProfitLoss(container); break;
       case 'balance-sheet': renderBalanceSheet(container); break;
+      case 'cash-flow': renderCashFlow(container); break;
+      case 'equity-changes': renderEquityChanges(container); break;
       case 'account-balance': renderAccountBalance(container); break;
       case 'accounts': renderAccounts(container); break;
       case 'periods': renderPeriods(container); break;
@@ -1445,7 +1451,7 @@ async function loadDetailLedger() {
 async function clearFilters(page) {
   var prefix = page;
   document.querySelectorAll('select[id^="' + prefix + '-"]').forEach(function(s) { s.value = ''; });
-  var tableMap = { gl: 'gl-table', dl: 'dl-table', pl: 'pl-table', bs: 'bs-table', tb: 'tb-table' };
+  var tableMap = { gl: 'gl-table', dl: 'dl-table', pl: 'pl-table', bs: 'bs-table', cf: 'cf-table', ec: 'ec-table', tb: 'tb-table' };
   var tbl = document.getElementById(tableMap[page] || '');
   if (tbl) tbl.innerHTML = '';
 }
@@ -1485,99 +1491,165 @@ function _readPeriod(prefix) {
 // ==================== 利润表 ====================
 async function renderProfitLoss(container) {
   const el = container || document.getElementById('content-area');
-  el.innerHTML = `
-    <div class="card">
-      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
-        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('pl-from', currentPeriod)}
-        <span style="color:#9ca3af">至</span>
-        ${_periodSelectsHTML('pl-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
-        <button class="btn btn-primary" onclick="loadProfitLoss()">🔍 生成报表</button>
-        <button onclick="clearFilters('pl')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
-      </div>
-      <div id="pl-table"></div>
-    </div>
-  `;
+  el.innerHTML =
+    '<div class="card">' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('pl-from', currentPeriod) +
+        '<span style="color:#9ca3af">至</span>' +
+        _periodSelectsHTML('pl-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
+        '<button class="btn btn-primary" onclick="loadProfitLoss()">生成报表</button>' +
+        '<button onclick="clearFilters(\'pl\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
+      '</div>' +
+      '<div id="pl-table"></div>' +
+    '</div>';
 }
 
+function plFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
+
 async function loadProfitLoss() {
-  const from = _readPeriod('pl-from');
-  const to = _readPeriod('pl-to');
+  const from = _readPeriod('pl-from'); const to = _readPeriod('pl-to');
   const el = document.getElementById('pl-table');
   el.innerHTML = '加载中...';
   try {
-    const data = await api(`/api/reports/profit-loss?period_from=${from}&period_to=${to}`);
-    el.innerHTML = `
-      <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">报告期间：${from} 至 ${to}</div>
-      <table class="report-table">
-        <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
-        <tbody>
-          ${data.items.map(item => `
-            <tr class="${item.bold ? 'report-bold' : ''} ${item.highlight ? 'report-highlight' : ''}">
-              <td>${item.label}</td>
-              <td>${item.amount !== null ? '¥' + fmt(item.amount) : ''}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-  } catch (e) {
-    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
-  }
+    const data = await api('/api/reports/profit-loss?period_from=' + from + '&period_to=' + to);
+    var rows = '';
+    for (var i = 0; i < data.items.length; i++) {
+      var it = data.items[i];
+      var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+      var indent = (it.indent || 0) * 16;
+      rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
+        '<td class="num">' + plFmt(it.current) + '</td>' +
+        '<td class="num">' + plFmt(it.prior) + '</td></tr>';
+    }
+    el.innerHTML =
+      '<div style="font-size:12px;color:#6b7280;margin-bottom:12px">会企02号 | 报告期间：' + data.period_from + ' 至 ' + data.period_to + '</div>' +
+      '<table class="report-table"><thead><tr><th>项目</th><th class="num">本期金额</th><th class="num">上期金额</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>';
+  } catch (e) { el.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>'; }
 }
 
 // ==================== 资产负债表 ====================
 async function renderBalanceSheet(container) {
   const el = container || document.getElementById('content-area');
-  el.innerHTML = `
-    <div class="card">
-      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
-        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('bs-from', currentPeriod)}
-        <span style="color:#9ca3af">至</span>
-        ${_periodSelectsHTML('bs-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
-        <button class="btn btn-primary" onclick="loadBalanceSheet()">🔍 生成报表</button>
-        <button onclick="clearFilters('bs')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
-      </div>
-      <div id="bs-table"></div>
-    </div>
-  `;
+  el.innerHTML =
+    '<div class="card">' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('bs-from', currentPeriod) +
+        '<button class="btn btn-primary" onclick="loadBalanceSheet()">生成报表</button>' +
+        '<button onclick="clearFilters(\'bs\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
+      '</div>' +
+      '<div id="bs-table"></div>' +
+    '</div>';
+}
+
+function bsFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
+
+function bsRenderRows(rows, showHeader) {
+  var h = showHeader ? '<thead><tr><th>项目</th><th class="num">期末余额</th><th class="num">年初余额</th></tr></thead>' : '';
+  var r = '';
+  for (var i = 0; i < rows.length; i++) {
+    var it = rows[i];
+    var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+    var indent = (it.indent || 0) * 16;
+    r += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
+      '<td class="num">' + bsFmt(it.end) + '</td>' +
+      '<td class="num">' + bsFmt(it.begin) + '</td></tr>';
+  }
+  return '<table class="report-table" style="width:100%">' + h + '<tbody>' + r + '</tbody></table>';
 }
 
 async function loadBalanceSheet() {
-  const from = _readPeriod('bs-from');
-  const to = _readPeriod('bs-to');
+  const period = _readPeriod('bs-from');
   const el = document.getElementById('bs-table');
   el.innerHTML = '加载中...';
   try {
-    const data = await api(`/api/reports/balance-sheet?period=${to}`);
-    const renderRows = (rows) => rows.map(r => `
-      <tr class="${r.bold ? 'report-bold' : ''} ${r.highlight ? 'report-highlight' : ''}">
-        <td>${r.label}</td>
-        <td>${r.amount !== null && r.amount !== undefined ? '¥' + fmt(r.amount) : ''}</td>
-      </tr>
-    `).join('');
+    const data = await api('/api/reports/balance-sheet?period=' + period);
+    el.innerHTML =
+      '<div style="font-size:12px;color:#6b7280;margin-bottom:12px">会企01号 | 截止期间：' + data.period + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">' +
+        '<div><div style="font-weight:700;margin-bottom:8px;font-size:14px">资产</div>' + bsRenderRows(data.assets, true) + '</div>' +
+        '<div><div style="font-weight:700;margin-bottom:8px;font-size:14px">负债及所有者权益</div>' + bsRenderRows(data.liabilities_equity, true) + '</div>' +
+      '</div>';
+  } catch (e) { el.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>'; }
+}
 
-    el.innerHTML = `
-      <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">截止期间：${period}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
-        <div>
-          <div style="font-weight:700;margin-bottom:8px;font-size:14px">资产</div>
-          <table class="report-table" style="width:100%">
-            <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
-            <tbody>${renderRows(data.assets)}</tbody>
-          </table>
-        </div>
-        <div>
-          <div style="font-weight:700;margin-bottom:8px;font-size:14px">负债及所有者权益</div>
-          <table class="report-table" style="width:100%">
-            <thead><tr><th>项目</th><th class="num">金额（元）</th></tr></thead>
-            <tbody>${renderRows(data.liabilities_equity)}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  } catch (e) {
-    el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
-  }
+// ==================== 现金流量表 ====================
+async function renderCashFlow(container) {
+  var el = container || document.getElementById('content-area');
+  el.innerHTML =
+    '<div class="card">' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('cf-from', currentPeriod) +
+        '<span style="color:#9ca3af">至</span>' +
+        _periodSelectsHTML('cf-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
+        '<button class="btn btn-primary" onclick="loadCashFlow()">生成报表</button>' +
+        '<button onclick="clearFilters(\'cf\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
+      '</div>' +
+      '<div id="cf-table"></div>' +
+    '</div>';
+}
+
+async function loadCashFlow() {
+  var from = _readPeriod('cf-from'); var to = _readPeriod('cf-to');
+  var el = document.getElementById('cf-table');
+  el.innerHTML = '加载中...';
+  try {
+    var data = await api('/api/reports/cash-flow?period_from=' + from + '&period_to=' + to);
+    var rows = '';
+    for (var i = 0; i < data.items.length; i++) {
+      var it = data.items[i];
+      var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+      var indent = (it.indent || 0) * 16;
+      rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
+        '<td class="num">' + plFmt(it.current) + '</td>' +
+        '<td class="num">' + plFmt(it.prior) + '</td></tr>';
+    }
+    el.innerHTML =
+      '<div style="font-size:12px;color:#6b7280;margin-bottom:12px">会企03号 | 报告期间：' + data.period_from + ' 至 ' + data.period_to + '</div>' +
+      '<table class="report-table"><thead><tr><th>项目</th><th class="num">本期金额</th><th class="num">上期金额</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>';
+  } catch (e) { el.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>'; }
+}
+
+// ==================== 所有者权益变动表 ====================
+async function renderEquityChanges(container) {
+  var el = container || document.getElementById('content-area');
+  el.innerHTML =
+    '<div class="card">' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('ec-from', currentPeriod) +
+        '<button class="btn btn-primary" onclick="loadEquityChanges()">生成报表</button>' +
+        '<button onclick="clearFilters(\'ec\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
+      '</div>' +
+      '<div id="ec-table" style="overflow-x:auto"></div>' +
+    '</div>';
+}
+
+async function loadEquityChanges() {
+  var period = _readPeriod('ec-from');
+  var el = document.getElementById('ec-table');
+  el.innerHTML = '加载中...';
+  try {
+    var data = await api('/api/reports/equity-changes?period=' + period);
+    var cols = data.columns;
+    var th = '<th>项目</th>';
+    for (var c = 0; c < cols.length; c++) { th += '<th class="num">' + cols[c] + '</th>'; }
+    function renderRow(label, vals, bold) {
+      var tr = '<tr' + (bold ? ' class="report-bold"' : '') + '><td>' + label + '</td>';
+      for (var i = 0; i < vals.length; i++) { tr += '<td class="num">' + plFmt(vals[i]) + '</td>'; }
+      return tr + '</tr>';
+    }
+    var rows = renderRow('一、上年年末余额', data.year_begin, true);
+    rows += renderRow('二、本年年初余额', data.year_begin, true);
+    rows += renderRow('三、本年增减变动金额', data.changes, false);
+    rows += renderRow('  （一）综合收益总额', data.year_end.map(function(v, i) {
+      return i === 7 ? data.net_profit : (i === 8 ? data.net_profit : 0);
+    }), true);
+    rows += renderRow('四、本年年末余额', data.year_end, true);
+    el.innerHTML =
+      '<div style="font-size:12px;color:#6b7280;margin-bottom:12px">会企04号 | 截止期间：' + data.period + '</div>' +
+      '<table class="report-table" style="min-width:900px"><thead><tr>' + th + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch (e) { el.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>'; }
 }
 
 // ==================== 科目余额表 ====================
