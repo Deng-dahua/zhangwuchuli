@@ -1349,8 +1349,7 @@ function goDetailLedger(code) {
 async function renderDetailLedger(container) {
   const el = container || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');
-  el.innerHTML = '<div class="page-header"><h2>📗 明细账</h2></div>' +
-    '<div class="card" style="margin-bottom:0">' +
+  el.innerHTML = '<div class="card" style="margin-bottom:0">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
         '<select class="form-control" id="dl-account" style="width:240px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">' +
           '<option value="">-- 选择科目 --</option>' + accountOptions +
