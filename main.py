@@ -1824,7 +1824,13 @@ def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: 
     inv.updated_at = datetime.now()
     db.commit()
     db.refresh(inv)
-    # 状态改为"正常"时自动生成凭证
+    # 状态改为非作废/红冲时自动生成凭证（先删旧再生成，确保金额一致）
+    db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "开具发票",
+        JournalEntry.ref_id == invoice_id
+    ).delete(synchronize_session=False)
+    db.flush()
     auto_generate_single_invoice(db, inv)
     return {"message": "更新成功"}
 
@@ -3464,9 +3470,9 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
 
 
 @app.post("/api/sales-invoices/{invoice_id}/to-journal")
-def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
-    """将单张销项发票生成记账凭证（分录）到序时账"""
-    inv = db.query(SalesInvoice).filter(SalesInvoice.id == invoice_id).first()
+def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db=Depends(get_db)):
+    """将单张销项发票生成记账凭证（分录）到序时账（允许重新生成，先删旧凭证）"""
+    inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "发票不存在")
     def get_full_name(code):
@@ -3528,13 +3534,13 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
     goods = inv.goods_name or ""
     summary = f"销售{goods or '货物'}给{buyer}"
 
-    # 防重复：检查是否已有该发票生成的凭证
-    existing = db.query(JournalEntry).filter(
+    # 先删旧凭证（允许重新生成）
+    db.query(JournalEntry).filter(
         JournalEntry.company_id == inv.company_id,
-        JournalEntry.summary == summary
-    ).first()
-    if existing:
-        raise HTTPException(400, "该发票已生成凭证，请先删除已有凭证后再重新生成")
+        JournalEntry.source == "开具发票",
+        JournalEntry.ref_id == inv.id
+    ).delete(synchronize_session=False)
+    db.flush()
 
     rev_code, rev_name = ensure_revenue_sub(goods)
 
@@ -3555,6 +3561,7 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             quantity=inv.quantity or 0,
             unit=inv.unit or "",
             unit_price=inv.unit_price or 0,
+            source="开具发票", ref_id=inv.id,
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -3572,6 +3579,7 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             quantity=inv.quantity or 0,
             unit=inv.unit or "",
             unit_price=inv.unit_price or 0,
+            source="开具发票", ref_id=inv.id,
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -3589,6 +3597,7 @@ def sales_invoice_to_journal(invoice_id: int, db=Depends(get_db)):
             quantity=inv.quantity or 0,
             unit=inv.unit or "",
             unit_price=inv.unit_price or 0,
+            source="开具发票", ref_id=inv.id,
         ),
     ]
     for e in entries:
@@ -4703,7 +4712,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             Customer.company_id == company_id
                         ).count()
                         next_cust_idx = existing_count + 1
-                    code = f"KH{next_cust_idx:04d}"
+                    code = f"KH{next_cust_idx:03d}"
                     next_cust_idx += 1
                     cust = Customer(
                         company_id=company_id,
@@ -5484,7 +5493,7 @@ def handle_create_customer(sess, msg, db, sid):
 
         if data.get("name"):
             if not data.get("code"):
-                data["code"] = f"KH{db.query(Customer).count() + 1:03d}"
+                data["code"] = f"KH{db.query(Customer).filter(Customer.company_id == company_id).count() + 1:03d}"
             sess["data"] = data
             sess["step"] = 2
             return {"reply": f"👤 客户名称：**{data['name']}**\n📋 编码：**{data['code']}**\n\n还需要添加其他信息吗？可以直接告诉我：\n• 联系人\n• 电话\n• 信用额度\n\n或说「**完成**」直接保存。", "session_id": sid, "action": None}
@@ -5495,7 +5504,7 @@ def handle_create_customer(sess, msg, db, sid):
         # 补充名称
         data["name"] = msg.strip()
         if not data.get("code"):
-            data["code"] = f"KH{db.query(Customer).count() + 1:03d}"
+            data["code"] = f"KH{db.query(Customer).filter(Customer.company_id == company_id).count() + 1:03d}"
         sess["data"] = data
         sess["step"] = 2
         return {"reply": f"👤 客户名称：**{data['name']}**\n📋 编码：**{data['code']}**\n\n还需要添加其他信息吗？可以告诉我联系人、电话、地址等。\n或说「**完成**」直接保存。", "session_id": sid, "action": None}
@@ -5576,14 +5585,14 @@ def handle_create_supplier(sess, msg, db, sid):
         if name_match: data["name"] = name_match
         if code_match: data["code"] = code_match.group(1)
         if data.get("name"):
-            if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).count() + 1:03d}"
+            if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).filter(Supplier.company_id == company_id).count() + 1:03d}"
             sess["data"] = data; sess["step"] = 2
             return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充其他信息吗？或说「**完成**」直接保存。", "session_id": sid, "action": None}
         return {"reply": "📦 新增供应商。请告诉我**供应商名称**，例如：\n「广州钢铁供应链有限公司」", "session_id": sid, "action": None}
 
     elif step == 1:
         data["name"] = msg.strip()
-        if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).count() + 1:03d}"
+        if not data.get("code"): data["code"] = f"GYS{db.query(Supplier).filter(Supplier.company_id == company_id).count() + 1:03d}"
         sess["data"] = data; sess["step"] = 2
         return {"reply": f"📦 供应商：**{data['name']}**（{data['code']}）\n\n需要补充其他信息吗？或说「**完成**」保存。", "session_id": sid, "action": None}
 
@@ -5632,14 +5641,14 @@ def handle_create_employee(sess, msg, db, sid):
         if name_match: data["name"] = name_match
         if dept_m: data["department_name"] = dept_m.group(1)
         if data.get("name"):
-            if not data.get("code"): data["code"] = f"YG{db.query(Employee).count() + 1:03d}"
+            if not data.get("code"): data["code"] = f"RY{db.query(Employee).filter(Employee.company_id == company_id).count() + 1:03d}"
             sess["data"] = data; sess["step"] = 2
             return {"reply": f"👤 员工：**{data['name']}**（{data['code']}）\n\n还需要补充部门、职位、电话吗？或说「**完成**」保存。", "session_id": sid, "action": None}
         return {"reply": "👤 新增员工。请告诉我**姓名**，例如：「张三」", "session_id": sid, "action": None}
 
     elif step == 1:
         data["name"] = msg.strip()
-        if not data.get("code"): data["code"] = f"YG{db.query(Employee).count() + 1:03d}"
+        if not data.get("code"): data["code"] = f"RY{db.query(Employee).filter(Employee.company_id == company_id).count() + 1:03d}"
         sess["data"] = data; sess["step"] = 2
         return {"reply": f"👤 员工：**{data['name']}**\n\n需要补充部门、职位、电话吗？或说「**完成**」保存。", "session_id": sid, "action": None}
 
