@@ -4088,7 +4088,7 @@ async function renderSalesInvoices(container) {
     html += '<input type="date" value="' + (siFilter.dateFrom||'') + '" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
-    html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button onclick="siFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);siFilter.dateFrom=r.from;siFilter.dateTo=r.to;document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
@@ -4504,7 +4504,7 @@ async function renderPurchaseInvoices(container) {
     html += '<input type="date" value="' + (piFilter.dateFrom||'') + '" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
-    html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button onclick="piFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);piFilter.dateFrom=r.from;piFilter.dateTo=r.to;document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
@@ -4773,7 +4773,7 @@ async function renderBankTransactions(container) {
   html += '<input type="date" id="bt-date-from" value="' + btDateFrom + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
   html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
   html += '<input type="date" id="bt-date-to" value="' + btDateTo + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="document.getElementById(\'bt-keyword\').value=\'\';document.getElementById(\'bt-date-from\').value=\'\';document.getElementById(\'bt-date-to\').value=\'\';loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button onclick="document.getElementById(\'bt-keyword\').value=\'\';const r=periodToDateRange(currentPeriod);document.getElementById(\'bt-date-from\').value=r.from;document.getElementById(\'bt-date-to\').value=r.to;loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
@@ -5090,7 +5090,7 @@ async function renderInputVATDeductions(container) {
   html += '<input type="date" value="' + (ivdFilter.dateFrom||'') + '" onchange="ivdFilter.dateFrom=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">';
   html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
   html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="ivdFilter.keyword=\'\';ivdFilter.dateFrom=\'\';ivdFilter.dateTo=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button onclick="ivdFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);ivdFilter.dateFrom=r.from;ivdFilter.dateTo=r.to;document.getElementById(\'ivdKeyword\').value=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
