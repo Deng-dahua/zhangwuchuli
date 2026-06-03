@@ -3986,7 +3986,7 @@ async def analyze_file_headers(
             ]
         elif module == "employee":
             field_order = [
-                "code", "name", "id_card", "email", "salary", "leave_date"
+                "name", "id_card"
             ]
         elif module == "customer":
             field_order = [
@@ -4427,39 +4427,29 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         used_fingerprints[fp] = i+2
 
                 elif module == "employee":
-                    code = mapped.get("code", "").strip()
                     name = mapped.get("name", "").strip()
-                    if not code or not name:
-                        errors.append(f"第{i+2}行: 工号和姓名不能为空")
+                    if not name:
+                        errors.append(f"第{i+2}行: 姓名不能为空")
                         continue
-                    # 解析离职日期
-                    leave_date = None
-                    ld_str = mapped.get("leave_date", "")
-                    if ld_str:
-                        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
-                            try:
-                                leave_date = datetime.strptime(ld_str, fmt).date()
-                                break
-                            except: pass
-                    # 安全转浮点
-                    def _sf(v, d=0.0):
-                        try: return float(str(v).replace(",", "")) if str(v).strip() else d
-                        except: return d
+                    # 编码自动生成：取当前公司最大code+1，默认从1开始
+                    max_code = db.query(Employee.code).filter(
+                        Employee.company_id == company_id
+                    ).order_by(Employee.id.desc()).first()
+                    if max_code and max_code[0]:
+                        try:
+                            code = str(int(max_code[0]) + 1)
+                        except ValueError:
+                            code = "1"
+                    else:
+                        code = "1"
                     existing = db.query(Employee).filter(Employee.company_id == company_id, Employee.code == code).first()
                     if existing:
                         existing.name = name
                         existing.id_card = mapped.get("id_card", "") or None
-                        existing.email = mapped.get("email", "") or None
-                        existing.salary = _sf(mapped.get("salary", 0))
-                        if leave_date:
-                            existing.leave_date = leave_date
                     else:
                         emp = Employee(
                             company_id=company_id, code=code, name=name,
-                            id_card=mapped.get("id_card", "") or None,
-                            email=mapped.get("email", "") or None,
-                            salary=_sf(mapped.get("salary", 0)),
-                            leave_date=leave_date
+                            id_card=mapped.get("id_card", "") or None
                         )
                         db.add(emp)
 
