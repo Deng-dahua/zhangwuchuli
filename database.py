@@ -7,7 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, date
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./accounting.db"
 
@@ -1140,7 +1140,7 @@ def migrate_schema(db):
 
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
-    from datetime import datetime as dt
+    from datetime import datetime, date as dt
     companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:
@@ -1268,7 +1268,7 @@ def auto_generate_journals(db):
 
 def auto_generate_single_invoice(db, inv):
     """为单张开具发票生成凭证（供创建发票API调用）"""
-    from datetime import datetime as dt
+    from datetime import datetime, date as dt
 
     buyer = inv.buyer_name or "客户"
     goods = inv.goods_name or ""
@@ -1383,7 +1383,7 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     
     如果 total_tax 为 None，自动从数据库汇总（优先用 deduction_period，为空则用 invoice_date 年月）
     """
-    from datetime import datetime as dt
+    from datetime import datetime, date as dt
     from sqlalchemy import func, or_, and_
 
     # 删除该期间已有的进项抵扣凭证
@@ -1505,7 +1505,7 @@ def auto_generate_input_vat_journals(db):
                 if d.invoice_date:
                     period = d.invoice_date.strftime("%Y-%m")
                 else:
-                    from datetime import datetime
+                    from datetime import datetime, date
                     period = datetime.now().strftime("%Y-%m")
             if period not in period_groups:
                 period_groups[period] = 0
@@ -1663,17 +1663,37 @@ def verify_dedup_columns(db):
 
 
 def init_db():
-    """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据"""
+    """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据
+    
+    新环境首次运行时，如果 companys 表为空，自动创建一家演示公司，
+    并初始化其科目/部门/期间，保证系统可直接使用。
+    """
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
     try:
         migrate_schema(db)
 
-        # 为已有公司初始化基础数据（不再自动创建默认公司，由注册页负责）
-        companies = db.query(Company).order_by(Company.id).all()
-        for company in companies:
-            init_company_data(db, company.id)
+        # 新环境无公司时，自动创建演示公司
+        if db.query(Company).count() == 0:
+            demo = Company(
+                name="演示公司",
+                uscc="91110000DEMO00001",
+                registered_capital=1000000.0,
+                established_date=date.today(),
+                legal_representative="管理员",
+                address="系统自动创建",
+                business_scope="演示用途",
+            )
+            db.add(demo)
+            db.flush()  # 拿到 demo.id
+            print(f"[init_db] 自动创建演示公司: id={demo.id}")
+            init_company_data(db, demo.id)
+            companies = [demo]
+        else:
+            companies = db.query(Company).order_by(Company.id).all()
+            for company in companies:
+                init_company_data(db, company.id)
 
         # 启动自检：验证四模块_fingerprint列存在且可写入
         verify_dedup_columns(db)
