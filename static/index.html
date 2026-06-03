@@ -1270,7 +1270,6 @@ async function renderGeneralLedger(container) {
   const el = container || document.getElementById('content-area');
   const yearMonth = currentPeriod;
   el.innerHTML = `
-    <div class="page-header"><h2>📒 总账</h2></div>
     <div class="card" style="margin-bottom:0">
       <div class="filter-bar" style="gap:8px;">
         <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('gl-from', yearMonth)}
@@ -1307,8 +1306,19 @@ async function loadGeneralLedger() {
             const pad = (lv - 1) * 20;
             const prefix = lv > 1 ? '└ ' : '';
             const bold = lv <= 2 ? 'font-weight:600' : '';
-            const endDir = r.end_balance == 0 ? '平' : r.end_direction;
-            const endBalHtml = r.end_balance == 0 ? '¥0.00' : (r.end_balance > 0 ? '¥' + fmt(r.end_balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.end_balance) + '</span>');
+            // 防御：方向
+            let dir = r.end_direction;
+            if (!dir || dir === 'undefined' || dir === 'null') {
+              const acc = allAccounts.find(a => a.code === r.account_code);
+              dir = acc && acc.balance_direction ? acc.balance_direction : '借';
+            }
+            // 防御：余额
+            let bal = r.end_balance;
+            if (bal === undefined || bal === null || isNaN(bal)) {
+              bal = (dir === '借') ? ((r.total_debit || 0) - (r.total_credit || 0)) : ((r.total_credit || 0) - (r.total_debit || 0));
+            }
+            const endDir = bal == 0 ? '平' : dir;
+            const endBalHtml = bal == 0 ? '¥0.00' : (bal > 0 ? '¥' + fmt(bal) : '<span style="color:var(--danger)">-¥' + fmt(-bal) + '</span>');
             return `
             <tr>
               <td><a href="#" onclick="goDetailLedger('${r.account_code}');return false" style="color:var(--primary)">${r.account_code}</a></td>
