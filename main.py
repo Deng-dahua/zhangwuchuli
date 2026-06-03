@@ -4,7 +4,8 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from sqlalchemy.orm import Session, make_transient
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 from sqlalchemy import func, and_, or_
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
@@ -4808,32 +4809,28 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
         if force_import:
-            # force模式：用make_transient重置对象后逐行savepoint提交
+            # force模式：用原始SQL INSERT OR IGNORE 绕过所有唯一约束
             pending = list(db.new)
             db.rollback()
             actual = 0
-            skipped_uniq = 0
             for obj in pending:
                 try:
-                    make_transient(obj)  # 清除SQLAlchemy内部状态，变为全新transient对象
-                    obj.id = None        # 清除自增主键
-                    sp = db.begin_nested()
-                    try:
-                        db.add(obj)
-                        db.flush()
-                        sp.commit()
+                    # 提取对象的所有列值（排除自增主键id）
+                    values = {}
+                    for col in obj.__table__.columns:
+                        if col.primary_key and col.autoincrement:
+                            continue
+                        values[col.name] = getattr(obj, col.name, None)
+                    # 构建 INSERT OR IGNORE 语句，自动跳过约束冲突
+                    stmt = obj.__table__.insert().prefix_with('OR IGNORE').values(**values)
+                    result = db.execute(stmt)
+                    if result.rowcount and result.rowcount > 0:
                         actual += 1
-                    except IntegrityError:
-                        sp.rollback()
-                        skipped_uniq += 1
-                    except Exception as ex:
-                        sp.rollback()
-                        print(f"[FORCE-IMPORT] flush异常: {ex}")
                 except Exception as ex:
-                    print(f"[FORCE-IMPORT] make_transient异常: {ex}")
+                    print(f"[FORCE-IMPORT] 行插入异常: {ex}")
+            db.commit()
             imported = actual
-            if skipped_uniq > 0:
-                errors.append(f"强制导入：{skipped_uniq}条因唯一约束冲突跳过（发票号码等重复），实际新增{actual}条")
+            errors.append(f"强制导入完成：新增 {actual} 条（{len(pending) - actual} 条因已存在跳过）")
             # force模式跳过自动凭证生成（对象已重新创建，引用失效）
             new_invoices = []
             new_deductions = []
