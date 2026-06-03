@@ -4812,6 +4812,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             pending = list(db.new)
             db.rollback()
             actual = 0
+            skipped_uniq = 0
             for obj in pending:
                 try:
                     make_transient(obj)  # 清除SQLAlchemy内部状态，变为全新transient对象
@@ -4824,11 +4825,15 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         actual += 1
                     except IntegrityError:
                         sp.rollback()
-                    except Exception:
+                        skipped_uniq += 1
+                    except Exception as ex:
                         sp.rollback()
-                except Exception:
-                    pass  # make_transient本身失败则跳过该行
+                        print(f"[FORCE-IMPORT] flush异常: {ex}")
+                except Exception as ex:
+                    print(f"[FORCE-IMPORT] make_transient异常: {ex}")
             imported = actual
+            if skipped_uniq > 0:
+                errors.append(f"强制导入：{skipped_uniq}条因唯一约束冲突跳过（发票号码等重复），实际新增{actual}条")
             # force模式跳过自动凭证生成（对象已重新创建，引用失效）
             new_invoices = []
             new_deductions = []
