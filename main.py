@@ -269,7 +269,7 @@ def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(1), d
 @app.post("/api/departments/import")
 async def import_departments(
     file: UploadFile = File(...),
-    company_id: int = Form(1),
+    company_id: int = Query(1),
     db: Session = Depends(get_db)
 ):
     """从 CSV 导入部门（编码+名称）"""
@@ -3990,9 +3990,7 @@ async def analyze_file_headers(
             ]
         elif module == "customer":
             field_order = [
-                "code", "name", "tax_no", "contact", "phone", "address",
-                "credit_limit", "payment_terms", "bank_name", "bank_account",
-                "uscc", "is_active", "remark"
+                "name", "uscc"
             ]
         elif module == "supplier":
             field_order = [
@@ -4453,50 +4451,31 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     db.flush()
 
                 elif module == "customer":
-                    code = mapped.get("code", "").strip()
                     name = mapped.get("name", "").strip()
-                    if not code or not name:
-                        errors.append(f"第{i+2}行: 编码和名称不能为空")
+                    if not name:
+                        errors.append(f"第{i+2}行: 客户名称不能为空")
                         continue
-                    def _sf2(v, d=0.0):
-                        try: return float(str(v).replace(",", "")) if str(v).strip() else d
-                        except: return d
-                    is_active = mapped.get("is_active", "是")
-                    if isinstance(is_active, str):
-                        is_active = is_active.strip() not in ("否", "false", "False", "0", "停用")
-                    pterms = mapped.get("payment_terms", "")
-                    try: pterms = int(float(pterms)) if pterms else 30
-                    except: pterms = 30
-                    existing = db.query(Customer).filter(Customer.company_id == company_id, Customer.code == code).first()
-                    if existing:
-                        existing.name = name
-                        existing.tax_no = mapped.get("tax_no", "") or None
-                        existing.contact = mapped.get("contact", "") or None
-                        existing.phone = mapped.get("phone", "") or None
-                        existing.address = mapped.get("address", "") or None
-                        existing.credit_limit = _sf2(mapped.get("credit_limit", 0))
-                        existing.payment_terms = pterms
-                        existing.bank_name = mapped.get("bank_name", "") or None
-                        existing.bank_account = mapped.get("bank_account", "") or None
-                        existing.uscc = mapped.get("uscc", "") or None
-                        existing.is_active = is_active
-                        existing.remark = mapped.get("remark", "") or None
-                    else:
-                        cust = Customer(
-                            company_id=company_id, code=code, name=name,
-                            tax_no=mapped.get("tax_no", "") or None,
-                            contact=mapped.get("contact", "") or None,
-                            phone=mapped.get("phone", "") or None,
-                            address=mapped.get("address", "") or None,
-                            credit_limit=_sf2(mapped.get("credit_limit", 0)),
-                            payment_terms=pterms,
-                            bank_name=mapped.get("bank_name", "") or None,
-                            bank_account=mapped.get("bank_account", "") or None,
-                            uscc=mapped.get("uscc", "") or None,
-                            is_active=is_active,
-                            remark=mapped.get("remark", "") or None
-                        )
-                        db.add(cust)
+                    # 编码自动生成：首次查DB取最大code，后续内存递增
+                    if 'cust_code_counter' not in locals():
+                        max_rec = db.query(Customer.code).filter(
+                            Customer.company_id == company_id
+                        ).order_by(Customer.id.desc()).first()
+                        if max_rec and max_rec[0]:
+                            try:
+                                cust_code_counter = int(max_rec[0])
+                            except ValueError:
+                                cust_code_counter = 0
+                        else:
+                            cust_code_counter = 0
+                    cust_code_counter += 1
+                    code = str(cust_code_counter)
+                    uscc = mapped.get("uscc", "") or None
+                    cust = Customer(
+                        company_id=company_id, code=code, name=name,
+                        uscc=uscc
+                    )
+                    db.add(cust)
+                    db.flush()
 
                 elif module == "supplier":
                     code = mapped.get("code", "").strip()
