@@ -254,6 +254,48 @@ def delete_department(dept_id: int, company_id: int = Query(1), db: Session = De
     db.commit()
     return {"message": "删除成功"}
 
+class DeptBatchDelete(BaseModel):
+    ids: list[int]
+
+@app.post("/api/departments/batch-delete")
+def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(1), db: Session = Depends(get_db)):
+    deleted = db.query(Department).filter(
+        Department.company_id == company_id,
+        Department.id.in_(req.ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 个部门", "count": deleted}
+
+@app.post("/api/departments/import")
+async def import_departments(
+    file: UploadFile = File(...),
+    company_id: int = Form(1),
+    db: Session = Depends(get_db)
+):
+    """从 CSV 导入部门（编码+名称）"""
+    content = (await file.read()).decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(content))
+    rows = list(reader)
+    if not rows:
+        raise HTTPException(400, "文件为空")
+    headers = [h.strip() for h in rows[0]]
+    ci = next((i for i, h in enumerate(headers) if h in ("编码", "code")), 0)
+    ni = next((i for i, h in enumerate(headers) if h in ("名称", "name", "部门名称")), 1)
+    imported = 0
+    for row in rows[1:]:
+        code = row[ci].strip() if ci < len(row) else ""
+        name = row[ni].strip() if ni < len(row) else ""
+        if not code or not name:
+            continue
+        existing = db.query(Department).filter(Department.company_id == company_id, Department.code == code).first()
+        if existing:
+            existing.name = name
+        else:
+            db.add(Department(company_id=company_id, code=code, name=name))
+        imported += 1
+    db.commit()
+    return {"message": f"成功导入 {imported} 条部门", "count": imported}
+
 
 # ==================== 人员档案 ====================
 
@@ -2285,8 +2327,8 @@ def bank_transaction_stats(
     income_base = base.filter(BankTransaction.transaction_type == "收入")
     expense_base = base.filter(BankTransaction.transaction_type == "支出")
 
-    total_income = income_base.with_entities(func.sum(BankTransaction.amount)).scalar() or 0
-    total_expense = expense_base.with_entities(func.sum(func.abs(BankTransaction.amount))).scalar() or 0
+    total_income = income_base.with_entities(func.sum(BankTransaction.credit_amount)).scalar() or 0
+    total_expense = expense_base.with_entities(func.sum(BankTransaction.debit_amount)).scalar() or 0
     # 新字段口径：借方=支出, 贷方=收入
     total_debit = base.with_entities(func.sum(BankTransaction.debit_amount)).scalar() or 0
     total_credit = base.with_entities(func.sum(BankTransaction.credit_amount)).scalar() or 0

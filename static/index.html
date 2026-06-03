@@ -1957,13 +1957,18 @@ async function renderDepartments(container) {
     const data = await api('/api/departments');
     el.innerHTML = `
       <div class="card">
-        <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">📁 导入文件</button>
+          <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">🗑 批量删除</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleDeptAll(this)"></th><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="3"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
+              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
                 <tr>
+                  <td><input type="checkbox" class="dept-cb" value="${d.id}"></td>
                   <td>${d.code}</td>
                   <td>${d.name}</td>
                   <td>
@@ -2018,6 +2023,22 @@ async function deleteDept(id) {
   try {
     await api(`/api/departments/${id}`, { method: 'DELETE' });
     toast('删除成功', 'success');
+    renderDepartments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function toggleDeptAll(cb) {
+  document.querySelectorAll('.dept-cb').forEach(c => c.checked = cb.checked);
+}
+
+async function batchDeleteDepts() {
+  var cbs = document.querySelectorAll('.dept-cb:checked');
+  if (cbs.length === 0) { toast('请先选择要删除的部门', 'warn'); return; }
+  if (!confirm('确认删除选中的 ' + cbs.length + ' 个部门？此操作不可恢复。')) return;
+  try {
+    var ids = Array.from(cbs).map(c => parseInt(c.value));
+    await api('/api/departments/batch-delete', { method: 'POST', body: JSON.stringify({ ids: ids }) });
+    toast('成功删除 ' + cbs.length + ' 个部门', 'success');
     renderDepartments();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -4000,7 +4021,7 @@ async function renderSalesInvoices(container) {
       api('/api/sales-invoices/stats')
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="page-header"><h2>📤 开具发票</h2></div>';
+    let html = '';
 
     // 统计卡片
     html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
@@ -4418,7 +4439,7 @@ async function renderPurchaseInvoices(container) {
       api('/api/purchase-invoices/stats')
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-    let html = '<div class="page-header"><h2>📥 取得发票</h2></div>';
+    let html = '';
 
     html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
@@ -5003,7 +5024,7 @@ async function renderInputVATDeductions(container) {
 
   document.title = '进项抵扣 - 财税风险防控系统';
   const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
-  let html = '<div class="page-header"><h2>✅ 进项抵扣</h2></div>';
+  let html = '';
 
   // 统计卡片
   html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
@@ -5233,7 +5254,7 @@ async function deleteVATDeduction(id) {
 // ==================== 文件导入 - 列映射 ====================
 
 function showUploadModal(module) {
-  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣', 'employee': '导入人员档案', 'customer': '导入客户档案', 'supplier': '导入供应商档案' };
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣', 'employee': '导入人员档案', 'customer': '导入客户档案', 'supplier': '导入供应商档案', 'department': '导入部门档案' };
   const modal = createModal(titles[module] || '导入文件', `
     <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
     <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
@@ -5254,6 +5275,25 @@ function showUploadModal(module) {
 async function handleFileSelect(input, module) {
   const file = input.files[0];
   if (!file) return;
+
+  // 部门档案：直接导入，跳过列映射
+  if (module === 'department') {
+    document.getElementById('upload-progress').style.display = 'block';
+    document.getElementById('upload-progress').innerText = '正在导入部门...';
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/departments/import?' + new URLSearchParams({company_id: currentCompanyId || 1}), { method: 'POST', body: fd });
+    const result = await resp.json();
+    document.getElementById('upload-progress').style.display = 'none';
+    if (resp.ok) {
+      toast(result.message || '导入成功', 'success');
+      closeModal();
+      renderDepartments();
+    } else {
+      toast(result.detail || '导入失败', 'error');
+    }
+    return;
+  }
 
   document.getElementById('upload-progress').style.display = 'block';
   document.getElementById('upload-progress').innerText = '正在分析文件表头...';
