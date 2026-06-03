@@ -890,7 +890,7 @@ async function renderJournal(container) {
       api('/api/journal-entries'),
       api('/api/journal-entries/stats')
     ]);
-    let html = '<div class="page-header"><h2>序时账</h2></div>';
+    let html = '';
 
     // 统计卡片
     html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
