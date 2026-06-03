@@ -666,10 +666,6 @@ async function handleCompanyRegister(e) {
   }
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 async function loadCurrentPeriod() {
   // 仅填充年份下拉框

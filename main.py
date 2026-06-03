@@ -16,6 +16,7 @@ import io
 import re
 import uuid
 import openpyxl
+import json
 from pypdf import PdfReader
 
 from database import (
@@ -714,13 +715,13 @@ def delete_account(account_id: int, company_id: int = Query(1), db: Session = De
 
 @app.get("/api/periods")
 def list_periods(company_id: int = Query(1), db: Session = Depends(get_db)):
-    periods = db.query(Period).order_by(Period.period.desc()).all()
+    periods = db.query(Period).filter(Period.company_id == company_id).order_by(Period.period.desc()).all()
     return [{"period": p.period, "status": p.status} for p in periods]
 
 
 @app.post("/api/periods/{period}/close")
 def close_period(period: str, company_id: int = Query(1), db: Session = Depends(get_db)):
-    p = db.query(Period).filter(Period.period == period).first()
+    p = db.query(Period).filter(Period.company_id == company_id, Period.period == period).first()
     if not p:
         raise HTTPException(404, detail="期间不存在")
     if p.status == "已结账":
@@ -734,9 +735,9 @@ def close_period(period: str, company_id: int = Query(1), db: Session = Depends(
         next_period = f"{year + 1}-01"
     else:
         next_period = f"{year}-{str(month + 1).zfill(2)}"
-    existing = db.query(Period).filter(Period.period == next_period).first()
+    existing = db.query(Period).filter(Period.company_id == company_id, Period.period == next_period).first()
     if not existing:
-        db.add(Period(period=next_period))
+        db.add(Period(company_id=company_id, period=next_period))
 
     db.commit()
     return {"message": f"{period} 结账成功，已自动创建 {next_period} 期间"}
@@ -2178,7 +2179,7 @@ def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db:
     return {"message": f"已为 {period} 生成进项抵扣凭证 ({count} 条)", "period": period}
 
 
-import json
+
 
 # ==================== 银行配置 ====================
 
@@ -2957,8 +2958,10 @@ def _build_pl(company_id, from_period, to_period, db):
     income_tax = _pl_net(b, "6801", False)
     # 中间计算
     gross_p = round(rev - cost - tax_sur, 2)
-    op_p = round(gross_p - sell_exp - admin_exp - rd_exp - fin_exp + inv_inc + fin_inc + other_inc, 2)
-    total_p = round(op_p + other_inc - other_exp + asset_disp - credit_loss - asset_impair, 2)
+    # 营业利润 = 毛利 - 期间费用 + 投资收益 + 资产处置收益 - 减值损失
+    # 注：营业外收入(6301)/营业外支出(6711)不属于营业利润，在利润总额中加减
+    op_p = round(gross_p - sell_exp - admin_exp - rd_exp - fin_exp + inv_inc + fin_inc + asset_disp - credit_loss - asset_impair, 2)
+    total_p = round(op_p + other_inc - other_exp, 2)
     net_p = round(total_p - income_tax, 2)
     items = [
         _pl_row("一、营业收入", rev, bold=True),
@@ -2970,7 +2973,7 @@ def _build_pl(company_id, from_period, to_period, db):
         _pl_row("  减：财务费用", fin_exp, indent=1),
         _pl_row("    其中：利息费用", fin_cost, indent=2),
         _pl_row("        利息收入", fin_inc, indent=2),
-        _pl_row("  加：其他收益", other_inc, indent=1),
+        _pl_row("  加：其他收益", 0.0, indent=1),
         _pl_row("  加：投资收益", inv_inc, indent=1),
         _pl_row("  加：资产处置收益", asset_disp, indent=1),
         _pl_row("  减：信用减值损失", credit_loss, indent=1),
