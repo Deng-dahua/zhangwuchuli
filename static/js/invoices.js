@@ -39,7 +39,7 @@ async function renderSalesInvoices(container) {
     html += '<input type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateFrom) + '" onchange="siFilter.dateFrom=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateTo) + '" onchange="siFilter.dateTo=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px" title="截止日期">';
-    html += '<button onclick="siFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);siFilter.dateFrom=r.from;siFilter.dateTo=r.to;document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button onclick="siFilter.keyword=\'\';siTab=\'all\';const r=periodToDateRange(currentPeriod);siFilter.dateFrom=r.from;siFilter.dateTo=r.to;renderSalesInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
@@ -454,7 +454,7 @@ async function renderPurchaseInvoices(container) {
     html += '<input type="date" value="' + (piFilter.dateFrom||'') + '" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
-    html += '<button onclick="piFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);piFilter.dateFrom=r.from;piFilter.dateTo=r.to;document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button onclick="piFilter.keyword=\'\';piTab=\'all\';const r=periodToDateRange(currentPeriod);piFilter.dateFrom=r.from;piFilter.dateTo=r.to;renderPurchaseInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
