@@ -229,13 +229,13 @@ function showForceConfirmDialog(skipped, total, dupErrors) {
         '<button onclick="resolveForceConfirm(null)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>' +
       '</div>' +
       '<div style="padding:16px 20px;">' +
-        '<div style="margin-bottom:16px;font-size:14px;color:#374151;line-height:1.6;">导入结果：成功 <b>' + ok + '</b> 条，跳过 <b style="color:#e53e3e;">' + skipped + '</b> 条重复记录。</div>' +
-        '<div style="margin-bottom:16px;font-size:14px;font-weight:600;color:#1f2937;">是否强制导入这' + skipped + '条重复记录？</div>' +
+        '<div style="margin-bottom:16px;font-size:14px;color:#374151;line-height:1.6;">导入' + total + '条记录中存在 <b style="color:#e53e3e;">' + skipped + '</b> 条重复记录。</div>' +
+        '<div style="margin-bottom:16px;font-size:14px;font-weight:600;color:#1f2937;">是否强制导入重复记录？</div>' +
         '<div style="margin-bottom:20px;display:flex;gap:28px;font-size:14px;">' +
           '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">' +
             '<input type="radio" name="force-import" value="yes" style="accent-color:#1a56db;"> 是（导入全部' + total + '条）</label>' +
           '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">' +
-            '<input type="radio" name="force-import" value="no" checked style="accent-color:#1a56db;"> 否（导入' + ok + '条）</label>' +
+            '<input type="radio" name="force-import" value="no" checked style="accent-color:#1a56db;"> 否（导入0条）</label>' +
         '</div>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px 16px 20px;border-top:1px solid #e5e7eb;">' +
