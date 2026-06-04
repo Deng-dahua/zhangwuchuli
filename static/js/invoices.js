@@ -34,8 +34,6 @@ async function renderSalesInvoices(container) {
     // 工具栏
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<input id="siKeyword" placeholder="搜索发票号/代码/购方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (siFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){siFilter.keyword=this.value;renderSalesInvoices()}">';
-    html += '<button onclick="siFilter.keyword=\'\';siTab=\'all\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
