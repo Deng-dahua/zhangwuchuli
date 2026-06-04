@@ -255,6 +255,11 @@ function buildMappingUI(result, module, file, bankConfigId) {
   mappingHtml += `
     <div style="margin-top:12px;">
       <label style="font-size:12px;display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="import-force-duplicates"> 🔓 强制导入（含重复数据）
+      </label>
+    </div>
+    <div style="margin-top:12px;">
+      <label style="font-size:12px;display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="save-as-template"> 保存此映射为模板，下次导入自动匹配
       </label>
       <input id="template-name" placeholder="模板名称（可选）" style="margin-top:4px;padding:4px 8px;border:1px solid var(--gray-300);border-radius:4px;font-size:12px;width:200px;display:none;">
@@ -341,6 +346,12 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   formData.append('column_mapping', JSON.stringify(mapping));
   formData.append('company_id', currentCompanyId);
   if (_importBankConfigId) formData.append('bank_config_id', _importBankConfigId);
+
+  // 强制导入（含重复数据）
+  const forceCheckbox = document.getElementById('import-force-duplicates');
+  if (forceCheckbox && forceCheckbox.checked) {
+    formData.append('force', 'true');
+  }
 
   // 统一导入（所有模块单步导入）
   document.getElementById('upload-progress').innerText = '正在导入数据...';
