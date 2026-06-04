@@ -15,7 +15,7 @@ async function renderSalesInvoices(container) {
   try {
     const [inv, stats] = await Promise.all([
       api('/api/sales-invoices'),
-      api('/api/sales-invoices/stats')
+      api('/api/sales-invoices/stats' + (siTab !== 'all' ? '?status=' + encodeURIComponent(siTab) : ''))
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '';
@@ -26,9 +26,6 @@ async function renderSalesInvoices(container) {
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">税额合计</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.normal_count + '</div><div class="stat-label">正常</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '</div><div class="stat-label">作废</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.red_count + '</div><div class="stat-label">红冲</div></div>';
     html += '</div>';
 
     // 工具栏

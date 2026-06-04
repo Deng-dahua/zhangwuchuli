@@ -1757,16 +1757,17 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
 
 
 @app.get("/api/sales-invoices/stats")
-def sales_invoice_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+def sales_invoice_stats(company_id: int = Query(1), status: str = Query(None), db: Session = Depends(get_db)):
     base = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
+    if status:
+        base = base.filter(SalesInvoice.status.like(f"%{status}%"))
     total_count = base.count()
-    # SQLAlchemy func.sum().scalar() 在SQLite下有时返回None，改用Python求和
     total_amt = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.total_amount).all())
     total_tax = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.tax_amount).all())
-    normal_count = base.filter(SalesInvoice.status == "正常").count()
-    void_count = base.filter(SalesInvoice.status.like("%作废%")).count()
-    red_count = base.filter(SalesInvoice.status.like("%红冲%")).count()
+    normal_count = base.filter(SalesInvoice.status == "正常").count() if not status else 0
+    void_count = base.filter(SalesInvoice.status.like("%作废%")).count() if not status else 0
+    red_count = base.filter(SalesInvoice.status.like("%红冲%")).count() if not status else 0
     return {
         "total_count": total_count, "total_amt": round(total_amt, 2),
         "total_amount": round(total_amount, 2),
