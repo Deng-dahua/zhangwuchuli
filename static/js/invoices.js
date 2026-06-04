@@ -443,12 +443,6 @@ async function renderPurchaseInvoices(container) {
 
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<input id="piKeyword" placeholder="搜索发票号/代码/销方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (piFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){piFilter.keyword=this.value;renderPurchaseInvoices()}">';
-    html += '<button onclick="piFilter.keyword=document.getElementById(\'piKeyword\').value;renderPurchaseInvoices()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
-    html += '<input type="date" value="' + (piFilter.dateFrom||'') + '" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
-    html += '<span style="color:#9ca3af">至</span>';
-    html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
-    html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';piTab=\'all\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
