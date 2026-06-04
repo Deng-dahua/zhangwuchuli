@@ -325,10 +325,12 @@ document.querySelectorAll('.nav-item').forEach(el => {
 
 // ==================== API 工具（多公司版本） ====================
 async function api(url, options = {}) {
-  // 自动附加 company_id 参数（/api/companies 自身除外）
-  if (url.includes('/api/') && !url.includes('company_id=') && !url.startsWith('/api/companies')) {
-    const sep = url.includes('?') ? '&' : '?';
-    url = url + sep + 'company_id=' + currentCompanyId;
+  // 强制附加/替换 company_id 参数（/api/companies 自身除外）
+  if (url.includes('/api/') && !url.startsWith('/api/companies')) {
+    const [base, query] = url.split('?');
+    const params = new URLSearchParams(query || '');
+    params.set('company_id', currentCompanyId || 1);
+    url = base + '?' + params.toString();
   }
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
