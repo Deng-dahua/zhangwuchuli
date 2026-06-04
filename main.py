@@ -4385,15 +4385,12 @@ async def analyze_file_headers(
 
 
 @app.post("/api/file/import-with-mapping")
-async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
+async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为单步导入
     file: UploadFile = File(...),
     module: str = Form("bank-transaction"),
     bank_config_id: Optional[int] = Form(None),
     column_mapping: str = Form(...),  # JSON: {标准字段: 文件列名}
     company_id: int = Form(1),
-    force: Optional[str] = Form(None),  # 强制导入（忽略去重）
-    preview: Optional[str] = Form(None),  # 预览模式：检测重复不导入（仅 purchase-invoice）
-    skipped_indices: Optional[str] = Form(None),  # 强制导入时仅处理这些行索引（JSON数组）
     db: Session = Depends(get_db)
 ):
     """根据列映射导入文件数据"""
@@ -4441,20 +4438,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if any(v.strip() for v in row_dict.values()):
                         rows_data.append(row_dict)
 
-        force_import = False  # disabled
         # 根据映射转换并导入
         imported = 0
         errors = []
         infos = []  # 非错误提示（如自动创建客户档案）
 
-
-
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
         new_deductions = []  # 收集新创建的进项抵扣，导入完成后自动生成凭证
-        skipped_indices_list = []  # 记录跳过的行号（用于force导入时回传）
-        preview_duplicates = []  # 预览模式：重复行信息
-        preview_unique = []  # 预览模式：唯一行信息
         for i, row in enumerate(rows_data):
             try:
                 mapped = {}
@@ -4679,36 +4670,12 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         )
                         fp_raw = "|".join(fp_values)
                         fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
-
                         existing = db.query(PurchaseInvoice).filter(
                             PurchaseInvoice.company_id == company_id,
                             PurchaseInvoice._fingerprint == fp
                         ).first()
-
-                        # 预览模式：仅检测重复，不导入
-                        if preview == "true":
-                            row_info = {
-                                "row_index": i,
-                                "row_label": f"第{i+2}行",
-                                "invoice_no": inv_no or "",
-                                "invoice_code": mapped.get("invoice_code", ""),
-                                "seller_name": mapped.get("seller_name", ""),
-                                "invoice_date": str(inv_date) if inv_date else "",
-                                "goods_name": mapped.get("goods_name", ""),
-                                "amount": amt,
-                                "tax_amount": tax_amt,
-                                "total_amount": total,
-                            }
-                            if existing:
-                                preview_duplicates.append(row_info)
-                            else:
-                                preview_unique.append(row_info)
-                            continue
-
-                        # 正常导入模式：跳过重复（force 强制导入时不检查）
-                        if existing and force != "true":
+                        if existing:
                             errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            skipped_indices_list.append(i)
                             continue
 
                         cert_date = None
@@ -5008,24 +4975,12 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                 db.rollback()
                 infos.append(f"进项凭证生成失败: {str(e)}")
 
-        # 预览模式：不导入，返回去重分析
-        if preview == "true" and module == "purchase-invoice":
-            return {
-                "mode": "preview",
-                "total": len(rows_data),
-                "unique_count": len(preview_unique),
-                "duplicate_count": len(preview_duplicates),
-                "duplicates": preview_duplicates,
-                "uniques": preview_unique,
-            }
-
         return {
             "imported": imported,
             "total": len(rows_data),
             "skipped": len(rows_data) - imported,
             "errors": errors[:20],
             "infos": infos[:20],
-            "skipped_indices": skipped_indices_list,
             "message": "成功导入 " + str(imported) + "/" + str(len(rows_data)) + " 条记录"
         }
     except Exception as e:
