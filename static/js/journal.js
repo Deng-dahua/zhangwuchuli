@@ -75,9 +75,6 @@ async function renderJournal(container) {
       groups.forEach(g => {
         const sz = g.entries.length;
         const allIds = g.entries.map(e => e.id).join(',');
-        // 判断整组是否可编辑：只有全部为手动录入才可操作
-        const canEdit = g.entries.every(e => (e.source || '手动录入') === '手动录入');
-
         g.entries.forEach((r, idx) => {
           html += '<tr>';
           if (idx === 0) {
@@ -99,12 +96,8 @@ async function renderJournal(container) {
           const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
           html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
           html += '<td style="white-space:nowrap">';
-          if (canEdit) {
-            html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
-            html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
-          } else {
-            html += '<span style="color:#9ca3af;font-size:12px">自动生成</span>';
-          }
+          html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
+          html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
           html += '</td></tr>';
         });
       });

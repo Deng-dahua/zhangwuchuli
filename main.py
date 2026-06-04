@@ -3433,8 +3433,6 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: in
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
-    if e.source and e.source != "手动录入":
-        raise HTTPException(403, detail="自动生成的凭证不可修改，请在来源模块中操作")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(e, k, v)
     db.commit()
@@ -3446,8 +3444,6 @@ def delete_journal_entry(entry_id: int, company_id: int = Query(1), db: Session 
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
-    if e.source and e.source != "手动录入":
-        raise HTTPException(403, detail="自动生成的凭证不可删除，请在来源模块中操作")
     period, vw = e.period, e.voucher_word
     db.delete(e)
     db.flush()
@@ -3484,16 +3480,6 @@ def _renumber_vouchers(db, company_id, period, voucher_word):
 
 @app.post("/api/journal-entries/batch-delete")
 def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
-    # 禁止删除自动生成的凭证
-    auto_count = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.id.in_(req.ids),
-        JournalEntry.source != None,
-        JournalEntry.source != "手动录入"
-    ).count()
-    if auto_count > 0:
-        raise HTTPException(403, detail=f"选中的记录中包含 {auto_count} 条自动生成的凭证，不可删除。请在来源模块中操作。")
-
     # 先查出被删记录的 (period, voucher_word) 组合
     deleted_records = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
