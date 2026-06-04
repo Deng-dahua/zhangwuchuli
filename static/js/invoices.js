@@ -11,7 +11,7 @@ let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 async function renderSalesInvoices(container) {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
-  if (currentPeriod && !siFilter.dateFrom) { const r = periodToDateRange(currentPeriod); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
+  // dateFrom/dateTo 保持空，不自动填充期间
   try {
     const [inv, stats] = await Promise.all([
       api('/api/sales-invoices'),
@@ -428,7 +428,7 @@ let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' }
 async function renderPurchaseInvoices(container) {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
-  if (currentPeriod && !piFilter.dateFrom) { const r = periodToDateRange(currentPeriod); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
+  // dateFrom/dateTo 保持空，不自动填充期间
   try {
     const [inv, stats] = await Promise.all([
       api('/api/purchase-invoices'),
@@ -454,7 +454,7 @@ async function renderPurchaseInvoices(container) {
     html += '<input type="date" value="' + (piFilter.dateFrom||'') + '" onchange="piFilter.dateFrom=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
     html += '<input type="date" value="' + (piFilter.dateTo||'') + '" onchange="piFilter.dateTo=this.value;renderPurchaseInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
-    html += '<button onclick="piFilter.keyword=\'\';piTab=\'all\';const r=periodToDateRange(currentPeriod);piFilter.dateFrom=r.from;piFilter.dateTo=r.to;renderPurchaseInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
+    html += '<button onclick="piFilter.keyword=\'\';piFilter.dateFrom=\'\';piFilter.dateTo=\'\';piTab=\'all\';document.getElementById(\'piKeyword\').value=\'\';renderPurchaseInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
