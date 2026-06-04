@@ -214,13 +214,13 @@ async function renderDepartments(container) {
   try {
     const data = await api('/api/departments');
     el.innerHTML = `
-      <div class="card">
-        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <div class="card card-fill">
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">📁 导入文件</button>
           <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">🗑 批量删除</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
             <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleDeptAll(this)"></th><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
             <tbody>
@@ -307,13 +307,13 @@ async function renderEmployees(container) {
   try {
     const data = await api('/api/employees');
     el.innerHTML = `
-      <div class="card">
-        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <div class="card card-fill">
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">📁 导入文件</button>
           <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">🗑 批量删除</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
             <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllEmp(this)" title="全选"></th><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
             <tbody>
@@ -415,13 +415,13 @@ async function renderCustomers(container) {
   try {
     const data = await api('/api/customers');
     el.innerHTML = `
-      <div class="card">
-        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <div class="card card-fill">
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">🗑 批量删除</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
             <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
@@ -525,13 +525,13 @@ async function renderSuppliers(container) {
   try {
     const data = await api('/api/suppliers');
     el.innerHTML = `
-      <div class="card">
-        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <div class="card card-fill">
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">🗑 批量删除</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
             <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
