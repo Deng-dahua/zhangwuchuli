@@ -844,7 +844,8 @@ def list_accounts(
             "full_name": hierarchy.get(a.code, f"{a.code} {a.name}"),
             "category": a.category, "balance_direction": a.balance_direction,
             "level": a.level, "parent_code": a.parent_code,
-            "is_active": a.is_active
+            "is_active": a.is_active,
+            "opening_balance": a.opening_balance or 0.0
         } for a in accounts
     ]
 
@@ -863,7 +864,8 @@ def create_account(data: dict, company_id: int = Query(1), db: Session = Depends
     if db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
         raise HTTPException(400, detail=f"科目编码 {code} 已存在")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
-                  balance_direction=balance_direction, level=level, parent_code=parent_code)
+                  balance_direction=balance_direction, level=level, parent_code=parent_code,
+                  opening_balance=data.get("opening_balance", 0.0))
     db.add(acc)
     db.commit()
     db.refresh(acc)
@@ -879,6 +881,8 @@ def update_account(account_id: int, data: dict, company_id: int = Query(1), db: 
         acc.name = data["name"]
     if "is_active" in data and data["is_active"] is not None:
         acc.is_active = data["is_active"]
+    if "opening_balance" in data and data["opening_balance"] is not None:
+        acc.opening_balance = data["opening_balance"]
     db.commit()
     return {"message": "更新成功"}
 

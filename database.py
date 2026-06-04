@@ -190,6 +190,7 @@ class Account(Base):
     level = Column(Integer, default=1, comment="科目级次")
     parent_code = Column(String(20), nullable=True, comment="上级科目编码")
     is_active = Column(Boolean, default=True)
+    opening_balance = Column(Float, default=0.0, comment="期初金额")
     created_at = Column(DateTime, default=datetime.now)
 
 

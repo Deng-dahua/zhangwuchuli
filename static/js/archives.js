@@ -31,7 +31,7 @@ async function loadAccounts() {
     allAccounts = data;
     el.innerHTML = `
       <table>
-        <thead><tr><th>科目编码</th><th>科目名称</th><th>类别</th><th>余额方向</th><th>级次</th><th>上级科目</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>科目编码</th><th>科目名称</th><th>类别</th><th>余额方向</th><th>级次</th><th>上级科目</th><th>期初金额</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           ${data.map(a => `
             <tr>
@@ -41,6 +41,7 @@ async function loadAccounts() {
               <td style="text-align:center">${a.balance_direction}</td>
               <td style="text-align:center">${a.level}</td>
               <td>${a.parent_code || '-'}</td>
+              <td style="text-align:right">${(a.opening_balance || 0).toFixed(2)}</td>
               <td>${a.is_active ? '<span class="badge badge-audited">启用</span>' : '<span class="badge" style="background:#f3f4f6;color:#6b7280">停用</span>'}</td>
               <td>
                 <button class="btn btn-secondary btn-sm" onclick="toggleAccount(${a.id}, ${!a.is_active})">${a.is_active ? '停用' : '启用'}</button>
@@ -82,6 +83,9 @@ function showAddAccount() {
         <label>上级科目</label>
         <select class="form-control" id="na-parent"><option value="">无</option>${parentOptions}</select>
       </div>
+      <div class="form-group">
+        <label>期初金额</label><input class="form-control" id="na-ob" type="number" step="0.01" value="0.00" placeholder="0.00">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -97,9 +101,10 @@ async function saveNewAccount() {
   const balance_direction = document.getElementById('na-dir').value;
   const level = parseInt(document.getElementById('na-level').value);
   const parent_code = document.getElementById('na-parent').value || null;
+  const opening_balance = parseFloat(document.getElementById('na-ob').value) || 0;
   if (!code || !name) { toast('请填写科目编码和名称', 'error'); return; }
   try {
-    await api('/api/accounts', { method: 'POST', body: JSON.stringify({ code, name, category, balance_direction, level, parent_code }) });
+    await api('/api/accounts', { method: 'POST', body: JSON.stringify({ code, name, category, balance_direction, level, parent_code, opening_balance }) });
     toast('科目创建成功', 'success');
     closeModal();
     await loadAccounts();
