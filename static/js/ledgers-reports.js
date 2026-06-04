@@ -66,7 +66,6 @@ async function loadGeneralLedger() {
       </table>
     `;
   } catch (e) { showError(el, e, '加载数据'); }
-  }
 }
 
 function goDetailLedger(code) {
@@ -460,6 +459,5 @@ async function loadAccountBalance() {
     html += '</tbody></table></div>';
     el.innerHTML = html;
   } catch (e) { showError(el, e, '加载数据'); }
-  }
 }
 
