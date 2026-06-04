@@ -2219,6 +2219,7 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     total_count = base.count()
     total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
+    total_raw_tax = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.tax_amount).all())
     # 可抵扣税额：tax_amount * deduction_rate / 100，仅统计专票 + 铁路电子客票
     deductible_invoices = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.company_id == company_id,
@@ -2238,6 +2239,7 @@ def purchase_invoice_stats(company_id: int = Query(1), db: Session = Depends(get
     return {
         "total_count": total_count, "total_amt": round(total_amt, 2),
         "total_amount": round(total_amount, 2),
+        "total_raw_tax": round(total_raw_tax, 2),
         "total_tax": total_tax,
         "normal_count": normal_count, "void_count": void_count,
         "red_count": red_count,
