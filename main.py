@@ -13,6 +13,7 @@ from typing import Optional, List
 from datetime import date, datetime
 import os
 import csv
+import hashlib
 import io
 import re
 import uuid
@@ -4341,6 +4342,34 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
+                        # 全行指纹去重
+                        fp_values = (
+                            str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
+                            str(mapped.get("digital_invoice_no", "")),
+                            str(mapped.get("seller_tax_no", "")), str(mapped.get("seller_name", "")),
+                            str(mapped.get("buyer_tax_no", "")), str(mapped.get("buyer_name", "")),
+                            str(inv_date) if inv_date else "",
+                            str(mapped.get("tax_category_code", "")), str(mapped.get("specific_business_type", "")),
+                            str(mapped.get("goods_name", "")), str(mapped.get("spec", "")),
+                            str(mapped.get("unit", "")), str(qty), str(uprice),
+                            str(amt), str(tr), str(tax_amt), str(total),
+                            str(mapped.get("invoice_source", "")),
+                            str(mapped.get("invoice_category", "增值税专用发票")),
+                            str(mapped.get("status", "正常")),
+                            str(mapped.get("is_positive", "是")),
+                            str(mapped.get("invoice_risk_level", "")),
+                            str(mapped.get("issuer", "")),
+                            str(mapped.get("remark", "")),
+                        )
+                        fp_raw = "|".join(fp_values)
+                        fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
+                        existing = db.query(SalesInvoice).filter(
+                            SalesInvoice.company_id == company_id,
+                            SalesInvoice._fingerprint == fp
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 数据重复，已跳过")
+                            continue
                         inv = SalesInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
@@ -4365,7 +4394,8 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             invoice_risk_level=mapped.get("invoice_risk_level", ""),
                             issuer=mapped.get("issuer", ""),
                             remark=mapped.get("remark", ""),
-                            raw_data=json.dumps(extra) if extra else None
+                            raw_data=json.dumps(extra) if extra else None,
+                            _fingerprint=fp
                         )
                         db.add(inv)
                         new_invoices.append(inv)
@@ -4634,8 +4664,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             db.commit()
         except IntegrityError as e:
             db.rollback()
-            errors.append("数据重复，已跳过已存在的记录")
-            imported = 0
+            if module == "sales-invoice":
+                errors.append("部分数据重复，已自动跳过重复记录")
+            else:
+                errors.append("数据重复，已跳过已存在的记录")
+                imported = 0
 
         # 开具发票导入后自动生成序时账凭证
         if module == "sales-invoice" and new_invoices:
