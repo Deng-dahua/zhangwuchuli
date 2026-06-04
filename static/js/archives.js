@@ -425,18 +425,24 @@ async function renderCustomers(container) {
           <table>
             <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => `
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
+                const locked = c.has_journal;
+                const delBtn = locked
+                  ? `<button class="btn btn-danger btn-sm" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
+                  : `<button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>`;
+                const cbAttr = locked ? 'disabled title="该客户已被序时账引用"' : '';
+                return `
                 <tr>
-                  <td><input type="checkbox" class="cust-check" value="${c.id}" onchange="updateBatchDelCustBtn()"></td>
+                  <td><input type="checkbox" class="cust-check" value="${c.id}" onchange="updateBatchDelCustBtn()" ${cbAttr}></td>
                   <td>${c.code}</td>
                   <td>${c.name}</td>
                   <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
                   <td>
                     <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>
+                    ${delBtn}
                   </td>
                 </tr>
-              `).join('')}
+              `}).join('')}
             </tbody>
           </table>
         </div>

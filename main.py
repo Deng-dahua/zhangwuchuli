@@ -433,6 +433,32 @@ def list_customers(
     if is_active is not None:
         q = q.filter(Customer.is_active == is_active)
     items = q.order_by(Customer.code).all()
+
+    # 检测哪些客户名称存在于序时账中（contact_project 或 summary）
+    cust_names = [c.name for c in items if c.name]
+    names_with_entries = set()
+    if cust_names:
+        # 精确匹配 contact_project
+        contact_hits = db.query(JournalEntry.contact_project).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project.in_(cust_names)
+        ).distinct().all()
+        names_with_entries.update(r[0] for r in contact_hits if r[0])
+
+        # 模糊匹配 summary（仅检查尚未匹配的客户）
+        remaining = [n for n in cust_names if n not in names_with_entries]
+        if remaining:
+            conds = [JournalEntry.summary.contains(name) for name in remaining]
+            summary_rows = db.query(JournalEntry.summary).filter(
+                JournalEntry.company_id == company_id,
+                or_(*conds)
+            ).all()
+            for row in summary_rows:
+                if row[0]:
+                    for name in remaining:
+                        if name in row[0]:
+                            names_with_entries.add(name)
+
     return [
         {
             "id": c.id, "code": c.code, "name": c.name,
@@ -441,7 +467,8 @@ def list_customers(
             "bank_name": c.bank_name,
             "bank_account": c.bank_account,
             "is_active": c.is_active,
-            "remark": c.remark
+            "remark": c.remark,
+            "has_journal": c.name in names_with_entries if c.name else False
         } for c in items
     ]
 
