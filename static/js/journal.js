@@ -53,8 +53,8 @@ async function renderJournal(container) {
 
     // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
-    html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
-    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
+    html += '<th style="width:36px;position:sticky;left:0;background:#f5f5f5;z-index:2"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
+    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th style="position:sticky;right:0;background:#f5f5f5;z-index:1">操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
@@ -62,7 +62,7 @@ async function renderJournal(container) {
     } else {
       items.forEach(r => {
         html += '<tr>';
-        html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" onchange="jeOnCheck()"></td>';
+        html += '<td style="text-align:center;position:sticky;left:0;background:#fff;z-index:1"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" onchange="jeOnCheck()"></td>';
         html += '<td>' + r.period + '</td>';
         html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
         html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
@@ -77,7 +77,7 @@ async function renderJournal(container) {
         const src = r.source || '手动录入';
         const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
         html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
-        html += '<td style="white-space:nowrap">';
+        html += '<td style="white-space:nowrap;position:sticky;right:0;background:#fff">';
         html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
         html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
         html += '</td></tr>';
