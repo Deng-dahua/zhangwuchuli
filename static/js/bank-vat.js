@@ -1,0 +1,600 @@
+// ==================== 银行流水 ====================
+
+let _bankConfigs = [];
+let _currentBankId = null;
+
+async function loadBankConfigs() {
+  const data = await api('/api/bank-configs');
+  _bankConfigs = data;
+  return data;
+}
+
+async function renderBankTransactions(container) {
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  // 全局期间联动
+  let btDateFrom = '', btDateTo = '';
+  if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
+  const [configs, stats] = await Promise.all([
+    loadBankConfigs(),
+    api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
+  ]);
+
+  document.title = '银行流水 - 财税风险防控系统';
+
+  let bankSelectHtml = '';
+  if (configs.length > 0) {
+    const opts = configs.map(c => `<option value="${c.id}" ${c.id == _currentBankId ? 'selected' : ''}>${c.bank_name} ${c.account_number ? '(' + c.account_number.slice(-4) + ')' : ''}</option>`).join('');
+    bankSelectHtml = `<select onchange="switchBank(this.value)" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:180px;">
+      <option value="">全部银行</option>${opts}
+    </select>`;
+  }
+
+  const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let html = '';
+
+  // 统计卡片
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">流水总数</div></div>';
+  html += '<div class="stat-card"><div class="stat-value" style="color:#e02424;">¥' + fmt(stats.total_income) + '</div><div class="stat-label">收入合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value" style="color:#0e9f6e;">¥' + fmt(stats.total_expense) + '</div><div class="stat-label">支出合计</div></div>';
+  const net = stats.total_income - stats.total_expense;
+  html += '<div class="stat-card"><div class="stat-value" style="color:' + (net >= 0 ? '#e02424' : '#0e9f6e') + ';">¥' + fmt(net) + '</div><div class="stat-label">净流入</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.last_balance) + '</div><div class="stat-label">最新余额</div></div>';
+  html += '</div>';
+
+  // 工具栏
+  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += bankSelectHtml;
+  html += '<input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;" onkeydown="if(event.key===\'Enter\')loadBankTxList()">';
+  html += '<button onclick="loadBankTxList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
+  html += '<input type="date" id="bt-date-from" value="' + btDateFrom + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
+  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
+  html += '<input type="date" id="bt-date-to" value="' + btDateTo + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
+  html += '<button onclick="document.getElementById(\'bt-keyword\').value=\'\';const r=periodToDateRange(currentPeriod);document.getElementById(\'bt-date-from\').value=r.from;document.getElementById(\'bt-date-to\').value=r.to;loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
+  html += '</div></div>';
+
+  // 表格
+  html += '<div id="bank-tx-table-container"></div>';
+
+  el.innerHTML = html;
+  loadBankTxList();
+}
+
+window.switchBank = function(bankId) {
+  _currentBankId = bankId || null;
+  renderBankTransactions();
+};
+
+async function loadBankTxList() {
+  const type = document.getElementById('bt-type-filter')?.value || '';
+  const kw = document.getElementById('bt-keyword')?.value || '';
+  const df = document.getElementById('bt-date-from')?.value || '';
+  const dt = document.getElementById('bt-date-to')?.value || '';
+  const params = new URLSearchParams();
+  if (_currentBankId) params.set('bank_config_id', _currentBankId);
+  if (type) params.set('transaction_type', type);
+  if (kw) params.set('keyword', kw);
+  if (df) params.set('date_from', df);
+  if (dt) params.set('date_to', dt);
+  const qs = params.toString();
+  const data = await api('/api/bank-transactions' + (qs ? '?' + qs : ''));
+
+  const rows = data.map(tx => {
+    const debitColor = (tx.debit_amount || 0) > 0 ? 'color:#e02424;font-weight:600;' : '';
+    const creditColor = (tx.credit_amount || 0) > 0 ? 'color:#0e9f6e;font-weight:600;' : '';
+    return `
+      <tr>
+        <td><input type="checkbox" class="bt-check" data-id="${tx.id}" onchange="updateBankTxBatchBtn()"></td>
+        <td>${tx.transaction_date}</td>
+        <td>${tx.transaction_time || '-'}</td>
+        <td>${tx.application_date || '-'}</td>
+        <td>${tx.voucher_no || '-'}</td>
+        <td style="${debitColor}">${(tx.debit_amount || 0) > 0 ? '¥' + (tx.debit_amount || 0).toLocaleString() : '-'}</td>
+        <td style="${creditColor}">${(tx.credit_amount || 0) > 0 ? '¥' + (tx.credit_amount || 0).toLocaleString() : '-'}</td>
+        <td>¥${(tx.balance || 0).toLocaleString()}</td>
+        <td>${tx.counterparty_account || '-'}</td>
+        <td>${tx.counterparty_name || '-'}</td>
+        <td>${tx.counterparty_bank || '-'}</td>
+        <td>${tx.transaction_serial_no || '-'}</td>
+        <td>${tx.voucher_seq || '-'}</td>
+        <td>${tx.record_status || '-'}</td>
+        <td>${tx.summary || '-'}</td>
+        <td>${tx.transaction_remark || '-'}</td>
+        <td>${tx.account_type || '-'}</td>
+        <td>${tx.journal_voucher_no || '-'}</td>
+        <td>${tx.journal_voucher_no ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromBankTx(' + tx.id + ')">生成凭证</button>'}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="editBankTx(${tx.id})">编辑</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankTx(${tx.id})">删除</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('bank-tx-table-container').innerHTML = `
+    <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px">
+    <table class="data-table"><thead><tr>
+      <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>记账凭证</th><th style="width:90px">生成凭证</th><th style="width:100px">操作</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="20" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
+    </div>`;
+}
+
+function toggleBankTxSelectAll() {
+  const all = document.getElementById('btSelectAll');
+  document.querySelectorAll('.bt-check').forEach(cb => cb.checked = all.checked);
+  updateBankTxBatchBtn();
+}
+
+function updateBankTxBatchBtn() {
+  const count = document.querySelectorAll('.bt-check:checked').length;
+  const btn = document.getElementById('btBatchDelBtn');
+  if (btn) {
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
+  }
+}
+
+async function batchDeleteBankTx() {
+  const checked = document.querySelectorAll('.bt-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条银行流水记录？此操作不可恢复。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/bank-transactions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ids: ids})
+    });
+    toast(result.message, 'success');
+    loadBankTxList();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function showBankTxForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑银行流水' : '新增银行流水';
+  const bankOpts = _bankConfigs.map(c => `<option value="${c.id}">${c.bank_name}</option>`).join('');
+
+  const modal = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>银行</label><select id="btf-bank" class="form-input">${bankOpts}</select></div>
+      <div class="form-group"><label>交易日期 *</label><input id="btf-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>交易时间</label><input id="btf-time" type="time" step="1" class="form-input"></div>
+      <div class="form-group"><label>申请日期</label><input id="btf-app-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>凭证号</label><input id="btf-voucher" class="form-input"></div>
+      <div class="form-group"><label>借方金额</label><input id="btf-debit" type="number" step="0.01" class="form-input" placeholder="0.00"></div>
+      <div class="form-group"><label>贷方金额</label><input id="btf-credit" type="number" step="0.01" class="form-input" placeholder="0.00"></div>
+      <div class="form-group"><label>余额</label><input id="btf-balance" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>对方账号</label><input id="btf-cparty-acc" class="form-input"></div>
+      <div class="form-group"><label>对方户名</label><input id="btf-cparty" class="form-input"></div>
+      <div class="form-group"><label>对方行名</label><input id="btf-cparty-bank" class="form-input"></div>
+      <div class="form-group"><label>交易流水号</label><input id="btf-serial" class="form-input"></div>
+      <div class="form-group"><label>传票序号</label><input id="btf-seq" class="form-input"></div>
+      <div class="form-group"><label>记录状态</label><input id="btf-status" class="form-input" placeholder="正常"></div>
+      <div class="form-group"><label>客户账户类型</label><input id="btf-account-type" class="form-input"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>摘要</label><input id="btf-summary" class="form-input" placeholder="交易摘要/用途说明"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>交易附言</label><textarea id="btf-txn-remark" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBankTx(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  if (isEdit) {
+    api('/api/bank-transactions/' + id).then(tx => {
+      document.getElementById('btf-bank').value = tx.bank_config_id || '';
+      document.getElementById('btf-date').value = tx.transaction_date;
+      document.getElementById('btf-time').value = tx.transaction_time || '';
+      document.getElementById('btf-app-date').value = tx.application_date || '';
+      document.getElementById('btf-voucher').value = tx.voucher_no || '';
+      document.getElementById('btf-debit').value = tx.debit_amount || 0;
+      document.getElementById('btf-credit').value = tx.credit_amount || 0;
+      document.getElementById('btf-balance').value = tx.balance || 0;
+      document.getElementById('btf-cparty-acc').value = tx.counterparty_account || '';
+      document.getElementById('btf-cparty').value = tx.counterparty_name || '';
+      document.getElementById('btf-cparty-bank').value = tx.counterparty_bank || '';
+      document.getElementById('btf-serial').value = tx.transaction_serial_no || '';
+      document.getElementById('btf-seq').value = tx.voucher_seq || '';
+      document.getElementById('btf-status').value = tx.record_status || '';
+      document.getElementById('btf-account-type').value = tx.account_type || '';
+      document.getElementById('btf-summary').value = tx.summary || '';
+      document.getElementById('btf-txn-remark').value = tx.transaction_remark || '';
+    });
+  }
+}
+
+async function saveBankTx(id) {
+  const body = {
+    bank_config_id: parseInt(document.getElementById('btf-bank').value) || null,
+    transaction_date: document.getElementById('btf-date').value,
+    transaction_time: document.getElementById('btf-time').value || null,
+    application_date: document.getElementById('btf-app-date').value || null,
+    voucher_no: document.getElementById('btf-voucher').value,
+    debit_amount: parseFloat(document.getElementById('btf-debit').value) || 0,
+    credit_amount: parseFloat(document.getElementById('btf-credit').value) || 0,
+    balance: parseFloat(document.getElementById('btf-balance').value) || 0,
+    counterparty_account: document.getElementById('btf-cparty-acc').value,
+    counterparty_name: document.getElementById('btf-cparty').value,
+    counterparty_bank: document.getElementById('btf-cparty-bank').value,
+    transaction_serial_no: document.getElementById('btf-serial').value,
+    voucher_seq: document.getElementById('btf-seq').value,
+    record_status: document.getElementById('btf-status').value,
+    summary: document.getElementById('btf-summary').value,
+    transaction_remark: document.getElementById('btf-txn-remark').value,
+    account_type: document.getElementById('btf-account-type').value
+  };
+  try {
+    if (id) {
+      await api('/api/bank-transactions/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/bank-transactions', { method: 'POST', body });
+    }
+    closeModal();
+    renderBankTransactions();
+    toast(id ? '更新成功' : '创建成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function editBankTx(id) { showBankTxForm(id); }
+
+async function deleteBankTx(id) {
+  if (!confirm('确定删除此流水记录？')) return;
+  await api('/api/bank-transactions/' + id, { method: 'DELETE' });
+  renderBankTransactions();
+  toast('已删除');
+}
+
+// ==================== 银行配置弹窗 ====================
+
+function showBankConfigModal() {
+  const list = _bankConfigs.map(c => `
+    <tr>
+      <td>${c.bank_name}</td><td>${c.account_number || '-'}</td><td>${c.account_name || '-'}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="editBankConfig(${c.id})">编辑</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankConfig(${c.id})">删除</button>
+      </td>
+    </tr>`).join('');
+
+  const modal = createModal('银行设置', `
+    <table class="data-table" style="margin-bottom:16px;"><thead><tr><th>银行名称</th><th>账号</th><th>账户名称</th><th>操作</th></tr></thead>
+      <tbody>${list || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--gray-500);">暂无银行配置</td></tr>'}</tbody>
+    </table>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="showBankConfigForm()">+ 添加银行</button>
+    </div>
+    <div style="text-align:right;margin-top:16px;"><button class="btn" onclick="closeModal()">关闭</button></div>
+  `);
+  document.body.appendChild(modal);
+}
+
+function showBankConfigForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑银行配置' : '添加银行';
+  const modal2 = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>银行名称 *</label><input id="bcf-name" class="form-input" placeholder="如：中国工商银行"></div>
+      <div class="form-group"><label>银行账号</label><input id="bcf-acc" class="form-input"></div>
+      <div class="form-group"><label>账户名称</label><input id="bcf-acc-name" class="form-input"></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBankConfig(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal2);
+
+  if (isEdit) {
+    const cfg = _bankConfigs.find(c => c.id === id);
+    if (cfg) {
+      document.getElementById('bcf-name').value = cfg.bank_name;
+      document.getElementById('bcf-acc').value = cfg.account_number;
+      document.getElementById('bcf-acc-name').value = cfg.account_name;
+    }
+  }
+}
+
+async function saveBankConfig(id) {
+  const body = {
+    bank_name: document.getElementById('bcf-name').value,
+    account_number: document.getElementById('bcf-acc').value,
+    account_name: document.getElementById('bcf-acc-name').value
+  };
+  if (!body.bank_name) { toast('请输入银行名称', 'error'); return; }
+  try {
+    if (id) {
+      await api('/api/bank-configs/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/bank-configs', { method: 'POST', body });
+    }
+    closeModal();
+    await loadBankConfigs();
+    showBankConfigModal();
+    toast(id ? '更新成功' : '添加成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function editBankConfig(id) { showBankConfigForm(id); }
+
+async function deleteBankConfig(id) {
+  if (!confirm('确定删除此银行配置？')) return;
+  await api('/api/bank-configs/' + id, { method: 'DELETE' });
+  await loadBankConfigs();
+  showBankConfigModal();
+  toast('已停用');
+}
+
+// ==================== 进项抵扣 - 认证台账 ====================
+
+async function renderInputVATDeductions(container) {
+  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  // 全局期间联动
+  if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
+  const params = new URLSearchParams();
+  if (ivdFilter.checkStatus) params.set('check_status', ivdFilter.checkStatus);
+  if (ivdFilter.dateFrom) params.set('date_from', ivdFilter.dateFrom);
+  if (ivdFilter.dateTo) params.set('date_to', ivdFilter.dateTo);
+  if (ivdFilter.keyword) params.set('keyword', ivdFilter.keyword);
+  const qs = params.toString();
+
+  const [list, stats] = await Promise.all([
+    api('/api/input-vat-deductions' + (qs ? '?' + qs : '')),
+    api('/api/input-vat-deductions/stats')
+  ]);
+
+  document.title = '进项抵扣 - 财税风险防控系统';
+  const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let html = '';
+
+  // 统计卡片
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">记录总数</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">金额合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">税额合计</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.checked_count + '</div><div class="stat-label">已勾选</div></div>';
+  html += '<div class="stat-card"><div class="stat-value">' + stats.abnormal_count + '</div><div class="stat-label">异常发票</div></div>';
+  html += '</div>';
+
+  // 工具栏
+  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += '<input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="' + (ivdFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){ivdFilter.keyword=this.value;renderInputVATDeductions()}">';
+  html += '<button onclick="ivdFilter.keyword=document.getElementById(\'ivdKeyword\').value;renderInputVATDeductions()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
+  html += '<input type="date" value="' + (ivdFilter.dateFrom||'') + '" onchange="ivdFilter.dateFrom=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">';
+  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
+  html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
+  html += '<button onclick="ivdFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);ivdFilter.dateFrom=r.from;ivdFilter.dateTo=r.to;document.getElementById(\'ivdKeyword\').value=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
+  html += '</div></div>';
+
+  // 表格
+  const riskColors = { STATUS.RISK_NORMAL + "': '#059669', STATUS.RISK_WARN: '#d97706', STATUS.RISK_ABNORMAL: '#e02424', STATUS.RISK_LOST: '#7c3aed' };
+  html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
+  html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
+  html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th style="width:90px">操作</th>';
+  html += '</tr></thead><tbody>';
+
+  if (list.length === 0) {
+    html += '<tr><td colspan="22" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
+  } else {
+    list.forEach(it => {
+      const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
+      html += '<tr>';
+      html += '<td><input type="checkbox" class="ivd-check" data-id="' + it.id + '" onchange="updateIVDBatchBtn()"></td>';
+      html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
+      html += '<td>' + (it.invoice_source || '-') + '</td>';
+      html += '<td>' + (it.domestic_sale_cert_no || '-') + '</td>';
+      html += '<td>' + (it.digital_invoice_no || '-') + '</td>';
+      html += '<td>' + (it.invoice_code || '-') + '</td>';
+      html += '<td>' + (it.invoice_no || '-') + '</td>';
+      html += '<td>' + (it.invoice_date || '-') + '</td>';
+      html += '<td>' + (it.seller_tax_id || '-') + '</td>';
+      html += '<td>' + (it.seller_name || '-') + '</td>';
+      html += '<td style="text-align:right">' + (it.amount != null ? '¥' + it.amount.toLocaleString() : '-') + '</td>';
+      html += '<td style="text-align:right;font-weight:600">' + (it.tax_amount != null ? '¥' + it.tax_amount.toLocaleString() : '-') + '</td>';
+      html += '<td style="text-align:right;color:var(--primary)">' + (it.deductible_tax_amount != null ? '¥' + it.deductible_tax_amount.toLocaleString() : '0') + '</td>';
+      html += '<td>' + (it.invoice_category || '-') + '</td>';
+      html += '<td>' + (it.invoice_category_label || '-') + '</td>';
+      html += '<td><span class="' + stCls + '">' + (it.invoice_status || '-') + '</span></td>';
+      html += '<td>' + (it.check_time ? it.check_time.slice(0,16).replace('T',' ') : '-') + '</td>';
+      html += '<td><span style="color:' + (riskColors[it.risk_level] || '#333') + ';font-weight:500;">' + (it.risk_level || '-') + '</span></td>';
+      const jv2 = it.journal_voucher_no || '';
+      html += '<td>' + (jv2 ? '<span style="color:#1d4ed8;font-weight:500">' + jv2 + '</span>' : '-') + '</td>';
+      html += '<td>' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromInputVAT(' + it.id + ')">生成凭证</button>') + '</td>';
+      html += '<td style="white-space:nowrap"><button class="btn btn-sm" style="padding:2px 8px;font-size:12px;margin-right:4px" onclick="editVATDeduction(' + it.id + ')">✏️</button><button class="btn btn-sm" style="padding:2px 8px;font-size:12px;color:var(--danger)" onclick="deleteVATDeduction(' + it.id + ')">🗑</button></td>';
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table></div>';
+
+  el.innerHTML = html;
+}
+
+function toggleIVDSelectAll() {
+  const all = document.getElementById('ivdSelectAll');
+  document.querySelectorAll('.ivd-check').forEach(cb => cb.checked = all.checked);
+  updateIVDBatchBtn();
+}
+
+function updateIVDBatchBtn() {
+  const count = document.querySelectorAll('.ivd-check:checked').length;
+  const delBtn = document.getElementById('ivdBatchDelBtn');
+  const certBtn = document.getElementById('ivdBatchCertBtn');
+  if (delBtn) {
+    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.disabled = count === 0;
+  }
+  if (certBtn) {
+    certBtn.textContent = count > 0 ? '✅ 批量认证（' + count + '）' : '✅ 批量认证';
+    certBtn.disabled = count === 0;
+  }
+}
+
+async function batchDeleteIVD() {
+  const checked = document.querySelectorAll('.ivd-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条认证记录？此操作不可恢复。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/input-vat-deductions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function batchCertifyIVD() {
+  const checked = document.querySelectorAll('.ivd-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm('确认认证选中的 ' + checked.length + ' 条记录？认证后将标记为STATUS.CHECKED并设置勾选时间。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  try {
+    const result = await api('/api/input-vat-deductions/batch-certify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function showVATDeductionForm(id) {
+  const isEdit = !!id;
+  const title = isEdit ? '编辑认证记录' : '新增认证记录';
+  const modal = createModal(title, `
+    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="form-group"><label>勾选状态</label><select id="ivdf-check-status" class="form-input">
+        <option value=STATUS.UNCHECKED>未勾选</option><option value=STATUS.CHECKED>已勾选</option>
+      </select></div>
+      <div class="form-group"><label>发票来源</label><input id="ivdf-source" class="form-input" placeholder="勾选平台/扫描认证/手工录入"></div>
+      <div class="form-group"><label>转内销证明编号</label><input id="ivdf-domestic-cert" class="form-input"></div>
+      <div class="form-group"><label>数电发票号码</label><input id="ivdf-digital-no" class="form-input"></div>
+      <div class="form-group"><label>发票代码</label><input id="ivdf-invoice-code" class="form-input"></div>
+      <div class="form-group"><label>发票号码</label><input id="ivdf-invoice-no" class="form-input"></div>
+      <div class="form-group"><label>开票日期</label><input id="ivdf-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>销售方纳税人识别号</label><input id="ivdf-seller-taxid" class="form-input"></div>
+      <div class="form-group"><label>销售方纳税人名称</label><input id="ivdf-seller" class="form-input"></div>
+      <div class="form-group"><label>金额（不含税）</label><input id="ivdf-amount" type="number" step="0.01" class="form-input" oninput="autoCalcVAT()"></div>
+      <div class="form-group"><label>税额</label><input id="ivdf-tax" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>有效抵扣税额</label><input id="ivdf-deductible" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>票种</label><input id="ivdf-category" class="form-input" placeholder="如：数电发票（增值税专用发票）"></div>
+      <div class="form-group"><label>票种标签</label><input id="ivdf-category-label" class="form-input"></div>
+      <div class="form-group"><label>发票状态</label><select id="ivdf-inv-status" class="form-input">
+        <option value="正常">正常</option><option value="作废">作废</option><option value="红冲">红冲</option>
+      </select></div>
+      <div class="form-group"><label>勾选时间</label><input id="ivdf-check-time" type="datetime-local" class="form-input"></div>
+      <div class="form-group"><label>发票风险等级</label><select id="ivdf-risk" class="form-input">
+        <option value="正常">正常</option><option value="疑点">疑点</option><option value="异常">异常</option><option value="失控">失控</option>
+      </select></div>
+      <div class="form-group"><label>抵扣所属期</label><input id="ivdf-period" class="form-input" placeholder="YYYY-MM"></div>
+      <div class="form-group"><label>抵扣方式</label><select id="ivdf-method" class="form-input">
+        <option value="凭票抵扣">凭票抵扣</option><option value="计算抵扣">计算抵扣</option><option value="核定抵扣">核定抵扣</option>
+      </select></div>
+      <div class="form-group"><label>货物名称</label><input id="ivdf-goods" class="form-input"></div>
+      <div class="form-group"><label>税率(%)</label><input id="ivdf-rate" type="number" step="0.01" class="form-input" value="13"></div>
+      <div class="form-group"><label>价税合计</label><input id="ivdf-total" type="number" step="0.01" class="form-input"></div>
+      <div class="form-group" style="grid-column:1/-1;"><label>备注</label><textarea id="ivdf-remark" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveVATDeduction(${isEdit ? id : 0})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  if (isEdit) {
+    api('/api/input-vat-deductions/' + id).then(it => {
+      document.getElementById('ivdf-check-status').value = it.check_status || STATUS.UNCHECKED;
+      document.getElementById('ivdf-source').value = it.invoice_source || '';
+      document.getElementById('ivdf-domestic-cert').value = it.domestic_sale_cert_no || '';
+      document.getElementById('ivdf-digital-no').value = it.digital_invoice_no || '';
+      document.getElementById('ivdf-invoice-code').value = it.invoice_code || '';
+      document.getElementById('ivdf-invoice-no').value = it.invoice_no || '';
+      document.getElementById('ivdf-date').value = it.invoice_date || '';
+      document.getElementById('ivdf-seller-taxid').value = it.seller_tax_id || '';
+      document.getElementById('ivdf-seller').value = it.seller_name || '';
+      document.getElementById('ivdf-amount').value = it.amount || 0;
+      document.getElementById('ivdf-tax').value = it.tax_amount || 0;
+      document.getElementById('ivdf-deductible').value = it.deductible_tax_amount || 0;
+      document.getElementById('ivdf-category').value = it.invoice_category || '';
+      document.getElementById('ivdf-category-label').value = it.invoice_category_label || '';
+      document.getElementById('ivdf-inv-status').value = it.invoice_status || STATUS.NORMAL;
+      document.getElementById('ivdf-check-time').value = it.check_time ? it.check_time.slice(0,16) : '';
+      document.getElementById('ivdf-risk').value = it.risk_level || STATUS.RISK_NORMAL;
+      document.getElementById('ivdf-period').value = it.deduction_period || '';
+      document.getElementById('ivdf-method').value = it.deduction_method || '凭票抵扣';
+      document.getElementById('ivdf-goods').value = it.goods_name || '';
+      document.getElementById('ivdf-rate').value = it.tax_rate || 0;
+      document.getElementById('ivdf-total').value = it.total_amount || 0;
+      document.getElementById('ivdf-remark').value = it.remark || '';
+    });
+  }
+}
+
+async function saveVATDeduction(id) {
+  const body = {
+    check_status: document.getElementById('ivdf-check-status').value,
+    invoice_source: document.getElementById('ivdf-source').value,
+    domestic_sale_cert_no: document.getElementById('ivdf-domestic-cert').value,
+    digital_invoice_no: document.getElementById('ivdf-digital-no').value,
+    invoice_code: document.getElementById('ivdf-invoice-code').value,
+    invoice_no: document.getElementById('ivdf-invoice-no').value,
+    invoice_date: document.getElementById('ivdf-date').value || null,
+    seller_tax_id: document.getElementById('ivdf-seller-taxid').value,
+    seller_name: document.getElementById('ivdf-seller').value,
+    amount: parseFloat(document.getElementById('ivdf-amount').value) || 0,
+    tax_amount: parseFloat(document.getElementById('ivdf-tax').value) || 0,
+    deductible_tax_amount: parseFloat(document.getElementById('ivdf-deductible').value) || 0,
+    invoice_category: document.getElementById('ivdf-category').value,
+    invoice_category_label: document.getElementById('ivdf-category-label').value,
+    invoice_status: document.getElementById('ivdf-inv-status').value,
+    check_time: document.getElementById('ivdf-check-time').value || null,
+    risk_level: document.getElementById('ivdf-risk').value,
+    goods_name: document.getElementById('ivdf-goods').value,
+    tax_rate: parseFloat(document.getElementById('ivdf-rate').value) || 0,
+    total_amount: parseFloat(document.getElementById('ivdf-total').value) || 0,
+    deduction_period: document.getElementById('ivdf-period').value,
+    deduction_method: document.getElementById('ivdf-method').value,
+    remark: document.getElementById('ivdf-remark').value
+  };
+  try {
+    if (id) {
+      await api('/api/input-vat-deductions/' + id, { method: 'PUT', body });
+    } else {
+      await api('/api/input-vat-deductions', { method: 'POST', body });
+    }
+    closeModal();
+    renderInputVATDeductions();
+    toast(id ? '更新成功' : '创建成功');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function autoCalcVAT() {
+  const amount = parseFloat(document.getElementById('ivdf-amount')?.value) || 0;
+  const rate = parseFloat(document.getElementById('ivdf-rate')?.value) || 0;
+  if (amount && rate) {
+    const tax = Math.round(amount * rate) / 100;
+    document.getElementById('ivdf-tax').value = tax.toFixed(2);
+    document.getElementById('ivdf-deductible').value = tax.toFixed(2);
+  }
+}
+
+function editVATDeduction(id) { showVATDeductionForm(id); }
+
+async function deleteVATDeduction(id) {
+  if (!confirm('确定删除此认证记录？')) return;
+  await api('/api/input-vat-deductions/' + id, { method: 'DELETE' });
+  renderInputVATDeductions();
+  toast('已删除');
+}
+
