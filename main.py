@@ -1,7 +1,7 @@
 """
 中小制造业账务处理系统 - 后端 API
 """
-from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
@@ -3470,10 +3470,19 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
 
 
 @app.post("/api/sales-invoices/batch-to-journal")
-def sales_invoice_batch_to_journal(company_id: int = Query(1), db=Depends(get_db)):
-    """一键生成所有未生成凭证的开具发票的记账凭证"""
+def sales_invoice_batch_to_journal(
+    body: dict = Body(default=None),
+    company_id: int = Query(1),
+    db=Depends(get_db)
+):
+    """一键生成勾选发票的记账凭证"""
+    ids = body.get("ids", []) if body else []
+    if not ids:
+        return {"message": "未选择任何发票", "generated": 0, "skipped": 0, "errors": []}
+
     invoices = db.query(SalesInvoice).filter(
-        SalesInvoice.company_id == company_id
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.id.in_(ids)
     ).order_by(SalesInvoice.invoice_date, SalesInvoice.id).all()
 
     generated = 0

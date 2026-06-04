@@ -665,15 +665,22 @@ async function showPurchaseDetail(id) {
   }
 }
 
-// 一键生成全部开具发票的记账凭证
+// 一键生成勾选发票的记账凭证
 async function batchGenerateVouchers() {
-  if (!confirm('确认将所有未生成凭证的开具发票一键生成为记账凭证？')) return;
+  var checked = document.querySelectorAll('.si-check:checked');
+  if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
+  var ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
+  if (!confirm('确认为选中的 ' + ids.length + ' 条发票生成记账凭证？')) return;
   var btn = event.target;
   btn.disabled = true;
   var origText = btn.textContent;
   btn.textContent = '⏳ 生成中...';
   try {
-    var res = await api('/api/sales-invoices/batch-to-journal', { method: 'POST' });
+    var res = await api('/api/sales-invoices/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    });
     toast(res.message, 'success');
     renderSalesInvoices();
     // 重置序时账缓存，确保切换后刷新
