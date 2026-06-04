@@ -76,7 +76,7 @@
     .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; width: 100%; }
     .stat-card { background: #fff; border-radius: 10px; border: 1px solid var(--gray-200); padding: 16px 20px; width: 100%; box-sizing: border-box; }
     .stat-label { font-size: 12px; color: var(--gray-500); margin-bottom: 6px; }
-    .stat-value { font-size: 26px; font-weight: 700; color: var(--gray-900); }
+    .stat-value { font-size: clamp(14px, 2vw, 26px); font-weight: 700; color: var(--gray-900); word-break: break-all; min-width: 0; }
     .stat-sub { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
 
     /* 按钮 */
@@ -101,10 +101,27 @@
     .link-danger { color: var(--danger); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
-    /* 表格 */
-    .table-wrap { overflow-x: auto; width: 100%; }
+    /* 表格操作列固定右侧 */
+    .table-wrap { overflow-x: auto; width: 100%; position: relative; }
     .table-wrap table { min-width: 100%; }
     .table-wrap th, .table-wrap td { white-space: nowrap; }
+    .col-action { position: sticky; right: 0; z-index: 5; background: #fff; box-shadow: -2px 0 4px rgba(0,0,0,0.06); }
+    thead .col-action { background: var(--gray-50); z-index: 15; }
+    tr:hover .col-action { background: var(--gray-50); }
+    .row-selected .col-action { background: #eff6ff; }
+    /* 所有在 table-wrap 中的表格最后一列自动 sticky（操作列） */
+    .table-wrap table th:last-child,
+    .table-wrap table td:last-child {
+      position: sticky; right: 0; z-index: 5;
+      background: inherit;
+      box-shadow: -2px 0 6px rgba(0,0,0,0.06);
+    }
+    .table-wrap table thead th:last-child { background: var(--gray-50); z-index: 15; }
+    .table-wrap table tbody tr:hover td:last-child { background: var(--gray-50); }
+    .table-wrap table tbody .row-selected td:last-child { background: #eff6ff; }
+    /* 报表不需要 sticky（最后一列是数字而非操作） */
+    .report-table th:last-child,
+    .report-table td:last-child { position: static; box-shadow: none; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     thead tr { background: var(--gray-50); }
     th { padding: 10px 12px; text-align: left; font-weight: 600; color: var(--gray-700); border-bottom: 1px solid var(--gray-200); white-space: nowrap; position: sticky; top: 0; z-index: 10; background: var(--gray-50); }
@@ -2638,6 +2655,11 @@ function createModal(title, body, extraClass) {
 let currentCompanyId = 1;
 let currentCompanyName = '';
 let allCompanies = [];
+
+// ==================== 文件导入全局状态 ====================
+let _importFile = null;       // 最近一次选择的 File 对象，供强制导入重用（避免流已消费）
+let _importModule = '';
+let _importBankConfigId = null;
 
 // ==================== 启动 ====================
 init();
@@ -5343,6 +5365,8 @@ function showUploadModal(module) {
 async function handleFileSelect(input, module) {
   const file = input.files[0];
   if (!file) return;
+  _importFile = file;
+  _importModule = module;
 
   // 部门档案：直接导入，跳过列映射
   if (module === 'department') {
@@ -5381,6 +5405,9 @@ async function handleFileSelect(input, module) {
   let bankConfigId = null;
   if (module === 'bank-transaction' && _currentBankId) {
     bankConfigId = _currentBankId;
+  }
+  _importBankConfigId = bankConfigId;
+  if (bankConfigId) {
     formData.append('bank_config_id', bankConfigId);
   }
 
@@ -5641,25 +5668,26 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       body: {
         module: module,
         template_name: tplName,
-        bank_config_id: bankConfigId || null,
+        bank_config_id: _importBankConfigId || null,
         column_mapping: JSON.stringify(mapping)
       }
     });
   }
 
-  const fileInput = document.getElementById('upload-file-input');
-  const file = fileInput.files[0];
-  if (!file) { toast('请重新选择文件', 'error'); return; }
+  // 使用全局保存的 File 对象（避免第一次 fetch 后文件流已消费）
+  const fileToUse = _importFile;
+  if (!fileToUse) { toast('请重新选择文件', 'error'); return; }
 
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', fileToUse);
   formData.append('module', module);
   formData.append('column_mapping', JSON.stringify(mapping));
   formData.append('company_id', currentCompanyId);
-  if (bankConfigId) formData.append('bank_config_id', bankConfigId);
+  if (_importBankConfigId) formData.append('bank_config_id', _importBankConfigId);
 
   // 第一轮：带去重导入
   document.getElementById('upload-progress').innerText = '正在导入数据...';
+  document.getElementById('upload-progress').style.display = 'block';
 
   const resp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData });
   const result = await resp.json();
@@ -5674,25 +5702,23 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   // 只要有重复记录被跳过，就提示是否强制导入
   const hasDupSkipped = result.skipped > 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
   if (hasDupSkipped) {
-    // 只传"完全重复"相关的错误信息给弹窗
     const dupErrors = result.errors ? result.errors.filter(e => e.includes('完全重复')) : [];
     const forceChoice = await showForceConfirmDialog(result.skipped, result.total, dupErrors);
     if (forceChoice === 'yes') {
-      // 重新构建 FormData（第一次 fetch 后文件流已消费，必须重建）
+      if (!fileToUse) { toast('文件已失效，请重新选择文件', 'error'); return; }
       const formData2 = new FormData();
-      formData2.append('file', file);
+      formData2.append('file', fileToUse);
       formData2.append('module', module);
       formData2.append('column_mapping', JSON.stringify(mapping));
       formData2.append('company_id', currentCompanyId);
       formData2.append('force', 'true');
-      // 传递被跳过的行索引，后端只处理这些行
       if (result.skipped_indices && result.skipped_indices.length > 0) {
         formData2.append('skipped_indices', JSON.stringify(result.skipped_indices));
       }
-      if (bankConfigId) formData2.append('bank_config_id', bankConfigId);
+      if (_importBankConfigId) formData2.append('bank_config_id', _importBankConfigId);
 
-      document.getElementById('upload-progress').style.display = 'block';
       document.getElementById('upload-progress').innerText = '正在强制导入数据...';
+      document.getElementById('upload-progress').style.display = 'block';
 
       const resp2 = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData2 });
       const result2 = await resp2.json();
@@ -5705,7 +5731,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       }
 
       closeModal();
-      // 刷新列表
+      // 刷新列表（同原代码）
       if (module === 'bank-transaction') renderBankTransactions();
       else if (module === 'sales-invoice') renderSalesInvoices();
       else if (module === 'purchase-invoice') renderPurchaseInvoices();
@@ -5713,24 +5739,19 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
       else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
       else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
-      // 显示结果
       let msg2 = `强制导入完成：${result2.imported}/${result2.total} 条记录`;
       if (result2.errors && result2.errors.length > 0) {
         msg2 += `，${result2.errors.length} 条错误`;
       }
       toast(msg2, result2.errors && result2.errors.length > 0 ? 'warn' : 'success');
-      if (result2.errors && result2.errors.length > 0) {
-        console.warn('Import errors:', result2.errors);
-      }
-      if (result2.infos && result2.infos.length > 0) {
-        console.log('Import infos:', result2.infos);
-      }
+      if (result2.errors && result2.errors.length > 0) console.warn('Import errors:', result2.errors);
+      if (result2.infos && result2.infos.length > 0) console.log('Import infos:', result2.infos);
       return;
     }
   }
 
   closeModal();
-  // 刷新列表
+  // 刷新列表（同原代码）
   if (module === 'bank-transaction') renderBankTransactions();
   else if (module === 'sales-invoice') renderSalesInvoices();
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
@@ -5738,18 +5759,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
   else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
   else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
-  // 显示结果
   let msg = `成功导入 ${result.imported}/${result.total} 条记录`;
   if (result.errors && result.errors.length > 0) {
     msg += `，${result.errors.length} 条错误`;
   }
   toast(msg, result.errors && result.errors.length > 0 ? 'warn' : 'success');
-  if (result.errors && result.errors.length > 0) {
-    console.warn('Import errors:', result.errors);
-  }
-  if (result.infos && result.infos.length > 0) {
-    console.log('Import infos:', result.infos);
-  }
+  if (result.errors && result.errors.length > 0) console.warn('Import errors:', result.errors);
+  if (result.infos && result.infos.length > 0) console.log('Import infos:', result.infos);
 }
 
 </script>
