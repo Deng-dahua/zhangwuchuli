@@ -103,11 +103,40 @@ function showCompanyPick(companies) {
       + '<div class="av">' + initial + '</div>'
       + '<div class="info"><div class="cn">' + escapeHtml(c.name) + '</div>'
       + (c.uscc ? '<div class="us">' + escapeHtml(c.uscc) + '</div>' : '')
-      + '</div><div class="arr">→</div></li>';
+      + '</div><div class="arr">→</div>'
+      + '<button class="pick-del-btn" onclick="event.stopPropagation();deleteCompanyFromPick(' + c.id + ',\'' + escapeHtml(c.name) + '\')" title="删除此账套">🗑</button>'
+      + '</li>';
   }).join('');
   document.getElementById('registration-view').classList.add('hidden');
   document.getElementById('company-pick-view').classList.remove('hidden');
   document.getElementById('app-view').classList.add('hidden');
+}
+
+async function deleteCompanyFromPick(companyId, companyName) {
+  if (!confirm('确定要删除账套「' + companyName + '」吗？\n\n⚠️ 此操作不可逆，该账套下的所有数据（凭证、发票、报表等）将一并删除。')) return;
+  try {
+    // 如果删除的是当前已登录的公司，先清除记录
+    if (currentCompanyId === companyId) {
+      localStorage.removeItem('lastCompanyId');
+      localStorage.removeItem('lastCompanyName');
+      currentCompanyId = 1;
+      currentCompanyName = '';
+    }
+    await fetch('/api/companies/' + companyId, { method: 'DELETE' });
+    toast('账套「' + companyName + '」已删除', 'success');
+    // 刷新选择列表
+    const companies = await loadCompaniesRaw();
+    window._companiesForPick = companies || [];
+    if (!companies || companies.length === 0) {
+      localStorage.removeItem('lastCompanyId');
+      localStorage.removeItem('lastCompanyName');
+      showRegistration();
+    } else {
+      showCompanyPick(companies);
+    }
+  } catch (e) {
+    toast('删除失败：' + e.message, 'error');
+  }
 }
 
 async function enterApp(companyId, companyName) {

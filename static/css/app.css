@@ -369,5 +369,8 @@
     .pick-list li .info .us { font-size: 11px; color: #9ca3af; margin-top: 2px; }
     .pick-list li .arr { color: #d1d5db; font-size: 14px; }
     .pick-list li:hover .arr { color: #1a56db; }
+    .pick-del-btn { width: 32px; height: 32px; border: none; background: transparent; font-size: 16px; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: 0; transition: all 0.15s; color: #9ca3af; }
+    .pick-list li:hover .pick-del-btn { opacity: 1; }
+    .pick-del-btn:hover { background: #fef2f2; color: #ef4444; }
     .pick-new-btn { width: 100%; padding: 13px; background: #fff; color: #1a56db; border: 2px dashed #d1d5db; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
     .pick-new-btn:hover { border-color: #1a56db; background: #eff6ff; }
