@@ -1,5 +1,10 @@
 // ==================== 开具发票 ====================
 
+function fmtDate(d) {
+  if (!d) return '-';
+  return d.replace(/-/g, '/');
+}
+
 let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
@@ -89,7 +94,7 @@ async function renderSalesInvoices(container) {
         html += '<td>' + (i.seller_name || '-') + '</td>';
         html += '<td>' + (i.buyer_tax_no || '-') + '</td>';
         html += '<td>' + (i.buyer_name || '-') + '</td>';
-        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td>' + fmtDate(i.invoice_date) + '</td>';
         html += '<td>' + (i.tax_category_code || '-') + '</td>';
         html += '<td>' + (i.specific_business_type || '-') + '</td>';
         html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
@@ -350,7 +355,7 @@ async function showSalesDetail(id) {
     html += '<div><b>发票代码：</b>' + (i.invoice_code || '-') + '</div>';
     html += '<div><b>发票号码：</b>' + (i.invoice_no || '-') + '</div>';
     html += '<div><b>数电发票号码：</b>' + (i.digital_invoice_no || '-') + '</div>';
-    html += '<div><b>开票日期：</b>' + (i.invoice_date || '-') + '</div>';
+    html += '<div><b>开票日期：</b>' + fmtDate(i.invoice_date) + '</div>';
     html += '</div></div>';
 
     // 销方信息
