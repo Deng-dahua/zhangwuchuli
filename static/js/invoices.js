@@ -517,6 +517,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td>' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
         html += '<td>' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
+        html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseInvoice(' + i.id + ')">删除</button>';
         html += '</td></tr>';
       });
@@ -654,6 +655,194 @@ async function showPurchaseDetail(id) {
 
     html += '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-secondary" onclick="closeModal()">关闭</button></div>';
     showModal(html);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ── 取得发票编辑弹窗 ──
+async function showPurchaseInvoiceForm(id) {
+  let data = {};
+  if (id) {
+    data = await api('/api/purchase-invoices/' + id);
+  }
+  const isEdit = !!id;
+  let html = '<div class="modal-header"><h3>' + (isEdit ? '编辑取得发票' : '新增取得发票') + '</h3><button class="modal-close" onclick="closeModal()">×</button></div>';
+  html += '<div class="modal-body" style="max-height:70vh;overflow-y:auto">';
+
+  // ── 发票基本信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📋 发票基本信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票代码</label><input class="form-input" id="pi-invoice-code" value="' + (data.invoice_code || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">发票号码</label><input class="form-input" id="pi-invoice-no" value="' + (data.invoice_no || '-') + '" ' + (isEdit ? 'readonly' : '') + '></div>';
+  html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">数电发票号码</label><input class="form-input" id="pi-digital-invoice-no" value="' + (data.digital_invoice_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">开票日期</label><input type="date" class="form-input" id="pi-invoice-date" value="' + (data.invoice_date || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 销方信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 销方信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">销方识别号</label><input class="form-input" id="pi-seller-taxno" value="' + (data.seller_tax_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">销方名称</label><input class="form-input" id="pi-seller-name" value="' + (data.seller_name || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 购方信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏢 购方信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">购方识别号</label><input class="form-input" id="pi-buyer-taxno" value="' + (data.buyer_tax_no || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">购买方名称</label><input class="form-input" id="pi-buyer-name" value="' + (data.buyer_name || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 分类信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">🏷️ 分类信息</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">税收分类编码</label><input class="form-input" id="pi-tax-category-code" value="' + (data.tax_category_code || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">特定业务类型</label><input class="form-input" id="pi-specific-business-type" value="' + (data.specific_business_type || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 货物明细 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📦 货物明细</div>';
+  html += '<div class="form-group"><label class="form-label">货物或应税劳务名称</label><input class="form-input" id="pi-goods-name" value="' + (data.goods_name || '') + '"></div>';
+  html += '<div class="form-grid-4">';
+  html += '<div class="form-group"><label class="form-label">规格型号</label><input class="form-input" id="pi-spec" value="' + (data.spec || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">单位</label><input class="form-input" id="pi-unit" value="' + (data.unit || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">数量</label><input type="number" step="any" class="form-input" id="pi-qty" value="' + (data.quantity || 0) + '" onchange="calcPiTotal()"></div>';
+  html += '<div class="form-group"><label class="form-label">单价</label><input type="number" step="any" class="form-input" id="pi-price" value="' + (data.unit_price || 0) + '" onchange="calcPiTotal()"></div>';
+  html += '</div></div>';
+
+  // ── 金额信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">💰 金额信息</div>';
+  html += '<div class="form-grid-3">';
+  html += '<div class="form-group"><label class="form-label">金额（不含税）</label><input type="number" step="any" class="form-input" id="pi-amount" value="' + (data.amount || 0) + '" onchange="calcPiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税率（%）</label><input type="number" step="any" class="form-input" id="pi-taxrate" value="' + (data.tax_rate || 0) + '" onchange="calcPiTax()"></div>';
+  html += '<div class="form-group"><label class="form-label">税额</label><input type="number" step="any" class="form-input" id="pi-taxamount" value="' + (data.tax_amount || 0) + '" onchange="calcPiAmount()"></div>';
+  html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">价税合计</label><input type="number" step="any" class="form-input" id="pi-total" value="' + (data.total_amount || 0) + '" readonly style="background:#f0f9ff;font-weight:600;font-size:16px"></div>';
+  html += '<div class="form-group"><label class="form-label">抵扣率（%）</label><input type="number" step="any" class="form-input" id="pi-deduction-rate" value="' + (data.deduction_rate != null ? data.deduction_rate : 100) + '"></div>';
+  html += '</div></div>';
+
+  // ── 发票属性 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📄 发票属性</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票票种</label><select class="form-input" id="pi-category">';
+  ['增值税专用发票', '增值税普通发票', '电子普通发票', '其他'].forEach(t => {
+    html += '<option value="' + t + '"' + (data.invoice_category === t ? ' selected' : '') + '>' + t + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">发票状态</label><select class="form-input" id="pi-status">';
+  [STATUS.NORMAL, STATUS.VOID, STATUS.RED].forEach(s => {
+    html += '<option value="' + s + '"' + (data.status === s ? ' selected' : '') + '>' + s + '</option>';
+  });
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">发票来源</label><input class="form-input" id="pi-source" value="' + (data.invoice_source || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">发票风险等级</label><select class="form-input" id="pi-risk-level">';
+  ['', STATUS.RISK_NORMAL, STATUS.FOLLOW_ATTENTION, STATUS.RISK_ABNORMAL].forEach(r => {
+    html += '<option value="' + r + '"' + (data.invoice_risk_level === r ? ' selected' : '') + '>' + (r || '--') + '</option>';
+  });
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div class="form-grid-2">';
+  html += '<div class="form-group"><label class="form-label">是否正数发票</label><select class="form-input" id="pi-is-positive">';
+  html += '<option value="1"' + (data.is_positive !== false ? ' selected' : '') + '>是</option>';
+  html += '<option value="0"' + (data.is_positive === false ? ' selected' : '') + '>否</option>';
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">开票人</label><input class="form-input" id="pi-issuer" value="' + (data.issuer || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 认证信息 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">✅ 认证信息</div>';
+  html += '<div class="form-grid-3">';
+  html += '<div class="form-group"><label class="form-label">认证状态</label><select class="form-input" id="pi-cert-status">';
+  ['未认证', '已认证', '已抵扣'].forEach(s => {
+    html += '<option value="' + s + '"' + (data.certification_status === s ? ' selected' : '') + '>' + s + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">认证日期</label><input type="date" class="form-input" id="pi-cert-date" value="' + (data.certification_date || '') + '"></div>';
+  html += '<div class="form-group"><label class="form-label">抵扣期间</label><input class="form-input" id="pi-deduction-period" placeholder="YYYY-MM" value="' + (data.deduction_period || '') + '"></div>';
+  html += '</div></div>';
+
+  // ── 备注 ──
+  html += '<div class="payment-form-section"><div class="payment-form-section-title">📝 备注</div>';
+  html += '<div class="form-group"><label class="form-label">备注</label><textarea class="form-input" id="pi-remark" rows="2" style="width:100%">' + (data.remark || '') + '</textarea></div>';
+  html += '</div>';
+
+  html += '</div>';
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary" onclick="closeModal()">取消</button>';
+  html += '<button class="btn btn-primary" onclick="savePurchaseInvoice(' + (id || 0) + ')">保存</button>';
+  html += '</div>';
+  showModal(html);
+}
+
+function calcPiTax() {
+  const amount = parseFloat(document.getElementById('pi-amount').value) || 0;
+  const rate = parseFloat(document.getElementById('pi-taxrate').value) || 0;
+  const tax = amount * rate / 100;
+  document.getElementById('pi-taxamount').value = tax.toFixed(2);
+  document.getElementById('pi-total').value = (amount + tax).toFixed(2);
+}
+
+function calcPiAmount() {
+  const tax = parseFloat(document.getElementById('pi-taxamount').value) || 0;
+  const amount = parseFloat(document.getElementById('pi-amount').value) || 0;
+  document.getElementById('pi-total').value = (amount + tax).toFixed(2);
+}
+
+function calcPiTotal() {
+  const qty = parseFloat(document.getElementById('pi-qty').value) || 0;
+  const price = parseFloat(document.getElementById('pi-price').value) || 0;
+  document.getElementById('pi-amount').value = (qty * price).toFixed(2);
+  calcPiTax();
+}
+
+async function savePurchaseInvoice(id) {
+  try {
+    const body = {
+      invoice_code: document.getElementById('pi-invoice-code').value.trim(),
+      invoice_no: document.getElementById('pi-invoice-no').value.trim(),
+      digital_invoice_no: document.getElementById('pi-digital-invoice-no').value.trim(),
+      seller_tax_no: document.getElementById('pi-seller-taxno').value.trim(),
+      seller_name: document.getElementById('pi-seller-name').value.trim(),
+      buyer_tax_no: document.getElementById('pi-buyer-taxno').value.trim(),
+      buyer_name: document.getElementById('pi-buyer-name').value.trim(),
+      invoice_date: document.getElementById('pi-invoice-date').value,
+      tax_category_code: document.getElementById('pi-tax-category-code').value.trim(),
+      specific_business_type: document.getElementById('pi-specific-business-type').value.trim(),
+      goods_name: document.getElementById('pi-goods-name').value.trim(),
+      spec: document.getElementById('pi-spec').value.trim(),
+      unit: document.getElementById('pi-unit').value.trim(),
+      quantity: parseFloat(document.getElementById('pi-qty').value) || 0,
+      unit_price: parseFloat(document.getElementById('pi-price').value) || 0,
+      amount: parseFloat(document.getElementById('pi-amount').value) || 0,
+      tax_rate: parseFloat(document.getElementById('pi-taxrate').value) || 0,
+      tax_amount: parseFloat(document.getElementById('pi-taxamount').value) || 0,
+      total_amount: parseFloat(document.getElementById('pi-total').value) || 0,
+      deduction_rate: parseFloat(document.getElementById('pi-deduction-rate').value) || 100,
+      invoice_source: document.getElementById('pi-source').value.trim(),
+      invoice_category: document.getElementById('pi-category').value,
+      status: document.getElementById('pi-status').value,
+      is_positive: document.getElementById('pi-is-positive').value === '1',
+      invoice_risk_level: document.getElementById('pi-risk-level').value,
+      issuer: document.getElementById('pi-issuer').value.trim(),
+      certification_status: document.getElementById('pi-cert-status').value,
+      certification_date: document.getElementById('pi-cert-date').value || null,
+      deduction_period: document.getElementById('pi-deduction-period').value.trim() || null,
+      remark: document.getElementById('pi-remark').value.trim()
+    };
+    let result;
+    if (id) {
+      result = await api('/api/purchase-invoices/' + id, { method: 'PUT', body });
+    } else {
+      result = await api('/api/purchase-invoices', { method: 'POST', body });
+    }
+    toast(result.message || '保存成功', 'success');
+    closeModal();
+    renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
   }
