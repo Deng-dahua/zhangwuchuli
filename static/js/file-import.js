@@ -359,7 +359,14 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   closeModal();
   // 刷新列表（同原代码）
   if (module === 'bank-transaction') renderBankTransactions();
-  else if (module === 'sales-invoice') renderSalesInvoices();
+  else if (module === 'sales-invoice') {
+    renderSalesInvoices();
+    // 导入发票会自动生成凭证，重置序时账和客户档案的渲染缓存，确保下次切换时刷新数据
+    ['page-journal', 'page-customers'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) delete el.dataset.rendered;
+    });
+  }
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
   else if (module === 'input-vat-deduction') renderInputVATDeductions();
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
