@@ -60,27 +60,53 @@ async function renderJournal(container) {
     if (items.length === 0) {
       html += '<tr><td colspan="14" style="text-align:center;color:#9ca3af;padding:40px">暂无记录</td></tr>';
     } else {
+      // 按凭证号分组
+      const groups = [];
+      let cur = null;
       items.forEach(r => {
-        html += '<tr>';
-        html += '<td style="text-align:center;position:sticky;left:0;background:#fff;z-index:1"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" onchange="jeOnCheck()"></td>';
-        html += '<td>' + r.period + '</td>';
-        html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
-        html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
-        html += '<td>' + (r.account_name || '-') + '</td>';
-        html += '<td>' + (r.contact_project || '-') + '</td>';
-        html += '<td>' + (r.spec_model || '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
-        html += '<td>' + (r.unit || '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
-        html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
-        const src = r.source || '手动录入';
-        const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
-        html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
-        html += '<td style="white-space:nowrap">';
-        html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
-        html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
-        html += '</td></tr>';
+        const key = r.period + '|' + (r.voucher_word || '记') + '|' + r.voucher_no;
+        if (!cur || cur.key !== key) {
+          cur = { key, entries: [] };
+          groups.push(cur);
+        }
+        cur.entries.push(r);
+      });
+
+      groups.forEach(g => {
+        const sz = g.entries.length;
+        const allIds = g.entries.map(e => e.id).join(',');
+        // 判断整组是否可编辑：只有全部为手动录入才可操作
+        const canEdit = g.entries.every(e => (e.source || '手动录入') === '手动录入');
+
+        g.entries.forEach((r, idx) => {
+          html += '<tr>';
+          if (idx === 0) {
+            // 同一凭证号只显示一个复选框
+            html += '<td rowspan="' + sz + '" style="text-align:center;position:sticky;left:0;background:#fff;z-index:1"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
+          }
+          html += '<td>' + r.period + '</td>';
+          html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
+          html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
+          html += '<td>' + (r.account_name || '-') + '</td>';
+          html += '<td>' + (r.contact_project || '-') + '</td>';
+          html += '<td>' + (r.spec_model || '-') + '</td>';
+          html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
+          html += '<td>' + (r.unit || '-') + '</td>';
+          html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
+          html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
+          html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+          const src = r.source || '手动录入';
+          const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
+          html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
+          html += '<td style="white-space:nowrap">';
+          if (canEdit) {
+            html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
+            html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
+          } else {
+            html += '<span style="color:#9ca3af;font-size:12px">自动生成</span>';
+          }
+          html += '</td></tr>';
+        });
       });
     }
     html += '</tbody></table></div>';
@@ -183,14 +209,20 @@ function jeOnCheck() {
   const all = document.querySelectorAll('.je-row-check');
   const checked = document.querySelectorAll('.je-row-check:checked');
   const selectAll = document.getElementById('je-select-all');
-  if (selectAll) selectAll.checked = checked.length === all.length;
+  if (selectAll) selectAll.checked = checked.length === all.length && all.length > 0;
 }
 
 async function batchDeleteJe() {
   const checked = document.querySelectorAll('.je-row-check:checked');
-  if (checked.length === 0) { toast('请先选择记录', 'warning'); return; }
-  if (!confirm('确认删除选中的 ' + checked.length + ' 条记录？此操作不可恢复。')) return;
-  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  if (checked.length === 0) { toast('请先选择凭证', 'warning'); return; }
+  // 收集所有选中凭证的分录ID
+  const ids = [];
+  checked.forEach(cb => {
+    if (cb.dataset.allIds) {
+      cb.dataset.allIds.split(',').forEach(id => ids.push(parseInt(id)));
+    }
+  });
+  if (!confirm('确认删除选中的 ' + checked.length + ' 个凭证（共 ' + ids.length + ' 条分录）？此操作不可恢复。')) return;
   try {
     const result = await api('/api/journal-entries/batch-delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
@@ -198,7 +230,7 @@ async function batchDeleteJe() {
     toast(result.message, 'success');
     renderJournal();
   } catch (e) {
-    toast(e.message, 'error');
+    handleError(e, '批量删除');
   }
 }
 
