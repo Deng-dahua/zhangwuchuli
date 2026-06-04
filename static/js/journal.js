@@ -1,6 +1,6 @@
 // ==================== 序时账 ====================
 
-let jeFilter = { keyword: '', periodFrom: '', periodTo: '' };
+let jeFilter = { periodFrom: '', periodTo: '' };
 
 async function renderJournal(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
@@ -23,16 +23,13 @@ async function renderJournal(container) {
 
     // 工具栏
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
-    html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<input id="jeKeyword" placeholder="搜索摘要/科目/凭证号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (jeFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){jeFilter.keyword=this.value;renderJournal()}">';
-    html += '<button onclick="jeFilter.keyword=document.getElementById(\'jeKeyword\').value;renderJournal()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
+    html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px">';
     html += '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('je-from', jeFilter.periodFrom||'');
     html += '<span style="color:#9ca3af">至</span>';
     html += _periodSelectsHTML('je-to', jeFilter.periodTo||'') + '<span style="font-size:13px;color:#6b7280">截止</span>';
-    html += '<button onclick="jeFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);jeFilter.periodFrom=r.from;jeFilter.periodTo=r.to;document.getElementById(\'jeKeyword\').value=\'\';renderJournal()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
     html += '</div>';
-    html += '</div></div>';
+    html += '</div>';
 
     // 过滤
     jeFilter.periodFrom = _readPeriod('je-from');
@@ -40,16 +37,6 @@ async function renderJournal(container) {
     let items = data;
     if (jeFilter.periodFrom) items = items.filter(i => i.period && i.period >= jeFilter.periodFrom);
     if (jeFilter.periodTo) items = items.filter(i => i.period && i.period <= jeFilter.periodTo);
-    if (jeFilter.keyword) {
-      const kw = jeFilter.keyword.toLowerCase();
-      items = items.filter(i =>
-        (i.summary && i.summary.toLowerCase().includes(kw)) ||
-        (i.account_code && i.account_code.toLowerCase().includes(kw)) ||
-        (i.account_name && i.account_name.toLowerCase().includes(kw)) ||
-        (i.account_full_name && i.account_full_name.toLowerCase().includes(kw)) ||
-        (i.voucher_no && String(i.voucher_no).includes(kw))
-      );
-    }
 
     // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
