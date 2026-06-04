@@ -3181,7 +3181,7 @@ def detail_ledger(
             balance += cr - dr
         rows.append({
             "voucher_date": str(e.entry_date) if e.entry_date else "",
-            "voucher_no": f"{e.voucher_word or '记'}-{str(e.voucher_no).zfill(4)}" if e.voucher_no else "",
+            "voucher_no": (e.voucher_word or '记') + '-' + str(e.voucher_no).zfill(4) if e.voucher_no else "",
             "summary": e.summary or "",
             "debit_amount": dr,
             "credit_amount": cr,
@@ -3199,11 +3199,11 @@ def detail_ledger(
 
 # ==================== 往来明细账（人员/客户/供应商） ====================
 
-# 往来科目映射
+# 往来科目映射（每类仅用一个主科目）
 _CONTACT_ACCOUNTS = {
-    "employee": ["1221"],        # 其他应收款（人员借支/备用金）
-    "customer": ["1122", "1123"], # 应收账款 + 预收账款
-    "supplier": ["2202", "2203"], # 应付账款 + 预付账款
+    "employee": ["1221"],   # 其他应收款（人员）
+    "customer": ["1122"],   # 应收账款（客户）
+    "supplier": ["2202"],   # 应付账款（供应商）
 }
 
 
@@ -3237,7 +3237,7 @@ def _sub_ledger_by_contact(company_id: int, account_codes: list, contact_name: s
         balance += dr - cr
         rows.append({
             "voucher_date": str(e.entry_date) if e.entry_date else "",
-            "voucher_no": f"{e.voucher_word or '记'}-{str(e.voucher_no).zfill(4)}" if e.voucher_no else "",
+            "voucher_no": (e.voucher_word or '记') + '-' + str(e.voucher_no).zfill(4) if e.voucher_no else "",
             "summary": e.summary or "",
             "account_code": e.account_code,
             "account_name": e.account_name or "",
