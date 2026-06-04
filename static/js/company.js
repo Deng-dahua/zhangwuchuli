@@ -6,26 +6,25 @@
 async function loadCompanies() {
   try {
     allCompanies = await fetch('/api/companies').then(r => r.json());
-    const sel = document.getElementById('company-select');
-    sel.innerHTML = allCompanies.map(c =>
-      '<option value="' + c.id + '" ' + (c.id === currentCompanyId ? 'selected' : '') + '>' + c.name + '</option>'
-    ).join('');
+    const display = document.getElementById('company-name-display');
     if (allCompanies.length > 0) {
       const cur = allCompanies.find(c => c.id === currentCompanyId) || allCompanies[0];
       currentCompanyName = cur.name;
+      if (display) display.textContent = currentCompanyName;
     }
   } catch (e) {
     console.error('加载公司列表失败', e);
   }
 }
 
-async function switchCompany() {
-  const sel = document.getElementById('company-select');
-  currentCompanyId = parseInt(sel.value);
+function switchCompany() {
+  // 顶部栏不再显示下拉选择器，切换账套请使用「退出本账套」回到选择页
   const cur = allCompanies.find(c => c.id === currentCompanyId);
-  currentCompanyName = cur ? cur.name : '';
-  toast('已切换到：' + currentCompanyName, 'success');
-  navigateTo(currentPage);
+  if (cur) {
+    currentCompanyName = cur.name;
+    const display = document.getElementById('company-name-display');
+    if (display) display.textContent = currentCompanyName;
+  }
 }
 
 // ==================== 公司信息 ====================
