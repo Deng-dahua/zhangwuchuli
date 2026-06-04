@@ -112,7 +112,7 @@ async function renderSalesInvoices(container) {
         html += '<td>' + (jv ? '<span style="color:#1d4ed8;font-weight:500">' + jv + '</span>' : '-') + '</td>';
         html += '<td>' + (jv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromSalesInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
-        html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')" style="margin-right:4px">编辑</button>';
+        html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteSalesInvoice(' + i.id + ')">删除</button>';
         html += '</td></tr>';
       });

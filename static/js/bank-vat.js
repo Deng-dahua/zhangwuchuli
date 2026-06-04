@@ -96,9 +96,9 @@ async function loadBankTxList() {
         <td>${tx.account_type || '-'}</td>
         <td>${tx.journal_voucher_no || '-'}</td>
         <td>${tx.journal_voucher_no ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromBankTx(' + tx.id + ')">生成凭证</button>'}</td>
-        <td>
-          <button class="btn btn-outline btn-sm" onclick="editBankTx(${tx.id})">编辑</button>
-          <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankTx(${tx.id})">删除</button>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-secondary" onclick="editBankTx(${tx.id})">编辑</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteBankTx(${tx.id})">删除</button>
         </td>
       </tr>`;
   }).join('');
@@ -107,7 +107,7 @@ async function loadBankTxList() {
     <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
-      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>记账凭证</th><th style="width:90px">生成凭证</th><th style="width:100px">操作</th>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>记账凭证</th><th style="width:90px">生成凭证</th><th>操作</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="20" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
 }
@@ -245,9 +245,9 @@ function showBankConfigModal() {
   const list = _bankConfigs.map(c => `
     <tr>
       <td>${c.bank_name}</td><td>${c.account_number || '-'}</td><td>${c.account_name || '-'}</td>
-      <td>
-        <button class="btn btn-outline btn-sm" onclick="editBankConfig(${c.id})">编辑</button>
-        <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteBankConfig(${c.id})">删除</button>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-secondary" onclick="editBankConfig(${c.id})">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteBankConfig(${c.id})">删除</button>
       </td>
     </tr>`).join('');
 
@@ -362,7 +362,7 @@ async function renderInputVATDeductions(container) {
   const riskColors = { [STATUS.RISK_NORMAL]: '#059669', [STATUS.RISK_WARN]: '#d97706', [STATUS.RISK_ABNORMAL]: '#e02424', [STATUS.RISK_LOST]: '#7c3aed' };
   html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
-  html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th style="width:90px">操作</th>';
+  html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>';
   html += '</tr></thead><tbody>';
 
   if (list.length === 0) {
@@ -392,7 +392,7 @@ async function renderInputVATDeductions(container) {
       const jv2 = it.journal_voucher_no || '';
       html += '<td>' + (jv2 ? '<span style="color:#1d4ed8;font-weight:500">' + jv2 + '</span>' : '-') + '</td>';
       html += '<td>' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromInputVAT(' + it.id + ')">生成凭证</button>') + '</td>';
-      html += '<td style="white-space:nowrap"><button class="btn btn-sm" style="padding:2px 8px;font-size:12px;margin-right:4px" onclick="editVATDeduction(' + it.id + ')">✏️</button><button class="btn btn-sm" style="padding:2px 8px;font-size:12px;color:var(--danger)" onclick="deleteVATDeduction(' + it.id + ')">🗑</button></td>';
+      html += '<td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="editVATDeduction(' + it.id + ')">编辑</button><button class="btn btn-sm btn-danger" onclick="deleteVATDeduction(' + it.id + ')">删除</button></td>';
       html += '</tr>';
     });
   }

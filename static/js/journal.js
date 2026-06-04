@@ -83,8 +83,8 @@ async function renderJournal(container) {
           const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
           html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
           html += '<td style="white-space:nowrap">';
-          html += '<span style="color:var(--primary);cursor:pointer;margin-right:12px" onclick="editJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">编辑</span>';
-          html += '<span style="color:var(--danger);cursor:pointer" onclick="deleteJeEntry(' + r.id + ')" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">删除</span>';
+          html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')">编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
           html += '</td></tr>';
         });
       });

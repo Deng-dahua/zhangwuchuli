@@ -43,9 +43,9 @@ async function loadAccounts() {
               <td>${a.parent_code || '-'}</td>
               <td style="text-align:right">${(a.opening_balance || 0).toFixed(2)}</td>
               <td>${a.is_active ? '<span class="badge badge-audited">启用</span>' : '<span class="badge" style="background:#f3f4f6;color:#6b7280">停用</span>'}</td>
-              <td>
-                <button class="btn btn-secondary btn-sm" onclick="toggleAccount(${a.id}, ${!a.is_active})">${a.is_active ? '停用' : '启用'}</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">删除</button>
+              <td style="white-space:nowrap">
+                <button class="btn btn-sm btn-secondary" onclick="toggleAccount(${a.id}, ${!a.is_active})">${a.is_active ? '停用' : '启用'}</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteAccount(${a.id})">删除</button>
               </td>
             </tr>
           `).join('')}
@@ -234,9 +234,9 @@ async function renderDepartments(container) {
                   <td><input type="checkbox" class="dept-cb" value="${d.id}" onchange="updateDeptBatchBtn()"></td>
                   <td>${d.code}</td>
                   <td>${d.name}</td>
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}')">编辑</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteDept(${d.id})">删除</button>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-secondary" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}')">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteDept(${d.id})">删除</button>
                   </td>
                 </tr>
               `).join('')}
@@ -337,9 +337,9 @@ async function renderEmployees(container) {
                   <td>${e.code}</td>
                   <td>${e.name}</td>
                   <td>${e.id_card || '-'}</td>
-                  <td>
-                    <span class="link-action" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}')">编辑</span>
-                    <span class="link-action link-danger" onclick="deleteEmp(${e.id})">删除</span>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-secondary" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}')">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteEmp(${e.id})">删除</button>
                   </td>
                 </tr>
               `}).join('')}
@@ -441,8 +441,8 @@ async function renderCustomers(container) {
               ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
                 const locked = c.has_journal;
                 const delBtn = locked
-                  ? `<button class="btn btn-danger btn-sm" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
-                  : `<button class="btn btn-danger btn-sm" onclick="deleteCust(${c.id})">删除</button>`;
+                  ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
+                  : `<button class="btn btn-sm btn-danger" onclick="deleteCust(${c.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该客户已被序时账引用"' : '';
                 return `
                 <tr>
@@ -450,8 +450,8 @@ async function renderCustomers(container) {
                   <td>${c.code}</td>
                   <td>${c.name}</td>
                   <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-secondary" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>
                     ${delBtn}
                   </td>
                 </tr>
@@ -554,9 +554,9 @@ async function renderSuppliers(container) {
                   <td>${s.code}</td>
                   <td>${s.name}</td>
                   <td style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteSupp(${s.id})">删除</button>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-secondary" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSupp(${s.id})">删除</button>
                   </td>
                 </tr>
               `).join('')}

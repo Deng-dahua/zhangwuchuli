@@ -30,8 +30,8 @@ async function loadContracts() {
         '<td>' + (c.contract_type || '') + '</td>' +
         '<td class="num">\uffe5' + (c.amount != null ? fmt(c.amount) : '-') + '</td>' +
         '<td>' + contractStatusBadge(c.status) + '</td>' +
-        '<td>' +
-          '<button class="btn btn-sm btn-secondary" onclick="showContractForm(' + c.id + ')">\u7f16\u8f91</button> ' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-secondary" onclick="showContractForm(' + c.id + ')">\u7f16\u8f91</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deleteContract(' + c.id + ')">\u5220\u9664</button>' +
         '</td>' +
       '</tr>';
@@ -170,7 +170,7 @@ async function showContractDetail(contractId) {
           '<td>' + (p.due_date || '') + '</td>' +
           '<td class="num">\uffe5' + fmt(p.amount) + '</td>' +
           '<td>' + pStatus + '</td>' +
-          '<td><button class="btn btn-sm btn-danger" onclick="deleteContractPayment(' + contractId + ',' + p.id + ')">\u5220\u9664</button></td>' +
+          '<td style="white-space:nowrap"><button class="btn btn-sm btn-danger" onclick="deleteContractPayment(' + contractId + ',' + p.id + ')">\u5220\u9664</button></td>' +
         '</tr>';
       }
       html += '</tbody></table></div>';
@@ -406,9 +406,9 @@ async function loadPayments() {
         '<td>' + (p.payment_method || '') + '</td>' +
         '<td>' + p.department + '</td>' +
         '<td>' + paymentStatusBadge(p.status) + '</td>' +
-        '<td>' +
-          '<button class="btn btn-sm btn-secondary" onclick="showPaymentForm(' + p.id + ')">编辑</button> ' +
-          (p.status === STATUS.APPROVED ? '<button class="btn btn-sm btn-success" onclick="markPaymentPaid(' + p.id + ')">确认付款</button> ' : '') +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-secondary" onclick="showPaymentForm(' + p.id + ')">编辑</button>' +
+          (p.status === STATUS.APPROVED ? '<button class="btn btn-sm btn-success" onclick="markPaymentPaid(' + p.id + ')">确认付款</button>' : '') +
           (p.status === STATUS.PENDING ? '<button class="btn btn-sm btn-danger" onclick="deletePayment(' + p.id + ')">删除</button>' : '') +
         '</td>' +
       '</tr>';

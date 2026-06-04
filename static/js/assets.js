@@ -29,8 +29,8 @@ async function loadFixedAssets() {
         '<td class="num">\uffe5' + fmt(a.accumulated_depreciation) + '</td>' +
         '<td class="num">\uffe5' + fmt(a.net_value) + '</td>' +
         '<td>' + statusBadge + '</td>' +
-        '<td>' +
-          '<button class="btn btn-sm btn-secondary" onclick="showFixedAssetForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-secondary" onclick="showFixedAssetForm(' + a.id + ')">\u7f16\u8f91</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deleteFixedAsset(' + a.id + ')">\u5220\u9664</button>' +
         '</td>' +
       '</tr>';
@@ -172,8 +172,8 @@ async function loadIntangibleAssets() {
         '<td class="num">\uffe5' + fmt(a.accumulated_amortization) + '</td>' +
         '<td class="num">\uffe5' + fmt(a.net_value) + '</td>' +
         '<td>' + statusBadge + '</td>' +
-        '<td>' +
-          '<button class="btn btn-sm btn-secondary" onclick="showIntangibleAssetForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-secondary" onclick="showIntangibleAssetForm(' + a.id + ')">\u7f16\u8f91</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deleteIntangibleAsset(' + a.id + ')">\u5220\u9664</button>' +
         '</td>' +
       '</tr>';
@@ -315,8 +315,8 @@ async function loadInventoryItems() {
         '<td>' + (a.unit || '') + '</td>' +
         '<td class="num">' + (a.quantity_on_hand != null ? fmt(a.quantity_on_hand) : '-') + '</td>' +
         '<td class="num">\uffe5' + (a.total_cost != null ? fmt(a.total_cost) : '-') + '</td>' +
-        '<td>' +
-          '<button class="btn btn-sm btn-secondary" onclick="showInventoryItemForm(' + a.id + ')">\u7f16\u8f91</button> ' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-secondary" onclick="showInventoryItemForm(' + a.id + ')">\u7f16\u8f91</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deleteInventoryItem(' + a.id + ')">\u5220\u9664</button>' +
         '</td>' +
       '</tr>';
