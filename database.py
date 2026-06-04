@@ -525,6 +525,7 @@ class PurchaseInvoice(Base):
     __tablename__ = "purchase_invoices"
     __table_args__ = (
         UniqueConstraint('company_id', 'invoice_no', name='uq_pi_company_no'),
+        UniqueConstraint('company_id', '_fingerprint', name='uq_pi_company_fp'),
         Index('idx_pi_company_date', 'company_id', 'invoice_date'),
         Index('idx_pi_company_seller', 'company_id', 'seller_name'),
         Index('idx_pi_company_cert', 'company_id', 'certification_status'),
@@ -571,6 +572,7 @@ class PurchaseInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(String(64), nullable=True, comment="全行指纹去重（仅导入时使用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

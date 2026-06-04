@@ -342,9 +342,69 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   formData.append('company_id', currentCompanyId);
   if (_importBankConfigId) formData.append('bank_config_id', _importBankConfigId);
 
-  // 第一轮：带去重导入
-  document.getElementById('upload-progress').innerText = '正在导入数据...';
-  document.getElementById('upload-progress').style.display = 'block';
+  // 取得发票：两阶段导入（先预览去重 → 弹窗确认 → 实际导入）
+  if (module === 'purchase-invoice') {
+    document.getElementById('upload-progress').innerText = '正在检测重复数据...';
+    document.getElementById('upload-progress').style.display = 'block';
+
+    const previewFD = new FormData();
+    previewFD.append('file', fileToUse);
+    previewFD.append('module', module);
+    previewFD.append('column_mapping', JSON.stringify(mapping));
+    previewFD.append('company_id', currentCompanyId);
+    previewFD.append('preview', 'true');
+
+    const previewResp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: previewFD });
+    const previewResult = await previewResp.json();
+    document.getElementById('upload-progress').style.display = 'none';
+
+    if (previewResult.error) {
+      if (errEl) { errEl.innerText = '导入失败：' + previewResult.error; errEl.style.display = 'block'; }
+      return;
+    }
+
+    if (previewResult.duplicate_count > 0) {
+      // 弹出去重确认弹窗，等待用户选择
+      const includeDuplicates = await showPurchaseDedupModal(previewResult);
+      if (includeDuplicates === null) return; // 用户关闭弹窗，取消导入
+
+      // 第二轮：实际导入
+      document.getElementById('upload-progress').innerText = '正在导入数据...';
+      document.getElementById('upload-progress').style.display = 'block';
+
+      const importFD = new FormData();
+      importFD.append('file', fileToUse);
+      importFD.append('module', module);
+      importFD.append('column_mapping', JSON.stringify(mapping));
+      importFD.append('company_id', currentCompanyId);
+      if (includeDuplicates) importFD.append('force', 'true');
+
+      const importResp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: importFD });
+      const importResult = await importResp.json();
+      document.getElementById('upload-progress').style.display = 'none';
+
+      if (importResult.error) {
+        if (errEl) { errEl.innerText = '导入失败：' + importResult.error; errEl.style.display = 'block'; }
+        return;
+      }
+
+      closeModal();
+      renderPurchaseInvoices();
+      let msg = '成功导入 ' + importResult.imported + '/' + importResult.total + ' 条记录';
+      if (importResult.skipped > 0) msg += '，跳过 ' + importResult.skipped + ' 条重复记录';
+      if (importResult.errors && importResult.errors.length > 0) msg += '，' + importResult.errors.length + ' 条错误';
+      toast(msg, 'success');
+      return;
+    }
+
+    // 无重复：直接导入（purchase-invoice fallthrough）
+    document.getElementById('upload-progress').innerText = '正在导入数据...';
+    document.getElementById('upload-progress').style.display = 'block';
+  } else {
+    // 非 purchase-invoice 模块：直接导入
+    document.getElementById('upload-progress').innerText = '正在导入数据...';
+    document.getElementById('upload-progress').style.display = 'block';
+  }
 
   const resp = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData });
   const result = await resp.json();
@@ -372,15 +432,61 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
   else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
   else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
-  let msg = `成功导入 ${result.imported}/${result.total} 条记录`;
+  let msg = '成功导入 ' + result.imported + '/' + result.total + ' 条记录';
   if (result.skipped > 0) {
-    msg += `，跳过 ${result.skipped} 条重复记录`;
+    msg += '，跳过 ' + result.skipped + ' 条重复记录';
   }
   if (result.errors && result.errors.length > 0) {
-    msg += `，${result.errors.length} 条错误`;
+    msg += '，' + result.errors.length + ' 条错误';
   }
   toast(msg, 'success');
   if (result.errors && result.errors.length > 0) console.warn('Import errors:', result.errors);
   if (result.infos && result.infos.length > 0) console.log('Import infos:', result.infos);
+}
+
+// ── 取得发票去重确认弹窗 ──
+function showPurchaseDedupModal(previewResult) {
+  return new Promise((resolve) => {
+    let html = '<div class="modal-header" style="background:#fff3cd;border-bottom:1px solid #ffc107">';
+    html += '<h3 style="color:#856404">⚠️ 检测到重复数据</h3>';
+    html += '<button class="modal-close" onclick="closeModal();window._piDedupResolve(null)">×</button>';
+    html += '</div>';
+    html += '<div class="modal-body">';
+    html += '<div style="margin-bottom:16px">';
+    html += '<p>文件共 <b>' + previewResult.total + '</b> 条记录：</p>';
+    html += '<p style="margin:8px 0">✅ 唯一数据 <b style="color:#059669">' + previewResult.unique_count + '</b> 条</p>';
+    html += '<p>⚠️ 重复数据 <b style="color:var(--danger)">' + previewResult.duplicate_count + '</b> 条（与数据库中已有记录完全一致）</p>';
+    html += '</div>';
+    html += '<div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:12px">';
+    html += '<table style="font-size:13px;width:100%">';
+    html += '<thead style="background:#fef3c7;position:sticky;top:0"><tr>';
+    html += '<th style="padding:8px 10px;text-align:left">行号</th>';
+    html += '<th style="padding:8px 10px;text-align:left">发票号码</th>';
+    html += '<th style="padding:8px 10px;text-align:left">销方名称</th>';
+    html += '<th style="padding:8px 10px;text-align:left">货物名称</th>';
+    html += '<th style="padding:8px 10px;text-align:right">金额</th>';
+    html += '<th style="padding:8px 10px;text-align:right">税额</th>';
+    html += '<th style="padding:8px 10px;text-align:right">价税合计</th>';
+    html += '</tr></thead><tbody>';
+    previewResult.duplicates.forEach(d => {
+      html += '<tr style="border-bottom:1px solid #f3f4f6">';
+      html += '<td style="padding:6px 10px">' + d.row_label + '</td>';
+      html += '<td style="padding:6px 10px">' + (d.invoice_no || '-') + '</td>';
+      html += '<td style="padding:6px 10px">' + (d.seller_name || '-') + '</td>';
+      html += '<td style="padding:6px 10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (d.goods_name || '') + '">' + (d.goods_name || '-') + '</td>';
+      html += '<td style="padding:6px 10px;text-align:right">' + (d.amount || 0).toFixed(2) + '</td>';
+      html += '<td style="padding:6px 10px;text-align:right">' + (d.tax_amount || 0).toFixed(2) + '</td>';
+      html += '<td style="padding:6px 10px;text-align:right">' + (d.total_amount || 0).toFixed(2) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '</div>';
+    html += '<div class="modal-footer">';
+    html += '<button class="btn btn-secondary" onclick="window._piDedupResolve(false);closeModal()">跳过重复，仅导入 ' + previewResult.unique_count + ' 条唯一数据</button>';
+    html += '<button class="btn btn-primary" onclick="window._piDedupResolve(true);closeModal()">全部导入（含 ' + previewResult.duplicate_count + ' 条重复）</button>';
+    html += '</div>';
+    showModal(html);
+    window._piDedupResolve = resolve;
+  });
 }
 
