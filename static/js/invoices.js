@@ -36,9 +36,9 @@ async function renderSalesInvoices(container) {
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<input id="siKeyword" placeholder="搜索发票号/代码/购方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (siFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){siFilter.keyword=this.value;renderSalesInvoices()}">';
     html += '<button onclick="siFilter.keyword=document.getElementById(\'siKeyword\').value;renderSalesInvoices()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
-    html += '<input type="date" value="' + (siFilter.dateFrom||'') + '" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
+    html += '<input type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateFrom) + '" onchange="siFilter.dateFrom=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px" title="起始日期">';
     html += '<span style="color:#9ca3af">至</span>';
-    html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '<input type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateTo) + '" onchange="siFilter.dateTo=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:110px" title="截止日期">';
     html += '<button onclick="siFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);siFilter.dateFrom=r.from;siFilter.dateTo=r.to;document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
