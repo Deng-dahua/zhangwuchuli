@@ -222,11 +222,11 @@ async function renderDepartments(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
-            <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleDeptAll(this)"></th><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleDeptAll(this);updateDeptBatchBtn()"></th><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
             <tbody>
               ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
                 <tr>
-                  <td><input type="checkbox" class="dept-cb" value="${d.id}"></td>
+                  <td><input type="checkbox" class="dept-cb" value="${d.id}" onchange="updateDeptBatchBtn()"></td>
                   <td>${d.code}</td>
                   <td>${d.name}</td>
                   <td>
@@ -287,6 +287,14 @@ async function deleteDept(id) {
 
 function toggleDeptAll(cb) {
   document.querySelectorAll('.dept-cb').forEach(c => c.checked = cb.checked);
+  updateDeptBatchBtn();
+}
+
+function updateDeptBatchBtn() {
+  const cbs = document.querySelectorAll('.dept-cb:checked');
+  const btn = document.getElementById('deptBatchDelBtn');
+  if (!btn) return;
+  btn.textContent = cbs.length > 0 ? '🗑 批量删除(' + cbs.length + ')' : '🗑 批量删除';
 }
 
 async function batchDeleteDepts() {
