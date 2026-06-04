@@ -3197,6 +3197,138 @@ def detail_ledger(
     }
 
 
+# ==================== 往来明细账（人员/客户/供应商） ====================
+
+# 往来科目映射
+_CONTACT_ACCOUNTS = {
+    "employee": ["1221"],        # 其他应收款（人员借支/备用金）
+    "customer": ["1122", "1123"], # 应收账款 + 预收账款
+    "supplier": ["2202", "2203"], # 应付账款 + 预付账款
+}
+
+
+def _sub_ledger_by_contact(company_id: int, account_codes: list, contact_name: str,
+                           period_from: str, period_to: str, db: Session):
+    """共用往来明细账计算函数
+
+    返回：{ contact_name, opening_balance, rows: [{date, voucher_no, summary, account_code, account_name, debit, credit, balance}] }
+    """
+    entries_all = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.account_code.in_(account_codes),
+        JournalEntry.contact_project == contact_name,
+        JournalEntry.period <= period_to
+    ).order_by(JournalEntry.entry_date, JournalEntry.voucher_no, JournalEntry.id).all()
+
+    # 期初余额：period_from 之前的累计净额
+    opening_balance = 0.0
+    for e in entries_all:
+        if e.period < period_from:
+            opening_balance += (e.debit_amount or 0) - (e.credit_amount or 0)
+
+    # 本期明细
+    rows = []
+    balance = opening_balance
+    for e in entries_all:
+        if e.period < period_from:
+            continue
+        dr = e.debit_amount or 0
+        cr = e.credit_amount or 0
+        balance += dr - cr
+        rows.append({
+            "voucher_date": str(e.entry_date) if e.entry_date else "",
+            "voucher_no": f"{e.voucher_word or '记'}-{str(e.voucher_no).zfill(4)}" if e.voucher_no else "",
+            "summary": e.summary or "",
+            "account_code": e.account_code,
+            "account_name": e.account_name or "",
+            "debit_amount": dr,
+            "credit_amount": cr,
+            "balance": round(balance, 2),
+        })
+
+    return {
+        "contact_name": contact_name,
+        "opening_balance": round(opening_balance, 2),
+        "rows": rows,
+    }
+
+
+def _contact_list(company_id: int, account_codes: list, db: Session):
+    """提取往来项目列表（从序时账 contact_project 中汇总）"""
+    results = db.query(
+        JournalEntry.contact_project,
+        func.sum(JournalEntry.debit_amount).label("total_debit"),
+        func.sum(JournalEntry.credit_amount).label("total_credit"),
+    ).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.account_code.in_(account_codes),
+        JournalEntry.contact_project.isnot(None),
+        JournalEntry.contact_project != "",
+    ).group_by(JournalEntry.contact_project).all()
+
+    contacts = []
+    for r in results:
+        name = r[0]
+        td = round(r[1] or 0, 2)
+        tc = round(r[2] or 0, 2)
+        contacts.append({
+            "name": name,
+            "total_debit": td,
+            "total_credit": tc,
+            "net": round(td - tc, 2),
+        })
+    contacts.sort(key=lambda c: c["name"])
+    return contacts
+
+
+@app.get("/api/ledger/employee-contacts")
+def employee_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+    return _contact_list(company_id, _CONTACT_ACCOUNTS["employee"], db)
+
+
+@app.get("/api/ledger/customer-contacts")
+def customer_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+    return _contact_list(company_id, _CONTACT_ACCOUNTS["customer"], db)
+
+
+@app.get("/api/ledger/supplier-contacts")
+def supplier_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+    return _contact_list(company_id, _CONTACT_ACCOUNTS["supplier"], db)
+
+
+@app.get("/api/ledger/employee-detail")
+def employee_detail(
+    company_id: int = Query(1),
+    contact_name: str = Query(...),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    return _sub_ledger_by_contact(company_id, _CONTACT_ACCOUNTS["employee"], contact_name, period_from, period_to, db)
+
+
+@app.get("/api/ledger/customer-detail")
+def customer_detail(
+    company_id: int = Query(1),
+    contact_name: str = Query(...),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    return _sub_ledger_by_contact(company_id, _CONTACT_ACCOUNTS["customer"], contact_name, period_from, period_to, db)
+
+
+@app.get("/api/ledger/supplier-detail")
+def supplier_detail(
+    company_id: int = Query(1),
+    contact_name: str = Query(...),
+    period_from: str = Query(...),
+    period_to: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    return _sub_ledger_by_contact(company_id, _CONTACT_ACCOUNTS["supplier"], contact_name, period_from, period_to, db)
+
+
 # ==================== 利润表（企业会计准则一般企业—会企02号） ====================
 def _pl_net(balances, code_prefix, is_credit_nature=True):
     """汇总指定前缀科目的净额：收入/收益类=贷-借，费用/损失类=借-贷"""

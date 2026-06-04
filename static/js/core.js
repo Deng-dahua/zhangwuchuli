@@ -23,6 +23,9 @@ const pages = {
   'suppliers': '供应商档案',
   'general-ledger': '总账',
   'detail-ledger': '明细账',
+  'employee-ledger': '人员明细账',
+  'customer-ledger': '客户明细账',
+  'supplier-ledger': '供应商明细账',
   'journal': '序时账',
   'profit-loss': '利润表',
   'balance-sheet': '资产负债表',
@@ -294,6 +297,9 @@ function navigateTo(page) {
       case 'journal': renderJournal(container); break;
       case 'general-ledger': renderGeneralLedger(container); break;
       case 'detail-ledger': renderDetailLedger(container); break;
+      case 'employee-ledger': renderEmployeeLedger(container); break;
+      case 'customer-ledger': renderCustomerLedger(container); break;
+      case 'supplier-ledger': renderSupplierLedger(container); break;
       case 'profit-loss': renderProfitLoss(container); break;
       case 'balance-sheet': renderBalanceSheet(container); break;
       case 'cash-flow': renderCashFlow(container); break;

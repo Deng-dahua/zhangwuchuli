@@ -461,3 +461,181 @@ async function loadAccountBalance() {
   } catch (e) { showError(el, e, '加载数据'); }
 }
 
+
+// ==================== 往来明细账（人员/客户/供应商） ====================
+// 三模块共用：从序时账往来项目自动填制，序时账有数据就自动显示
+
+var _contactCache = {}; // 缓存往来列表
+
+function _contactPageHTML(title, apiPrefix) {
+  return '<div class="card" style="margin-bottom:0;display:flex;flex-direction:column">' +
+    '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center">' +
+      '<b style="font-size:14px;min-width:90px">' + title + '</b>' +
+      '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML(apiPrefix + '-from', currentPeriod) +
+      '<span style="color:#9ca3af">至</span>' +
+      _periodSelectsHTML(apiPrefix + '-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
+      '<button class="btn btn-primary" onclick="_loadContactDetail(\'' + apiPrefix + '\')">🔍 查询</button>' +
+      '<button onclick="_clearContactDetail(\'' + apiPrefix + '\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>' +
+    '</div>' +
+    '<div style="display:flex;flex:1;gap:12px;overflow:hidden;margin-top:12px">' +
+      '<div id="' + apiPrefix + '-list" style="width:260px;min-width:200px;overflow-y:auto;border-right:1px solid var(--gray-200);padding-right:8px"></div>' +
+      '<div id="' + apiPrefix + '-table" style="flex:1;overflow:auto;padding-bottom:4px"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+async function _loadContactList(apiPrefix) {
+  var listEl = document.getElementById(apiPrefix + '-list');
+  listEl.innerHTML = '<div style="color:#999;padding:12px;font-size:13px">加载中...</div>';
+  try {
+    var data = await api('/api/ledger/' + apiPrefix + '-contacts');
+    _contactCache[apiPrefix] = data;
+    if (data.length === 0) {
+      listEl.innerHTML = '<div style="color:#9ca3af;padding:24px 12px;text-align:center;font-size:13px">暂无往来数据<br><span style="font-size:11px">序时账中录入往来项目后自动生成</span></div>';
+      return;
+    }
+    var html = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">往来项目（' + data.length + '）</div>';
+    data.forEach(function(c, i) {
+      var netStr = c.net >= 0 ? ('¥' + fmt(Math.abs(c.net))) : ('<span style="color:var(--danger)">-¥' + fmt(Math.abs(c.net)) + '</span>');
+      html += '<div class="contact-item" data-name="' + escHtml(c.name) + '" onclick="_onContactClick(\'' + apiPrefix + '\', \'' + escJs(c.name) + '\')" style="padding:10px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;border:1px solid transparent">' +
+        '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(c.name) + '</div>' +
+        '<div style="font-size:11px;color:#6b7280;margin-top:4px;display:flex;justify-content:space-between">' +
+          '<span>借 ¥' + fmt(c.total_debit) + '</span>' +
+          '<span>贷 ¥' + fmt(c.total_credit) + '</span>' +
+          '<span style="font-weight:600">净 ' + netStr + '</span>' +
+        '</div>' +
+      '</div>';
+    });
+    listEl.innerHTML = html;
+    // 默认加载第一个往来项目
+    if (data.length > 0) {
+      _onContactClick(apiPrefix, data[0].name);
+    }
+  } catch (e) {
+    listEl.innerHTML = '<div style="color:var(--danger);padding:12px;font-size:13px">加载失败</div>';
+  }
+}
+
+function _onContactClick(apiPrefix, name) {
+  // 高亮选中
+  var listEl = document.getElementById(apiPrefix + '-list');
+  listEl.querySelectorAll('.contact-item').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.name === name);
+    el.style.background = el.dataset.name === name ? 'var(--gray-100)' : '';
+    el.style.borderColor = el.dataset.name === name ? 'var(--primary)' : 'transparent';
+  });
+  // 加载明细
+  _loadContactDetail(apiPrefix, name);
+}
+
+async function _loadContactDetail(apiPrefix, name) {
+  if (!name) {
+    // 尝试从当前激活的获取
+    var activeEl = document.querySelector('#' + apiPrefix + '-list .contact-item.active');
+    if (activeEl) name = activeEl.dataset.name;
+  }
+  var tableEl = document.getElementById(apiPrefix + '-table');
+  if (!name) {
+    tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请从左侧选择一个往来项目</div>';
+    return;
+  }
+  var from = _readPeriod(apiPrefix + '-from');
+  var to = _readPeriod(apiPrefix + '-to');
+  if (!from || !to) {
+    tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请选择起止期间</div>';
+    return;
+  }
+  tableEl.innerHTML = '<div style="color:#999;padding:20px;font-size:13px">加载中...</div>';
+  try {
+    var data = await api('/api/ledger/' + apiPrefix + '-detail?contact_name=' + encodeURIComponent(name) + '&period_from=' + from + '&period_to=' + to);
+    var ob = data.opening_balance || 0;
+    var obFmt = ob === 0 ? '¥0.00' : (ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>');
+    var html = '<div style="font-size:13px;margin-bottom:10px;padding:8px 4px;border-bottom:1px solid #e5e7eb">' +
+      '<b>往来单位：</b>' + escHtml(name) +
+      ' &nbsp;&nbsp; <b>期初余额：</b>' + obFmt +
+      ' &nbsp;&nbsp; <b>期间：</b>' + from + ' ~ ' + to + '</div>';
+    html += '<table><thead><tr>' +
+      '<th>日期</th><th>凭证号</th><th>摘要</th><th>科目</th>' +
+      '<th class="num">借方</th><th class="num">贷方</th>' +
+      '<th class="num">余额</th>' +
+      '</tr></thead><tbody>';
+    // 期初行
+    var obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
+    html += '<tr style="background:#f8fafc">' +
+      '<td></td><td></td><td style="color:#6b7280;font-style:italic">上期结转</td><td></td>' +
+      '<td class="num"></td><td class="num"></td>' +
+      '<td class="num" style="font-weight:600">' + obDir + ' ' + obFmt + '</td>' +
+      '</tr>';
+    if (data.rows.length === 0) {
+      html += '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:30px">该期间无往来明细记录</td></tr>';
+    } else {
+      var totalDr = 0, totalCr = 0;
+      data.rows.forEach(function(r) {
+        totalDr += r.debit_amount || 0;
+        totalCr += r.credit_amount || 0;
+        var balDir = r.balance === 0 ? '平' : (r.balance > 0 ? '借' : '贷');
+        var balHtml = r.balance === 0 ? '¥0.00' : (r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
+        html += '<tr>' +
+          '<td>' + r.voucher_date + '</td>' +
+          '<td>' + r.voucher_no + '</td>' +
+          '<td>' + (r.summary || '') + '</td>' +
+          '<td>' + r.account_code + ' ' + r.account_name + '</td>' +
+          '<td class="num">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '') + '</td>' +
+          '<td class="num">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '') + '</td>' +
+          '<td class="num" style="font-weight:600">' + balDir + ' ' + balHtml + '</td>' +
+          '</tr>';
+      });
+      // 本页合计行
+      var endBal = ob + totalDr - totalCr;
+      var endDir = endBal === 0 ? '平' : (endBal > 0 ? '借' : '贷');
+      var endFmt = endBal === 0 ? '¥0.00' : (endBal >= 0 ? '¥' + fmt(endBal) : '<span style="color:var(--danger)">-¥' + fmt(-endBal) + '</span>');
+      html += '<tr style="background:#f0f9ff;font-weight:600">' +
+        '<td colspan="4" style="text-align:right;color:#6b7280">本页合计</td>' +
+        '<td class="num">¥' + fmt(totalDr) + '</td>' +
+        '<td class="num">¥' + fmt(totalCr) + '</td>' +
+        '<td class="num">' + endDir + ' ' + endFmt + '</td>' +
+        '</tr>';
+    }
+    html += '</tbody></table>';
+    tableEl.innerHTML = html;
+  } catch (e) { showError(tableEl, e, '加载数据'); }
+}
+
+function _clearContactDetail(apiPrefix) {
+  var tableEl = document.getElementById(apiPrefix + '-table');
+  if (tableEl) tableEl.innerHTML = '';
+  var listEl = document.getElementById(apiPrefix + '-list');
+  if (listEl) {
+    listEl.querySelectorAll('.contact-item').forEach(function(el) {
+      el.classList.remove('active');
+      el.style.background = '';
+      el.style.borderColor = 'transparent';
+    });
+  }
+}
+
+// 转义函数
+function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function escJs(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n'); }
+
+// ==================== 人员明细账 ====================
+async function renderEmployeeLedger(container) {
+  var el = container || document.getElementById('page-employee-ledger') || document.getElementById('content-area');
+  el.innerHTML = _contactPageHTML('人员明细账', 'employee');
+  _loadContactList('employee');
+}
+
+// ==================== 客户明细账 ====================
+async function renderCustomerLedger(container) {
+  var el = container || document.getElementById('page-customer-ledger') || document.getElementById('content-area');
+  el.innerHTML = _contactPageHTML('客户明细账', 'customer');
+  _loadContactList('customer');
+}
+
+// ==================== 供应商明细账 ====================
+async function renderSupplierLedger(container) {
+  var el = container || document.getElementById('page-supplier-ledger') || document.getElementById('content-area');
+  el.innerHTML = _contactPageHTML('供应商明细账', 'supplier');
+  _loadContactList('supplier');
+}
+
