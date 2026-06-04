@@ -91,6 +91,7 @@ async function renderJournal(container) {
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
+    updateJeBatchBtn();
   } catch (e) {
     showError(el, e, '加载序时账');
   }
@@ -183,6 +184,7 @@ async function generateFromBankTx(id) {
 
 function jeToggleAll(checkbox) {
   document.querySelectorAll('.je-row-check').forEach(cb => cb.checked = checkbox.checked);
+  updateJeBatchBtn();
 }
 
 function jeOnCheck() {
@@ -190,6 +192,16 @@ function jeOnCheck() {
   const checked = document.querySelectorAll('.je-row-check:checked');
   const selectAll = document.getElementById('je-select-all');
   if (selectAll) selectAll.checked = checked.length === all.length && all.length > 0;
+  updateJeBatchBtn();
+}
+
+function updateJeBatchBtn() {
+  const count = document.querySelectorAll('.je-row-check:checked').length;
+  const btn = document.getElementById('jeBatchDelBtn');
+  if (btn) {
+    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.disabled = count === 0;
+  }
 }
 
 async function batchDeleteJe() {
