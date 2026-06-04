@@ -4852,57 +4852,45 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
 
         if force_import:
             # force模式：先删数据库中对应的旧记录（按 _fingerprint），再插入新记录
-            # 这样即使没有唯一约束也不会重复插入
+            # 关键：rollback前提取所有属性，因为rollback后对象过期无法访问
             pending = list(db.new)
+            pending_rows = []  # [(model_cls, fingerprint_or_None, values_dict)]
+            from collections import defaultdict
+            by_model_fps = defaultdict(list)
+            for obj in pending:
+                model_cls = type(obj)
+                fp = getattr(obj, '_fingerprint', None)
+                values = {}
+                for col in obj.__table__.columns:
+                    if col.primary_key and col.autoincrement:
+                        continue
+                    values[col.name] = getattr(obj, col.name, None)
+                pending_rows.append((model_cls, fp, values))
+                if fp:
+                    by_model_fps[model_cls].append(fp)
+
             db.rollback()
             actual = 0
-            # 按模型类型分组处理
-            from collections import defaultdict
-            by_model = defaultdict(list)
-            for obj in pending:
-                by_model[type(obj)].append(obj)
 
-            for model_cls, objs in by_model.items():
-                # 收集所有待插入记录的 _fingerprint
-                fps = [getattr(obj, '_fingerprint', None) for obj in objs]
-                fps = [fp for fp in fps if fp]  # 过滤None
-                if not fps:
-                    # 没有 fingerprint 就直接插入
-                    for obj in objs:
-                        values = {}
-                        for col in obj.__table__.columns:
-                            if col.primary_key and col.autoincrement:
-                                continue
-                            values[col.name] = getattr(obj, col.name, None)
-                        try:
-                            stmt = model_cls.__table__.insert().values(**values)
-                            result = db.execute(stmt)
-                            if result.rowcount and result.rowcount > 0:
-                                actual += 1
-                        except Exception as ex:
-                            print(f"[FORCE-IMPORT] 行插入异常: {ex}")
-                    continue
-                # 先删数据库中这些 fingerprint 的旧记录
+            # 按模型分组：先删后插
+            for model_cls, fps in by_model_fps.items():
                 if hasattr(model_cls, '_fingerprint'):
                     db.query(model_cls).filter(
                         model_cls.company_id == company_id,
                         model_cls._fingerprint.in_(fps)
                     ).delete(synchronize_session=False)
                     db.flush()
-                # 再插入新记录
-                for obj in objs:
-                    values = {}
-                    for col in obj.__table__.columns:
-                        if col.primary_key and col.autoincrement:
-                            continue
-                        values[col.name] = getattr(obj, col.name, None)
-                    try:
-                        stmt = model_cls.__table__.insert().values(**values)
-                        result = db.execute(stmt)
-                        if result.rowcount and result.rowcount > 0:
-                            actual += 1
-                    except Exception as ex:
-                        print(f"[FORCE-IMPORT] 行插入异常: {ex}")
+
+            # 插入所有新记录
+            for model_cls, fp, values in pending_rows:
+                try:
+                    stmt = model_cls.__table__.insert().values(**values)
+                    result = db.execute(stmt)
+                    if result.rowcount and result.rowcount > 0:
+                        actual += 1
+                except Exception as ex:
+                    print(f"[FORCE-IMPORT] 行插入异常: {ex}")
+
             db.commit()
             imported = actual
             errors.append(f"强制导入完成：新增 {actual} 条（覆盖已存在的重复记录）")
