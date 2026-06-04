@@ -2227,24 +2227,23 @@ def purchase_invoice_stats(company_id: int = Query(1), tab: str = Query("all"), 
     total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
     total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
     total_raw_tax = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.tax_amount).all())
-    # 可抵扣税额：tax_amount * deduction_rate / 100，按票种筛选
-    deductible_invoices = db.query(PurchaseInvoice).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.tax_amount > 0,
-        PurchaseInvoice.invoice_category.in_(["数电发票（增值税专用发票）", "数电发票（铁路电子客票）"])
-    )
-    # 按票种筛选 deductible_invoices（与 base 一致）
-    if tab == "zpt":
-        deductible_invoices = deductible_invoices.filter(PurchaseInvoice.invoice_category.contains("专用发票"))
-    elif tab == "ppt":
-        deductible_invoices = deductible_invoices.filter(PurchaseInvoice.invoice_category.contains("普通发票"))
-    elif tab == "tlp":
-        deductible_invoices = deductible_invoices.filter(PurchaseInvoice.invoice_category.contains("铁路"))
-    deductible_invoices = deductible_invoices.all()
-    total_tax = round(sum(
-        (inv.tax_amount or 0) * ((inv.deduction_rate if inv.deduction_rate is not None else 100.0) / 100.0)
-        for inv in deductible_invoices
-    ), 2)
+    # 可抵扣税额：专票/铁路票 = 税额合计，普票 = 0
+    if tab == "ppt":
+        total_tax = 0.0
+    else:
+        deduct_q = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.tax_amount > 0,
+        )
+        if tab == "zpt":
+            deduct_q = deduct_q.filter(PurchaseInvoice.invoice_category.contains("专用发票"))
+        elif tab == "tlp":
+            deduct_q = deduct_q.filter(PurchaseInvoice.invoice_category.contains("铁路"))
+        else:  # all：专票 + 铁路票
+            deduct_q = deduct_q.filter(
+                or_(PurchaseInvoice.invoice_category.contains("专用发票"),
+                     PurchaseInvoice.invoice_category.contains("铁路")))
+        total_tax = round(sum(a[0] or 0 for a in deduct_q.with_entities(PurchaseInvoice.tax_amount).all()), 2)
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
