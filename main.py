@@ -2372,6 +2372,86 @@ def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db:
     return {"message": f"已为 {period} 生成进项抵扣凭证 ({count} 条)", "period": period}
 
 
+@app.post("/api/purchase-invoices/batch-to-journal")
+def purchase_invoice_batch_to_journal(
+    body: dict = Body(default=None),
+    company_id: int = Query(1),
+    db=Depends(get_db)
+):
+    """一键将勾选的取得发票生成进项抵扣凭证（按月汇总）"""
+    ids = body.get("ids", []) if body else []
+    if not ids:
+        return {"message": "未选择任何发票", "generated": 0, "skipped": 0, "errors": []}
+
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).order_by(PurchaseInvoice.invoice_date, PurchaseInvoice.id).all()
+
+    generated = 0
+    skipped = 0
+    errors = []
+    affected_periods = set()
+
+    for inv in invoices:
+        try:
+            period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
+
+            # 查找或创建进项抵扣记录
+            ded = db.query(InputVATDeduction).filter(
+                InputVATDeduction.company_id == company_id,
+                InputVATDeduction.invoice_no == inv.invoice_no
+            ).first()
+
+            if not ded:
+                ded = InputVATDeduction(
+                    company_id=company_id,
+                    purchase_invoice_id=inv.id,
+                    invoice_code=inv.invoice_code or "",
+                    invoice_no=inv.invoice_no or "",
+                    invoice_date=inv.invoice_date,
+                    seller_name=inv.seller_name or "",
+                    seller_tax_id=inv.seller_tax_no or "",
+                    amount=inv.amount or 0,
+                    tax_amount=inv.tax_amount or 0,
+                    deductible_tax_amount=inv.tax_amount or 0,
+                    total_amount=inv.total_amount or 0,
+                    invoice_category=inv.invoice_category or "增值税专用发票",
+                    goods_name=inv.goods_name or "",
+                    deduction_period=period,
+                    deduction_status="待抵扣",
+                )
+                db.add(ded)
+                db.flush()
+            else:
+                if not ded.deduction_period:
+                    ded.deduction_period = period
+                if not ded.deduction_status:
+                    ded.deduction_status = "待抵扣"
+                db.flush()
+
+            affected_periods.add(period)
+            generated += 1
+        except Exception as e:
+            errors.append(f"发票{inv.id}({inv.invoice_no}): {str(e)}")
+            db.rollback()
+
+    # 按月汇总生成进项抵扣凭证
+    voucher_count = 0
+    for period in sorted(affected_periods):
+        try:
+            c = auto_generate_input_vat_for_period(db, company_id, period)
+            voucher_count += c
+        except Exception as e:
+            errors.append(f"生成期间{period}凭证失败: {str(e)}")
+
+    db.commit()
+    msg = f"批量生成完成：{generated} 张发票 → {voucher_count} 笔凭证"
+    if skipped > 0:
+        msg += f"，跳过 {skipped} 张"
+    if errors:
+        msg += f"，{len(errors)} 项失败"
+    return {"message": msg, "generated": generated, "skipped": skipped, "vouchers": voucher_count, "errors": errors}
 
 
 # ==================== 银行配置 ====================

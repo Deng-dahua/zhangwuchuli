@@ -3,7 +3,8 @@
 """
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, Date, Time, DateTime,
-    Text, Boolean, ForeignKey, inspect, text as TextClause, UniqueConstraint, Index
+    Text, Boolean, ForeignKey, inspect, text as TextClause, UniqueConstraint, Index,
+    func, distinct, or_, and_
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -1421,8 +1422,6 @@ def auto_generate_input_vat_journals(db):
     """为所有进项抵扣记录按月汇总生成凭证
     period 优先用 deduction_period，为空则用 invoice_date 的年月
     """
-    from sqlalchemy import distinct, func
-
     companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:

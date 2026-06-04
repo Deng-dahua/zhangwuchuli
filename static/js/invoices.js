@@ -417,7 +417,7 @@ async function showSalesDetail(id) {
 
 // ==================== 取得发票 ====================
 
-let piTab = 'all';
+let piTab = 'all'; // all / zpt / ppt / tlp (专票/普票/铁路票)
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
@@ -443,11 +443,21 @@ async function renderPurchaseInvoices(container) {
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
-    html += '</div></div>';
+    html += '<button class="btn btn-primary" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">⚡ 一键生成凭证</button>';
+    html += '<div class="tab-btn-group">';
+    const piTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票'], ['tlp', '铁路票']];
+    piTabs.forEach(([t, label]) => {
+      html += '<button class="tab-btn ' + (piTab === t ? 'active' : '') + '" onclick="piTab=\'' + t + '\';renderPurchaseInvoices()">' + label + '</button>';
+    });
+    html += '</div></div></div>';
 
     // 渲染后自适应卡片字体
     setTimeout(fitInvoiceStatFonts, 50);
     let items = inv;
+    // 票种筛选
+    if (piTab === 'zpt') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('专用发票')));
+    if (piTab === 'ppt') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('普通发票')));
+    if (piTab === 'tlp') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('铁路')));
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
       const dFrom = piFilter.dateFrom.length === 10 && piFilter.dateFrom.includes('/') ? piFilter.dateFrom.replace(/\//g, '-') : piFilter.dateFrom;
@@ -548,10 +558,15 @@ function togglePiSelectAll() {
 
 function updatePiBatchBtn() {
   const count = document.querySelectorAll('.pi-check:checked').length;
-  const btn = document.getElementById('piBatchDelBtn');
-  if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
-    btn.disabled = count === 0;
+  const delBtn = document.getElementById('piBatchDelBtn');
+  if (delBtn) {
+    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.disabled = count === 0;
+  }
+  const genBtn = document.getElementById('piBatchGenBtn');
+  if (genBtn) {
+    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.disabled = count === 0;
   }
 }
 
@@ -570,6 +585,32 @@ async function batchDeletePurchaseInvoices() {
     renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
+  }
+}
+
+// 一键生成取得发票的进项抵扣凭证
+async function batchGeneratePurchaseVouchers() {
+  var checked = document.querySelectorAll('.pi-check:checked');
+  if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
+  var ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
+  if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
+  var btn = document.getElementById('piBatchGenBtn');
+  if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
+  try {
+    var res = await api('/api/purchase-invoices/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    });
+    toast(res.message, 'success');
+    renderPurchaseInvoices();
+    // 重置序时账缓存
+    var jel = document.getElementById('page-journal');
+    if (jel) delete jel.dataset.rendered;
+  } catch (e) {
+    handleError(e, '批量生成凭证');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
 }
 
