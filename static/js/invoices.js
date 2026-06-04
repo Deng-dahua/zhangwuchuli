@@ -1,7 +1,7 @@
 // ==================== 开具发票 ====================
 
 function fmtDate(d) {
-  if (!d) return '-';
+  if (!d) return '';
   return d.replace(/-/g, '/');
 }
 
@@ -35,9 +35,15 @@ async function renderSalesInvoices(container) {
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<input id="siKeyword" placeholder="搜索发票号/代码/购方/货物..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:220px" value="' + (siFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){siFilter.keyword=this.value;renderSalesInvoices()}">';
-    html += '<input type="date" value="' + (siFilter.dateFrom||'') + '" onchange="siFilter.dateFrom=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="起始日期">';
+    html += '<span style="display:inline-flex;align-items:center;gap:2px">';
+    html += '<input id="siDateFrom" type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateFrom) + '" onchange="siFilter.dateFrom=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px 0 0 6px;width:110px" title="起始日期">';
+    html += '<button onclick="var p=document.createElement(\'input\');p.type=\'date\';p.style.position=\'absolute\';p.style.visibility=\'hidden\';p.value=siFilter.dateFrom||\'\';p.onchange=function(){document.getElementById(\'siDateFrom\').value=p.value.replace(/-/g,\'/\');siFilter.dateFrom=p.value;renderSalesInvoices()};document.body.appendChild(p);p.showPicker();setTimeout(function(){document.body.removeChild(p)},500)" style="padding:6px 6px;border:1px solid #d1d5db;border-left:none;border-radius:0 6px 6px 0;background:#fff;cursor:pointer;font-size:14px" title="选择日期">📅</button>';
+    html += '</span>';
     html += '<span style="color:#9ca3af">至</span>';
-    html += '<input type="date" value="' + (siFilter.dateTo||'') + '" onchange="siFilter.dateTo=this.value;renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px" title="截止日期">';
+    html += '<span style="display:inline-flex;align-items:center;gap:2px">';
+    html += '<input id="siDateTo" type="text" placeholder="yyyy/mm/dd" value="' + fmtDate(siFilter.dateTo) + '" onchange="siFilter.dateTo=this.value.replace(/\\//g,\'-\');renderSalesInvoices()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px 0 0 6px;width:110px" title="截止日期">';
+    html += '<button onclick="var p=document.createElement(\'input\');p.type=\'date\';p.style.position=\'absolute\';p.style.visibility=\'hidden\';p.value=siFilter.dateTo||\'\';p.onchange=function(){document.getElementById(\'siDateTo\').value=p.value.replace(/-/g,\'/\');siFilter.dateTo=p.value;renderSalesInvoices()};document.body.appendChild(p);p.showPicker();setTimeout(function(){document.body.removeChild(p)},500)" style="padding:6px 6px;border:1px solid #d1d5db;border-left:none;border-radius:0 6px 6px 0;background:#fff;cursor:pointer;font-size:14px" title="选择日期">📅</button>';
+    html += '</span>';
     html += '<button onclick="siFilter.keyword=document.getElementById(\'siKeyword\').value;renderSalesInvoices()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer">🔍 搜索</button>';
     html += '<button onclick="siFilter.keyword=\'\';siFilter.dateFrom=\'\';siFilter.dateTo=\'\';document.getElementById(\'siKeyword\').value=\'\';renderSalesInvoices();toast(\'已清除筛选条件\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">清除筛选</button>';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
