@@ -368,13 +368,7 @@ async function renderInputVATDeductions(container) {
 
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
-  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-  html += '<input id="ivdKeyword" placeholder="搜索发票号/数电号/销方/税号..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:240px" value="' + (ivdFilter.keyword||'') + '" onkeydown="if(event.key==\'Enter\'){ivdFilter.keyword=this.value;renderInputVATDeductions()}">';
-  html += '<button onclick="ivdFilter.keyword=document.getElementById(\'ivdKeyword\').value;renderInputVATDeductions()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
-  html += '<input type="date" value="' + (ivdFilter.dateFrom||'') + '" onchange="ivdFilter.dateFrom=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="起始日期">';
-  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
-  html += '<input type="date" value="' + (ivdFilter.dateTo||'') + '" onchange="ivdFilter.dateTo=this.value;renderInputVATDeductions()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="ivdFilter.keyword=\'\';const r=periodToDateRange(currentPeriod);ivdFilter.dateFrom=r.from;ivdFilter.dateTo=r.to;document.getElementById(\'ivdKeyword\').value=\'\';renderInputVATDeductions()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
