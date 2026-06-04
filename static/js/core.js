@@ -57,16 +57,6 @@ async function init() {
     showRegistration();
     return;
   }
-  // 记住上次选择的公司，刷新直接进入
-  const lastCompanyId = localStorage.getItem('lastCompanyId');
-  const lastCompanyName = localStorage.getItem('lastCompanyName');
-  if (lastCompanyId && lastCompanyName) {
-    const exists = companies.some(c => String(c.id) === String(lastCompanyId));
-    if (exists) {
-      await enterApp(parseInt(lastCompanyId), lastCompanyName);
-      return;
-    }
-  }
   showCompanyPick(companies);
 }
 
