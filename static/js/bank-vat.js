@@ -3,6 +3,9 @@
 let _bankConfigs = [];
 let _currentBankId = null;
 
+// ==================== 进项抵扣 ====================
+let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
+
 async function loadBankConfigs() {
   const data = await api('/api/bank-configs');
   _bankConfigs = data;
@@ -374,7 +377,7 @@ async function renderInputVATDeductions(container) {
   html += '</div></div>';
 
   // 表格
-  const riskColors = { STATUS.RISK_NORMAL + "': '#059669', STATUS.RISK_WARN: '#d97706', STATUS.RISK_ABNORMAL: '#e02424', STATUS.RISK_LOST: '#7c3aed' };
+  const riskColors = { [STATUS.RISK_NORMAL]: '#059669', [STATUS.RISK_WARN]: '#d97706', [STATUS.RISK_ABNORMAL]: '#e02424', [STATUS.RISK_LOST]: '#7c3aed' };
   html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
   html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th style="width:90px">操作</th>';
