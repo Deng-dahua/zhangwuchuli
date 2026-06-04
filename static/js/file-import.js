@@ -356,57 +356,6 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     return;
   }
 
-  // 只要有重复记录被跳过，就提示是否强制导入
-  const hasDupSkipped = result.skipped > 0 && result.errors && result.errors.some(e => e.includes('完全重复'));
-  if (hasDupSkipped) {
-    const dupErrors = result.errors ? result.errors.filter(e => e.includes('完全重复')) : [];
-    const forceChoice = await showForceConfirmDialog(result.skipped, result.total, dupErrors);
-    if (forceChoice === 'yes') {
-      if (!fileToUse) { toast('文件已失效，请重新选择文件', 'error'); return; }
-      const formData2 = new FormData();
-      formData2.append('file', fileToUse);
-      formData2.append('module', module);
-      formData2.append('column_mapping', JSON.stringify(mapping));
-      formData2.append('company_id', currentCompanyId);
-      formData2.append('force', 'true');
-      if (result.skipped_indices && result.skipped_indices.length > 0) {
-        formData2.append('skipped_indices', JSON.stringify(result.skipped_indices));
-      }
-      if (_importBankConfigId) formData2.append('bank_config_id', _importBankConfigId);
-
-      document.getElementById('upload-progress').innerText = '正在强制导入数据...';
-      document.getElementById('upload-progress').style.display = 'block';
-
-      const resp2 = await fetch('/api/file/import-with-mapping', { method: 'POST', body: formData2 });
-      const result2 = await resp2.json();
-
-      document.getElementById('upload-progress').style.display = 'none';
-
-      if (result2.error) {
-        if (errEl) { errEl.innerText = '强制导入失败：' + result2.error; errEl.style.display = 'block'; }
-        return;
-      }
-
-      closeModal();
-      // 刷新列表（同原代码）
-      if (module === 'bank-transaction') renderBankTransactions();
-      else if (module === 'sales-invoice') renderSalesInvoices();
-      else if (module === 'purchase-invoice') renderPurchaseInvoices();
-      else if (module === 'input-vat-deduction') renderInputVATDeductions();
-      else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
-      else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
-      else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
-      let msg2 = `强制导入完成：${result2.imported}/${result2.total} 条记录`;
-      if (result2.errors && result2.errors.length > 0) {
-        msg2 += `，${result2.errors.length} 条错误`;
-      }
-      toast(msg2, result2.errors && result2.errors.length > 0 ? 'warn' : 'success');
-      if (result2.errors && result2.errors.length > 0) console.warn('Import errors:', result2.errors);
-      if (result2.infos && result2.infos.length > 0) console.log('Import infos:', result2.infos);
-      return;
-    }
-  }
-
   closeModal();
   // 刷新列表（同原代码）
   if (module === 'bank-transaction') renderBankTransactions();
@@ -417,10 +366,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
   else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }
   let msg = `成功导入 ${result.imported}/${result.total} 条记录`;
+  if (result.skipped > 0) {
+    msg += `，跳过 ${result.skipped} 条重复记录`;
+  }
   if (result.errors && result.errors.length > 0) {
     msg += `，${result.errors.length} 条错误`;
   }
-  toast(msg, result.errors && result.errors.length > 0 ? 'warn' : 'success');
+  toast(msg, 'success');
   if (result.errors && result.errors.length > 0) console.warn('Import errors:', result.errors);
   if (result.infos && result.infos.length > 0) console.log('Import infos:', result.infos);
 }

@@ -212,56 +212,6 @@ function showModal(html) {
 function closeModal() {
   document.getElementById('modal-overlay')?.remove();
 }
-
-// 强制导入确认弹窗。返回 'yes'（是）、'no'（否）或 null（取消）
-// dupErrors: 重复记录的详细信息数组
-// 强制导入确认弹窗。返回 'yes'（是）、'no'（否）或 null（取消）
-// dupErrors: 重复记录的详细信息数组
-function showForceConfirmDialog(skipped, total, dupErrors) {
-  const ok = total - skipped;
-  return new Promise((resolve) => {
-    var overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.id = 'force-confirm-overlay';
-    overlay.innerHTML = '<div class="modal" style="max-width:480px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px 20px;border-bottom:1px solid #e5e7eb;">' +
-        '<div style="font-size:16px;font-weight:700;">导入确认</div>' +
-        '<button onclick="resolveForceConfirm(null)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>' +
-      '</div>' +
-      '<div style="padding:16px 20px;">' +
-        '<div style="margin-bottom:16px;font-size:14px;color:#374151;line-height:1.6;">导入' + total + '条记录中存在 <b style="color:#e53e3e;">' + skipped + '</b> 条重复记录。</div>' +
-        '<div style="margin-bottom:16px;font-size:14px;font-weight:600;color:#1f2937;">是否强制导入重复记录？</div>' +
-        '<div style="margin-bottom:20px;display:flex;gap:28px;font-size:14px;">' +
-          '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">' +
-            '<input type="radio" name="force-import" value="yes" style="accent-color:#1a56db;"> 是（导入全部' + total + '条）</label>' +
-          '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">' +
-            '<input type="radio" name="force-import" value="no" checked style="accent-color:#1a56db;"> 否（导入0条）</label>' +
-        '</div>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px 16px 20px;border-top:1px solid #e5e7eb;">' +
-        '<button class="btn btn-sm btn-primary" onclick="resolveForceConfirm(true)">确定</button>' +
-      '</div>' +
-    '</div>';
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) { overlay.remove(); resolve(null); } });
-    document.body.appendChild(overlay);
-    window._forceConfirmResolve = resolve;
-  });
-}
-
-function resolveForceConfirm(confirmed) {
-  var overlay = document.getElementById('force-confirm-overlay');
-  var choice = null;
-  if (confirmed && overlay) {
-    var selected = overlay.querySelector('input[name="force-import"]:checked');
-    choice = selected ? selected.value : 'no';
-  }
-  if (overlay) overlay.remove();
-  if (window._forceConfirmResolve) {
-    window._forceConfirmResolve(choice);
-    delete window._forceConfirmResolve;
-  }
-}
-
 function createModal(title, body, extraClass) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
