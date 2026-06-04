@@ -61,7 +61,7 @@ async function renderBankTransactions(container) {
   html += '</div></div>';
 
   // 表格
-  html += '<div id="bank-tx-table-container"></div>';
+  html += '<div id="bank-tx-table-container" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0"></div>';
 
   el.innerHTML = html;
   loadBankTxList();
