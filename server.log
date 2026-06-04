@@ -1,14 +1,4 @@
-INFO:     Started server process [43160]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
-  [OK] 开具发票→凭证: 无需生成（均已存在或无发票）
-[DEDUP-FAIL] bank_transactions._fingerprint 自检失败: (sqlite3.OperationalError) table bank_transactions has no column named journal_voucher_no
-[SQL: INSERT INTO bank_transactions (company_id, bank_config_id, transaction_date, transaction_time, application_date, voucher_no, debit_amount, credit_amount, balance, counterparty_account, counterparty_name, counterparty_bank, transaction_serial_no, voucher_seq, record_status, summary, transaction_remark, account_type, amount, transaction_type, payment_method, reference_no, raw_data, journal_voucher_no, _fingerprint, remark, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
-[parameters: (1, None, '2026-06-02', None, None, None, 0.0, 0.0, 0.0, None, None, None, None, None, None, None, None, None, 0.0, '支出', None, None, None, None, '[["__test__", "__verify__"]]', None, '2026-06-02 23:41:06.408239')]
-(Background on this error at: https://sqlalche.me/e/20/e3q8)
-[DEDUP-OK] sales_invoices._fingerprint 读写正常
-[DEDUP-OK] purchase_invoices._fingerprint 读写正常
-[DEDUP-OK] input_vat_deductions._fingerprint 读写正常
-数据库初始化完成（1 家公司）
-INFO:     127.0.0.1:36160 - "GET /api/ledger/general?period_from=2025-10 HTTP/1.1" 422 Unprocessable Content
+Microsoft Windows [版本 10.0.22631.5335]
+(c) Microsoft Corporation。保留所有权利。
+
+C:\Users\26726\WorkBuddy\2026-05-31-09-56-37\caishuixitong>

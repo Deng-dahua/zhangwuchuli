@@ -94,7 +94,6 @@ class Department(Base):
     __tablename__ = "departments"
     __table_args__ = (
         UniqueConstraint('company_id', 'code', name='uq_dept_company_code'),
-        Index('idx_dept_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -106,7 +105,6 @@ class Department(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 人员档案 ====================
@@ -115,7 +113,6 @@ class Employee(Base):
     __tablename__ = "employees"
     __table_args__ = (
         UniqueConstraint('company_id', 'code', name='uq_emp_company_code'),
-        Index('idx_emp_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -127,7 +124,6 @@ class Employee(Base):
     leave_date = Column(Date, comment="离职日期")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 客户档案 ====================
@@ -136,7 +132,6 @@ class Customer(Base):
     __tablename__ = "customers"
     __table_args__ = (
         UniqueConstraint('company_id', 'code', name='uq_cust_company_code'),
-        Index('idx_cust_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -155,7 +150,6 @@ class Customer(Base):
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 供应商档案 ====================
@@ -164,7 +158,6 @@ class Supplier(Base):
     __tablename__ = "suppliers"
     __table_args__ = (
         UniqueConstraint('company_id', 'code', name='uq_supp_company_code'),
-        Index('idx_supp_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -178,7 +171,6 @@ class Supplier(Base):
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    _fingerprint = Column(Text, comment="去重指纹")
 
 
 # ==================== 会计科目 ====================
@@ -481,7 +473,6 @@ class SalesInvoice(Base):
         Index('idx_si_company_date', 'company_id', 'invoice_date'),
         Index('idx_si_company_buyer', 'company_id', 'buyer_name'),
         Index('idx_si_company_status', 'company_id', 'status'),
-        Index('idx_si_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -520,7 +511,6 @@ class SalesInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
-    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -535,7 +525,6 @@ class PurchaseInvoice(Base):
         Index('idx_pi_company_date', 'company_id', 'invoice_date'),
         Index('idx_pi_company_seller', 'company_id', 'seller_name'),
         Index('idx_pi_company_cert', 'company_id', 'certification_status'),
-        Index('idx_pi_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -579,7 +568,6 @@ class PurchaseInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
-    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -609,7 +597,6 @@ class BankTransaction(Base):
         Index('idx_bt_company_date', 'company_id', 'transaction_date'),
         Index('idx_bt_company_bank', 'company_id', 'bank_config_id'),
         Index('idx_bt_company_type', 'company_id', 'transaction_type'),
-        Index('idx_bt_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -637,7 +624,6 @@ class BankTransaction(Base):
     reference_no = Column(String(50), comment="银行流水号（旧）")
     raw_data = Column(Text, comment="原始数据JSON（旧）")
     journal_voucher_no = Column(String(30), comment="关联序时账凭证号")
-    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     remark = Column(Text, comment="备注（旧）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -652,7 +638,6 @@ class InputVATDeduction(Base):
         Index('idx_ivd_company_check_time', 'company_id', 'check_time'),
         Index('idx_ivd_company_invoice', 'company_id', 'purchase_invoice_id'),
         Index('idx_ivd_status', 'company_id', 'invoice_status'),
-        Index('idx_ivd_fingerprint', '_fingerprint'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -690,7 +675,6 @@ class InputVATDeduction(Base):
     voucher_no = Column(String(30), comment="关联凭证号")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
-    _fingerprint = Column(Text, comment="去重指纹：json.dumps(list(row_fingerprint({**mapped,**extra})))")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -954,7 +938,6 @@ def migrate_schema(db):
                 db.rollback()
 
     # ── 9. 发票号码和开票日期改为可空 ──
-    # 注：表重建已执行过一次，后续启动不再执行（重建会导致新列_fingerprint数据丢失）
     for table_name in ("sales_invoices", "purchase_invoices"):
         if table_name in inspector.get_table_names():
             cols = {c["name"]: c for c in inspector.get_columns(table_name)}
@@ -970,26 +953,6 @@ def migrate_schema(db):
                 except Exception as e:
                     db.rollback()
                     print(f"清理 {backup_table} 跳过: {e}")
-
-    # ── 10. 添加 _fingerprint 列（去重指纹） ──
-    fingerprint_tables = {
-        "sales_invoices": "ALTER TABLE sales_invoices ADD COLUMN _fingerprint TEXT",
-        "purchase_invoices": "ALTER TABLE purchase_invoices ADD COLUMN _fingerprint TEXT",
-        "bank_transactions": "ALTER TABLE bank_transactions ADD COLUMN _fingerprint TEXT",
-        "input_vat_deductions": "ALTER TABLE input_vat_deductions ADD COLUMN _fingerprint TEXT",
-    }
-    for table_name, sql in fingerprint_tables.items():
-        try:
-            if table_name in inspector.get_table_names():
-                existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-                if "_fingerprint" not in existing_cols:
-                    db.execute(TextClause(sql))
-                    db.commit()
-                    print(f"已为 {table_name} 添加 _fingerprint 列")
-        except Exception as e:
-            db.rollback()
-            print(f"添加 {table_name}._fingerprint 跳过: {e}")
-
 
 
     # ── 11. JournalEntry 新增5个字段 ──
@@ -1075,18 +1038,6 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] 222101 待认证进项税额 迁移失败: {e}")
 
-    # ── 12.6. 为档案表补充 _fingerprint 去重列 ──
-    for tbl in ("departments", "employees", "customers", "suppliers"):
-        if tbl in inspector.get_table_names():
-            existing_cols = {c["name"] for c in inspector.get_columns(tbl)}
-            if "_fingerprint" not in existing_cols:
-                try:
-                    db.execute(TextClause(f"ALTER TABLE {tbl} ADD COLUMN _fingerprint TEXT"))
-                    db.commit()
-                    print(f"  [OK] {tbl} 添加 _fingerprint 列")
-                except Exception as e:
-                    db.rollback()
-                    print(f"  [X] {tbl} _fingerprint 迁移失败: {e}")
 
     # ── 12.7. 为档案表补充 updated_at 列 ──
     for tbl in ("departments", "employees", "customers", "suppliers", "bank_transactions"):
@@ -1101,23 +1052,6 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] {tbl} updated_at 迁移失败: {e}")
 
-    # ── 12.8. 为 _fingerprint 列创建索引（加速导入去重查询） ──
-    fingerprint_index_tables = [
-        "departments", "employees", "customers", "suppliers",
-        "sales_invoices", "purchase_invoices", "bank_transactions", "input_vat_deductions",
-    ]
-    for tbl in fingerprint_index_tables:
-        idx_name = f"idx_{tbl[:4]}_fingerprint"
-        try:
-            # 检查索引是否已存在
-            existing_idxs = {i["name"] for i in inspector.get_indexes(tbl)}
-            if idx_name not in existing_idxs:
-                db.execute(TextClause(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tbl} (_fingerprint)"))
-                db.commit()
-                print(f"  [OK] {tbl} 创建 _fingerprint 索引")
-        except Exception as e:
-            db.rollback()
-            print(f"  [X] {tbl} _fingerprint 索引创建失败: {e}")
 
     # ── 13. 自动为"正常"状态的开具发票生成序时账凭证 ──
     if "sales_invoices" in inspector.get_table_names() and "journal_entries" in inspector.get_table_names():
@@ -1625,36 +1559,8 @@ def init_company_data(db, company_id: int):
 
 
 def verify_dedup_columns(db):
-    """启动自检：验证四模块_fingerprint列存在并可写入"""
-    import json
-    models = {
-        "bank_transactions": BankTransaction,
-        "sales_invoices": SalesInvoice,
-        "purchase_invoices": PurchaseInvoice,
-        "input_vat_deductions": InputVATDeduction,
-    }
-    for name, model in models.items():
-        # 检查列是否存在
-        if not hasattr(model, '_fingerprint'):
-            print(f"[DEDUP-ERROR] {name} 模型缺少 _fingerprint 列！")
-            continue
-        # 尝试写读自检：插入→验证→回滚
-        try:
-            test_fp = json.dumps([["__test__", "__verify__"]])
-            kwargs = {"_fingerprint": test_fp, "company_id": 1}
-            if name == "bank_transactions":
-                from datetime import date
-                kwargs["transaction_date"] = date.today()
-            rec = model(**kwargs)
-            db.add(rec)
-            db.flush()
-            db.refresh(rec)
-            assert rec._fingerprint == test_fp, f"写入={rec._fingerprint}, 预期={test_fp}"
-            db.rollback()
-            print(f"[DEDUP-OK] {name}._fingerprint 读写正常")
-        except Exception as e:
-            db.rollback()
-            print(f"[DEDUP-FAIL] {name}._fingerprint 自检失败: {e}")
+    """已禁用：去重列自检"""
+    pass
 
 
 
@@ -1734,8 +1640,6 @@ def init_db():
 
         db.commit()
 
-        # 启动自检：验证四模块_fingerprint列存在且可写入
-        verify_dedup_columns(db)
         print(f"数据库初始化完成（{len(companies)} 家公司）")
     except Exception as e:
         db.rollback()

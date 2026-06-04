@@ -303,19 +303,6 @@ async def import_departments(
     ci = next((i for i, h in enumerate(headers) if h in ("编码", "code", "部门编码")), None)
     ni = next((i for i, h in enumerate(headers) if h in ("名称", "name", "部门名称", "部门")), 1)
 
-    # 全行指纹去重：加载已有指纹
-    def row_fingerprint(values_dict):
-        return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
-
-    existing_fps = set()
-    for rec in db.query(Department._fingerprint).filter(
-        Department.company_id == company_id,
-        Department._fingerprint.isnot(None)
-    ).all():
-        try:
-            existing_fps.add(tuple(tuple(x) for x in json.loads(rec[0])))
-        except: pass
-    used_fps = {}
 
     # 获取当前最大编码（仅匹配 BM 前缀，提取数字部分）
     existing_codes = db.query(Department.code).filter(
@@ -341,15 +328,6 @@ async def import_departments(
         if not name:
             continue
 
-        # 指纹去重
-        row_data = {"code": code, "name": name}
-        fp = row_fingerprint(row_data)
-        if fp in used_fps:
-            skipped += 1
-            continue
-        if fp in existing_fps:
-            skipped += 1
-            continue
 
         # 编码为空时自动生成 BM001 格式
         if not code:
@@ -361,13 +339,10 @@ async def import_departments(
         ).first()
         if existing:
             existing.name = name
-            existing._fingerprint = json.dumps(list(fp))
         else:
             db.add(Department(
-                company_id=company_id, code=code, name=name,
-                _fingerprint=json.dumps(list(fp))
+                company_id=company_id, code=code, name=name
             ))
-        used_fps[fp] = True
         imported += 1
     db.commit()
     msg = f"成功导入 {imported} 条部门"
@@ -439,9 +414,6 @@ def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session =
 
 # ==================== 客户档案 ====================
 
-def _make_fingerprint(values_dict):
-    """生成全行指纹：所有列名+值排序后组成元组，可哈希对比"""
-    return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
 
 @app.get("/api/customers")
 def list_customers(
@@ -486,10 +458,6 @@ def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Sessio
         if not ok:
             raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     c = Customer(company_id=company_id, **data.model_dump())
-    # 计算并存储全行指纹
-    fd = data.model_dump()
-    fd['company_id'] = company_id
-    c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
     db.add(c)
     db.commit()
     return {"message": "新增成功"}
@@ -515,12 +483,6 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
             raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(c, k, v)
-    # 重新计算全行指纹
-    fp_fields = ['company_id', 'code', 'name', 'tax_no', 'contact', 'phone',
-                 'address', 'credit_limit', 'payment_terms', 'bank_name',
-                 'bank_account', 'uscc', 'remark']
-    fd = {k: getattr(c, k) for k in fp_fields}
-    c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
     db.commit()
     return {"message": "更新成功"}
 
@@ -4229,95 +4191,14 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if any(v.strip() for v in row_dict.values()):
                         rows_data.append(row_dict)
 
-        force_import = (force == "true")
+        force_import = False  # disabled
         # 根据映射转换并导入
         imported = 0
         errors = []
         infos = []  # 非错误提示（如自动创建客户档案）
 
-        # 全行指纹去重：比对整行所有列数据，而非单一字段
-        def row_fingerprint(values_dict):
-            """生成全行指纹：所有列名+值排序后组成元组，可哈希对比"""
-            return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
 
-        used_fingerprints = {} if not force_import else None  # fp -> 行号，同批次去重；None时跳过
 
-        # 跨批次数据库查重：始终加载，防止 force 导入时重复入库已有记录
-        existing_fingerprints = set()
-        if module == "bank-transaction":
-            for rec in db.query(BankTransaction._fingerprint).filter(
-                BankTransaction.company_id == company_id,
-                BankTransaction._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "sales-invoice":
-            for rec in db.query(SalesInvoice._fingerprint).filter(
-                SalesInvoice.company_id == company_id,
-                SalesInvoice._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "purchase-invoice":
-            for rec in db.query(PurchaseInvoice._fingerprint).filter(
-                PurchaseInvoice.company_id == company_id,
-                PurchaseInvoice._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "input-vat-deduction":
-            for rec in db.query(InputVATDeduction._fingerprint).filter(
-                InputVATDeduction.company_id == company_id,
-                InputVATDeduction._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "employee":
-            for rec in db.query(Employee._fingerprint).filter(
-                Employee.company_id == company_id,
-                Employee._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "customer":
-            for rec in db.query(Customer._fingerprint).filter(
-                Customer.company_id == company_id,
-                Customer._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "supplier":
-            for rec in db.query(Supplier._fingerprint).filter(
-                Supplier.company_id == company_id,
-                Supplier._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-        elif module == "department":
-            for rec in db.query(Department._fingerprint).filter(
-                Department.company_id == company_id,
-                Department._fingerprint.isnot(None)
-            ).all():
-                try:
-                    existing_fingerprints.add(tuple(tuple(x) for x in json.loads(rec[0])))
-                except: pass
-
-        # 接收前端传来的跳过行索引（force模式下仅处理指定行）
-        target_indices = None  # None=全部处理, set=只处理指定行
-        if force_import and skipped_indices:
-            try:
-                target_indices = set(json.loads(skipped_indices))
-            except: pass
-
-        if force_import:
-            existing_fingerprints = None  # 强制导入跳过跨批次查重
         new_customers = {}  # {(tax_no, name): True} — 自动添加客户档案
         new_invoices = []  # 收集新创建的发票，导入完成后自动生成凭证
         new_deductions = []  # 收集新创建的进项抵扣，导入完成后自动生成凭证
@@ -4335,9 +4216,6 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     if col_name not in mapping.values():
                         extra[col_name] = val.strip()
 
-                # force模式下仅处理指定行（被跳过的重复行）
-                if target_indices is not None and i not in target_indices:
-                    continue
 
                 if module == "bank-transaction":
                     # 解析日期
@@ -4387,17 +4265,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: balance = float(bal_str) if bal_str else 0.0
                     except: pass
 
-                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-
+                    
                     tx = BankTransaction(
                         company_id=company_id,
                         bank_config_id=bank_config_id,
@@ -4421,12 +4289,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         amount=credit_amount - debit_amount,
                         transaction_type="收入" if credit_amount > 0 else "支出",
                         raw_data=json.dumps(extra, ensure_ascii=False) if extra else "{}",
-                        _fingerprint=json.dumps(list(fp)),
                         remark=mapped.get("remark", "")
                     )
                     db.add(tx)
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module in ("sales-invoice", "purchase-invoice"):
                     inv_date = None
@@ -4443,20 +4308,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     # 空值保留为 None，不拦截
                     inv_no = mapped.get("invoice_no", "") or None
 
-                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        dup_row = used_fingerprints[fp]
-                        key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
-                        errors.append(f"第{i+2}行: 与第{dup_row}行完全重复（{key_info}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        key_info = f"发票号={mapped.get('invoice_no','无')}, 金额={mapped.get('amount','无')}, 货物={mapped.get('goods_name','无')[:20]}"
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（{key_info}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-
+                    
                     # 安全转浮点数——兼容千分位/百分号/空值/文本
                     # nullable=True 时源文件为空则返回 None，保留空白不填 0
                     def safe_float(val, default=0.0, nullable=False):
@@ -4513,12 +4365,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             invoice_risk_level=mapped.get("invoice_risk_level", ""),
                             issuer=mapped.get("issuer", ""),
                             remark=mapped.get("remark", ""),
-                            raw_data=json.dumps(extra) if extra else None,
-                            _fingerprint=json.dumps(list(fp))
+                            raw_data=json.dumps(extra) if extra else None
                         )
                         db.add(inv)
-                        if used_fingerprints is not None:
-                            used_fingerprints[fp] = i+2
                         new_invoices.append(inv)
                         # 收集购买方信息，导入后自动添加客户档案
                         buyer_nm = mapped.get("buyer_name", "").strip()
@@ -4561,12 +4410,9 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                             certification_date=cert_date,
                             deduction_period=mapped.get("deduction_period", ""),
                             remark=mapped.get("remark", ""),
-                            raw_data=json.dumps(extra) if extra else None,
-                            _fingerprint=json.dumps(list(fp))
+                            raw_data=json.dumps(extra) if extra else None
                         )
                     db.add(inv)
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module == "input-vat-deduction":
                     # 进项抵扣导入：解析日期
@@ -4600,17 +4446,7 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     try: deductible = float(deductible) if deductible else 0.0
                     except: deductible = 0.0
 
-                    # 去重：全线指纹 — mapped+extra 全部参与比对，有一列不同就不是重复
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-
+                    
                     inv = InputVATDeduction(
                         company_id=company_id,
                         check_status=mapped.get("check_status", "未勾选"),
@@ -4631,30 +4467,17 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                         check_time=check_time,
                         risk_level=mapped.get("risk_level", "正常"),
                         remark=mapped.get("remark", ""),
-                        raw_data=json.dumps(extra) if extra else None,
-                        _fingerprint=json.dumps(list(fp))
+                        raw_data=json.dumps(extra) if extra else None
                     )
                     db.add(inv)
                     new_deductions.append(inv)
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module == "employee":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 姓名不能为空")
                         continue
-                    # 全行指纹去重
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（姓名={name}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
+                                        # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
                     if 'emp_code_counter' not in locals():
                         existing_codes = db.query(Employee.code).filter(
                             Employee.company_id == company_id,
@@ -4671,30 +4494,17 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     code = f"RY{emp_code_counter:03d}"
                     emp = Employee(
                         company_id=company_id, code=code, name=name,
-                        id_card=mapped.get("id_card", "") or None,
-                        _fingerprint=json.dumps(list(fp))
+                        id_card=mapped.get("id_card", "") or None
                     )
                     db.add(emp)
                     db.flush()
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module == "customer":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 客户名称不能为空")
                         continue
-                    # 全行指纹去重
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（客户={name}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    # 编码自动生成 KH001 格式：首次查DB取最大code，后续内存递增
+                                        # 编码自动生成 KH001 格式：首次查DB取最大code，后续内存递增
                     if 'cust_code_counter' not in locals():
                         existing_codes = db.query(Customer.code).filter(
                             Customer.company_id == company_id,
@@ -4712,30 +4522,17 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     uscc = mapped.get("uscc", "") or None
                     cust = Customer(
                         company_id=company_id, code=code, name=name,
-                        uscc=uscc,
-                        _fingerprint=json.dumps(list(fp))
+                        uscc=uscc
                     )
                     db.add(cust)
                     db.flush()
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module == "supplier":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 供应商名称不能为空")
                         continue
-                    # 全行指纹去重
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（供应商={name}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    # 编码自动生成 GYS001 格式：首次查DB取最大code，后续内存递增
+                                        # 编码自动生成 GYS001 格式：首次查DB取最大code，后续内存递增
                     if 'supp_code_counter' not in locals():
                         existing_codes = db.query(Supplier.code).filter(
                             Supplier.company_id == company_id,
@@ -4753,30 +4550,17 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     uscc = mapped.get("uscc", "") or None
                     supp = Supplier(
                         company_id=company_id, code=code, name=name,
-                        uscc=uscc,
-                        _fingerprint=json.dumps(list(fp))
+                        uscc=uscc
                     )
                     db.add(supp)
                     db.flush()
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 elif module == "department":
                     name = mapped.get("name", "").strip()
                     if not name:
                         errors.append(f"第{i+2}行: 部门名称不能为空")
                         continue
-                    # 全行指纹去重
-                    fp = row_fingerprint({**mapped, **extra})
-                    if used_fingerprints is not None and fp in used_fingerprints:
-                        errors.append(f"第{i+2}行: 与第{used_fingerprints[fp]}行完全重复，跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    if existing_fingerprints is not None and fp in existing_fingerprints:
-                        errors.append(f"第{i+2}行: 与数据库中已有记录完全重复（部门={name}），跳过")
-                        skipped_indices_list.append(i)
-                        continue
-                    # 编码：优先用导入的编码，为空则自动生成 BM001 格式
+                                        # 编码：优先用导入的编码，为空则自动生成 BM001 格式
                     code = mapped.get("code", "").strip()
                     if not code:
                         if 'dept_code_counter' not in locals():
@@ -4799,15 +4583,11 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
                     ).first()
                     if existing:
                         existing.name = name
-                        existing._fingerprint = json.dumps(list(fp))
                     else:
                         db.add(Department(
-                            company_id=company_id, code=code, name=name,
-                            _fingerprint=json.dumps(list(fp))
+                            company_id=company_id, code=code, name=name
                         ))
                     db.flush()
-                    if used_fingerprints is not None:
-                        used_fingerprints[fp] = i+2
 
                 imported += 1
             except Exception as e:
@@ -4850,60 +4630,12 @@ async def import_file_with_mapping(  # v2026-06-01-fix: 空发票号码不拦截
             if customer_added > 0:
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
-        if force_import:
-            # force模式：先删数据库中对应的旧记录（按 _fingerprint），再插入新记录
-            # 关键：rollback前提取所有属性，因为rollback后对象过期无法访问
-            pending = list(db.new)
-            pending_rows = []  # [(model_cls, fingerprint_or_None, values_dict)]
-            from collections import defaultdict
-            by_model_fps = defaultdict(list)
-            for obj in pending:
-                model_cls = type(obj)
-                fp = getattr(obj, '_fingerprint', None)
-                values = {}
-                for col in obj.__table__.columns:
-                    if col.primary_key and col.autoincrement:
-                        continue
-                    values[col.name] = getattr(obj, col.name, None)
-                pending_rows.append((model_cls, fp, values))
-                if fp:
-                    by_model_fps[model_cls].append(fp)
-
-            db.rollback()
-            actual = 0
-
-            # 按模型分组：先删后插
-            for model_cls, fps in by_model_fps.items():
-                if hasattr(model_cls, '_fingerprint'):
-                    db.query(model_cls).filter(
-                        model_cls.company_id == company_id,
-                        model_cls._fingerprint.in_(fps)
-                    ).delete(synchronize_session=False)
-                    db.flush()
-
-            # 插入所有新记录
-            for model_cls, fp, values in pending_rows:
-                try:
-                    stmt = model_cls.__table__.insert().values(**values)
-                    result = db.execute(stmt)
-                    if result.rowcount and result.rowcount > 0:
-                        actual += 1
-                except Exception as ex:
-                    print(f"[FORCE-IMPORT] 行插入异常: {ex}")
-
+        try:
             db.commit()
-            imported = actual
-            errors.append(f"强制导入完成：新增 {actual} 条（覆盖已存在的重复记录）")
-            # force模式跳过自动凭证生成（对象已重新创建，引用失效）
-            new_invoices = []
-            new_deductions = []
-        else:
-            try:
-                db.commit()
-            except IntegrityError as e:
-                db.rollback()
-                errors.append("数据重复，已跳过已存在的记录")
-                imported = 0
+        except IntegrityError as e:
+            db.rollback()
+            errors.append("数据重复，已跳过已存在的记录")
+            imported = 0
 
         # 开具发票导入后自动生成序时账凭证
         if module == "sales-invoice" and new_invoices:
@@ -5747,12 +5479,6 @@ def save_customer(data, db, sess, sid, company_id):
             address=data.get("address"),
             credit_limit=data.get("credit_limit", 0.0)
         )
-        # 计算并存储全行指纹
-        fd = {k: getattr(c, k) for k in
-              ['company_id', 'code', 'name', 'tax_no', 'contact', 'phone',
-               'address', 'credit_limit', 'payment_terms', 'bank_name',
-               'bank_account', 'uscc', 'remark']}
-        c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
         db.add(c)
         db.commit()
         sess["intent"] = None
