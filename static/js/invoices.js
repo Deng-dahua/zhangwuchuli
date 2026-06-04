@@ -427,7 +427,7 @@ async function renderPurchaseInvoices(container) {
   try {
     const [inv, stats] = await Promise.all([
       api('/api/purchase-invoices'),
-      api('/api/purchase-invoices/stats')
+      api('/api/purchase-invoices/stats' + (piTab !== 'all' ? '?tab=' + piTab : ''))
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '';
