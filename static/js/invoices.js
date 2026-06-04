@@ -21,7 +21,7 @@ async function renderSalesInvoices(container) {
     let html = '';
 
     // 统计卡片
-    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div class="stat-grid-invoice">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
@@ -42,6 +42,9 @@ async function renderSalesInvoices(container) {
       html += '<button class="tab-btn ' + (siTab === t ? 'active' : '') + '" onclick="siTab=\'' + t + '\';renderSalesInvoices()">' + label + '</button>';
     });
     html += '</div></div></div>';
+
+    // 渲染后自适应卡片字体
+    setTimeout(fitInvoiceStatFonts, 50);
 
     // 过滤
     let items = inv;
@@ -431,7 +434,7 @@ async function renderPurchaseInvoices(container) {
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '';
 
-    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">';
+    html += '<div class="stat-grid-invoice">';
     html += '<div class="stat-card"><div class="stat-value">' + stats.total_count + '</div><div class="stat-label">发票总数</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
@@ -446,6 +449,9 @@ async function renderPurchaseInvoices(container) {
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '</div></div>';
+
+    // 渲染后自适应卡片字体
+    setTimeout(fitInvoiceStatFonts, 50);
     let items = inv;
     if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
@@ -656,5 +662,21 @@ async function showPurchaseDetail(id) {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+// 自适应统计卡片字体：检测溢出自动缩小
+function fitInvoiceStatFonts() {
+  document.querySelectorAll('.stat-grid-invoice .stat-value').forEach(function(el) {
+    var card = el.parentElement;
+    if (!card) return;
+    var maxW = card.clientWidth - 40;
+    if (maxW <= 0) return;
+    var fontSize = 26;
+    el.style.fontSize = fontSize + 'px';
+    while (el.scrollWidth > maxW && fontSize > 10) {
+      fontSize -= 1;
+      el.style.fontSize = fontSize + 'px';
+    }
+  });
 }
 
