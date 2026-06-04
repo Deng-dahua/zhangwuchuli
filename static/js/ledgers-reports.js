@@ -3,7 +3,7 @@ async function renderGeneralLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const yearMonth = currentPeriod;
   el.innerHTML = `
-    <div class="card" style="margin-bottom:0">
+    <div class="card card-fill">
       <div class="filter-bar" style="gap:8px;">
         <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('gl-from', yearMonth)}
         <span style="color:#9ca3af">至</span>
@@ -215,7 +215,7 @@ function _readPeriod(prefix) {
 async function renderProfitLoss(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
-    '<div class="card">' +
+    '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
         '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('pl-from', currentPeriod) +
         '<span style="color:#9ca3af">至</span>' +
@@ -223,7 +223,7 @@ async function renderProfitLoss(container) {
         '<button class="btn btn-primary" onclick="loadProfitLoss()">生成报表</button>' +
         '<button onclick="clearFilters(\'pl\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
-      '<div id="pl-table"></div>' +
+      '<div id="pl-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
 }
 
@@ -255,13 +255,13 @@ async function loadProfitLoss() {
 async function renderBalanceSheet(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
-    '<div class="card">' +
+    '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
         '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('bs-from', currentPeriod) +
         '<button class="btn btn-primary" onclick="loadBalanceSheet()">生成报表</button>' +
         '<button onclick="clearFilters(\'bs\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
-      '<div id="bs-table"></div>' +
+      '<div id="bs-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
 }
 
@@ -300,7 +300,7 @@ async function loadBalanceSheet() {
 async function renderCashFlow(container) {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
-    '<div class="card">' +
+    '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
         '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('cf-from', currentPeriod) +
         '<span style="color:#9ca3af">至</span>' +
@@ -308,7 +308,7 @@ async function renderCashFlow(container) {
         '<button class="btn btn-primary" onclick="loadCashFlow()">生成报表</button>' +
         '<button onclick="clearFilters(\'cf\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
-      '<div id="cf-table"></div>' +
+      '<div id="cf-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
 }
 
@@ -338,13 +338,13 @@ async function loadCashFlow() {
 async function renderEquityChanges(container) {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
-    '<div class="card">' +
+    '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
         '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('ec-from', currentPeriod) +
         '<button class="btn btn-primary" onclick="loadEquityChanges()">生成报表</button>' +
         '<button onclick="clearFilters(\'ec\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
-      '<div id="ec-table" style="overflow-x:auto"></div>' +
+      '<div id="ec-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
 }
 
@@ -376,7 +376,7 @@ async function loadEquityChanges() {
 async function renderAccountBalance(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
-    <div class="card">
+    <div class="card card-fill">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
         <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('tb-from', currentPeriod)}
         <span style="color:#9ca3af">至</span>

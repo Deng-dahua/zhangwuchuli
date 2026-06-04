@@ -2,7 +2,7 @@
 async function renderAccounts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
-    <div class="card" style="margin-bottom:0">
+    <div class="card card-fill">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <button class="btn btn-primary" onclick="showAddAccount()">+ 新增科目</button>
       </div>
@@ -15,7 +15,7 @@ async function renderAccounts(container) {
         <input class="form-control" id="acc-kw" placeholder="科目编码/名称" style="width:180px">
         <button class="btn btn-primary" onclick="loadAccounts()">🔍 查询</button>
       </div>
-      <div class="table-wrap" id="acc-table">加载中...</div>
+      <div class="table-wrap" id="acc-table" style="flex:1;overflow:auto">加载中...</div>
     </div>
   `;
   await loadAccounts();
@@ -136,7 +136,7 @@ async function renderPeriods(container) {
   try {
     const data = await api('/api/periods');
     el.innerHTML = `
-      <div class="card" style="margin-bottom:0">
+      <div class="card card-fill">
         <table>
           <thead><tr><th>会计期间</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>
