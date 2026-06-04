@@ -419,7 +419,6 @@ async function showSalesDetail(id) {
 
 let piTab = 'all';
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
-let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');

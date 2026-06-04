@@ -13,6 +13,7 @@ async function loadBankConfigs() {
 }
 
 async function renderBankTransactions(container) {
+  try {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   let btDateFrom = '', btDateTo = '';
@@ -64,6 +65,7 @@ async function renderBankTransactions(container) {
 
   el.innerHTML = html;
   loadBankTxList();
+  } catch(e) { console.error('[renderBankTransactions]', e); el.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">银行流水加载失败：' + e.message + '</p></div>'; }
 }
 
 window.switchBank = function(bankId) {
@@ -335,6 +337,7 @@ async function deleteBankConfig(id) {
 // ==================== 进项抵扣 - 认证台账 ====================
 
 async function renderInputVATDeductions(container) {
+  try {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
@@ -417,6 +420,7 @@ async function renderInputVATDeductions(container) {
   html += '</tbody></table></div>';
 
   el.innerHTML = html;
+  } catch(e) { console.error('[renderInputVATDeductions]', e); el.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">进项抵扣加载失败：' + e.message + '</p></div>'; }
 }
 
 function toggleIVDSelectAll() {
