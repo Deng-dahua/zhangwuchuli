@@ -255,6 +255,8 @@ def delete_department(dept_id: int, company_id: int = Query(1), db: Session = De
     if not d:
         raise HTTPException(404, detail="部门不存在")
     db.delete(d)
+    db.flush()
+    _renumber_archive(db, company_id, Department, 'BM')
     db.commit()
     return {"message": "删除成功"}
 
@@ -267,6 +269,8 @@ def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(1), d
         Department.company_id == company_id,
         Department.id.in_(req.ids)
     ).delete(synchronize_session=False)
+    db.flush()
+    _renumber_archive(db, company_id, Department, 'BM')
     db.commit()
     return {"message": f"成功删除 {deleted} 个部门", "count": deleted}
 
@@ -400,6 +404,8 @@ def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depen
     if not e:
         raise HTTPException(404, detail="员工不存在")
     db.delete(e)
+    db.flush()
+    _renumber_archive(db, company_id, Employee, 'RY')
     db.commit()
     return {"message": "删除成功"}
 
@@ -409,6 +415,8 @@ def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session =
     if not ids:
         raise HTTPException(400, detail="请选择要删除的记录")
     deleted = db.query(Employee).filter(Employee.company_id == company_id, Employee.id.in_(ids)).delete(synchronize_session=False)
+    db.flush()
+    _renumber_archive(db, company_id, Employee, 'RY')
     db.commit()
     return {"message": f"成功删除 {deleted} 条人员记录"}
 
@@ -524,6 +532,8 @@ def batch_delete_customers(
         Customer.company_id == company_id,
         Customer.id.in_(body.ids)
     ).delete(synchronize_session=False)
+    db.flush()
+    _renumber_archive(db, company_id, Customer, 'KH')
     db.commit()
     return {"message": f"成功删除 {deleted} 条客户"}
 
@@ -533,6 +543,8 @@ def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depe
     if not c:
         raise HTTPException(404, detail="客户不存在")
     db.delete(c)
+    db.flush()
+    _renumber_archive(db, company_id, Customer, 'KH')
     db.commit()
     return {"message": "删除成功"}
 
@@ -619,6 +631,8 @@ def batch_delete_suppliers(
         Supplier.company_id == company_id,
         Supplier.id.in_(body.ids)
     ).delete(synchronize_session=False)
+    db.flush()
+    _renumber_archive(db, company_id, Supplier, 'GYS')
     db.commit()
     return {"message": f"成功删除 {deleted} 条供应商"}
 
@@ -628,8 +642,149 @@ def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depe
     if not s:
         raise HTTPException(404, detail="供应商不存在")
     db.delete(s)
+    db.flush()
+    _renumber_archive(db, company_id, Supplier, 'GYS')
     db.commit()
     return {"message": "删除成功"}
+
+
+# ==================== 样本数据生成 ====================
+
+@app.post("/api/generate-sample-archives")
+def generate_sample_archives(company_id: int = Query(1), db: Session = Depends(get_db)):
+    """为部门、人员、客户、供应商各生成25条样本数据"""
+    results = {"departments": 0, "employees": 0, "customers": 0, "suppliers": 0}
+
+    # --- 部门：25个常用部门 ---
+    dept_names = [
+        "总经理办公室", "财务部", "人力资源部", "市场部", "销售一部",
+        "销售二部", "研发一部", "研发二部", "采购部", "质量管理部",
+        "物流部", "行政部", "法务合规部", "信息技术部", "客户服务部",
+        "公关部", "审计部", "战略发展部", "工程部", "设计部",
+        "培训部", "安全环保部", "后勤保障部", "国际业务部", "投资管理部"
+    ]
+    # 先查现有最大编码
+    max_dept = db.query(Department.code).filter(
+        Department.company_id == company_id, Department.code.like('BM%')
+    ).order_by(Department.code.desc()).first()
+    dept_idx = int(max_dept[0][2:]) + 1 if max_dept else 1
+    for name in dept_names:
+        existing = db.query(Department).filter(
+            Department.company_id == company_id, Department.name == name
+        ).first()
+        if not existing:
+            db.add(Department(company_id=company_id, code=f"BM{dept_idx:03d}", name=name))
+            dept_idx += 1
+            results["departments"] += 1
+    db.flush()
+
+    # --- 人员：25个员工 ---
+    emp_data = [
+        ("张伟", "440101199001011234"), ("李娜", "440102199103152345"), ("王磊", "440103198807203456"),
+        ("陈静", "440104199206184567"), ("刘洋", "440105199311255678"), ("杨帆", "440106198912106789"),
+        ("赵敏", "440107199507157890"), ("黄超", "440108199008168901"), ("周婷", "440109199409179012"),
+        ("吴强", "440110199110181123"), ("郑芳", "440111199211192234"), ("冯涛", "440112199312203345"),
+        ("何丽", "440113199401214456"), ("韩明", "440114199502225567"), ("曹雪", "440115199603236678"),
+        ("许杰", "440116199704247789"), ("邓辉", "440117199805258890"), ("萧琳", "440118199906269901"),
+        ("唐波", "440119198701270112"), ("彭悦", "440120198802282223"), ("曾强", "440121198903013334"),
+        ("董洁", "440122199004024445"), ("袁浩", "440123199105035556"), ("蒋霞", "440124199206046667"),
+        ("沈飞", "440125199307057778")
+    ]
+    max_emp = db.query(Employee.code).filter(
+        Employee.company_id == company_id, Employee.code.like('RY%')
+    ).order_by(Employee.code.desc()).first()
+    emp_idx = int(max_emp[0][2:]) + 1 if max_emp else 1
+    for i, (name, id_card) in enumerate(emp_data):
+        existing = db.query(Employee).filter(
+            Employee.company_id == company_id, Employee.name == name, Employee.id_card == id_card
+        ).first()
+        if not existing:
+            db.add(Employee(
+                company_id=company_id, code=f"RY{emp_idx:03d}", name=name,
+                id_card=id_card,
+                email=f"{name.lower()}{emp_idx}@cunqin.com",
+                salary=round(5000 + i * 800 + (hash(name) % 3000), -2)
+            ))
+            emp_idx += 1
+            results["employees"] += 1
+    db.flush()
+
+    # --- 客户：25个企业客户 ---
+    cust_data = [
+        ("广州天宏科技有限公司", "91440101MA5ABCD123"), ("深圳鹏程实业有限公司", "91440300MA5EFGH456"),
+        ("东莞华耀电子有限公司", "91441900MA5IJKL789"), ("佛山顺达建材有限公司", "91440600MA5MNOP012"),
+        ("中山明辉灯饰有限公司", "91442000MA5QRST345"), ("珠海海天贸易有限公司", "91440400MA5UVWX678"),
+        ("惠州鑫源五金有限公司", "91441300MA5YZAB901"), ("江门益丰食品有限公司", "91440700MA5CDEF234"),
+        ("肇庆鼎湖旅游开发有限公司", "91441200MA5GHIJ567"), ("汕头潮阳纺织有限公司", "91440500MA5KLMN890"),
+        ("北京中科创新科技有限公司", "91110108MA5OPQR123"), ("上海浦江物流有限公司", "91310115MA5STUV456"),
+        ("杭州西湖软件有限公司", "91330108MA5WXYZ789"), ("南京金陵机械有限公司", "91320105MA5ABCD012"),
+        ("武汉江城建设集团有限公司", "91420102MA5EFGH345"), ("成都天府餐饮管理有限公司", "91510104MA5IJKL678"),
+        ("重庆山城商贸有限公司", "91500103MA5MNOP901"), ("长沙星城文化传媒有限公司", "91430102MA5QRST234"),
+        ("厦门海西进出口有限公司", "91350203MA5UVWX567"), ("青岛海尔智能科技有限公司", "91370281MA5YZAB890"),
+        ("大连滨海渔业有限公司", "91210202MA5CDEF123"), ("苏州园林设计院有限公司", "91320505MA5GHIJ456"),
+        ("无锡太湖环保科技有限公司", "91320213MA5KLMN789"), ("合肥高新投资管理有限公司", "91340104MA5OPQR012"),
+        ("福州闽江房地产开发有限公司", "91350102MA5STUV345")
+    ]
+    max_cust = db.query(Customer.code).filter(
+        Customer.company_id == company_id, Customer.code.like('KH%')
+    ).order_by(Customer.code.desc()).first()
+    cust_idx = int(max_cust[0][2:]) + 1 if max_cust else 1
+    banks = ["中国工商银行", "中国建设银行", "中国农业银行", "中国银行", "招商银行"]
+    for name, uscc in cust_data:
+        existing = db.query(Customer).filter(
+            Customer.company_id == company_id, Customer.uscc == uscc
+        ).first()
+        if not existing:
+            bi = hash(name) % len(banks)
+            db.add(Customer(
+                company_id=company_id, code=f"KH{cust_idx:03d}", name=name,
+                uscc=uscc, tax_no=uscc[2:20],
+                bank_name=banks[bi],
+                bank_account=f"{62220000 + cust_idx * 137:020d}",
+                remark="样本数据"
+            ))
+            cust_idx += 1
+            results["customers"] += 1
+    db.flush()
+
+    # --- 供应商：25个供应商 ---
+    supp_data = [
+        ("广州龙腾电子科技有限公司", "91440101MA5AAAA111"), ("深圳星辰照明有限公司", "91440300MA5BBBB222"),
+        ("东莞万丰模具制品有限公司", "91441900MA5CCCC333"), ("佛山新力包装材料有限公司", "91440600MA5DDDD444"),
+        ("中山瑞安五金机电有限公司", "91442000MA5EEEE555"), ("珠海格力精密模具有限公司", "91440400MA5FFFF666"),
+        ("惠州德盛化工有限公司", "91441300MA5GGGG777"), ("江门华盛纺织原料有限公司", "91440700MA5HHHH888"),
+        ("肇庆大发木业有限公司", "91441200MA5IIII999"), ("汕头阳光印务有限公司", "91440500MA5JJJJ000"),
+        ("北京云帆信息技术有限公司", "91110108MA5KKKK111"), ("上海博达广告传媒有限公司", "91310115MA5LLLL222"),
+        ("杭州网联通信设备有限公司", "91330108MA5MMMM333"), ("南京翔宇机械设备有限公司", "91320105MA5NNNN444"),
+        ("武汉盛丰粮油贸易有限公司", "91420102MA5OOOO555"), ("成都锦程物流有限公司", "91510104MA5PPPP666"),
+        ("重庆利群商贸有限公司", "91500103MA5QQQQ777"), ("长沙恒达仪器仪表有限公司", "91430102MA5RRRR888"),
+        ("厦门伟业建筑工程有限公司", "91350203MA5SSSS999"), ("青岛远洋渔业有限公司", "91370281MA5TTTT000"),
+        ("大连宏发水产品有限公司", "91210202MA5UUUU111"), ("苏州鼎丰纺织有限公司", "91320505MA5VVVV222"),
+        ("无锡大明金属材料有限公司", "91320213MA5WWWW333"), ("合肥利安医疗器材有限公司", "91340104MA5XXXX444"),
+        ("福州东南汽车配件有限公司", "91350102MA5YYYY555")
+    ]
+    max_supp = db.query(Supplier.code).filter(
+        Supplier.company_id == company_id, Supplier.code.like('GYS%')
+    ).order_by(Supplier.code.desc()).first()
+    supp_idx = int(max_supp[0][3:]) + 1 if max_supp else 1
+    for name, uscc in supp_data:
+        existing = db.query(Supplier).filter(
+            Supplier.company_id == company_id, Supplier.uscc == uscc
+        ).first()
+        if not existing:
+            bi = hash(name + "_s") % len(banks)
+            db.add(Supplier(
+                company_id=company_id, code=f"GYS{supp_idx:03d}", name=name,
+                uscc=uscc, tax_no=uscc[2:20],
+                bank_name=banks[bi],
+                bank_account=f"{62280000 + supp_idx * 211:020d}",
+                remark="样本数据"
+            ))
+            supp_idx += 1
+            results["suppliers"] += 1
+
+    db.commit()
+    return {"message": "样本数据生成完成", "results": results}
 
 
 # ==================== 会计科目（原有，保留）====================
@@ -3450,6 +3605,20 @@ def delete_journal_entry(entry_id: int, company_id: int = Query(1), db: Session 
     _renumber_vouchers(db, company_id, period, vw)
     db.commit()
     return {"message": "删除成功"}
+
+
+def _renumber_archive(db, company_id, model_cls, prefix):
+    """删除后自动整理档案编码，使其连续不断号"""
+    entries = db.query(model_cls).filter(
+        model_cls.company_id == company_id,
+        model_cls.code.like(prefix + '%')
+    ).order_by(model_cls.code).all()
+    prefix_len = len(prefix)
+    for i, entry in enumerate(entries, 1):
+        new_code = f"{prefix}{i:03d}"
+        if entry.code != new_code:
+            entry.code = new_code
+    db.flush()
 
 
 def _renumber_vouchers(db, company_id, period, voucher_word):
