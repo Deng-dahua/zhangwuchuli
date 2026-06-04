@@ -3469,6 +3469,44 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
     return {"message": f"成功删除 {deleted} 条记录", "count": deleted}
 
 
+@app.post("/api/sales-invoices/batch-to-journal")
+def sales_invoice_batch_to_journal(company_id: int = Query(1), db=Depends(get_db)):
+    """一键生成所有未生成凭证的开具发票的记账凭证"""
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id
+    ).order_by(SalesInvoice.invoice_date, SalesInvoice.id).all()
+
+    generated = 0
+    skipped = 0
+    errors = []
+
+    for inv in invoices:
+        try:
+            existing = db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.source == "开具发票",
+                JournalEntry.ref_id == inv.id
+            ).first()
+            if existing:
+                skipped += 1
+                continue
+
+            from database import auto_generate_single_invoice
+            auto_generate_single_invoice(db, inv)
+            generated += 1
+        except Exception as e:
+            errors.append(f"发票{inv.id}({inv.invoice_no}): {str(e)}")
+
+    db.commit()
+    msg = f"批量生成完成：生成 {generated} 笔凭证"
+    if skipped > 0:
+        msg += f"，跳过 {skipped} 笔（已有凭证）"
+    if errors:
+        msg += f"，{len(errors)} 笔失败"
+        print("Batch journal errors:", errors)
+    return {"message": msg, "generated": generated, "skipped": skipped, "errors": errors}
+
+
 @app.post("/api/sales-invoices/{invoice_id}/to-journal")
 def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db=Depends(get_db)):
     """将单张销项发票生成记账凭证（分录）到序时账（允许重新生成，先删旧凭证）"""

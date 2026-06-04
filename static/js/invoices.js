@@ -36,6 +36,7 @@ async function renderSalesInvoices(container) {
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
+    html += '<button class="btn btn-primary" onclick="batchGenerateVouchers()">⚡ 一键生成凭证</button>';
         html += '<div class="tab-btn-group">';
     const salesTabs = [['all', '全部'], [STATUS.NORMAL, STATUS.NORMAL], [STATUS.VOID, STATUS.VOID], [STATUS.RED, STATUS.RED]];
     salesTabs.forEach(([t, label]) => {
@@ -661,6 +662,28 @@ async function showPurchaseDetail(id) {
     showModal(html);
   } catch (e) {
     toast(e.message, 'error');
+  }
+}
+
+// 一键生成全部开具发票的记账凭证
+async function batchGenerateVouchers() {
+  if (!confirm('确认将所有未生成凭证的开具发票一键生成为记账凭证？')) return;
+  var btn = event.target;
+  btn.disabled = true;
+  var origText = btn.textContent;
+  btn.textContent = '⏳ 生成中...';
+  try {
+    var res = await api('/api/sales-invoices/batch-to-journal', { method: 'POST' });
+    toast(res.message, 'success');
+    renderSalesInvoices();
+    // 重置序时账缓存，确保切换后刷新
+    var jel = document.getElementById('page-journal');
+    if (jel) delete jel.dataset.rendered;
+  } catch (e) {
+    handleError(e, '批量生成凭证');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
   }
 }
 
