@@ -437,9 +437,6 @@ async function renderPurchaseInvoices(container) {
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">可抵扣税额</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.normal_count + '</div><div class="stat-label">正常</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.void_count + '</div><div class="stat-label">作废</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">' + stats.red_count + '</div><div class="stat-label">红冲</div></div>';
     html += '</div>';
 
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
