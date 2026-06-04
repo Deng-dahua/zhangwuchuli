@@ -108,6 +108,7 @@ class CustomerCreate(BaseModel):
     remark: Optional[str] = None
 
 class CustomerUpdate(BaseModel):
+    code: Optional[str] = None
     name: Optional[str] = None
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
@@ -438,6 +439,10 @@ def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session =
 
 # ==================== 客户档案 ====================
 
+def _make_fingerprint(values_dict):
+    """生成全行指纹：所有列名+值排序后组成元组，可哈希对比"""
+    return tuple(sorted((str(k), str(v)) for k, v in values_dict.items()))
+
 @app.get("/api/customers")
 def list_customers(
     keyword: Optional[str] = None,
@@ -481,6 +486,10 @@ def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Sessio
         if not ok:
             raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     c = Customer(company_id=company_id, **data.model_dump())
+    # 计算并存储全行指纹
+    fd = data.model_dump()
+    fd['company_id'] = company_id
+    c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
     db.add(c)
     db.commit()
     return {"message": "新增成功"}
@@ -506,6 +515,12 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
             raise HTTPException(400, detail=f"客户统一社会信用代码：{msg}")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(c, k, v)
+    # 重新计算全行指纹
+    fp_fields = ['company_id', 'code', 'name', 'tax_no', 'contact', 'phone',
+                 'address', 'credit_limit', 'payment_terms', 'bank_name',
+                 'bank_account', 'uscc', 'remark']
+    fd = {k: getattr(c, k) for k in fp_fields}
+    c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
     db.commit()
     return {"message": "更新成功"}
 
@@ -5744,6 +5759,12 @@ def save_customer(data, db, sess, sid, company_id):
             address=data.get("address"),
             credit_limit=data.get("credit_limit", 0.0)
         )
+        # 计算并存储全行指纹
+        fd = {k: getattr(c, k) for k in
+              ['company_id', 'code', 'name', 'tax_no', 'contact', 'phone',
+               'address', 'credit_limit', 'payment_terms', 'bank_name',
+               'bank_account', 'uscc', 'remark']}
+        c._fingerprint = json.dumps(list(_make_fingerprint(fd)))
         db.add(c)
         db.commit()
         sess["intent"] = None
