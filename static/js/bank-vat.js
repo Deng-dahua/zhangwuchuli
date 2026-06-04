@@ -15,9 +15,6 @@ async function loadBankConfigs() {
 async function renderBankTransactions(container) {
   try {
   var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
-  // 全局期间联动
-  let btDateFrom = '', btDateTo = '';
-  if (currentPeriod) { const r = periodToDateRange(currentPeriod); btDateFrom = r.from; btDateTo = r.to; }
   const [configs, stats] = await Promise.all([
     loadBankConfigs(),
     api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
@@ -48,14 +45,8 @@ async function renderBankTransactions(container) {
 
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
-  html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
-  html += '<input id="bt-keyword" placeholder="搜索对方户名/摘要/流水号..." style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:220px;" onkeydown="if(event.key===\'Enter\')loadBankTxList()">';
-  html += '<button onclick="loadBankTxList()" style="padding:6px 12px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔍 搜索</button>';
-  html += '<input type="date" id="bt-date-from" value="' + btDateFrom + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="起始日期">';
-  html += '<span style="color:#9ca3af;font-size:13px;">至</span>';
-  html += '<input type="date" id="bt-date-to" value="' + btDateTo + '" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" title="截止日期">';
-  html += '<button onclick="document.getElementById(\'bt-keyword\').value=\'\';const r=periodToDateRange(currentPeriod);document.getElementById(\'bt-date-from\').value=r.from;document.getElementById(\'bt-date-to\').value=r.to;loadBankTxList()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
@@ -75,15 +66,9 @@ window.switchBank = function(bankId) {
 
 async function loadBankTxList() {
   const type = document.getElementById('bt-type-filter')?.value || '';
-  const kw = document.getElementById('bt-keyword')?.value || '';
-  const df = document.getElementById('bt-date-from')?.value || '';
-  const dt = document.getElementById('bt-date-to')?.value || '';
   const params = new URLSearchParams();
   if (_currentBankId) params.set('bank_config_id', _currentBankId);
   if (type) params.set('transaction_type', type);
-  if (kw) params.set('keyword', kw);
-  if (df) params.set('date_from', df);
-  if (dt) params.set('date_to', dt);
   const qs = params.toString();
   const data = await api('/api/bank-transactions' + (qs ? '?' + qs : ''));
 
