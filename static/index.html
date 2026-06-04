@@ -2651,6 +2651,39 @@ function createModal(title, body, extraClass) {
   return overlay;
 }
 
+// ==================== 全局常量（替换魔法字符串）====================
+const STATUS = {
+  // 发票状态
+  NORMAL: '正常',
+  VOID: STATUS.VOID,
+  RED: STATUS.RED,
+  // 勾选状态
+  CHECKED: STATUS.CHECKED,
+  UNCHECKED: STATUS.UNCHECKED,
+  // 认证/抵扣状态
+  CERTIFIED: STATUS.CERTIFIED,
+  DEDUCTED: STATUS.DEDUCTED,
+  PARTIAL: STATUS.PARTIAL,
+  NOT_DEDUCTIBLE: STATUS.NOT_DEDUCTIBLE,
+  // 付款状态
+  PENDING: '待审批',
+  APPROVED: '已审批',
+  PAID: '已付款',
+  REJECTED: '已驳回',
+  // 风险等级
+  RISK_NORMAL: '正常',
+  RISK_WARN: STATUS.RISK_WARN,
+  RISK_ABNORMAL: STATUS.RISK_ABNORMAL,
+  RISK_LOST: STATUS.RISK_LOST,
+};
+const PAYMENT_STATUS_COLORS = {
+  [STATUS.PENDING]: '#c27803',
+  [STATUS.APPROVED]: '#1a56db',
+  [STATUS.PAID]: '#0e9f6e',
+  [STATUS.REJECTED]: '#e02424'
+};
+// ============================================================
+
 // ==================== 多公司支持 ====================
 let currentCompanyId = 1;
 let currentCompanyName = '';
@@ -3661,10 +3694,10 @@ async function renderPayments(container) {
       '<div class="filter-bar" style="margin-top:16px">' +
         '<select class="form-control" id="payment-status-filter" style="width:120px">' +
           '<option value="">全部状态</option>' +
-          '<option value="待审批">待审批</option>' +
-          '<option value="已审批">已审批</option>' +
-          '<option value="已付款">已付款</option>' +
-          '<option value="已驳回">已驳回</option>' +
+          '<option value="' + STATUS.PENDING + '">' + STATUS.PENDING + '</option>' +
+          '<option value="' + STATUS.APPROVED + '">' + STATUS.APPROVED + '</option>' +
+          '<option value="' + STATUS.PAID + '">' + STATUS.PAID + '</option>' +
+          '<option value="' + STATUS.REJECTED + '">' + STATUS.REJECTED + '</option>' +
         '</select>' +
         '<input class="form-control" id="payment-keyword-filter" placeholder="搜索单号/人员/供应商/用途..." style="width:240px">' +
         '<button class="btn btn-primary" onclick="loadPayments()">🔍 查询</button>' +
@@ -3749,9 +3782,9 @@ async function loadPaymentStats() {
     document.getElementById('tab-internal-count').textContent = s.internal_count || 0;
     document.getElementById('tab-external-count').textContent = s.external_count || 0;
     document.getElementById('payment-stats').innerHTML =
-      '<div class="payment-stat-item"><div class="psi-label">待审批</div><div class="psi-value" style="color:#c27803">' + (s.pending_count||0) + '</div><div class="psi-sub">¥' + fmt(s.pending_amount||0) + '</div></div>' +
-      '<div class="payment-stat-item"><div class="psi-label">已审批</div><div class="psi-value" style="color:#1a56db">' + (s.approved_count||0) + '</div><div class="psi-sub">待付款项</div></div>' +
-      '<div class="payment-stat-item"><div class="psi-label">已付款</div><div class="psi-value" style="color:#0e9f6e">' + (s.paid_count||0) + '</div><div class="psi-sub">¥' + fmt(s.paid_amount||0) + '</div></div>' +
+      '<div class="payment-stat-item"><div class="psi-label">' + STATUS.PENDING + '</div><div class="psi-value" style="color:#c27803">' + (s.pending_count||0) + '</div><div class="psi-sub">¥' + fmt(s.pending_amount||0) + '</div></div>' +
+      '<div class="payment-stat-item"><div class="psi-label">' + STATUS.APPROVED + '</div><div class="psi-value" style="color:#1a56db">' + (s.approved_count||0) + '</div><div class="psi-sub">待付款项</div></div>' +
+      '<div class="payment-stat-item"><div class="psi-label">' + STATUS.PAID + '</div><div class="psi-value" style="color:#0e9f6e">' + (s.paid_count||0) + '</div><div class="psi-sub">¥' + fmt(s.paid_amount||0) + '</div></div>' +
       '<div class="payment-stat-item"><div class="psi-label">' + (currentPaymentTab==='internal'?'内部总额':'外部总额') + '</div><div class="psi-value">' + (s.total_count||0) + '</div><div class="psi-sub">¥' + fmt(currentPaymentTab==='internal'?(s.internal_amount||0):(s.external_amount||0)) + '</div></div>';
   } catch (e) {}
 }
@@ -3791,8 +3824,8 @@ async function loadPayments() {
         '<td>' + paymentStatusBadge(p.status) + '</td>' +
         '<td>' +
           '<button class="btn btn-sm btn-secondary" onclick="showPaymentForm(' + p.id + ')">编辑</button> ' +
-          (p.status === '已审批' ? '<button class="btn btn-sm btn-success" onclick="markPaymentPaid(' + p.id + ')">确认付款</button> ' : '') +
-          (p.status === '待审批' ? '<button class="btn btn-sm btn-danger" onclick="deletePayment(' + p.id + ')">删除</button>' : '') +
+          (p.status === STATUS.APPROVED ? '<button class="btn btn-sm btn-success" onclick="markPaymentPaid(' + p.id + ')">确认付款</button> ' : '') +
+          (p.status === STATUS.PENDING ? '<button class="btn btn-sm btn-danger" onclick="deletePayment(' + p.id + ')">删除</button>' : '') +
         '</td>' +
       '</tr>';
     }
@@ -3809,7 +3842,7 @@ async function loadPayments() {
 
 function paymentStatusBadge(status) {
   const map = {
-    '待审批': '#c27803', '已审批': '#1a56db', '已付款': '#0e9f6e', '已驳回': '#e02424'
+    [STATUS.PENDING]: '#c27803', [STATUS.APPROVED]: '#1a56db', [STATUS.PAID]: '#0e9f6e', [STATUS.REJECTED]: '#e02424'
   };
   const color = map[status] || '#6b7280';
   return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;color:#fff;background:' + color + '">' + status + '</span>';
@@ -4015,7 +4048,7 @@ async function deletePayment(id) {
 async function markPaymentPaid(id) {
   if (!confirm('确认该笔款项已支付？')) return;
   try {
-    await api('/api/payments/' + id, { method: 'PUT', body: JSON.stringify({ status: '已付款' }) });
+    await api('/api/payments/' + id, { method: 'PUT', body: JSON.stringify({ status: STATUS.PAID }) });
     toast('付款确认成功', 'success');
     await loadPayments();
     await loadPaymentStats();
@@ -4113,7 +4146,7 @@ async function renderSalesInvoices(container) {
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
-    const salesTabs = [['all', '全部'], ['正常', '正常'], ['作废', '作废'], ['红冲', '红冲']];
+    const salesTabs = [['all', '全部'], [STATUS.NORMAL, STATUS.NORMAL], [STATUS.VOID, STATUS.VOID], [STATUS.RED, STATUS.RED]];
     salesTabs.forEach(([t, label]) => {
       html += '<button class="tab-btn ' + (siTab === t ? 'active' : '') + '" onclick="siTab=\'' + t + '\';renderSalesInvoices()">' + label + '</button>';
     });
@@ -4153,7 +4186,7 @@ async function renderSalesInvoices(container) {
       html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
     } else {
       items.forEach(i => {
-        const stCls = i.status === '正常' ? 'badge-green' : i.status === '红冲' ? 'badge-red' : 'badge-gray';
+        const stCls = i.status === STATUS.NORMAL ? 'badge-green' : i.status === STATUS.RED ? 'badge-red' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         html += '<tr>';
         html += '<td><input type="checkbox" class="si-check" data-id="' + i.id + '" onchange="updateSiBatchBtn()"></td>';
@@ -4269,7 +4302,7 @@ async function showSalesInvoiceForm(id) {
   });
   html += '</select></div>';
   html += '<div class="form-group"><label class="form-label">发票状态</label><select class="form-input" id="si-status">';
-  ['正常', '作废', '红冲'].forEach(s => {
+  [STATUS.NORMAL, STATUS.VOID, STATUS.RED].forEach(s => {
     html += '<option value="' + s + '"' + (data.status === s ? ' selected' : '') + '>' + s + '</option>';
   });
   html += '</select></div>';
@@ -4277,7 +4310,7 @@ async function showSalesInvoiceForm(id) {
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">发票来源</label><input class="form-input" id="si-source" value="' + (data.invoice_source || '') + '"></div>';
   html += '<div class="form-group"><label class="form-label">发票风险等级</label><select class="form-input" id="si-risk-level">';
-  ['', '正常', '关注', '异常'].forEach(r => {
+  ['', STATUS.RISK_NORMAL, STATUS.FOLLOW_ATTENTION, STATUS.RISK_ABNORMAL].forEach(r => {
     html += '<option value="' + r + '"' + (data.invoice_risk_level === r ? ' selected' : '') + '>' + (r || '--') + '</option>';
   });
   html += '</select></div>';
@@ -4561,7 +4594,7 @@ async function renderPurchaseInvoices(container) {
       html += '<tr><td colspan="33" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
       items.forEach(i => {
-        const stCls = i.status === '正常' ? 'badge-green' : 'badge-gray';
+        const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         html += '<tr>';
         html += '<td><input type="checkbox" class="pi-check" data-id="' + i.id + '" onchange="updatePiBatchBtn()"></td>';
@@ -4589,7 +4622,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td><span class="' + stCls + '">' + i.status + '</span></td>';
         html += '<td>' + posText + '</td>';
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
-        const certCls = i.certification_status === '已认证' ? 'badge-green' : i.certification_status === '已抵扣' ? 'badge-blue' : 'badge-gray';
+        const certCls = i.certification_status === STATUS.CERTIFIED ? 'badge-green' : i.certification_status === STATUS.DEDUCTED ? 'badge-blue' : 'badge-gray';
         html += '<td><span class="' + certCls + '">' + (i.certification_status || '未认证') + '</span></td>';
         html += '<td>' + (i.certification_date || '-') + '</td>';
         html += '<td>' + (i.deduction_period || '-') + '</td>';
@@ -4725,7 +4758,7 @@ async function showPurchaseDetail(id) {
     // 认证信息
     html += '<div class="payment-form-section"><div class="payment-form-section-title">✅ 认证信息</div>';
     html += '<div class="form-grid-2">';
-    html += '<div><b>认证状态：</b><span class="' + (i.certification_status === '已抵扣' ? 'badge-green' : i.certification_status === '已认证' ? 'badge-blue' : 'badge-gray') + '">' + i.certification_status + '</span></div>';
+    html += '<div><b>认证状态：</b><span class="' + (i.certification_status === STATUS.DEDUCTED ? 'badge-green' : i.certification_status === STATUS.CERTIFIED ? 'badge-blue' : 'badge-gray') + '">' + i.certification_status + '</span></div>';
     html += '<div><b>认证日期：</b>' + (i.certification_date || '-') + '</div>';
     html += '<div><b>抵扣期间：</b>' + (i.deduction_period || '-') + '</div>';
     html += '</div></div>';
@@ -5117,7 +5150,7 @@ async function renderInputVATDeductions(container) {
   html += '</div></div>';
 
   // 表格
-  const riskColors = { '正常': '#059669', '疑点': '#d97706', '异常': '#e02424', '失控': '#7c3aed' };
+  const riskColors = { STATUS.RISK_NORMAL + "': '#059669', STATUS.RISK_WARN: '#d97706', STATUS.RISK_ABNORMAL: '#e02424', STATUS.RISK_LOST: '#7c3aed' };
   html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="ivdSelectAll" onclick="toggleIVDSelectAll()" title="全选"></th>';
   html += '<th>勾选状态</th><th>发票来源</th><th>转内销证明编号</th><th>数电发票号码</th><th>发票代码</th><th>发票号码</th><th>开票日期</th><th>销售方纳税人识别号</th><th>销售方纳税人名称</th><th style="text-align:right">金额</th><th style="text-align:right">税额</th><th style="text-align:right">有效抵扣税额</th><th>票种</th><th>票种标签</th><th>发票状态</th><th>勾选时间</th><th>发票风险等级</th><th>凭证号</th><th style="width:90px">生成凭证</th><th style="width:90px">操作</th>';
@@ -5127,10 +5160,10 @@ async function renderInputVATDeductions(container) {
     html += '<tr><td colspan="22" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
   } else {
     list.forEach(it => {
-      const stCls = it.invoice_status === '正常' ? 'badge-green' : it.invoice_status === '作废' ? 'badge-gray' : 'badge-red';
+      const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
       html += '<tr>';
       html += '<td><input type="checkbox" class="ivd-check" data-id="' + it.id + '" onchange="updateIVDBatchBtn()"></td>';
-      html += '<td><span style="color:' + (it.check_status === '已勾选' ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
+      html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';
       html += '<td>' + (it.domestic_sale_cert_no || '-') + '</td>';
       html += '<td>' + (it.digital_invoice_no || '-') + '</td>';
@@ -5198,7 +5231,7 @@ async function batchDeleteIVD() {
 async function batchCertifyIVD() {
   const checked = document.querySelectorAll('.ivd-check:checked');
   if (checked.length === 0) return;
-  if (!confirm('确认认证选中的 ' + checked.length + ' 条记录？认证后将标记为"已勾选"并设置勾选时间。')) return;
+  if (!confirm('确认认证选中的 ' + checked.length + ' 条记录？认证后将标记为STATUS.CHECKED并设置勾选时间。')) return;
   const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
   try {
     const result = await api('/api/input-vat-deductions/batch-certify', {
@@ -5217,7 +5250,7 @@ function showVATDeductionForm(id) {
   const modal = createModal(title, `
     <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="form-group"><label>勾选状态</label><select id="ivdf-check-status" class="form-input">
-        <option value="未勾选">未勾选</option><option value="已勾选">已勾选</option>
+        <option value=STATUS.UNCHECKED>未勾选</option><option value=STATUS.CHECKED>已勾选</option>
       </select></div>
       <div class="form-group"><label>发票来源</label><input id="ivdf-source" class="form-input" placeholder="勾选平台/扫描认证/手工录入"></div>
       <div class="form-group"><label>转内销证明编号</label><input id="ivdf-domestic-cert" class="form-input"></div>
@@ -5257,7 +5290,7 @@ function showVATDeductionForm(id) {
 
   if (isEdit) {
     api('/api/input-vat-deductions/' + id).then(it => {
-      document.getElementById('ivdf-check-status').value = it.check_status || '未勾选';
+      document.getElementById('ivdf-check-status').value = it.check_status || STATUS.UNCHECKED;
       document.getElementById('ivdf-source').value = it.invoice_source || '';
       document.getElementById('ivdf-domestic-cert').value = it.domestic_sale_cert_no || '';
       document.getElementById('ivdf-digital-no').value = it.digital_invoice_no || '';
@@ -5271,9 +5304,9 @@ function showVATDeductionForm(id) {
       document.getElementById('ivdf-deductible').value = it.deductible_tax_amount || 0;
       document.getElementById('ivdf-category').value = it.invoice_category || '';
       document.getElementById('ivdf-category-label').value = it.invoice_category_label || '';
-      document.getElementById('ivdf-inv-status').value = it.invoice_status || '正常';
+      document.getElementById('ivdf-inv-status').value = it.invoice_status || STATUS.NORMAL;
       document.getElementById('ivdf-check-time').value = it.check_time ? it.check_time.slice(0,16) : '';
-      document.getElementById('ivdf-risk').value = it.risk_level || '正常';
+      document.getElementById('ivdf-risk').value = it.risk_level || STATUS.RISK_NORMAL;
       document.getElementById('ivdf-period').value = it.deduction_period || '';
       document.getElementById('ivdf-method').value = it.deduction_method || '凭票抵扣';
       document.getElementById('ivdf-goods').value = it.goods_name || '';
