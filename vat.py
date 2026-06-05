@@ -5,12 +5,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
+import calendar
 import json
 
 from database import (
     VATDeclaration, Company, SalesInvoice, PurchaseInvoice,
     InputVATDeduction, JournalEntry, get_db
 )
+
+def _end_of_month(period: str) -> str:
+    """返回期间的月末日期，如 '2025-02' -> '2025-02-28'"""
+    y, m = period.split("-")
+    last_day = calendar.monthrange(int(y), int(m))[1]
+    return f"{y}-{m}-{last_day:02d}"
 
 router = APIRouter(prefix="/api/vat", tags=["增值税申报"])
 
@@ -33,8 +40,7 @@ def list_vat_declarations(company_id: int = Query(1), period: str = Query(None),
 
 
 @router.post("/declarations")
-def create_vat_declaration(data: dict, db: Session = Depends(get_db)):
-    company_id = data.get("company_id", 1)
+def create_vat_declaration(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
     period = data.get("period", "")
     if not period:
         raise HTTPException(400, detail="税款所属期不能为空")
@@ -60,7 +66,7 @@ def create_vat_declaration(data: dict, db: Session = Depends(get_db)):
         micro_enterprise=data.get("micro_enterprise", True),
         six_tax_reduction=data.get("six_tax_reduction", True),
         reduction_start=period + "-01",
-        reduction_end=period + "-31",
+        reduction_end=_end_of_month(period),
     )
     db.add(vd)
     db.flush()
@@ -71,8 +77,8 @@ def create_vat_declaration(data: dict, db: Session = Depends(get_db)):
 
 
 @router.get("/declarations/{declaration_id}")
-def get_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
-    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id).first()
+def get_vat_declaration(declaration_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
     return {
@@ -103,8 +109,8 @@ def get_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/declarations/{declaration_id}")
-def update_vat_declaration(declaration_id: int, data: dict, db: Session = Depends(get_db)):
-    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id).first()
+def update_vat_declaration(declaration_id: int, data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
     for key in ["form_main", "form_sales", "form_input", "form_deduction", "form_credit", "form_surcharge", "form_reduction"]:
@@ -135,8 +141,8 @@ def delete_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/declarations/{declaration_id}/recompute")
-def recompute_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
-    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id).first()
+def recompute_vat_declaration(declaration_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
     _compute_vat_forms(db, vd)
@@ -165,7 +171,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     sales_invoices = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.invoice_date >= period + "-01",
-        SalesInvoice.invoice_date <= period + "-31"
+        SalesInvoice.invoice_date <= _end_of_month(period)
     ).all()
     sales_total = sum(i.total_amount or 0 for i in sales_invoices)
     if output_tax == 0:
@@ -412,7 +418,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     purchase_invoices = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= period + "-01",
-        PurchaseInvoice.invoice_date <= period + "-31"
+        PurchaseInvoice.invoice_date <= _end_of_month(period)
     ).all()
 
     def _cert_sum(inv_list, status_filter=None):

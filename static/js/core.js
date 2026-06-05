@@ -206,7 +206,9 @@ async function loadCurrentPeriod() {
   const yearSel = document.getElementById('period-year');
   if (!yearSel) return;
   let ops = '<option value="">年</option>';
-  for (let y = 2020; y <= 2030; y++) ops += `<option value="${y}">${y}</option>`;
+  let now = new Date();
+  let curY = now.getFullYear();
+  for (let y = curY - 5; y <= curY + 5; y++) ops += `<option value="${y}">${y}</option>`;
   yearSel.innerHTML = ops;
 
   // 尝试恢复上次选择的期间
@@ -248,9 +250,9 @@ function onGlobalPeriodConfirm() {
     if (ey) ey.value = y;
     if (em) em.value = m;
   });
-  siFilter.dateFrom = ''; siFilter.dateTo = '';
-  piFilter.dateFrom = ''; piFilter.dateTo = '';
-  ivdFilter.dateFrom = ''; ivdFilter.dateTo = '';
+  try { siFilter.dateFrom = ''; siFilter.dateTo = ''; } catch(e) {}
+  try { piFilter.dateFrom = ''; piFilter.dateTo = ''; } catch(e) {}
+  try { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; } catch(e) {}
   navigateTo(currentPage);
 }
 
@@ -357,6 +359,12 @@ function toast(msg, type = 'default') {
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
+}
+
+// 统一的 Modal 关闭函数：无参时移除 #modal-overlay（兼容 chat.js），有参时移除指定 id 元素（salary.js）
+function closeModal(id) {
+    if (id) { const el = document.getElementById(id); if (el) el.remove(); return; }
+    document.getElementById('modal-overlay')?.remove();
 }
 
 function fmt(n) {

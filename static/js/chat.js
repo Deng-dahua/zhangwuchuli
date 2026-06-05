@@ -208,10 +208,6 @@ function showModal(html) {
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.body.appendChild(overlay);
 }
-
-function closeModal() {
-  document.getElementById('modal-overlay')?.remove();
-}
 function createModal(title, body, extraClass) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';

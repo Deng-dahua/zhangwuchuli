@@ -100,7 +100,7 @@ async function createVATDeclaration() {
   const taxpayer = document.getElementById('vat-taxpayer').value;
   const micro = document.getElementById('vat-micro').checked;
   const sixTax = document.getElementById('vat-six-tax').checked;
-  if (!period) { alert('请选择税款所属期'); return; }
+  if (!period) { toast('请选择税款所属期', 'warning'); return; }
   try {
     const resp = await api('/api/vat/declarations', {
       method: 'POST',
@@ -120,7 +120,7 @@ async function openVATDetail(id) {
     const data = await api('/api/vat/declarations/' + id);
     renderVATTemplateView(data);
   } catch (e) {
-    alert('加载申报表失败: ' + (e.message || e));
+    toast('加载申报表失败: ' + (e.message || e), 'error');
   }
 }
 

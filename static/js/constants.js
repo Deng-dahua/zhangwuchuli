@@ -19,6 +19,8 @@ const STATUS = {
   REJECTED: '已驳回',
   // 风险等级
   RISK_NORMAL: '正常',
+  RISK_FOLLOW: '关注',
+  FOLLOW_ATTENTION: '关注',
   RISK_WARN: '疑点',
   RISK_ABNORMAL: '异常',
   RISK_LOST: '失控',

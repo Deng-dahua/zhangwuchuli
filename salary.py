@@ -181,18 +181,23 @@ def _compute_tax_cumulative(income: float, prev_cumulative_income: float,
                             prev_cumulative_tax: float,
                             basic_deduction: float = 5000,
                             special_deduction: float = 0,
-                            additional_deduction: float = 0):
+                            additional_deduction: float = 0,
+                            prev_cumulative_deduction: float = 0,
+                            prev_cumulative_special: float = 0,
+                            prev_cumulative_additional: float = 0):
     """
-    累计预扣法计算个税
-    返回: (taxable_income, tax_rate, quick_deduction, tax_this_period, net_salary)
+    累计预扣法计算个税（P1-1: 使用上期累计值而非月份数×月扣除额，避免入职月份不同导致的误差）
+    返回: (taxable_income, tax_rate, quick_deduction, cum_tax, tax_this_period,
+           cum_deduction, cum_special, cum_additional)
     """
-    # 累计收入
+    # 累计收入 = 上期累计 + 本期
     cum_income = prev_cumulative_income + income
-    # 累计减除费用
-    cum_deduction = basic_deduction  # 本月基本减除（实际应该是累计，这里简化）
-    # 累计专项扣除 + 附加扣除
-    cum_special = special_deduction
-    cum_additional = additional_deduction
+    # 累计减除费用 = 上期累计 + 本期
+    cum_deduction = prev_cumulative_deduction + basic_deduction
+    # 累计专项扣除 = 上期累计 + 本期
+    cum_special = prev_cumulative_special + special_deduction
+    # 累计专项附加扣除 = 上期累计 + 本期
+    cum_additional = prev_cumulative_additional + additional_deduction
 
     # 应纳税所得额
     taxable = cum_income - cum_deduction - cum_special - cum_additional
@@ -222,7 +227,7 @@ def _compute_tax_cumulative(income: float, prev_cumulative_income: float,
     cum_tax = taxable * rate - qd
     tax_this_period = max(0, cum_tax - prev_cumulative_tax)
 
-    return taxable, rate, qd, cum_tax, tax_this_period
+    return taxable, rate, qd, cum_tax, tax_this_period, cum_deduction, cum_special, cum_additional
 
 
 # ========== API 端点 ==========
@@ -686,6 +691,7 @@ def compute_salary_tax(
         return {"msg": "未找到工资记录"}
 
     updated = 0
+
     for r in records:
         # 获取该员工历史累计数据（本期之前）
         prev = db.query(SalaryRecord).filter(
@@ -696,24 +702,31 @@ def compute_salary_tax(
 
         prev_cum_income = prev.cumulative_income if prev else 0
         prev_cum_tax = prev.cumulative_tax_withheld if prev else 0
+        prev_cum_deduction = prev.cumulative_deduction if prev else 0
+        prev_cum_special = prev.cumulative_special if prev else 0
+        prev_cum_additional = prev.cumulative_additional if prev else 0
 
-        # 专项扣除合计
+        # 专项扣除合计（月）
         special_total = (r.pension_insurance or 0) + (r.medical_insurance or 0) + \
                         (r.unemployment_insurance or 0) + (r.housing_fund or 0)
-        # 附加扣除合计
+        # 附加扣除合计（月）
         additional_total = (r.child_education or 0) + (r.continuing_education or 0) + \
                            (r.housing_loan_interest or 0) + (r.housing_rent or 0) + \
                            (r.elderly_support or 0) + (r.infant_care or 0) + \
                            (r.major_medical or 0)
 
-        # 计算
-        taxable, rate, qd, cum_tax, tax_this = _compute_tax_cumulative(
+        # 累计预扣法计算（使用上期累计扣除值，不再用 months × 月扣除额）
+        (taxable, rate, qd, cum_tax, tax_this,
+         cum_deduction, cum_special, cum_additional) = _compute_tax_cumulative(
             r.current_income or 0,
             prev_cum_income,
             prev_cum_tax,
             r.basic_deduction or 5000,
             special_total,
-            additional_total
+            additional_total,
+            prev_cumulative_deduction=prev_cum_deduction,
+            prev_cumulative_special=prev_cum_special,
+            prev_cumulative_additional=prev_cum_additional,
         )
 
         r.taxable_income = round(taxable, 2)
@@ -721,7 +734,13 @@ def compute_salary_tax(
         r.quick_deduction = qd
         r.tax_payable = round(cum_tax, 2)
         r.tax_to_pay = round(tax_this, 2)
-        r.net_salary = round((r.current_income or 0) - tax_this, 2)
+        r.tax_already_withheld = round(tax_this, 2)
+        r.cumulative_income = round(prev_cum_income + (r.current_income or 0), 2)
+        r.cumulative_deduction = round(cum_deduction, 2)
+        r.cumulative_special = round(cum_special, 2)
+        r.cumulative_additional = round(cum_additional, 2)
+        r.cumulative_tax_withheld = round(cum_tax, 2)
+        r.net_salary = round((r.current_income or 0) - tax_this - special_total, 2)
         r.updated_at = datetime.now()
         updated += 1
 

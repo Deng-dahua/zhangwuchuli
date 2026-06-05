@@ -55,7 +55,7 @@ async function showCompanyManager(container) {
     if (c.shareholders && c.shareholders.length) {
       html += '<div class="table-wrap"><table><thead><tr><th>姓名/公司名称</th><th>身份证号/统一社会信用代码</th><th>持股比例(%)</th><th>认缴出资额</th></tr></thead><tbody>';
       for (const s of c.shareholders) {
-        html += '<tr><td>' + s.name + '</td><td>' + (s.id_number || '--') + '</td><td>' + (s.ratio || '--') + '</td><td>' + (s.contribution_amount ? '¥' + s.contribution_amount.toLocaleString() : '--') + '</td></tr>';
+        html += '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.id_number || '--') + '</td><td>' + esc(s.ratio || '--') + '</td><td>' + (s.contribution_amount ? '¥' + s.contribution_amount.toLocaleString() : '--') + '</td></tr>';
       }
       html += '</tbody></table></div>';
     } else {
@@ -66,7 +66,7 @@ async function showCompanyManager(container) {
     if (c.directors && c.directors.length) {
       html += '<div class="table-wrap"><table><thead><tr><th>姓名</th><th>身份证号</th></tr></thead><tbody>';
       for (const d of c.directors) {
-        html += '<tr><td>' + d.name + '</td><td>' + (d.id_number || '--') + '</td></tr>';
+        html += '<tr><td>' + esc(d.name) + '</td><td>' + esc(d.id_number || '--') + '</td></tr>';
       }
       html += '</tbody></table></div>';
     } else {
@@ -88,7 +88,7 @@ async function showCompanyManager(container) {
     if (c.finance_contacts && c.finance_contacts.length) {
       html += '<div class="table-wrap"><table><thead><tr><th>姓名</th><th>身份证号</th></tr></thead><tbody>';
       for (const f of c.finance_contacts) {
-        html += '<tr><td>' + f.name + '</td><td>' + (f.id_number || '--') + '</td></tr>';
+        html += '<tr><td>' + esc(f.name) + '</td><td>' + esc(f.id_number || '--') + '</td></tr>';
       }
       html += '</tbody></table></div>';
     } else {
@@ -197,7 +197,7 @@ async function saveCompanyDetail() {
     });
     closeModal();
     toast('保存成功', 'success');
-    showCompanyManager(container);
+    showCompanyManager();
   } catch(e) { toast(e.message, 'error'); }
 }
 async function deleteCompany(id) {
@@ -218,7 +218,7 @@ async function deleteCompany(id) {
       return;
     }
     await loadCompanies();
-    showCompanyManager(container);
+    showCompanyManager();
   } catch (e) {
     toast(e.message, 'error');
   }

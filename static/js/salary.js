@@ -24,7 +24,7 @@ function showSalaryPage() {
 }
 
 function renderSalaryPage() {
-    const app = document.getElementById('app');
+    const app = document.getElementById('content-area');
     app.innerHTML = `
         <div class="page-header">
             <h2>Ⓜ️ 工资薪金所得</h2>
@@ -71,12 +71,12 @@ function loadSalaryData() {
     currentSalaryPeriod = periodInput ? periodInput.value : getCurrentPeriod();
 
     // 加载统计
-    api('/api/salary/stats', { period: currentSalaryPeriod }).then(stats => {
+    api('/api/salary/stats?period=' + encodeURIComponent(currentSalaryPeriod)).then(stats => {
         renderSalaryStats(stats);
     }).catch(() => {});
 
     // 加载列表
-    api('/api/salary/records', { period: currentSalaryPeriod }).then(data => {
+    api('/api/salary/records?period=' + encodeURIComponent(currentSalaryPeriod)).then(data => {
         currentSalaryRecords = data;
         renderSalaryTable(data);
     }).catch(err => {
@@ -216,7 +216,7 @@ function calcSalaryNet() {
 function saveSalaryRecord() {
     const period = document.getElementById('sal-modal-period').value.trim();
     const name = document.getElementById('sal-modal-name').value.trim();
-    if (!period || !name) { alert('期间和姓名必填'); return; }
+    if (!period || !name) { toast('期间和姓名必填', 'warning'); return; }
 
     const data = {
         period,
@@ -242,33 +242,33 @@ function saveSalaryRecord() {
     };
 
     const method = currentEditingSalaryId ? 'PUT' : 'POST';
-    const url = currentEditingSalaryId ? `/api/salary/records/${currentEditingSalaryId}` : '/api/salary/records';
+    const url = currentEditingSalaryId ? '/api/salary/records/' + currentEditingSalaryId : '/api/salary/records';
 
-    api(url, data, { method }).then(() => {
+    api(url, { method: method, body: JSON.stringify(data) }).then(() => {
         closeModal('salary-modal');
         loadSalaryData();
-        showToast('保存成功');
-    }).catch(err => alert('保存失败：' + (err.message || '')));
+        toast('保存成功', 'success');
+    }).catch(err => toast(err.message || '保存失败', 'error'));
 }
 
 // ========== 删除 ==========
 
 function deleteSalaryRecord(id) {
     if (!confirm('确定删除该条工资记录？')) return;
-    api(`/api/salary/records/${id}`, {}, { method: 'DELETE' }).then(() => {
+    api('/api/salary/records/' + id, { method: 'DELETE' }).then(() => {
         loadSalaryData();
-        showToast('已删除');
-    }).catch(err => alert('删除失败：' + (err.message || '')));
+        toast('已删除', 'success');
+    }).catch(err => toast('删除失败：' + (err.message || ''), 'error'));
 }
 
 function batchDeleteSalary() {
     const ids = getSelectedIds('salary');
-    if (ids.length === 0) { alert('请先选择要删除的记录'); return; }
-    if (!confirm(`确定删除选中的 ${ids.length} 条记录？`)) return;
-    api('/api/salary/records/batch-delete', ids, { method: 'POST' }).then(() => {
+    if (ids.length === 0) { toast('请先选择要删除的记录', 'error'); return; }
+    if (!confirm('确定删除选中的 ' + ids.length + ' 条记录？')) return;
+    api('/api/salary/records/batch-delete', { method: 'POST', body: JSON.stringify(ids) }).then(() => {
         loadSalaryData();
-        showToast(`已删除 ${ids.length} 条记录`);
-    }).catch(err => alert('删除失败：' + (err.message || '')));
+        toast('已删除 ' + ids.length + ' 条记录', 'success');
+    }).catch(err => toast('删除失败：' + (err.message || ''), 'error'));
 }
 
 // ========== 导入Excel ==========
@@ -307,8 +307,8 @@ function showSalaryImportModal() {
 function importSalaryExcel() {
     const period = document.getElementById('sal-import-period').value.trim();
     const fileInput = document.getElementById('sal-import-file');
-    if (!period) { alert('请填写期间'); return; }
-    if (!fileInput.files.length) { alert('请选择文件'); return; }
+    if (!period) { toast('请填写期间', 'error'); return; }
+    if (!fileInput.files.length) { toast('请选择文件', 'error'); return; }
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
@@ -325,10 +325,10 @@ function importSalaryExcel() {
         progress.style.display = 'none';
         closeModal('salary-import-modal');
         loadSalaryData();
-        showToast(data.msg || '导入完成');
+        toast(data.msg || '导入完成', 'success');
     }).catch(err => {
         progress.style.display = 'none';
-        alert('导入失败：' + (err.message || ''));
+        toast(err.message || '导入失败', 'error');
     });
 }
 
@@ -336,21 +336,21 @@ function importSalaryExcel() {
 
 function autoCreateEmployeesFromSalary() {
     if (!confirm('将根据工资表中的所有人员信息自动创建/更新人员档案（按证件号码匹配）？')) return;
-    api('/api/salary/auto-create-employees', { period: currentSalaryPeriod }, { method: 'POST' })
+    api('/api/salary/auto-create-employees?period=' + encodeURIComponent(currentSalaryPeriod), { method: 'POST' })
         .then(data => {
-            showToast(data.msg || '完成');
-        }).catch(err => alert('操作失败：' + (err.message || '')));
+            toast(data.msg || '完成', 'success');
+        }).catch(err => toast(err.message || '操作失败', 'error'));
 }
 
 // ========== 计算个税 ==========
 
 function computeSalaryTax() {
     if (!confirm(`将重新计算 ${currentSalaryPeriod} 期间所有员工的个税（累计预扣法），确定？`)) return;
-    api('/api/salary/compute', { period: currentSalaryPeriod }, { method: 'POST' })
+    api('/api/salary/compute?period=' + encodeURIComponent(currentSalaryPeriod), { method: 'POST' })
         .then(data => {
-            showToast(data.msg || '计算完成');
+            toast(data.msg || '计算完成', 'success');
             loadSalaryData();
-        }).catch(err => alert('计算失败：' + (err.message || '')));
+        }).catch(err => toast(err.message || '计算失败', 'error'));
 }
 
 // ========== 辅助 ==========
@@ -366,10 +366,7 @@ function toggleSelectAll(type) {
     document.querySelectorAll(`.${type}-checkbox`).forEach(cb => cb.checked = checked);
 }
 
-function closeModal(id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.remove();
-}
+// closeModal 统一在 core.js 定义，salary 不再重复定义
 
 function escHtml(s) {
     if (!s) return '';

@@ -6,8 +6,7 @@ from sqlalchemy import (
     Text, Boolean, ForeignKey, inspect, text as TextClause, UniqueConstraint, Index,
     func, distinct, or_, and_
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.orm import declarative_base, relationship, Session, sessionmaker
 from typing import Optional, List
 from datetime import datetime, date
 
@@ -1641,7 +1640,7 @@ ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
     ("1002", "银行存款", "资产", "借", 1),
     ("1122", "应收账款", "资产", "借", 1),
-    ("1123", "预收账款", "资产", "贷", 1),
+    ("1123", "预收账款", "负债", "贷", 1),
     ("1221", "其他应收款", "资产", "借", 1),
     ("1401", "原材料", "资产", "借", 1),
     ("1402", "在途物资", "资产", "借", 1),
@@ -1654,7 +1653,7 @@ ACCOUNTS_TEMPLATE = [
     ("1801", "长期待摊费用", "资产", "借", 1),
     ("2001", "短期借款", "负债", "贷", 1),
     ("2202", "应付账款", "负债", "贷", 1),
-    ("2203", "预付账款", "负债", "借", 1),
+    ("2203", "预付账款", "资产", "借", 1),
     ("2221", "其他应付款", "负债", "贷", 1),
     ("2241", "递延收益", "负债", "贷", 1),
     ("2501", "长期借款", "负债", "贷", 1),
@@ -1822,7 +1821,10 @@ class SalaryRecord(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-
+    __table_args__ = (
+        UniqueConstraint('company_id', 'period', 'id_number', name='uq_salary_company_period_id'),
+        Index('idx_salary_company_period', 'company_id', 'period'),
+    )
 def init_db():
     """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据
     

@@ -33,6 +33,7 @@ from database import (
     SalesInvoice, PurchaseInvoice,
     BankConfig, BankTransaction,
     InputVATDeduction, ColumnTemplate, JournalEntry,
+    SalaryRecord, VATDeclaration,
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
@@ -156,7 +157,7 @@ async def index():
 # ==================== 公司信息 ====================
 
 @app.get("/api/company")
-def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_company(company_id: int = Query(...), db: Session = Depends(get_db)):
     info = db.query(Company).filter(Company.id == company_id).first()
     if not info:
         return {"company_name": "", "uscc": ""}
@@ -177,7 +178,7 @@ def get_company(company_id: int = Query(1), db: Session = Depends(get_db)):
     }
 
 @app.put("/api/company")
-def update_company(data: CompanyUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_company(data: CompanyUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     info = db.query(Company).filter(Company.id == company_id).first()
     if not info:
         info = Company(id=company_id, name=data.company_name or "")
@@ -218,7 +219,7 @@ def _update_company_subtable(db, company, model, items):
 @app.get("/api/departments")
 def list_departments(
     keyword: Optional[str] = None,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     q = db.query(Department).filter(Department.company_id == company_id)
@@ -237,7 +238,7 @@ def list_departments(
     ]
 
 @app.post("/api/departments")
-def create_department(data: DepartmentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_department(data: DepartmentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(Department).filter(Department.company_id == company_id, Department.code == data.code).first():
         raise HTTPException(400, detail=f"部门编码 {data.code} 已存在")
     d = Department(company_id=company_id, **data.model_dump())
@@ -246,7 +247,7 @@ def create_department(data: DepartmentCreate, company_id: int = Query(1), db: Se
     return {"message": "新增成功"}
 
 @app.put("/api/departments/{dept_id}")
-def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
@@ -256,7 +257,7 @@ def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Qu
     return {"message": "更新成功"}
 
 @app.delete("/api/departments/{dept_id}")
-def delete_department(dept_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_department(dept_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
@@ -270,7 +271,7 @@ class DeptBatchDelete(BaseModel):
     ids: list[int]
 
 @app.post("/api/departments/batch-delete")
-def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(...), db: Session = Depends(get_db)):
     deleted = db.query(Department).filter(
         Department.company_id == company_id,
         Department.id.in_(req.ids)
@@ -283,7 +284,7 @@ def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(1), d
 @app.post("/api/departments/import")
 async def import_departments(
     file: UploadFile = File(...),
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     """从 CSV/XLSX 导入部门（编码+名称），编码为空时自动生成 BM001 格式"""
@@ -367,7 +368,7 @@ async def import_departments(
 @app.get("/api/employees")
 def list_employees(
     keyword: Optional[str] = None,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     q = db.query(Employee).filter(Employee.company_id == company_id)
@@ -386,7 +387,7 @@ def list_employees(
     ]
 
 @app.post("/api/employees")
-def create_employee(data: EmployeeCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_employee(data: EmployeeCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.code).first():
         raise HTTPException(400, detail=f"工号 {data.code} 已存在")
     e = Employee(company_id=company_id, **data.model_dump())
@@ -395,7 +396,7 @@ def create_employee(data: EmployeeCreate, company_id: int = Query(1), db: Sessio
     return {"message": "新增成功"}
 
 @app.put("/api/employees/{emp_id}")
-def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
@@ -405,7 +406,7 @@ def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(1
     return {"message": "更新成功"}
 
 @app.delete("/api/employees/{emp_id}")
-def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_employee(emp_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
@@ -416,7 +417,7 @@ def delete_employee(emp_id: int, company_id: int = Query(1), db: Session = Depen
     return {"message": "删除成功"}
 
 @app.post("/api/employees/batch-delete")
-def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_employees(data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
     ids = data.get("ids", [])
     if not ids:
         raise HTTPException(400, detail="请选择要删除的记录")
@@ -434,7 +435,7 @@ def batch_delete_employees(data: dict, company_id: int = Query(1), db: Session =
 def list_customers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     q = db.query(Customer).filter(Customer.company_id == company_id)
@@ -487,7 +488,7 @@ def list_customers(
     ]
 
 @app.post("/api/customers")
-def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_customer(data: CustomerCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 去重：编码/名称/统一社会信用代码 任一重复即拦截
     conds = [Customer.code == data.code, Customer.name == data.name]
     if data.uscc:
@@ -505,7 +506,7 @@ def create_customer(data: CustomerCreate, company_id: int = Query(1), db: Sessio
     return {"message": "新增成功"}
 
 @app.put("/api/customers/{cust_id}")
-def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
@@ -531,7 +532,7 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
 @app.post("/api/customers/batch-delete")
 def batch_delete_customers(
     body: BatchDelete,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     deleted = db.query(Customer).filter(
@@ -544,7 +545,7 @@ def batch_delete_customers(
     return {"message": f"成功删除 {deleted} 条客户"}
 
 @app.delete("/api/customers/{cust_id}")
-def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_customer(cust_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
@@ -561,7 +562,7 @@ def delete_customer(cust_id: int, company_id: int = Query(1), db: Session = Depe
 def list_suppliers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     q = db.query(Supplier).filter(Supplier.company_id == company_id)
@@ -586,7 +587,7 @@ def list_suppliers(
     ]
 
 @app.post("/api/suppliers")
-def create_supplier(data: SupplierCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_supplier(data: SupplierCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 去重：编码/名称/统一社会信用代码 任一重复即拦截
     conds = [Supplier.code == data.code, Supplier.name == data.name]
     if data.uscc:
@@ -604,7 +605,7 @@ def create_supplier(data: SupplierCreate, company_id: int = Query(1), db: Sessio
     return {"message": "新增成功"}
 
 @app.put("/api/suppliers/{supp_id}")
-def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
@@ -630,7 +631,7 @@ def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(
 @app.post("/api/suppliers/batch-delete")
 def batch_delete_suppliers(
     body: BatchDelete,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     deleted = db.query(Supplier).filter(
@@ -643,7 +644,7 @@ def batch_delete_suppliers(
     return {"message": f"成功删除 {deleted} 条供应商"}
 
 @app.delete("/api/suppliers/{supp_id}")
-def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
@@ -657,7 +658,7 @@ def delete_supplier(supp_id: int, company_id: int = Query(1), db: Session = Depe
 # ==================== 样本数据生成 ====================
 
 @app.post("/api/generate-sample-archives")
-def generate_sample_archives(company_id: int = Query(1), db: Session = Depends(get_db)):
+def generate_sample_archives(company_id: int = Query(...), db: Session = Depends(get_db)):
     """为部门、人员、客户、供应商各生成25条样本数据"""
     results = {"departments": 0, "employees": 0, "customers": 0, "suppliers": 0}
 
@@ -820,7 +821,7 @@ def list_accounts(
     keyword: Optional[str] = None,
     level: Optional[int] = None,
     leaf_only: Optional[str] = None,
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
     q = db.query(Account).filter(Account.company_id == company_id)
@@ -857,7 +858,7 @@ def list_accounts(
 
 
 @app.post("/api/accounts")
-def create_account(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_account(data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
     from pydantic import ValidationError
     code = data.get("code")
     name = data.get("name")
@@ -879,7 +880,7 @@ def create_account(data: dict, company_id: int = Query(1), db: Session = Depends
 
 
 @app.put("/api/accounts/{account_id}")
-def update_account(account_id: int, data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_account(account_id: int, data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
     acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
     if not acc:
         raise HTTPException(404, detail="科目不存在")
@@ -894,7 +895,7 @@ def update_account(account_id: int, data: dict, company_id: int = Query(1), db: 
 
 
 @app.delete("/api/accounts/{account_id}")
-def delete_account(account_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_account(account_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
     if not acc:
         raise HTTPException(404, detail="科目不存在")
@@ -906,13 +907,13 @@ def delete_account(account_id: int, company_id: int = Query(1), db: Session = De
 # ==================== 期间管理 ====================
 
 @app.get("/api/periods")
-def list_periods(company_id: int = Query(1), db: Session = Depends(get_db)):
+def list_periods(company_id: int = Query(...), db: Session = Depends(get_db)):
     periods = db.query(Period).filter(Period.company_id == company_id).order_by(Period.period.desc()).all()
     return [{"period": p.period, "status": p.status} for p in periods]
 
 
 @app.post("/api/periods/{period}/close")
-def close_period(period: str, company_id: int = Query(1), db: Session = Depends(get_db)):
+def close_period(period: str, company_id: int = Query(...), db: Session = Depends(get_db)):
     p = db.query(Period).filter(Period.company_id == company_id, Period.period == period).first()
     if not p:
         raise HTTPException(404, detail="期间不存在")
@@ -938,7 +939,7 @@ def close_period(period: str, company_id: int = Query(1), db: Session = Depends(
 # ==================== 统计看板（原有，保留）====================
 
 @app.get("/api/dashboard")
-def dashboard(company_id: int = Query(1), db: Session = Depends(get_db)):
+def dashboard(company_id: int = Query(...), db: Session = Depends(get_db)):
     """统计看板 - 基础档案统计"""
     from datetime import date
     period = date.today().strftime("%Y-%m")
@@ -1068,13 +1069,62 @@ def update_company_detail(company_id: int, data: CompanyUpdateModel, db: Session
 
 @app.delete("/api/companies/{company_id}")
 def delete_company(company_id: int, db: Session = Depends(get_db)):
-    """删除公司"""
+    """删除公司及其所有关联数据"""
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(404, detail="公司不存在")
+
+    # 级联删除顺序：先删子表（有外键的表），再删中间表，最后删主表
+    # 1. 公司治理层子表
+    db.query(CompanyShareholder).filter(CompanyShareholder.company_id == company_id).delete()
+    db.query(CompanyDirector).filter(CompanyDirector.company_id == company_id).delete()
+    db.query(CompanySupervisor).filter(CompanySupervisor.company_id == company_id).delete()
+    db.query(CompanyFinanceContact).filter(CompanyFinanceContact.company_id == company_id).delete()
+    # 2. 档案类
+    db.query(Department).filter(Department.company_id == company_id).delete()
+    db.query(Employee).filter(Employee.company_id == company_id).delete()
+    db.query(Customer).filter(Customer.company_id == company_id).delete()
+    db.query(Supplier).filter(Supplier.company_id == company_id).delete()
+    db.query(Account).filter(Account.company_id == company_id).delete()
+    db.query(Period).filter(Period.company_id == company_id).delete()
+    # 3. 资产/库存
+    db.query(FixedAssetDepreciation).filter(FixedAssetDepreciation.company_id == company_id).delete()
+    db.query(FixedAsset).filter(FixedAsset.company_id == company_id).delete()
+    db.query(IntangibleAssetAmortization).filter(IntangibleAssetAmortization.company_id == company_id).delete()
+    db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id).delete()
+    db.query(InventoryTransaction).filter(InventoryTransaction.company_id == company_id).delete()
+    db.query(InventoryBalance).filter(InventoryBalance.company_id == company_id).delete()
+    db.query(InventoryItem).filter(InventoryItem.company_id == company_id).delete()
+    # 4. 合同/付款
+    db.query(ContractPayment).filter(ContractPayment.company_id == company_id).delete()
+    db.query(Contract).filter(Contract.company_id == company_id).delete()
+    db.query(Payment).filter(Payment.company_id == company_id).delete()
+    # 5. 业务核心
+    db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).delete()
+    db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).delete()
+    db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id).delete()
+    db.query(BankTransaction).filter(BankTransaction.company_id == company_id).delete()
+    db.query(BankConfig).filter(BankConfig.company_id == company_id).delete()
+    db.query(JournalEntry).filter(JournalEntry.company_id == company_id).delete()
+    db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id).delete()
+    # 6. 子模块表（salary_records / vat_declarations 通过 raw SQL 确保兼容）
+    import importlib
+    try:
+        salary_mod = importlib.import_module('salary')
+        vat_mod = importlib.import_module('vat')
+    except Exception:
+        salary_mod = None; vat_mod = None
+    if salary_mod:
+        from database import SalaryRecord
+        db.query(SalaryRecord).filter(SalaryRecord.company_id == company_id).delete()
+    if vat_mod:
+        from database import VATDeclaration
+        db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id).delete()
+    # 7. 字典表（不按company_id隔离，跳过）
+    # 8. 终删公司
     db.delete(company)
     db.commit()
-    return {"message": "删除成功"}
+    return {"message": "公司及全部关联数据已删除"}
 
 
 # ==================== 固定资产 ====================
@@ -1112,7 +1162,7 @@ class FixedAssetUpdate(BaseModel):
 
 @app.get("/api/fixed-assets")
 def list_fixed_assets(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     category: Optional[str] = None,
     status: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -1143,7 +1193,7 @@ def list_fixed_assets(
 
 
 @app.post("/api/fixed-assets")
-def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.code == data.code).first():
         raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
     # 计算月折旧额（直线法）
@@ -1167,7 +1217,7 @@ def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(1), db: S
 
 
 @app.put("/api/fixed-assets/{fa_id}")
-def update_fixed_asset(fa_id: int, data: FixedAssetUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_fixed_asset(fa_id: int, data: FixedAssetUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
     if not fa:
         raise HTTPException(404, detail="资产不存在")
@@ -1183,7 +1233,7 @@ def update_fixed_asset(fa_id: int, data: FixedAssetUpdate, company_id: int = Que
 
 
 @app.post("/api/fixed-assets/{fa_id}/depreciate")
-def depreciate_asset(fa_id: int, period: str = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+def depreciate_asset(fa_id: int, period: str = Query(...), company_id: int = Query(...), db: Session = Depends(get_db)):
     """计提单月折旧"""
     fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
     if not fa:
@@ -1220,7 +1270,7 @@ def depreciate_asset(fa_id: int, period: str = Query(...), company_id: int = Que
 
 
 @app.get("/api/fixed-assets/{fa_id}/depreciations")
-def get_asset_depreciations(fa_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_asset_depreciations(fa_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     recs = db.query(FixedAssetDepreciation).filter(
         FixedAssetDepreciation.company_id == company_id,
         FixedAssetDepreciation.asset_id == fa_id
@@ -1233,7 +1283,7 @@ def get_asset_depreciations(fa_id: int, company_id: int = Query(1), db: Session 
 
 
 @app.delete("/api/fixed-assets/{fa_id}")
-def delete_fixed_asset(fa_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_fixed_asset(fa_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
     if not fa:
         raise HTTPException(404, detail="资产不存在")
@@ -1269,7 +1319,7 @@ class IntangibleAssetUpdate(BaseModel):
 
 @app.get("/api/intangible-assets")
 def list_intangible_assets(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     category: Optional[str] = None,
     keyword: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -1294,7 +1344,7 @@ def list_intangible_assets(
 
 
 @app.post("/api/intangible-assets")
-def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.code == data.code).first():
         raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
     monthly = round((data.original_value - data.residual_value) / data.useful_life_months, 2) if data.useful_life_months > 0 else 0
@@ -1312,7 +1362,7 @@ def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query
 
 
 @app.put("/api/intangible-assets/{ia_id}")
-def update_intangible_asset(ia_id: int, data: IntangibleAssetUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_intangible_asset(ia_id: int, data: IntangibleAssetUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
     if not ia:
         raise HTTPException(404, detail="资产不存在")
@@ -1326,7 +1376,7 @@ def update_intangible_asset(ia_id: int, data: IntangibleAssetUpdate, company_id:
 
 
 @app.post("/api/intangible-assets/{ia_id}/amortize")
-def amortize_asset(ia_id: int, period: str = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+def amortize_asset(ia_id: int, period: str = Query(...), company_id: int = Query(...), db: Session = Depends(get_db)):
     """计提单月摊销"""
     ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
     if not ia:
@@ -1361,7 +1411,7 @@ def amortize_asset(ia_id: int, period: str = Query(...), company_id: int = Query
 
 
 @app.delete("/api/intangible-assets/{ia_id}")
-def delete_intangible_asset(ia_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_intangible_asset(ia_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
     if not ia:
         raise HTTPException(404, detail="资产不存在")
@@ -1412,7 +1462,7 @@ class InventoryTransactionCreate(BaseModel):
 
 @app.get("/api/inventory-items")
 def list_inventory_items(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     category: Optional[str] = None,
     keyword: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -1434,7 +1484,7 @@ def list_inventory_items(
 
 
 @app.post("/api/inventory-items")
-def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == data.code).first():
         raise HTTPException(400, detail=f"商品编码 {data.code} 已存在")
     item = InventoryItem(company_id=company_id, **data.model_dump())
@@ -1445,7 +1495,7 @@ def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(1),
 
 
 @app.put("/api/inventory-items/{item_id}")
-def update_inventory_item(item_id: int, data: InventoryItemUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_inventory_item(item_id: int, data: InventoryItemUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.id == item_id).first()
     if not item:
         raise HTTPException(404, detail="商品不存在")
@@ -1458,7 +1508,7 @@ def update_inventory_item(item_id: int, data: InventoryItemUpdate, company_id: i
 
 @app.get("/api/inventory-transactions")
 def list_inventory_transactions(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     item_code: Optional[str] = None,
     trans_type: Optional[str] = None,
     limit: int = 100,
@@ -1480,7 +1530,7 @@ def list_inventory_transactions(
 
 
 @app.post("/api/inventory-transactions")
-def create_inventory_transaction(data: InventoryTransactionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_inventory_transaction(data: InventoryTransactionCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 校验商品存在
     item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == data.item_code).first()
     if not item:
@@ -1554,7 +1604,7 @@ class ContractPaymentCreate(BaseModel):
 
 @app.get("/api/contracts")
 def list_contracts(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     contract_type: Optional[str] = None,
     status: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -1580,7 +1630,7 @@ def list_contracts(
 
 
 @app.post("/api/contracts")
-def create_contract(data: ContractCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_contract(data: ContractCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(Contract).filter(Contract.company_id == company_id, Contract.contract_no == data.contract_no).first():
         raise HTTPException(400, detail=f"合同编号 {data.contract_no} 已存在")
     contract = Contract(company_id=company_id, **data.model_dump())
@@ -1591,7 +1641,7 @@ def create_contract(data: ContractCreate, company_id: int = Query(1), db: Sessio
 
 
 @app.put("/api/contracts/{contract_id}")
-def update_contract(contract_id: int, data: ContractUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_contract(contract_id: int, data: ContractUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
     if not c:
         raise HTTPException(404, detail="合同不存在")
@@ -1603,7 +1653,7 @@ def update_contract(contract_id: int, data: ContractUpdate, company_id: int = Qu
 
 
 @app.delete("/api/contracts/{contract_id}")
-def delete_contract(contract_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_contract(contract_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
     if not c:
         raise HTTPException(404, detail="合同不存在")
@@ -1615,7 +1665,7 @@ def delete_contract(contract_id: int, company_id: int = Query(1), db: Session = 
 
 
 @app.get("/api/contracts/{contract_id}/payments")
-def get_contract_payments(contract_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_contract_payments(contract_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     payments = db.query(ContractPayment).filter(
         ContractPayment.company_id == company_id,
         ContractPayment.contract_id == contract_id
@@ -1629,7 +1679,7 @@ def get_contract_payments(contract_id: int, company_id: int = Query(1), db: Sess
 
 
 @app.post("/api/contracts/{contract_id}/payments")
-def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def add_contract_payment(contract_id: int, data: ContractPaymentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     c = db.query(Contract).filter(Contract.company_id == company_id, Contract.id == contract_id).first()
     if not c:
         raise HTTPException(404, detail="合同不存在")
@@ -1690,7 +1740,7 @@ class PaymentUpdate(BaseModel):
 
 @app.get("/api/payments")
 def list_payments(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     payment_type: Optional[str] = None,
     status: Optional[str] = None,
     supplier_id: Optional[int] = None,
@@ -1733,7 +1783,7 @@ def list_payments(
 
 
 @app.post("/api/payments")
-def create_payment(data: PaymentCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_payment(data: PaymentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if db.query(Payment).filter(Payment.company_id == company_id, Payment.payment_no == data.payment_no).first():
         raise HTTPException(400, detail=f"付款单号 {data.payment_no} 已存在")
     payment = Payment(company_id=company_id, **data.model_dump())
@@ -1744,7 +1794,7 @@ def create_payment(data: PaymentCreate, company_id: int = Query(1), db: Session 
 
 
 @app.get("/api/payments/stats")
-def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+def payment_stats(company_id: int = Query(...), db: Session = Depends(get_db)):
     """付款统计"""
     base = db.query(Payment).filter(Payment.company_id == company_id)
     total_count = base.count()
@@ -1775,7 +1825,7 @@ def payment_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
 
 
 @app.put("/api/payments/{payment_id}")
-def update_payment(payment_id: int, data: PaymentUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_payment(payment_id: int, data: PaymentUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     p = db.query(Payment).filter(Payment.company_id == company_id, Payment.id == payment_id).first()
     if not p:
         raise HTTPException(404, detail="付款单不存在")
@@ -1790,7 +1840,7 @@ def update_payment(payment_id: int, data: PaymentUpdate, company_id: int = Query
 
 
 @app.delete("/api/payments/{payment_id}")
-def delete_payment(payment_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_payment(payment_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     p = db.query(Payment).filter(Payment.company_id == company_id, Payment.id == payment_id).first()
     if not p:
         raise HTTPException(404, detail="付款单不存在")
@@ -1862,7 +1912,7 @@ class SalesInvoiceUpdate(BaseModel):
 
 @app.get("/api/sales-invoices")
 def list_sales_invoices(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     invoice_category: Optional[str] = None,
     status: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -1936,7 +1986,7 @@ def list_sales_invoices(
 
 
 @app.post("/api/sales-invoices")
-def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if data.invoice_no and db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.invoice_no == data.invoice_no).first():
         raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = SalesInvoice(company_id=company_id, **data.model_dump())
@@ -1949,7 +1999,7 @@ def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(1), d
 
 
 @app.get("/api/sales-invoices/stats")
-def sales_invoice_stats(company_id: int = Query(1), status: str = Query(None), db: Session = Depends(get_db)):
+def sales_invoice_stats(company_id: int = Query(...), status: str = Query(None), db: Session = Depends(get_db)):
     base = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
     if status:
         base = base.filter(SalesInvoice.status.like(f"%{status}%"))
@@ -1970,7 +2020,7 @@ def sales_invoice_stats(company_id: int = Query(1), status: str = Query(None), d
 
 
 @app.get("/api/sales-invoices/{invoice_id}")
-def get_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_sales_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2008,7 +2058,7 @@ def get_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Session =
 
 
 @app.put("/api/sales-invoices/{invoice_id}")
-def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2029,7 +2079,7 @@ def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: 
 
 
 @app.delete("/api/sales-invoices/{invoice_id}")
-def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_sales_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2039,7 +2089,7 @@ def delete_sales_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
 
 
 @app.post("/api/sales-invoices/batch-delete")
-def batch_delete_sales_invoices(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_sales_invoices(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
     deleted = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.id.in_(ids)
@@ -2117,7 +2167,7 @@ class PurchaseInvoiceUpdate(BaseModel):
     remark: Optional[str] = None
 @app.get("/api/purchase-invoices")
 def list_purchase_invoices(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     invoice_category: Optional[str] = None,
     certification_status: Optional[str] = None,
     status: Optional[str] = None,
@@ -2209,7 +2259,7 @@ def list_purchase_invoices(
 
 
 @app.post("/api/purchase-invoices")
-def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     if data.invoice_no and db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.invoice_no == data.invoice_no).first():
         raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
@@ -2220,7 +2270,7 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
 
 
 @app.get("/api/purchase-invoices/stats")
-def purchase_invoice_stats(company_id: int = Query(1), tab: str = Query("all"), db: Session = Depends(get_db)):
+def purchase_invoice_stats(company_id: int = Query(...), tab: str = Query("all"), db: Session = Depends(get_db)):
     base = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
     # 按票种筛选
     if tab == "zpt":
@@ -2270,7 +2320,7 @@ def purchase_invoice_stats(company_id: int = Query(1), tab: str = Query("all"), 
 
 
 @app.get("/api/purchase-invoices/{invoice_id}")
-def get_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2312,7 +2362,7 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Sessio
 
 
 @app.put("/api/purchase-invoices/{invoice_id}")
-def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2324,7 +2374,7 @@ def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, compan
 
 
 @app.delete("/api/purchase-invoices/{invoice_id}")
-def delete_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
@@ -2334,7 +2384,7 @@ def delete_purchase_invoice(invoice_id: int, company_id: int = Query(1), db: Ses
 
 
 @app.post("/api/purchase-invoices/batch-delete")
-def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
     deleted = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.id.in_(ids)
@@ -2344,7 +2394,7 @@ def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(1), d
 
 
 @app.post("/api/purchase-invoices/{invoice_id}/to-journal")
-def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     """将单张取得发票生成进项抵扣记录并生成凭证"""
     inv = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.id == invoice_id,
@@ -2397,7 +2447,7 @@ def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db:
 @app.post("/api/purchase-invoices/batch-to-journal")
 def purchase_invoice_batch_to_journal(
     body: dict = Body(default=None),
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db=Depends(get_db)
 ):
     """一键将勾选的取得发票生成进项抵扣凭证（按月汇总）"""
@@ -2493,7 +2543,7 @@ class BankConfigUpdate(BaseModel):
 
 
 @app.get("/api/bank-configs")
-def list_bank_configs(company_id: int = Query(1), db: Session = Depends(get_db)):
+def list_bank_configs(company_id: int = Query(...), db: Session = Depends(get_db)):
     configs = db.query(BankConfig).filter(
         BankConfig.company_id == company_id, BankConfig.is_active == True
     ).order_by(BankConfig.bank_name).all()
@@ -2507,7 +2557,7 @@ def list_bank_configs(company_id: int = Query(1), db: Session = Depends(get_db))
 
 
 @app.post("/api/bank-configs")
-def create_bank_config(data: BankConfigCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_bank_config(data: BankConfigCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     cfg = BankConfig(company_id=company_id, **data.model_dump())
     db.add(cfg)
     db.commit()
@@ -2516,7 +2566,7 @@ def create_bank_config(data: BankConfigCreate, company_id: int = Query(1), db: S
 
 
 @app.put("/api/bank-configs/{config_id}")
-def update_bank_config(config_id: int, data: BankConfigUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_bank_config(config_id: int, data: BankConfigUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     cfg = db.query(BankConfig).filter(BankConfig.company_id == company_id, BankConfig.id == config_id).first()
     if not cfg:
         raise HTTPException(404, detail="银行配置不存在")
@@ -2528,7 +2578,7 @@ def update_bank_config(config_id: int, data: BankConfigUpdate, company_id: int =
 
 
 @app.delete("/api/bank-configs/{config_id}")
-def delete_bank_config(config_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_bank_config(config_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     cfg = db.query(BankConfig).filter(BankConfig.company_id == company_id, BankConfig.id == config_id).first()
     if not cfg:
         raise HTTPException(404, detail="银行配置不存在")
@@ -2595,7 +2645,7 @@ class BankTransactionUpdate(BaseModel):
 
 @app.get("/api/bank-transactions")
 def list_bank_transactions(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     bank_config_id: Optional[int] = None,
     transaction_type: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -2673,7 +2723,7 @@ def list_bank_transactions(
 
 
 @app.post("/api/bank-transactions")
-def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     tx = BankTransaction(company_id=company_id, **data.model_dump())
     db.add(tx)
     db.commit()
@@ -2683,7 +2733,7 @@ def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query
 
 @app.get("/api/bank-transactions/stats")
 def bank_transaction_stats(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     bank_config_id: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -2728,7 +2778,7 @@ class BatchDeleteRequest(BaseModel):
 
 
 @app.post("/api/bank-transactions/batch-delete")
-def batch_delete_bank_transactions(req: BatchDeleteRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_bank_transactions(req: BatchDeleteRequest, company_id: int = Query(...), db: Session = Depends(get_db)):
     deleted = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id,
         BankTransaction.id.in_(req.ids)
@@ -2738,7 +2788,7 @@ def batch_delete_bank_transactions(req: BatchDeleteRequest, company_id: int = Qu
 
 
 @app.get("/api/bank-transactions/{tx_id}")
-def get_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_bank_transaction(tx_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
     if not tx:
         raise HTTPException(404, detail="流水记录不存在")
@@ -2761,7 +2811,7 @@ def get_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session = D
 
 
 @app.put("/api/bank-transactions/{tx_id}")
-def update_bank_transaction(tx_id: int, data: BankTransactionUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_bank_transaction(tx_id: int, data: BankTransactionUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
     if not tx:
         raise HTTPException(404, detail="流水记录不存在")
@@ -2772,7 +2822,7 @@ def update_bank_transaction(tx_id: int, data: BankTransactionUpdate, company_id:
 
 
 @app.delete("/api/bank-transactions/{tx_id}")
-def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_bank_transaction(tx_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     tx = db.query(BankTransaction).filter(BankTransaction.company_id == company_id, BankTransaction.id == tx_id).first()
     if not tx:
         raise HTTPException(404, detail="流水记录不存在")
@@ -2782,7 +2832,7 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(1), db: Session 
 
 
 @app.post("/api/bank-transactions/{tx_id}/to-journal")
-def bank_transaction_to_journal(tx_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     """为单条银行流水生成双分录记账凭证（借贷必相等）"""
     tx = db.query(BankTransaction).filter(
         BankTransaction.id == tx_id,
@@ -2793,14 +2843,10 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(1), db: Sess
 
     cp = tx.counterparty_name or tx.summary or "银行流水"
     summary_tag = f"银行流水-#{tx_id}-{cp}"
-    # 去重：同一流水只应生成一次凭证
-    existing = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.summary == summary_tag,
-        JournalEntry.account_code == "1002",
-    ).first()
-    if existing:
-        raise HTTPException(400, f"该流水已生成凭证：{existing.voucher_word}-{existing.voucher_no}")
+
+    # P1-8: 去重改用 journal_voucher_no 字段判断，不再依赖摘要文本匹配
+    if tx.journal_voucher_no:
+        raise HTTPException(400, f"该流水已生成凭证：{tx.journal_voucher_no}")
 
     period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
     max_no = db.query(JournalEntry.voucher_no).filter(
@@ -2905,7 +2951,7 @@ class JournalEntryUpdate(BaseModel):
 
 @app.get("/api/journal-entries")
 def list_journal_entries(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period: Optional[str] = None,
     voucher_word: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -2953,7 +2999,7 @@ def list_journal_entries(
 
 @app.get("/api/journal-entries/stats")
 def journal_entry_stats(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -3073,6 +3119,7 @@ def _build_trial_balance_tree(company_id, period_raw, cum_raw, db):
             "balance_direction": direction,
             "level": acc.level,
             "parent_code": acc.parent_code,
+            "has_children": acc.code in children_map and len(children_map[acc.code]) > 0,
             "begin_debit": 0,
             "begin_credit": 0,
             "period_debit": pdr,
@@ -3088,7 +3135,7 @@ def _build_trial_balance_tree(company_id, period_raw, cum_raw, db):
 # ==================== 科目余额表 ====================
 @app.get("/api/trial-balance")
 def trial_balance(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -3109,7 +3156,7 @@ def trial_balance(
 # ==================== 总账 ====================
 @app.get("/api/ledger/general")
 def general_ledger(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
     db: Session = Depends(get_db)
@@ -3203,7 +3250,7 @@ def general_ledger(
 # ==================== 明细账 ====================
 @app.get("/api/ledger/detail")
 def detail_ledger(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     account_code: str = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
@@ -3346,23 +3393,23 @@ def _contact_list(company_id: int, account_codes: list, db: Session):
 
 
 @app.get("/api/ledger/employee-contacts")
-def employee_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+def employee_contacts(company_id: int = Query(...), db: Session = Depends(get_db)):
     return _contact_list(company_id, _CONTACT_ACCOUNTS["employee"], db)
 
 
 @app.get("/api/ledger/customer-contacts")
-def customer_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+def customer_contacts(company_id: int = Query(...), db: Session = Depends(get_db)):
     return _contact_list(company_id, _CONTACT_ACCOUNTS["customer"], db)
 
 
 @app.get("/api/ledger/supplier-contacts")
-def supplier_contacts(company_id: int = Query(1), db: Session = Depends(get_db)):
+def supplier_contacts(company_id: int = Query(...), db: Session = Depends(get_db)):
     return _contact_list(company_id, _CONTACT_ACCOUNTS["supplier"], db)
 
 
 @app.get("/api/ledger/employee-detail")
 def employee_detail(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     contact_name: str = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
@@ -3373,7 +3420,7 @@ def employee_detail(
 
 @app.get("/api/ledger/customer-detail")
 def customer_detail(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     contact_name: str = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
@@ -3384,7 +3431,7 @@ def customer_detail(
 
 @app.get("/api/ledger/supplier-detail")
 def supplier_detail(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     contact_name: str = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
@@ -3469,7 +3516,7 @@ def _prior_same_period(period_from: str, period_to: str):
 
 @app.get("/api/reports/profit-loss")
 def profit_loss_report(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
     db: Session = Depends(get_db)
@@ -3630,7 +3677,7 @@ def _build_bs_side(balances, side):
 
 @app.get("/api/reports/balance-sheet")
 def balance_sheet_report(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period: str = Query(...),
     db: Session = Depends(get_db)
 ):
@@ -3690,7 +3737,7 @@ def _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db,
 
 @app.get("/api/reports/cash-flow")
 def cash_flow_report(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period_from: str = Query(...),
     period_to: str = Query(...),
     db: Session = Depends(get_db)
@@ -3766,7 +3813,7 @@ def _eq9(*indices_vals):  # (idx, val, ...) → 9 列数组
 
 @app.get("/api/reports/equity-changes")
 def equity_changes_report(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     period: str = Query(...),
     db: Session = Depends(get_db)
 ):
@@ -3834,7 +3881,7 @@ def equity_changes_report(
 
 
 @app.post("/api/journal-entries")
-def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = JournalEntry(company_id=company_id, **data.model_dump())
     db.add(e)
     db.commit()
@@ -3843,7 +3890,7 @@ def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), d
 
 
 @app.get("/api/journal-entries/by-voucher")
-def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(...), company_id: int = Query(...), db: Session = Depends(get_db)):
     """按凭证字+凭证号查询凭证详情（所有分录）"""
     entries = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
@@ -3881,7 +3928,7 @@ def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(.
 
 
 @app.get("/api/journal-entries/{entry_id}")
-def get_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_journal_entry(entry_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
@@ -3902,7 +3949,7 @@ def get_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = D
 
 
 @app.put("/api/journal-entries/{entry_id}")
-def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
@@ -3913,7 +3960,7 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: in
 
 
 @app.delete("/api/journal-entries/{entry_id}")
-def delete_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_journal_entry(entry_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
@@ -3966,7 +4013,7 @@ def _renumber_vouchers(db, company_id, period, voucher_word):
 
 
 @app.post("/api/journal-entries/batch-delete")
-def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 先查出被删记录的 (period, voucher_word) 组合
     deleted_records = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
@@ -3987,7 +4034,7 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
 @app.post("/api/sales-invoices/batch-to-journal")
 def sales_invoice_batch_to_journal(
     body: dict = Body(default=None),
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     db=Depends(get_db)
 ):
     """一键生成勾选发票的记账凭证"""
@@ -4032,7 +4079,7 @@ def sales_invoice_batch_to_journal(
 
 
 @app.post("/api/sales-invoices/{invoice_id}/to-journal")
-def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db=Depends(get_db)):
+def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db=Depends(get_db)):
     """将单张销项发票生成记账凭证（分录）到序时账（允许重新生成，先删旧凭证）"""
     inv = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.id == invoice_id).first()
     if not inv:
@@ -4237,7 +4284,7 @@ class InputVATDeductionUpdate(BaseModel):
 
 @app.get("/api/input-vat-deductions")
 def list_input_vat_deductions(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     invoice_status: Optional[str] = None,
     check_status: Optional[str] = None,
     risk_level: Optional[str] = None,
@@ -4328,7 +4375,7 @@ def list_input_vat_deductions(
 
 
 @app.post("/api/input-vat-deductions")
-def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     item = InputVATDeduction(company_id=company_id, **data.model_dump())
     db.add(item)
     db.commit()
@@ -4345,7 +4392,7 @@ def create_input_vat_deduction(data: InputVATDeductionCreate, company_id: int = 
 
 
 @app.get("/api/input-vat-deductions/stats")
-def input_vat_deduction_stats(company_id: int = Query(1), db: Session = Depends(get_db)):
+def input_vat_deduction_stats(company_id: int = Query(...), db: Session = Depends(get_db)):
     base = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
     total_count = base.count()
     total_tax = base.with_entities(func.sum(InputVATDeduction.tax_amount)).scalar() or 0
@@ -4366,7 +4413,7 @@ def input_vat_deduction_stats(company_id: int = Query(1), db: Session = Depends(
 
 
 @app.get("/api/input-vat-deductions/{item_id}")
-def get_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_input_vat_deduction(item_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
     if not it:
         raise HTTPException(404, detail="抵扣记录不存在")
@@ -4405,7 +4452,7 @@ def get_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Sessio
 
 
 @app.put("/api/input-vat-deductions/{item_id}")
-def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
     if not it:
         raise HTTPException(404, detail="抵扣记录不存在")
@@ -4425,7 +4472,7 @@ def update_input_vat_deduction(item_id: int, data: InputVATDeductionUpdate, comp
 
 
 @app.delete("/api/input-vat-deductions/{item_id}")
-def delete_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_input_vat_deduction(item_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     it = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id, InputVATDeduction.id == item_id).first()
     if not it:
         raise HTTPException(404, detail="抵扣记录不存在")
@@ -4435,7 +4482,7 @@ def delete_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Ses
 
 
 @app.post("/api/input-vat-deductions/batch-delete")
-def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
     deleted = db.query(InputVATDeduction).filter(
         InputVATDeduction.company_id == company_id,
         InputVATDeduction.id.in_(ids)
@@ -4445,7 +4492,7 @@ def batch_delete_input_vat_deductions(ids: list[int], company_id: int = Query(1)
 
 
 @app.post("/api/input-vat-deductions/batch-certify")
-def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(1), db: Session = Depends(get_db)):
+def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
     """批量认证：将选中记录标记为已勾选，设置勾选时间/认证日期"""
     now = datetime.now()
     today = date.today()
@@ -4500,7 +4547,7 @@ def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(1
 
 
 @app.post("/api/input-vat-deductions/batch-to-journal")
-def input_vat_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(1), db: Session = Depends(get_db)):
+def input_vat_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(...), db: Session = Depends(get_db)):
     """按指定进项抵扣记录的期间批量生成/重生成凭证；不传 ids 则处理全部"""
     q = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
     if ids:
@@ -4532,7 +4579,7 @@ def input_vat_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id
 
 
 @app.post("/api/bank-transactions/batch-to-journal")
-def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(1), db: Session = Depends(get_db)):
+def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(...), db: Session = Depends(get_db)):
     """为指定银行流水批量生成记账凭证；不传 ids 则处理全部"""
     result = _generate_bank_journals(db, company_id, ids)
     db.commit()
@@ -4545,7 +4592,7 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
 
 
 @app.post("/api/input-vat-deductions/{item_id}/to-journal")
-def input_vat_deduction_to_journal(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def input_vat_deduction_to_journal(item_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     """为进项抵扣记录所在期间重新生成凭证"""
     it = db.query(InputVATDeduction).filter(
         InputVATDeduction.id == item_id,
@@ -4578,7 +4625,7 @@ class ColumnTemplateUpdate(BaseModel):
 
 @app.get("/api/column-templates")
 def list_column_templates(
-    company_id: int = Query(1),
+    company_id: int = Query(...),
     module: Optional[str] = None,
     bank_config_id: Optional[int] = None,
     db: Session = Depends(get_db)
@@ -4599,7 +4646,7 @@ def list_column_templates(
 
 
 @app.post("/api/column-templates")
-def create_column_template(data: ColumnTemplateCreate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_column_template(data: ColumnTemplateCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     tpl = ColumnTemplate(company_id=company_id, **data.model_dump())
     db.add(tpl)
     db.commit()
@@ -4608,7 +4655,7 @@ def create_column_template(data: ColumnTemplateCreate, company_id: int = Query(1
 
 
 @app.put("/api/column-templates/{tpl_id}")
-def update_column_template(tpl_id: int, data: ColumnTemplateUpdate, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_column_template(tpl_id: int, data: ColumnTemplateUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     tpl = db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id, ColumnTemplate.id == tpl_id).first()
     if not tpl:
         raise HTTPException(404, detail="模板不存在")
@@ -4620,7 +4667,7 @@ def update_column_template(tpl_id: int, data: ColumnTemplateUpdate, company_id: 
 
 
 @app.delete("/api/column-templates/{tpl_id}")
-def delete_column_template(tpl_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def delete_column_template(tpl_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     tpl = db.query(ColumnTemplate).filter(ColumnTemplate.company_id == company_id, ColumnTemplate.id == tpl_id).first()
     if not tpl:
         raise HTTPException(404, detail="模板不存在")
@@ -5181,6 +5228,16 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     if not name:
                         errors.append(f"第{i+2}行: 姓名不能为空")
                         continue
+                    # P1-4: 通用导入检查 id_card 去重
+                    id_card = mapped.get("id_card", "").strip() or None
+                    if id_card:
+                        dup = db.query(Employee).filter(
+                            Employee.company_id == company_id,
+                            Employee.id_card == id_card
+                        ).first()
+                        if dup:
+                            errors.append(f"第{i+2}行: 身份证号 {id_card} 已存在于【{dup.name}】，已跳过")
+                            continue
                                         # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
                     if 'emp_code_counter' not in locals():
                         existing_codes = db.query(Employee.code).filter(
@@ -5648,7 +5705,7 @@ async def upload_file(
 
 
 @app.post("/api/chat")
-def chat_endpoint(payload: ChatRequest, company_id: int = Query(1), db: Session = Depends(get_db)):
+def chat_endpoint(payload: ChatRequest, company_id: int = Query(...), db: Session = Depends(get_db)):
     """AI 助手对话接口"""
     message = payload.message.strip()
     sid = payload.session_id or str(uuid.uuid4())
