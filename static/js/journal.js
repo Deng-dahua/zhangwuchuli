@@ -66,7 +66,7 @@ async function renderJournal(container) {
           html += '<tr>';
           if (idx === 0) {
             // 同一凭证号只显示一个复选框
-            html += '<td rowspan="' + sz + '" style="text-align:center"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
+            html += '<td class="col-checkbox" rowspan="' + sz + '" style="text-align:center"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
           }
           html += '<td>' + r.period + '</td>';
           html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';

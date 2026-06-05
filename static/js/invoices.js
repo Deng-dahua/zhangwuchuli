@@ -529,7 +529,7 @@ async function renderPurchaseInvoices(container) {
         html += '<tr>';
         // 选择框：首行 rowspan 跨整组，垂直居中
         if (isFirst) {
-          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
+          html += '<td class="col-checkbox" rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
         }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
