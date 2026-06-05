@@ -509,11 +509,9 @@ async function renderPurchaseInvoices(container) {
         const grp = piGroupMap.get(key) || [i];
         const allIds = grp.map(g => g.id).join(',');
         html += '<tr>';
-        // 选择框：只在组首行显示，代表整组
+        // 选择框：首行 rowspan 跨整组，垂直居中
         if (isFirst) {
-          html += '<td><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
-        } else {
-          html += '<td></td>';
+          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
         }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
