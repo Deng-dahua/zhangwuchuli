@@ -491,6 +491,7 @@ class SalesInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -860,6 +861,7 @@ def migrate_schema(db):
             "invoice_risk_level": "ALTER TABLE sales_invoices ADD COLUMN invoice_risk_level VARCHAR(10)",
             "issuer": "ALTER TABLE sales_invoices ADD COLUMN issuer VARCHAR(30)",
             "invoice_category": "ALTER TABLE sales_invoices ADD COLUMN invoice_category VARCHAR(20)",
+            "_fingerprint": "ALTER TABLE sales_invoices ADD COLUMN _fingerprint VARCHAR(64)",
         }
         for col, sql in new_si_cols.items():
             if col not in existing_cols:

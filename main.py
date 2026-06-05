@@ -15,6 +15,7 @@ import os
 import csv
 import io
 import re
+import hashlib
 import uuid
 import openpyxl
 import json
@@ -1963,7 +1964,49 @@ def list_sales_invoices(
 
 @app.post("/api/sales-invoices")
 def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    inv = SalesInvoice(company_id=company_id, **data.model_dump())
+    # 全行指纹去重
+    fp_values = (
+        str(company_id),
+        str(data.invoice_no or ""),
+        str(data.invoice_code or ""),
+        str(data.digital_invoice_no or ""),
+        str(data.seller_tax_no or ""),
+        str(data.seller_name or ""),
+        str(data.buyer_tax_no or ""),
+        str(data.buyer_name or ""),
+        str(data.invoice_date) if data.invoice_date else "",
+        str(data.tax_category_code or ""),
+        str(data.specific_business_type or ""),
+        str(data.goods_name or ""),
+        str(data.spec or ""),
+        str(data.unit or ""),
+        str(data.quantity),
+        str(data.unit_price),
+        str(data.amount),
+        str(data.tax_rate),
+        str(data.tax_amount),
+        str(data.total_amount),
+        str(data.invoice_source or ""),
+        str(data.invoice_category or ""),
+        str(data.status or ""),
+        str(data.is_positive),
+        str(data.invoice_risk_level or ""),
+        str(data.issuer or ""),
+        str(data.remark or ""),
+    )
+    fp_raw = "|".join(fp_values)
+    fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
+    existing = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice._fingerprint == fp
+    ).first()
+    if existing:
+        raise HTTPException(400, detail="该发票数据已存在（全行比对重复），请勿重复录入")
+    inv = SalesInvoice(
+        company_id=company_id,
+        _fingerprint=fp,
+        **data.model_dump()
+    )
     db.add(inv)
     db.commit()
     db.refresh(inv)
@@ -2039,6 +2082,39 @@ def update_sales_invoice(invoice_id: int, data: SalesInvoiceUpdate, company_id: 
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(inv, k, v)
     inv.updated_at = datetime.now()
+    # 重新计算全行指纹
+    fp_values = (
+        str(company_id),
+        str(inv.invoice_no or ""),
+        str(inv.invoice_code or ""),
+        str(inv.digital_invoice_no or ""),
+        str(inv.seller_tax_no or ""),
+        str(inv.seller_name or ""),
+        str(inv.buyer_tax_no or ""),
+        str(inv.buyer_name or ""),
+        str(inv.invoice_date) if inv.invoice_date else "",
+        str(inv.tax_category_code or ""),
+        str(inv.specific_business_type or ""),
+        str(inv.goods_name or ""),
+        str(inv.spec or ""),
+        str(inv.unit or ""),
+        str(inv.quantity or 0),
+        str(inv.unit_price or 0),
+        str(inv.amount or 0),
+        str(inv.tax_rate or 0),
+        str(inv.tax_amount or 0),
+        str(inv.total_amount or 0),
+        str(inv.invoice_source or ""),
+        str(inv.invoice_category or ""),
+        str(inv.status or ""),
+        str(inv.is_positive if inv.is_positive is not None else True),
+        str(inv.invoice_risk_level or ""),
+        str(inv.issuer or ""),
+        str(inv.remark or ""),
+    )
+    fp_raw = "|".join(fp_values)
+    fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
+    inv._fingerprint = fp
     db.commit()
     db.refresh(inv)
     # 状态改为非作废/红冲时自动生成凭证（先删旧再生成，确保金额一致）
@@ -4993,6 +5069,34 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
+                        # 全行指纹去重
+                        fp_values = (
+                            str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
+                            str(mapped.get("digital_invoice_no", "")),
+                            str(mapped.get("seller_tax_no", "")), str(mapped.get("seller_name", "")),
+                            str(mapped.get("buyer_tax_no", "")), str(mapped.get("buyer_name", "")),
+                            str(inv_date) if inv_date else "",
+                            str(mapped.get("tax_category_code", "")), str(mapped.get("specific_business_type", "")),
+                            str(mapped.get("goods_name", "")), str(mapped.get("spec", "")),
+                            str(mapped.get("unit", "")), str(qty), str(uprice),
+                            str(amt), str(tr), str(tax_amt), str(total),
+                            str(mapped.get("invoice_source", "")),
+                            str(mapped.get("invoice_category", "增值税专用发票")),
+                            str(mapped.get("status", "正常")),
+                            str(mapped.get("is_positive", "是")),
+                            str(mapped.get("invoice_risk_level", "")),
+                            str(mapped.get("issuer", "")),
+                            str(mapped.get("remark", "")),
+                        )
+                        fp_raw = "|".join(fp_values)
+                        fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
+                        existing = db.query(SalesInvoice).filter(
+                            SalesInvoice.company_id == company_id,
+                            SalesInvoice._fingerprint == fp
+                        ).first()
+                        if existing:
+                            errors.append(f"第{i+2}行: 数据重复，已跳过")
+                            continue
                         inv = SalesInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
@@ -5018,6 +5122,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             issuer=mapped.get("issuer", ""),
                             remark=mapped.get("remark", ""),
                             raw_data=json.dumps(extra) if extra else None,
+                            _fingerprint=fp,
                         )
                         db.add(inv)
                         db.flush()
