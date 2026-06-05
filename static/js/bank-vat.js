@@ -95,7 +95,7 @@ async function loadBankTxList() {
         <td>${tx.summary || '-'}</td>
         <td>${tx.transaction_remark || '-'}</td>
         <td>${tx.account_type || '-'}</td>
-        <td>${tx.journal_voucher_no || '-'}</td>
+        <td>${tx.journal_voucher_no ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + tx.journal_voucher_no + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + tx.journal_voucher_no + '</a>' : '-'}</td>
         <td>${tx.journal_voucher_no ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromBankTx(' + tx.id + ')">生成凭证</button>'}</td>
         <td style="white-space:nowrap">
           ${tx.journal_voucher_no 
@@ -417,7 +417,7 @@ async function renderInputVATDeductions(container) {
       // 凭证号/生成凭证/操作：首行 rowspan 跨整组
       if (isFirst) {
         const jv2 = it.journal_voucher_no || '';
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<span style="color:#1d4ed8;font-weight:500">' + jv2 + '</span>' : '-') + '</td>';
+        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv2 + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv2 + '</a>' : '-') + '</td>';
         html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVDGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
         html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
         if (jv2) {

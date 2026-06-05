@@ -109,7 +109,7 @@ async function renderSalesInvoices(container) {
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
         const jv = i.journal_voucher_no || '';
-        html += '<td>' + (jv ? '<span style="color:#1d4ed8;font-weight:500">' + jv + '</span>' : '-') + '</td>';
+        html += '<td>' + (jv ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv + '</a>' : '-') + '</td>';
         html += '<td>' + (jv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromSalesInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
         if (jv) {
@@ -551,7 +551,7 @@ async function renderPurchaseInvoices(container) {
         // 凭证号/生成凭证/操作：首行 rowspan 跨整组
         if (isFirst) {
           const pjv = i.journal_voucher_no || '';
-          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
+          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + pjv + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + pjv + '</a>' : '-') + '</td>';
           html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
           html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
           if (pjv) {

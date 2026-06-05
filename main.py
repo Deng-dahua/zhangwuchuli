@@ -3844,6 +3844,44 @@ def create_journal_entry(data: JournalEntryCreate, company_id: int = Query(1), d
     return {"id": e.id, "message": "序时账记录创建成功"}
 
 
+@app.get("/api/journal-entries/by-voucher")
+def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(...), company_id: int = Query(1), db: Session = Depends(get_db)):
+    """按凭证字+凭证号查询凭证详情（所有分录）"""
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.voucher_word == voucher_word,
+        JournalEntry.voucher_no == voucher_no
+    ).order_by(JournalEntry.id.asc()).all()
+    if not entries:
+        raise HTTPException(404, detail="凭证不存在")
+    first = entries[0]
+    total_debit = sum(e.debit_amount or 0 for e in entries)
+    total_credit = sum(e.credit_amount or 0 for e in entries)
+    return {
+        "voucher_word": voucher_word,
+        "voucher_no": voucher_no,
+        "voucher_full": f"{voucher_word}-{voucher_no}",
+        "period": first.period,
+        "entry_date": str(first.entry_date),
+        "source": first.source or "手动录入",
+        "total_debit": round(total_debit, 2),
+        "total_credit": round(total_credit, 2),
+        "is_balanced": abs(total_debit - total_credit) < 0.01,
+        "entry_count": len(entries),
+        "entries": [
+            {
+                "id": e.id,
+                "summary": e.summary or "",
+                "account_code": e.account_code,
+                "account_name": e.account_name or "",
+                "debit_amount": e.debit_amount or 0,
+                "credit_amount": e.credit_amount or 0,
+            }
+            for e in entries
+        ]
+    }
+
+
 @app.get("/api/journal-entries/{entry_id}")
 def get_journal_entry(entry_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()

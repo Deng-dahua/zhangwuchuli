@@ -227,3 +227,57 @@ function createModal(title, body, extraClass) {
   return overlay;
 }
 
+async function showVoucherDetail(voucherStr) {
+  // 解析"记-5" → voucher_word="记", voucher_no=5
+  const parts = voucherStr.split('-');
+  if (parts.length < 2) { toast('凭证号格式无效', 'error'); return; }
+  const voucherWord = parts[0];
+  const voucherNo = parseInt(parts.slice(1).join('-'));
+
+  try {
+    const data = await api('/api/journal-entries/by-voucher?voucher_word=' + encodeURIComponent(voucherWord) + '&voucher_no=' + voucherNo);
+    const balColor = data.is_balanced ? '#059669' : '#dc2626';
+    const balIcon = data.is_balanced ? '✓' : '✗';
+    let html = '';
+    // 凭证头部信息
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
+    html += '<div><span style="font-size:18px;font-weight:700;color:#1d4ed8">' + data.voucher_full + '</span>';
+    html += '<span style="margin-left:8px;font-size:13px;color:var(--gray-500)">' + data.period + ' | ' + data.entry_date + '</span></div>';
+    html += '<div style="display:flex;gap:12px;font-size:13px">';
+    html += '<span style="color:var(--gray-500)">来源：<b>' + data.source + '</b></span>';
+    html += '<span style="color:' + balColor + ';font-weight:600">' + balIcon + ' 借贷' + (data.is_balanced ? '平衡' : '不平衡') + '</span>';
+    html += '</div></div>';
+    // 分录表格
+    html += '<table class="data-table" style="width:100%"><thead><tr>';
+    html += '<th style="width:60px">#</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th>';
+    html += '</tr></thead><tbody>';
+    data.entries.forEach((e, idx) => {
+      html += '<tr>';
+      html += '<td style="color:var(--gray-400)">' + (idx + 1) + '</td>';
+      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (e.summary || '') + '">' + (e.summary || '-') + '</td>';
+      html += '<td>' + e.account_code + '</td>';
+      html += '<td>' + e.account_name + '</td>';
+      html += '<td style="text-align:right;color:#e02424;font-weight:600">' + (e.debit_amount > 0 ? '¥' + e.debit_amount.toLocaleString() : '') + '</td>';
+      html += '<td style="text-align:right;color:#0e9f6e;font-weight:600">' + (e.credit_amount > 0 ? '¥' + e.credit_amount.toLocaleString() : '') + '</td>';
+      html += '</tr>';
+    });
+    // 合计行
+    html += '<tr style="border-top:2px solid var(--gray-300);font-weight:700;background:#f9fafb">';
+    html += '<td colspan="4" style="text-align:right">合计（' + data.entry_count + '条分录）</td>';
+    html += '<td style="text-align:right;color:#e02424">¥' + data.total_debit.toLocaleString() + '</td>';
+    html += '<td style="text-align:right;color:#0e9f6e">¥' + data.total_credit.toLocaleString() + '</td>';
+    html += '</tr>';
+    html += '</tbody></table>';
+    html += '<div style="text-align:right;margin-top:12px"><button class="btn" onclick="closeModal()">关闭</button></div>';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'modal-overlay';
+    overlay.innerHTML = '<div class="modal modal-lg" style="max-width:680px;padding:20px"><button class="modal-close" onclick="closeModal()">&times;</button>' + html + '</div>';
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+    document.body.appendChild(overlay);
+  } catch (e) {
+    toast(e.message || '获取凭证详情失败', 'error');
+  }
+}
+
