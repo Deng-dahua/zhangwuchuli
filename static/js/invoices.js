@@ -32,7 +32,7 @@ async function renderSalesInvoices(container) {
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
-    html += '<button class="btn btn-primary" onclick="batchGenerateVouchers()">⚡ 一键生成凭证</button>';
+    html += '<button class="btn btn-primary" id="siBatchGenBtn" onclick="batchGenerateVouchers()">⚡ 一键生成凭证</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
     const salesTabs = [['all', '全部'], [STATUS.NORMAL, STATUS.NORMAL], [STATUS.VOID, STATUS.VOID], [STATUS.RED, STATUS.RED]];
@@ -112,8 +112,13 @@ async function renderSalesInvoices(container) {
         html += '<td>' + (jv ? '<span style="color:#1d4ed8;font-weight:500">' + jv + '</span>' : '-') + '</td>';
         html += '<td>' + (jv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromSalesInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
-        html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')">编辑</button>';
-        html += '<button class="btn btn-sm btn-danger" onclick="deleteSalesInvoice(' + i.id + ')">删除</button>';
+        if (jv) {
+          html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
+        } else {
+          html += '<button class="btn btn-sm btn-secondary" onclick="showSalesInvoiceForm(' + i.id + ')">编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" onclick="deleteSalesInvoice(' + i.id + ')">删除</button>';
+        }
         html += '</td></tr>';
       });
     }
@@ -312,10 +317,14 @@ function toggleSiSelectAll() {
 
 function updateSiBatchBtn() {
   const count = document.querySelectorAll('.si-check:checked').length;
-  const btn = document.getElementById('siBatchDelBtn');
-  if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
-    btn.disabled = count === 0;
+  const delBtn = document.getElementById('siBatchDelBtn');
+  if (delBtn) {
+    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.disabled = count === 0;
+  }
+  const genBtn = document.getElementById('siBatchGenBtn');
+  if (genBtn) {
+    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
   }
 }
 
@@ -545,8 +554,13 @@ async function renderPurchaseInvoices(container) {
           html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
           html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
           html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
-          html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
-          html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseGroup(\'' + allIds + '\')">删除</button>';
+          if (pjv) {
+            html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
+            html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
+          } else {
+            html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
+            html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseGroup(\'' + allIds + '\')">删除</button>';
+          }
           html += '</td>';
         }
         html += '</tr>';

@@ -48,7 +48,7 @@ async function renderBankTransactions(container) {
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
-  html += '<button class="btn btn-primary" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
+  html += '<button class="btn btn-primary" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
 
@@ -98,8 +98,10 @@ async function loadBankTxList() {
         <td>${tx.journal_voucher_no || '-'}</td>
         <td>${tx.journal_voucher_no ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromBankTx(' + tx.id + ')">生成凭证</button>'}</td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm btn-secondary" onclick="editBankTx(${tx.id})">编辑</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteBankTx(${tx.id})">删除</button>
+          ${tx.journal_voucher_no 
+            ? '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button><button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>'
+            : '<button class="btn btn-sm btn-secondary" onclick="editBankTx(' + tx.id + ')">编辑</button><button class="btn btn-sm btn-danger" onclick="deleteBankTx(' + tx.id + ')">删除</button>'
+          }
         </td>
       </tr>`;
   }).join('');
@@ -108,7 +110,7 @@ async function loadBankTxList() {
     <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px">
     <table class="data-table"><thead><tr>
       <th style="width:36px"><input type="checkbox" id="btSelectAll" onclick="toggleBankTxSelectAll()" title="全选"></th>
-      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>记账凭证</th><th style="width:90px">生成凭证</th><th>操作</th>
+      <th>交易日期</th><th>交易时间</th><th>申请日期</th><th>凭证号</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th style="text-align:right">余额</th><th>对方账号</th><th>对方户名</th><th>对方行名</th><th>交易流水号</th><th>传票序号</th><th>记录状态</th><th>摘要</th><th>交易附言</th><th>客户账户类型</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="20" style="text-align:center;padding:40px;color:var(--gray-500);">暂无流水记录</td></tr>'}</tbody></table>
     </div>`;
 }
@@ -121,10 +123,14 @@ function toggleBankTxSelectAll() {
 
 function updateBankTxBatchBtn() {
   const count = document.querySelectorAll('.bt-check:checked').length;
-  const btn = document.getElementById('btBatchDelBtn');
-  if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
-    btn.disabled = count === 0;
+  const delBtn = document.getElementById('btBatchDelBtn');
+  if (delBtn) {
+    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.disabled = count === 0;
+  }
+  const genBtn = document.getElementById('btBatchGenBtn');
+  if (genBtn) {
+    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
   }
 }
 
@@ -413,7 +419,15 @@ async function renderInputVATDeductions(container) {
         const jv2 = it.journal_voucher_no || '';
         html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<span style="color:#1d4ed8;font-weight:500">' + jv2 + '</span>' : '-') + '</td>';
         html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVDGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="editVATDeduction(' + it.id + ')">编辑</button><button class="btn btn-sm btn-danger" onclick="deleteIVDGroup(\'' + allIds + '\')">删除</button></td>';
+        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
+        if (jv2) {
+          html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
+        } else {
+          html += '<button class="btn btn-sm btn-secondary" onclick="editVATDeduction(' + it.id + ')">编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" onclick="deleteIVDGroup(\'' + allIds + '\')">删除</button>';
+        }
+        html += '</td>';
       }
       html += '</tr>';
     });
@@ -443,6 +457,10 @@ function updateIVDBatchBtn() {
   if (certBtn) {
     certBtn.textContent = count > 0 ? '✅ 批量认证（' + count + '）' : '✅ 批量认证';
     certBtn.disabled = count === 0;
+  }
+  const genBtn = document.getElementById('ivdBatchGenBtn');
+  if (genBtn) {
+    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
   }
 }
 
@@ -676,7 +694,7 @@ async function batchGenerateBankVouchers() {
   if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
   const ids = [];
   checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
-  if (!confirm('确认为选中的 ' + ids.length + ' 条银行流水生成记账凭证？')) return;
+  if (!confirm('确认为选中的 ' + ids.length + ' 条银行流水生成凭证？')) return;
   try {
     const res = await api('/api/bank-transactions/batch-to-journal', {
       method: 'POST',

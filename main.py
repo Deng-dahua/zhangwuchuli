@@ -2787,6 +2787,23 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(1), db: Sess
     is_debit = tx.debit_amount and tx.debit_amount > 0
     amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
+    # 匹配客户档案：根据对方户名或对方账号查找客户
+    matched_customer = None
+    if tx.counterparty_name:
+        matched_customer = db.query(Customer).filter(
+            Customer.company_id == company_id,
+            Customer.name == tx.counterparty_name
+        ).first()
+    if not matched_customer and tx.counterparty_account:
+        matched_customer = db.query(Customer).filter(
+            Customer.company_id == company_id,
+            Customer.bank_account == tx.counterparty_account
+        ).first()
+
+    # 付款给客户时登记为负数凭证
+    if matched_customer and is_debit:
+        amount = -amount
+
     entry = JournalEntry(
         company_id=company_id,
         entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
@@ -4476,6 +4493,24 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
                 db.flush()
             is_debit = tx.debit_amount and tx.debit_amount > 0
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+
+            # 匹配客户档案：根据对方户名或对方账号查找客户
+            matched_customer = None
+            if tx.counterparty_name:
+                matched_customer = db.query(Customer).filter(
+                    Customer.company_id == company_id,
+                    Customer.name == tx.counterparty_name
+                ).first()
+            if not matched_customer and tx.counterparty_account:
+                matched_customer = db.query(Customer).filter(
+                    Customer.company_id == company_id,
+                    Customer.bank_account == tx.counterparty_account
+                ).first()
+
+            # 付款给客户时登记为负数凭证
+            if matched_customer and is_debit:
+                amount = -amount
+
             entry = JournalEntry(
                 company_id=company_id,
                 entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
