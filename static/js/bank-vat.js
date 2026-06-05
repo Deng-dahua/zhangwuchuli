@@ -360,10 +360,10 @@ async function renderInputVATDeductions(container) {
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
-  // 三号分组：发票代码+发票号码+数电发票号码相同的行，公用选择框/凭证号/生成凭证/操作
+  // 按导入批次分组：同一次上传的记录共享选择框/凭证号/生成凭证/操作
   const ivdGroupMap = new Map();
   list.forEach(i => {
-    const key = (i.invoice_code || '') + '|' + (i.invoice_no || '') + '|' + (i.digital_invoice_no || '');
+    const key = i.import_batch_id || '__single__' + i.id;
     if (!ivdGroupMap.has(key)) ivdGroupMap.set(key, []);
     ivdGroupMap.get(key).push(i);
   });
@@ -383,7 +383,7 @@ async function renderInputVATDeductions(container) {
     list.forEach(it => {
       const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
       const isFirst = ivdFirstInGroup.has(it.id);
-      const key = (it.invoice_code || '') + '|' + (it.invoice_no || '') + '|' + (it.digital_invoice_no || '');
+      const key = it.import_batch_id || '__single__' + it.id;
       const grp = ivdGroupMap.get(key) || [it];
       const allIds = grp.map(g => g.id).join(',');
       html += '<tr>';

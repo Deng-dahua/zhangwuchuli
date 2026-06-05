@@ -681,6 +681,7 @@ class InputVATDeduction(Base):
     voucher_no = Column(String(30), comment="关联凭证号")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    import_batch_id = Column(String(36), comment="导入批次ID，同一次导入共享")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

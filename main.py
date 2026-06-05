@@ -4228,6 +4228,7 @@ def list_input_vat_deductions(
         "deduction_method": it.deduction_method or "",
         "voucher_no": it.voucher_no or "", "remark": it.remark or "",
         "journal_voucher_no": voucher_map.get(it.id, ""),
+        "import_batch_id": it.import_batch_id or "",
         "created_at": str(it.created_at) if it.created_at else ""
     } for it in items]
 
@@ -4758,6 +4759,8 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         rows_data.append(row_dict)
 
         # 根据映射转换并导入
+        import uuid
+        import_batch_id = str(uuid.uuid4())
         imported = 0
         errors = []
         infos = []  # 非错误提示（如自动创建客户档案）
@@ -5110,7 +5113,8 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         check_time=check_time,
                         risk_level=mapped.get("risk_level", "正常"),
                         remark=mapped.get("remark", ""),
-                        raw_data=json.dumps(extra) if extra else None
+                        raw_data=json.dumps(extra) if extra else None,
+                        import_batch_id=import_batch_id
                     )
                     db.add(inv)
                     try:
