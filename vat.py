@@ -243,6 +243,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row6_exempt_sales": 0.0,                      # 免税销售额
         "row7_export_exempt": 0.0,                     # 出口免税销售额
         "row8_tax_free": 0.0,                          # 其中：免税劳务
+        "row9_exempt_goods": 0.0,                      # 免税货物销售额
+        "row10_exempt_service": 0.0,                   # 免税劳务销售额
         # 二、税款计算
         "row11_output_tax": round(output_tax, 2),      # 销项税额
         "row12_input_tax": round(input_tax, 2),         # 进项税额
@@ -269,6 +271,9 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row32_check_tax_should": 0.0,                  # 其中：欠缴税额
         "row33_check_prepaid": 0.0,                     # 本期入库查补税额
         "row34_should_check": 0.0,                      # 期末未缴查补税额
+        "row36_prior_unpaid_check": 0.0,                # 期初未缴查补税额
+        "row37_check_paid": 0.0,                        # 本期入库查补税额
+        "row38_end_check": 0.0,                         # 期末未缴查补税额
         # 四、附加税费
         "row39_city_maintenance_tax": city_tax,          # 城市维护建设税
         "row40_education_surcharge": edu_surcharge,      # 教育费附加
@@ -348,6 +353,50 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         # --- 3%征收率的服务、不动产和无形资产 ---
         "row7_3_service_special_sales": 0.0, "row7_3_service_special_tax": 0.0,
         "row7_3_service_total_sales": 0.0, "row7_3_service_total_tax": 0.0,
+        # 6%征收率
+        "row8_6_collect_sales": 0.0, "row8_6_collect_tax": 0.0,
+        "row8_6_collect_other_sales": 0.0, "row8_6_collect_other_tax": 0.0,
+        "row8_6_collect_no_invoice_sales": 0.0, "row8_6_collect_no_invoice_tax": 0.0,
+        "row8_6_collect_check_sales": 0.0, "row8_6_collect_check_tax": 0.0,
+        "row8_6_collect_total_sales": 0.0, "row8_6_collect_total_tax": 0.0,
+        # 9%税率服务
+        "row4_9_service_sales": 0.0, "row4_9_service_tax": 0.0,
+        "row4_9_service_other_sales": 0.0, "row4_9_service_other_tax": 0.0,
+        "row4_9_service_no_invoice_sales": 0.0, "row4_9_service_no_invoice_tax": 0.0,
+        "row4_9_service_check_sales": 0.0, "row4_9_service_check_tax": 0.0,
+        "row4_9_service_total_sales": 0.0, "row4_9_service_total_tax": 0.0,
+        # 6%税率额外
+        "row5_6_extra": 0.0, "row5_6_extra_tax": 0.0,
+        # 5%征收率货物(9a)
+        "row9a_5_goods_sales": 0.0, "row9a_5_goods_tax": 0.0,
+        "row9a_5_goods_other_sales": 0.0, "row9a_5_goods_other_tax": 0.0,
+        "row9a_5_goods_no_invoice_sales": 0.0, "row9a_5_goods_no_invoice_tax": 0.0,
+        "row9a_5_goods_check_sales": 0.0, "row9a_5_goods_check_tax": 0.0,
+        "row9a_5_goods_total_sales": 0.0, "row9a_5_goods_total_tax": 0.0,
+        # 5%征收率服务(9b)
+        "row9b_5_service_sales": 0.0, "row9b_5_service_tax": 0.0,
+        "row9b_5_service_other_sales": 0.0, "row9b_5_service_other_tax": 0.0,
+        "row9b_5_service_no_invoice_sales": 0.0, "row9b_5_service_no_invoice_tax": 0.0,
+        "row9b_5_service_check_sales": 0.0, "row9b_5_service_check_tax": 0.0,
+        "row9b_5_service_total_sales": 0.0, "row9b_5_service_total_tax": 0.0,
+        # 4%征收率
+        "row10_4_collect_sales": 0.0, "row10_4_collect_tax": 0.0,
+        "row10_4_collect_other_sales": 0.0, "row10_4_collect_other_tax": 0.0,
+        "row10_4_collect_no_invoice_sales": 0.0, "row10_4_collect_no_invoice_tax": 0.0,
+        "row10_4_collect_check_sales": 0.0, "row10_4_collect_check_tax": 0.0,
+        "row10_4_collect_total_sales": 0.0, "row10_4_collect_total_tax": 0.0,
+        # 3%征收率货物(11)
+        "row11_3_goods_sales": round(_sr("rate_3")["amount"], 2), "row11_3_goods_tax": round(_sr("rate_3")["tax"], 2),
+        "row11_3_goods_other_sales": 0.0, "row11_3_goods_other_tax": 0.0,
+        "row11_3_goods_no_invoice_sales": 0.0, "row11_3_goods_no_invoice_tax": 0.0,
+        "row11_3_goods_check_sales": 0.0, "row11_3_goods_check_tax": 0.0,
+        "row11_3_goods_total_sales": round(_sr("rate_3")["amount"], 2), "row11_3_goods_total_tax": round(_sr("rate_3")["tax"], 2),
+        # 3%征收率服务(12)
+        "row12_3_service_sales": 0.0, "row12_3_service_tax": 0.0,
+        "row12_3_service_other_sales": 0.0, "row12_3_service_other_tax": 0.0,
+        "row12_3_service_no_invoice_sales": 0.0, "row12_3_service_no_invoice_tax": 0.0,
+        "row12_3_service_check_sales": 0.0, "row12_3_service_check_tax": 0.0,
+        "row12_3_service_total_sales": 0.0, "row12_3_service_total_tax": 0.0,
         # --- 免抵退税 ---
         "row8_export_sales": 0.0, "row8_export_tax": 0.0,
         # --- 免税 ---
@@ -385,36 +434,40 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row1_certified_count": cert_count,           # 认证相符的增值税专用发票-份数
         "row1_certified_amount": round(cert_amount, 2), # 金额
         "row1_certified_tax": round(cert_tax, 2),       # 税额
-        "row2_other_deduct_count": 0, "row2_other_deduct_amount": 0.0, "row2_other_deduct_tax": 0.0,  # 其他扣税凭证
-        "row3_special_invoice_count": 0, "row3_special_invoice_amount": 0.0, "row3_special_invoice_tax": 0.0,  # 农产品收购/销售发票
-        "row4_import_tax_cert_count": 0, "row4_import_tax_cert_amount": 0.0, "row4_import_tax_cert_tax": 0.0,  # 海关进口增值税专用缴款书
-        "row5_tax_payment_cert_count": 0, "row5_tax_payment_cert_amount": 0.0, "row5_tax_payment_cert_tax": 0.0,  # 代扣代缴税收缴款凭证
-        "row6_other_cert_count": 0, "row6_other_cert_amount": 0.0, "row6_other_cert_tax": 0.0,  # 其他
-        "row7_current_total_transfer": 0.0,  # 当期申报抵扣进项税额合计(转入)
-        # 二、进项税额转出额
-        "row8_transfer_out_total": 0.0,  # 本期进项税额转出额
-        "row9_exempt_transfer": 0.0,     # 免税项目用
-        "row10_collective_transfer": 0.0, # 集体福利、个人消费
-        "row11_abnormal_loss": 0.0,       # 非正常损失
-        "row12_simple_tax_transfer": 0.0, # 简易计税方法征税项目用
-        "row13_exempt_credit_transfer": 0.0, # 免抵退税办法不得抵扣的进项税额
-        "row14_tax_check_transfer": 0.0,  # 纳税检查调减进项税额
-        "row15_other_transfer": 0.0,      # 其他应作进项税额转出的情形
-        "row16_red_letter_transfer": 0.0, # 红字专用发票信息表注明的进项税额
-        "row17_input_transfer_out": 0.0,  # 上期留抵税额抵减欠税
-        "row18_transfer_out_check": 0.0,  # 上期留抵税额退税
-        "row19_except_transfer_out": 0.0, # 异常凭证转出进项税额
-        # 三、待抵扣进项税额
-        "row20_pending_total": 0.0,       # 本期认证相符且本期未申报抵扣
-        "row21_pending_begin": 0.0,       # 期初已认证相符但未申报抵扣
-        "row22_pending_current": 0.0,     # 本期认证相符且本期未申报抵扣
-        "row23_pending_other_begin": 0.0, # 其他扣税凭证-期初
-        "row24_pending_other_current": 0.0, # 其他扣税凭证-本期
+        "row2_certified_curr_count": cert_count, "row2_certified_curr_amount": round(cert_amount, 2), "row2_certified_curr_tax": round(cert_tax, 2),
+        "row3_certified_prior_count": 0, "row3_certified_prior_amount": 0.0, "row3_certified_prior_tax": 0.0,
+        # 其他扣税凭证
+        "row4_other_count": 0, "row4_other_amount": 0.0, "row4_other_tax": 0.0,
+        "row5_customs_count": 0, "row5_customs_amount": 0.0, "row5_customs_tax": 0.0,
+        "row6_agri_count": 0, "row6_agri_amount": 0.0, "row6_agri_tax": 0.0,
+        "row7_wht_count": 0, "row7_wht_tax": 0.0,
+        "row8a_agri_extra": 0.0,
+        "row8b_other_count": 0, "row8b_other_amount": 0.0, "row8b_other_tax": 0.0,
+        # 不动产/旅客/外贸
+        "row9_real_estate_count": 0, "row9_real_estate_amount": 0.0, "row9_real_estate_tax": 0.0,
+        "row10_travel_count": 0, "row10_travel_amount": 0.0, "row10_travel_tax": 0.0,
+        "row11_foreign_trade_count": 0, "row11_foreign_trade_tax": 0.0,
+        # 二、进项税额转出额 (numbered 13-23b as frontend expects)
+        "row13_transfer_out_total": 0.0,
+        "row14_exempt_transfer": 0.0, "row15_collective_transfer": 0.0,
+        "row16_abnormal_loss": 0.0, "row17_simple_tax_transfer": 0.0,
+        "row18_exempt_credit_transfer": 0.0, "row19_tax_check_transfer": 0.0,
+        "row20_red_letter_transfer": 0.0, "row21_prior_credit_arrears": 0.0,
+        "row22_prior_credit_refund": 0.0, "row23a_abnormal_transfer": 0.0, "row23b_other_transfer": 0.0,
+        # 三、待抵扣进项税额 (numbered 24-34)
+        "row25_pending_begin_count": 0, "row25_pending_begin_amount": 0.0, "row25_pending_begin_tax": 0.0,
+        "row26_pending_curr_count": 0, "row26_pending_curr_amount": 0.0, "row26_pending_curr_tax": 0.0,
+        "row27_pending_end_count": 0, "row27_pending_end_amount": 0.0, "row27_pending_end_tax": 0.0,
+        "row28_not_allowed_count": 0, "row28_not_allowed_amount": 0.0, "row28_not_allowed_tax": 0.0,
+        "row29_other_pending_count": 0, "row29_other_pending_amount": 0.0, "row29_other_pending_tax": 0.0,
+        "row30_customs_pending_count": 0, "row30_customs_pending_amount": 0.0, "row30_customs_pending_tax": 0.0,
+        "row31_agri_pending_count": 0, "row31_agri_pending_amount": 0.0, "row31_agri_pending_tax": 0.0,
+        "row32_wht_pending_count": 0, "row32_wht_pending_tax": 0.0,
+        "row33_other_pending_count": 0, "row33_other_pending_amount": 0.0, "row33_other_pending_tax": 0.0,
         # 四、其他
-        "row25_other_begin": 0.0,         # 期初已征税款
-        "row26_other_current": 0.0,       # 本期取得
-        "row27_other_end": 0.0,           # 期末已征税款
-        # 合计
+        "row35_cert_count": cert_count, "row35_cert_amount": round(cert_amount, 2), "row35_cert_tax": round(cert_tax, 2),
+        "row36_wht_total_tax": 0.0,
+        # 合计(兼容)
         "certified_count": cert_count,
         "certified_amount": round(cert_amount, 2),
         "certified_tax": round(cert_tax, 2),
@@ -441,6 +494,17 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         # 5%征收率项目
         "row5_5_price_tax": 0.0, "row5_5_begin": 0.0, "row5_5_occur": 0.0,
         "row5_5_should": 0.0, "row5_5_actual": 0.0, "row5_5_end": 0.0,
+        # 3%征收率
+        "row6_3_price_tax": 0.0, "row6_3_begin": 0.0, "row6_3_occur": 0.0,
+        "row6_3_should": 0.0, "row6_3_actual": 0.0, "row6_3_end": 0.0,
+        # 金融商品转让
+        "row4_fin_price_tax": 0.0, "row4_fin_begin": 0.0, "row4_fin_occur": 0.0,
+        "row4_fin_should": 0.0, "row4_fin_actual": 0.0, "row4_fin_end": 0.0,
+        # 免抵退税+免税
+        "row7_exempt_credit_price_tax": 0.0, "row7_exempt_credit_begin": 0.0, "row7_exempt_credit_occur": 0.0,
+        "row7_exempt_credit_should": 0.0, "row7_exempt_credit_actual": 0.0, "row7_exempt_credit_end": 0.0,
+        "row8_exempt_price_tax": 0.0, "row8_exempt_begin": 0.0, "row8_exempt_occur": 0.0,
+        "row8_exempt_should": 0.0, "row8_exempt_actual": 0.0, "row8_exempt_end": 0.0,
         # 合计
         "row_total_price_tax": round(sales_total, 2), "row_total_begin": 0.0,
         "row_total_occur": 0.0, "row_total_should": 0.0, "row_total_actual": 0.0, "row_total_end": 0.0,
@@ -454,14 +518,22 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # ====== 附列资料（四）：税额抵减情况表 ======
     form_credit = {
         "period": period,
-        # 一、税额抵减情况
-        "tax_control_device": 0.0,  # 增值税税控系统专用设备费及技术维护费
-        "subtotal_tax": 0.0,         # 合计(税额抵减)
+        # 一、税额抵减情况（5项）
+        "tax_control_device": 0.0,
+        "tax_control_begin": 0.0, "tax_control_occur": 0.0, "tax_control_should": 0.0,
+        "tax_control_actual": 0.0, "tax_control_end": 0.0,
+        "subtotal_tax": 0.0,
+        "branch_begin": 0.0, "branch_occur": 0.0, "branch_should": 0.0, "branch_actual": 0.0, "branch_end": 0.0,
+        "construction_begin": 0.0, "construction_occur": 0.0, "construction_should": 0.0, "construction_actual": 0.0, "construction_end": 0.0,
+        "real_estate_begin": 0.0, "real_estate_occur": 0.0, "real_estate_should": 0.0, "real_estate_actual": 0.0, "real_estate_end": 0.0,
+        "rental_begin": 0.0, "rental_occur": 0.0, "rental_should": 0.0, "rental_actual": 0.0, "rental_end": 0.0,
         # 二、加计抵减情况（一般项目）
-        "item1_begin": 0.0, "item1_occur": 0.0, "item1_should_deduct": 0.0,
+        "item1_begin": 0.0, "item1_occur": 0.0, "item1_adjust": 0.0,
+        "item1_can_deduct": 0.0, "item1_should_deduct": 0.0,
         "item1_actual_deduct": 0.0, "item1_end": 0.0,
         # 即征即退项目
-        "item2_begin": 0.0, "item2_occur": 0.0, "item2_should_deduct": 0.0,
+        "item2_begin": 0.0, "item2_occur": 0.0, "item2_adjust": 0.0,
+        "item2_can_deduct": 0.0, "item2_should_deduct": 0.0,
         "item2_actual_deduct": 0.0, "item2_end": 0.0,
     }
     vd.form_credit = json.dumps(form_credit, ensure_ascii=False)
@@ -480,30 +552,56 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "city_base": round(tax_payable, 2),
         "city_rate": 0.07,
         "city_tax": round(city_full, 2),
-        "city_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
+        "city_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "city_reduction_amount": round(city_full * reduction_rate, 2),
+        "city_six_tax_amount": round(city_full * reduction_rate, 2),
         "city_final": city_tax,
         "city_reduction_rate": reduction_rate,
+        "city_vat_exempt_credit": 0.0,
+        "city_vat_refund_deduct": 0.0,
+        "city_edu_pilot_code": "",
+        "city_edu_pilot_amount": 0.0,
+        "city_paid": 0.0,
         # 教育费附加
         "edu_base": round(tax_payable, 2),
         "edu_rate": 0.03,
         "edu_tax": round(edu_full, 2),
-        "edu_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
+        "edu_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "edu_reduction_amount": round(edu_full * reduction_rate, 2),
+        "edu_six_tax_amount": round(edu_full * reduction_rate, 2),
         "edu_final": edu_surcharge,
         "edu_reduction_rate": reduction_rate,
+        "edu_vat_exempt_credit": 0.0,
+        "edu_vat_refund_deduct": 0.0,
+        "edu_edu_pilot_code": "",
+        "edu_edu_pilot_amount": 0.0,
+        "edu_paid": 0.0,
         # 地方教育附加
         "local_edu_base": round(tax_payable, 2),
         "local_edu_rate": 0.02,
         "local_edu_tax": round(local_edu_full, 2),
-        "local_edu_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
+        "local_edu_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "local_edu_reduction_amount": round(local_edu_full * reduction_rate, 2),
+        "local_edu_six_tax_amount": round(local_edu_full * reduction_rate, 2),
         "local_edu_final": local_edu,
         "local_edu_reduction_rate": reduction_rate,
+        "local_edu_vat_exempt_credit": 0.0,
+        "local_edu_vat_refund_deduct": 0.0,
+        "local_edu_edu_pilot_code": "",
+        "local_edu_edu_pilot_amount": 0.0,
+        "local_edu_paid": 0.0,
         # 合计
         "total_tax": round(city_full + edu_full + local_edu_full, 2),
         "total_reduction": round((city_full + edu_full + local_edu_full) * reduction_rate, 2),
+        "total_six_tax_reduction": round((city_full + edu_full + local_edu_full) * reduction_rate, 2),
+        "total_edu_pilot": 0.0,
+        "total_paid": 0.0,
         "total_final": round(city_tax + edu_surcharge + local_edu, 2),
+        # 兼容
+        "vat_exempt_credit": 0.0, "vat_refund_deduct": 0.0,
+        "city_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
+        "edu_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
+        "local_edu_reduction_type": "六税两费减征" if reduction_rate > 0 else "",
     }
     vd.form_surcharge = json.dumps(form_surcharge, ensure_ascii=False)
 
