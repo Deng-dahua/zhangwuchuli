@@ -64,10 +64,8 @@ async function renderJournal(container) {
         const allIds = g.entries.map(e => e.id).join(',');
         g.entries.forEach((r, idx) => {
           html += '<tr>';
-          if (idx === 0) {
-            // 同一凭证号只显示一个复选框
-            html += '<td class="col-checkbox" rowspan="' + sz + '" style="text-align:center"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
-          }
+          // 每行独立复选框（不再 rowspan 合并）
+          html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
           html += '<td>' + r.period + '</td>';
           html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
           html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';

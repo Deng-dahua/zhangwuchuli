@@ -366,21 +366,6 @@ async function renderInputVATDeductions(container) {
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
-  // 按导入批次分组：同一次上传的记录共享选择框/凭证号/生成凭证/操作
-  const ivdGroupMap = new Map();
-  list.forEach(i => {
-    const key = i.import_batch_id || '__single__' + i.id;
-    if (!ivdGroupMap.has(key)) ivdGroupMap.set(key, []);
-    ivdGroupMap.get(key).push(i);
-  });
-  const ivdFirstInGroup = new Set();
-  ivdGroupMap.forEach((grp) => { ivdFirstInGroup.add(grp[0].id); });
-  // 计算每组是否有凭证号
-  const ivdGroupHasVoucher = new Set();
-  ivdGroupMap.forEach((grp, key) => {
-    if (grp.some(i => i.journal_voucher_no)) ivdGroupHasVoucher.add(key);
-  });
-
   // 表格
   const riskColors = { [STATUS.RISK_NORMAL]: '#059669', [STATUS.RISK_WARN]: '#d97706', [STATUS.RISK_ABNORMAL]: '#e02424', [STATUS.RISK_LOST]: '#7c3aed' };
   html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table class="data-table"><thead><tr>';
@@ -393,16 +378,10 @@ async function renderInputVATDeductions(container) {
   } else {
     list.forEach(it => {
       const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
-      const isFirst = ivdFirstInGroup.has(it.id);
-      const key = it.import_batch_id || '__single__' + it.id;
-      const grp = ivdGroupMap.get(key) || [it];
-      const allIds = grp.map(g => g.id).join(',');
+      const jv2 = it.journal_voucher_no || '';
       html += '<tr>';
-      // 选择框：首行 rowspan 跨整组，垂直居中
-      if (isFirst) {
-        const groupHasVoucher = ivdGroupHasVoucher.has(key);
-        html += '<td class="col-checkbox" rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="ivd-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updateIVDBatchBtn()" ' + (groupHasVoucher ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
-      }
+      // 每行独立复选框（不再 rowspan 合并）
+      html += '<td style="text-align:center"><input type="checkbox" class="ivd-check" data-id="' + it.id + '" onchange="updateIVDBatchBtn()" ' + (jv2 ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
       html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';
       html += '<td>' + (it.domestic_sale_cert_no || '-') + '</td>';
@@ -420,21 +399,20 @@ async function renderInputVATDeductions(container) {
       html += '<td><span class="' + stCls + '">' + (it.invoice_status || '-') + '</span></td>';
       html += '<td>' + (it.check_time ? it.check_time.slice(0,16).replace('T',' ') : '-') + '</td>';
       html += '<td><span style="color:' + (riskColors[it.risk_level] || '#333') + ';font-weight:500;">' + (it.risk_level || '-') + '</span></td>';
-      // 凭证号/生成凭证/操作：首行 rowspan 跨整组
-      if (isFirst) {
-        const jv2 = it.journal_voucher_no || '';
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv2 + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv2 + '</a>' : '-') + '</td>';
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVDGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
-        if (jv2) {
-          html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
-          html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
-        } else {
-          html += '<button class="btn btn-sm btn-secondary" onclick="editVATDeduction(' + it.id + ')">编辑</button>';
-          html += '<button class="btn btn-sm btn-danger" onclick="deleteIVDGroup(\'' + allIds + '\')">删除</button>';
-        }
-        html += '</td>';
+      // 凭证号（每行独立）
+      html += '<td>' + (jv2 ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv2 + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv2 + '</a>' : '-') + '</td>';
+      // 生成凭证（每行独立）
+      html += '<td style="width:90px">' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVD(' + it.id + ')">生成凭证</button>') + '</td>';
+      // 操作（每行独立）
+      html += '<td style="white-space:nowrap">';
+      if (jv2) {
+        html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
+      } else {
+        html += '<button class="btn btn-sm btn-secondary" onclick="editVATDeduction(' + it.id + ')">编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deleteIVD(' + it.id + ')">删除</button>';
       }
+      html += '</td>';
       html += '</tr>';
     });
   }
@@ -453,8 +431,7 @@ function toggleIVDSelectAll() {
 function updateIVDBatchBtn() {
   const enabledBoxes = document.querySelectorAll('.ivd-check:not(:disabled)');
   const checkedEnabled = document.querySelectorAll('.ivd-check:not(:disabled):checked');
-  let count = 0;
-  checkedEnabled.forEach(cb => { count += parseInt(cb.dataset.count || '1'); });
+  const count = checkedEnabled.length;
   const delBtn = document.getElementById('ivdBatchDelBtn');
   const certBtn = document.getElementById('ivdBatchCertBtn');
   if (delBtn) {
@@ -482,9 +459,7 @@ async function batchDeleteIVD() {
   const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) return;
   const ids = [];
-  checked.forEach(cb => {
-    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
-  });
+  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
   if (!confirm('确认删除选中的 ' + ids.length + ' 条认证记录？此操作不可恢复。')) return;
   try {
     const result = await api('/api/input-vat-deductions/batch-delete', {
@@ -677,14 +652,56 @@ async function deleteVATDeduction(id) {
   toast('已删除');
 }
 
+async function generateFromIVD(id) {
+  if (!confirm('确认从该认证记录生成凭证？')) return;
+  try {
+    let res = await api('/api/input-vat-deductions/' + id + '/to-journal', { method: 'POST' });
+    toast(res.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message || '生成失败', 'error'); }
+}
+
+// 分组生成凭证（已废弃，改为每行独立）
+/*
+async function generateFromIVDGroup(idStr) {
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  if (!confirm('确认为该组 ' + ids.length + ' 条认证记录生成进项抵扣凭证？')) return;
+  try {
+    for (var j = 0; j < ids.length; j++) {
+      await api('/api/input-vat-deductions/' + ids[j] + '/to-journal', { method: 'POST' });
+    }
+    toast('已为 ' + ids.length + ' 条记录生成凭证', 'success');
+    renderInputVATDeductions();
+  } catch (e) {
+    handleError(e, '生成凭证');
+  }
+}
+*/
+
+// 分组删除（已废弃，改为每行独立）
+/*
+async function deleteIVDGroup(idStr) {
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  if (!confirm('确认删除该组 ' + ids.length + ' 条认证记录？此操作不可恢复。')) return;
+  try {
+    const result = await api('/api/input-vat-deductions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+*/
+
+// 批量生成进项抵扣凭证（每行独立勾选）
 async function batchGenerateIVDVouchers() {
   // 收集选中的进项抵扣ID
   const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
   const ids = [];
-  checked.forEach(cb => {
-    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
-  });
+  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
   const btn = document.getElementById('ivdBatchGenBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
   try {
