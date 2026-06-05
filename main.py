@@ -4086,7 +4086,7 @@ def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(1), db=Dep
 
 class InputVATDeductionCreate(BaseModel):
     purchase_invoice_id: Optional[int] = None
-    check_status: Optional[str] = "未勾选"
+    check_status: Optional[str] = None
     invoice_source: Optional[str] = None
     domestic_sale_cert_no: Optional[str] = None
     digital_invoice_no: Optional[str] = None
@@ -4208,7 +4208,7 @@ def list_input_vat_deductions(
             voucher_map[it.id] = period_vouchers[ep]
     return [{
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
-        "check_status": it.check_status or "未勾选",
+        "check_status": it.check_status or "",
         "invoice_source": it.invoice_source or "",
         "domestic_sale_cert_no": it.domestic_sale_cert_no or "",
         "digital_invoice_no": it.digital_invoice_no or "",
@@ -4286,7 +4286,7 @@ def get_input_vat_deduction(item_id: int, company_id: int = Query(1), db: Sessio
         raise HTTPException(404, detail="抵扣记录不存在")
     return {
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
-        "check_status": it.check_status or "未勾选",
+        "check_status": it.check_status or "",
         "invoice_source": it.invoice_source or "",
         "domestic_sale_cert_no": it.domestic_sale_cert_no or "",
         "digital_invoice_no": it.digital_invoice_no or "",
@@ -5103,7 +5103,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     
                     inv = InputVATDeduction(
                         company_id=company_id,
-                        check_status=mapped.get("check_status", "未勾选"),
+                        check_status=mapped.get("check_status", ""),
                         invoice_source=mapped.get("invoice_source", ""),
                         domestic_sale_cert_no=mapped.get("domestic_sale_cert_no", ""),
                         digital_invoice_no=mapped.get("digital_invoice_no", ""),

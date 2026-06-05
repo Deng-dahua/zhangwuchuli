@@ -649,7 +649,7 @@ class InputVATDeduction(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     purchase_invoice_id = Column(Integer, ForeignKey("purchase_invoices.id"), nullable=True, comment="关联取得发票ID")
     # 核心发票信息
-    check_status = Column(String(10), default="未勾选", comment="勾选状态：已勾选/未勾选")
+    check_status = Column(String(10), comment="勾选状态：已勾选/未勾选")
     invoice_source = Column(String(50), comment="发票来源，如：勾选平台/扫描认证/手工录入")
     domestic_sale_cert_no = Column(String(50), comment="转内销证明编号")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
