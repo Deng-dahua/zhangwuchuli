@@ -440,6 +440,9 @@ async function renderCustomers(container) {
             <tbody>
               ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
                 const locked = c.has_journal;
+                const editBtn = locked
+                  ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可编辑">编辑</button>`
+                  : `<button class="btn btn-sm btn-secondary" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>`;
                 const delBtn = locked
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteCust(${c.id})">删除</button>`;
@@ -451,7 +454,7 @@ async function renderCustomers(container) {
                   <td>${c.name}</td>
                   <td style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
                   <td style="white-space:nowrap">
-                    <button class="btn btn-sm btn-secondary" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>
+                    ${editBtn}
                     ${delBtn}
                   </td>
                 </tr>
@@ -554,20 +557,29 @@ async function renderSuppliers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
-            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="suppSelectAll" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => `
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => {
+                const locked = s.has_journal;
+                const editBtn = locked
+                  ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可编辑">编辑</button>`
+                  : `<button class="btn btn-sm btn-secondary" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>`;
+                const delBtn = locked
+                  ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可删除">删除</button>`
+                  : `<button class="btn btn-sm btn-danger" onclick="deleteSupp(${s.id})">删除</button>`;
+                const cbAttr = locked ? 'disabled title="该供应商已被序时账引用"' : '';
+                return `
                 <tr>
-                  <td><input type="checkbox" class="supp-check" value="${s.id}" onchange="updateBatchDelSuppBtn()"></td>
+                  <td><input type="checkbox" class="supp-check" value="${s.id}" onchange="updateBatchDelSuppBtn()" ${cbAttr}></td>
                   <td>${s.code}</td>
                   <td>${s.name}</td>
                   <td style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
                   <td style="white-space:nowrap">
-                    <button class="btn btn-sm btn-secondary" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSupp(${s.id})">删除</button>
+                    ${editBtn}
+                    ${delBtn}
                   </td>
                 </tr>
-              `).join('')}
+              `}).join('')}
             </tbody>
           </table>
         </div>
@@ -579,18 +591,25 @@ async function renderSuppliers(container) {
 }
 
 function toggleSelectAllSupp(el) {
-  document.querySelectorAll('.supp-check').forEach(cb => { cb.checked = el.checked; });
+  document.querySelectorAll('.supp-check:not(:disabled)').forEach(cb => { cb.checked = el.checked; });
   updateBatchDelSuppBtn();
 }
 function updateBatchDelSuppBtn() {
   const btn = document.getElementById('btn-batch-del-supp');
   if (!btn) return;
-  const checked = document.querySelectorAll('.supp-check:checked').length;
+  const enabledBoxes = document.querySelectorAll('.supp-check:not(:disabled)');
+  const checkedEnabled = document.querySelectorAll('.supp-check:not(:disabled):checked');
+  const checked = checkedEnabled.length;
   btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
   btn.disabled = checked === 0;
+  const selectAll = document.getElementById('suppSelectAll');
+  if (selectAll) {
+    selectAll.checked = enabledBoxes.length > 0 && enabledBoxes.length === checkedEnabled.length;
+    selectAll.indeterminate = checkedEnabled.length > 0 && checkedEnabled.length < enabledBoxes.length;
+  }
 }
 async function batchDeleteSupp() {
-  const checked = [...document.querySelectorAll('.supp-check:checked')].map(cb => parseInt(cb.value));
+  const checked = [...document.querySelectorAll('.supp-check:not(:disabled):checked')].map(cb => parseInt(cb.value));
   if (checked.length === 0) return;
   if (!confirm(`确认删除选中的 ${checked.length} 条供应商记录？此操作不可撤销！`)) return;
   try {

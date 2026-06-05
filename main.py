@@ -570,6 +570,16 @@ def list_suppliers(
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
+    # 查询序时账中出现的供应商名称
+    names_with_entries = set()
+    try:
+        entries = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.counterparty.isnot(None)
+        ).all()
+        names_with_entries = {e.counterparty for e in entries if e.counterparty}
+    except Exception:
+        pass
     q = db.query(Supplier).filter(Supplier.company_id == company_id)
     if keyword:
         q = q.filter(or_(
@@ -587,7 +597,8 @@ def list_suppliers(
             "bank_name": s.bank_name,
             "bank_account": s.bank_account,
             "is_active": s.is_active,
-            "remark": s.remark
+            "remark": s.remark,
+            "has_journal": s.name in names_with_entries if s.name else False
         } for s in items
     ]
 
