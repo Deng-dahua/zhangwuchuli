@@ -374,3 +374,25 @@
     .pick-del-btn:hover { background: #fef2f2; color: #ef4444; }
     .pick-new-btn { width: 100%; padding: 13px; background: #fff; color: #1a56db; border: 2px dashed #d1d5db; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
     .pick-new-btn:hover { border-color: #1a56db; background: #eff6ff; }
+
+    /* ====== 增值税申报模板表 ====== */
+    .vat-form-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+      border: 1px solid #999; margin-bottom: 0;
+    }
+    .vat-form-table thead tr { background: #e8edf5; }
+    .vat-form-table th {
+      padding: 6px 8px; border: 1px solid #999; text-align: center;
+      font-weight: 600; font-size: 11px; color: #374151; white-space: nowrap;
+    }
+    .vat-form-table td {
+      padding: 4px 8px; border: 1px solid #ccc; color: #374151;
+    }
+    .vat-form-table tbody tr:hover td { background: #f8faff; }
+    .vat-form-table td.num {
+      text-align: right; font-variant-numeric: tabular-nums;
+      font-family: "Consolas", "Monaco", monospace;
+    }
+    .vat-form-table .vat-bold td {
+      font-weight: 700; background: #f0fdf4;
+    }
