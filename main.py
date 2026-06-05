@@ -2819,16 +2819,8 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(1), db: Sess
     is_debit = tx.debit_amount and tx.debit_amount > 0
     amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-    # 匹配客户档案
-    matched_customer = None
-    if tx.counterparty_name:
-        matched_customer = db.query(Customer).filter(
-            Customer.company_id == company_id, Customer.name == tx.counterparty_name
-        ).first()
-    if not matched_customer and tx.counterparty_account:
-        matched_customer = db.query(Customer).filter(
-            Customer.company_id == company_id, Customer.bank_account == tx.counterparty_account
-        ).first()
+    # 匹配客户档案（标准化名称 + 银行账号两级匹配）
+    matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
 
     if is_debit:
         # 付款：借 应付账款/其他应收款  贷 银行存款
@@ -4532,6 +4524,37 @@ def input_vat_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id
     }
 
 
+def _normalize_customer_name(name: str) -> str:
+    """标准化客户名称：去空格、全角括号转半角，提高匹配率"""
+    if not name:
+        return ""
+    name = name.strip()
+    # 全角括号/空格转半角
+    name = name.replace("\uff08", "(").replace("\uff09", ")")
+    name = name.replace("\u3000", " ").replace("\xa0", " ")
+    name = " ".join(name.split())  # 多个空格合并为一个
+    return name
+
+
+def _match_customer(db: Session, company_id: int, counterparty_name: str = None, counterparty_account: str = None):
+    """匹配客户档案：先按标准化名称匹配，再按银行账号匹配"""
+    if counterparty_name:
+        normalized = _normalize_customer_name(counterparty_name)
+        # 先精确匹配（标准化后）
+        customers = db.query(Customer).filter(
+            Customer.company_id == company_id
+        ).all()
+        for c in customers:
+            if _normalize_customer_name(c.name) == normalized:
+                return c
+    if counterparty_account:
+        return db.query(Customer).filter(
+            Customer.company_id == company_id,
+            Customer.bank_account == counterparty_account
+        ).first()
+    return None
+
+
 def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[int]] = None):
     """为银行流水批量生成双分录记账凭证（借贷必相等）。
     收款：借 1002 银行存款 / 贷 1122应收账款(匹配客户)或2241其他应付款(未匹配)
@@ -4587,18 +4610,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             is_debit = tx.debit_amount and tx.debit_amount > 0
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-            # 匹配客户档案
-            matched_customer = None
-            if tx.counterparty_name:
-                matched_customer = db.query(Customer).filter(
-                    Customer.company_id == company_id,
-                    Customer.name == tx.counterparty_name
-                ).first()
-            if not matched_customer and tx.counterparty_account:
-                matched_customer = db.query(Customer).filter(
-                    Customer.company_id == company_id,
-                    Customer.bank_account == tx.counterparty_account
-                ).first()
+            # 匹配客户档案（标准化名称 + 银行账号两级匹配）
+            matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
 
             if is_debit:
                 # 付款：借 应付账款/其他应收款  贷 银行存款
