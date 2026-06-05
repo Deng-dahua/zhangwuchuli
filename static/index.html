@@ -15,13 +15,13 @@
 <div id="registration-view" class="hidden">
   <div class="reg-card">
     <div class="reg-icon">🏢</div>
-    <h2 style="margin:0 0 12px 0;font-size:20px;font-weight:700">新建公司账套</h2>
-    <p style="margin:0 0 20px 0;color:#6b7280;font-size:14px">为您的企业创建第一个账套，开始财税管理</p>
+    <h2 class="reg-card-title">新建公司账套</h2>
+    <p class="reg-card-subtitle">为您的企业创建第一个账套，开始财税管理</p>
     <form class="reg-form" id="reg-form" onsubmit="handleCompanyRegister(event)">
       <input type="text" id="reg-name" placeholder="公司全称（必填）*" required>
       <input type="text" id="reg-uscc" placeholder="统一社会信用代码（选填）">
       <button type="submit" class="reg-btn" id="reg-submit-btn">✅ 创建账套，进入系统</button>
-      <div id="reg-back-hint" style="margin-top:14px;text-align:center;display:none">
+      <div id="reg-back-hint" class="reg-back-hint">
         <a onclick="exitCompany()">← 返回选择公司</a>
       </div>
     </form>
@@ -31,10 +31,10 @@
 <!-- ====== 公司选择页面 ====== -->
 <div id="company-pick-view" class="hidden">
   <div class="pick-card">
-    <h2 style="margin:0 0 8px 0;font-size:22px;font-weight:700">选择账套</h2>
-    <p style="margin:0 0 20px 0;color:#6b7280;font-size:13px">请选择要进入的公司账套</p>
+    <h2 class="pick-card-title">选择账套</h2>
+    <p class="pick-card-subtitle">请选择要进入的公司账套</p>
     <ul id="pick-list" class="pick-list"></ul>
-    <div style="text-align:center;margin-top:20px">
+    <div class="pick-new-btn-container">
       <button class="pick-new-btn" onclick="showRegistration()">＋ 创建新公司</button>
     </div>
   </div>
@@ -51,7 +51,7 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-group-title">AI 助手</div>
-    <div class="nav-item" data-page="chat" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 8px; margin: 0 4px 6px; padding: 10px 14px;">
+    <div class="nav-item nav-item-ai" data-page="chat">
       <span class="icon">🤖</span> AI 助手
     </div>
 
@@ -168,22 +168,22 @@
         <span id="company-name-display"></span>
       </div>
       <div class="period-badge" onclick="document.getElementById('period-picker').style.display=document.getElementById('period-picker').style.display==='none'?'block':'none'">
-        📅 <span id="current-period-label" style="margin-left:4px"></span>
+        📅 <span id="current-period-label" class="period-label-indent"></span>
       </div>
       <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
     </div>
   </div>
-  <div id="period-picker" style="display:none;position:absolute;top:56px;right:24px;background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;">
-    <div style="display:flex;gap:8px;align-items:center">
-      <select id="period-year" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><option value="">年</option></select>
-      <select id="period-month" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
+  <div id="period-picker" class="period-picker-popup">
+    <div class="period-picker-inner">
+      <select id="period-year" class="period-select"><option value="">年</option></select>
+      <select id="period-month" class="period-select">
         <option value="">月</option>
         <option value="01">01</option><option value="02">02</option><option value="03">03</option>
         <option value="04">04</option><option value="05">05</option><option value="06">06</option>
         <option value="07">07</option><option value="08">08</option><option value="09">09</option>
         <option value="10">10</option><option value="11">11</option><option value="12">12</option>
       </select>
-      <button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;margin-left:4px" onclick="onGlobalPeriodConfirm()">确定</button>
+      <button class="btn btn-sm btn-primary period-confirm-btn" onclick="onGlobalPeriodConfirm()">确定</button>
     </div>
   </div>
   <div class="content-area" id="content-area">

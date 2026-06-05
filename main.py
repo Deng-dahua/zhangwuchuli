@@ -888,7 +888,6 @@ def list_accounts(
 
 @app.post("/api/accounts")
 def create_account(data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
-    from pydantic import ValidationError
     code = data.get("code")
     name = data.get("name")
     category = data.get("category")

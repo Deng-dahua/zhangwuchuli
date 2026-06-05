@@ -367,6 +367,42 @@ function toast(msg, type = 'default') {
   setTimeout(() => el.remove(), 3000);
 }
 
+// ==================== 分页工具 ====================
+let _paginationState = {};
+
+function setPageState(key, skip, limit) {
+  _paginationState[key] = { skip: skip || 0, limit: limit || 50 };
+}
+
+function getPageState(key) {
+  return _paginationState[key] || { skip: 0, limit: 50 };
+}
+
+function renderPagination(container, total, key, onPageChange) {
+  const state = getPageState(key);
+  const currentPage = Math.floor(state.skip / state.limit) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / state.limit));
+  if (totalPages <= 1) return;
+
+  const html = `
+    <div class="pagination">
+      <button class="pag-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="event.stopPropagation();this.onclick=function(){${onPageChange}(0)}">
+        « 首页
+      </button>
+      <button class="pag-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="event.stopPropagation();this.onclick=function(){${onPageChange}(${(currentPage-2)*state.limit})}">
+        ‹ 上一页
+      </button>
+      <span class="pag-info">第 ${currentPage} / ${totalPages} 页</span>
+      <button class="pag-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="event.stopPropagation();this.onclick=function(){${onPageChange}(${currentPage*state.limit})}">
+        下一页 ›
+      </button>
+      <button class="pag-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="event.stopPropagation();this.onclick=function(){${onPageChange}(${(totalPages-1)*state.limit})}">
+        末页 »
+      </button>
+    </div>`;
+  container.insertAdjacentHTML('beforeend', html);
+}
+
 // 统一的 Modal 关闭函数：无参时移除 #modal-overlay（兼容 chat.js），有参时移除指定 id 元素（salary.js）
 function closeModal(id) {
     if (id) { const el = document.getElementById(id); if (el) el.remove(); return; }

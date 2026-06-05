@@ -396,3 +396,44 @@
     .vat-form-table .vat-bold td {
       font-weight: 700; background: #f0fdf4;
     }
+
+    /* ====== 登录/注册/选择公司页面样式 ====== */
+    .reg-card-title { margin: 0 0 12px 0; font-size: 20px; font-weight: 700; }
+    .reg-card-subtitle { margin: 0 0 20px 0; color: #6b7280; font-size: 14px; }
+    .reg-back-hint { margin-top: 14px; text-align: center; display: none; }
+    .pick-card-title { margin: 0 0 8px 0; font-size: 22px; font-weight: 700; }
+    .pick-card-subtitle { margin: 0 0 20px 0; color: #6b7280; font-size: 13px; }
+    .pick-new-btn-container { text-align: center; margin-top: 20px; }
+    .nav-item-ai {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff; border-radius: 8px;
+      margin: 0 4px 6px; padding: 10px 14px;
+    }
+    .period-picker-popup {
+      display: none; position: absolute; top: 56px; right: 24px;
+      background: #fff; border: 1px solid var(--gray-200);
+      border-radius: 10px; padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100;
+    }
+    .period-picker-inner { display: flex; gap: 8px; align-items: center; }
+    .period-select {
+      padding: 6px 10px; border: 1px solid var(--gray-300);
+      border-radius: 6px; font-size: 13px;
+    }
+    .period-confirm-btn { padding: 3px 10px; font-size: 12px; margin-left: 4px; }
+    .period-label-indent { margin-left: 4px; }
+
+    /* ====== 分页控件 ====== */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; padding: 12px 0; margin-top: 12px;
+    }
+    .pag-btn {
+      padding: 5px 12px; border: 1px solid var(--gray-300);
+      border-radius: 6px; background: #fff; cursor: pointer;
+      font-size: 12px; color: var(--gray-700); transition: all 0.15s;
+    }
+    .pag-btn:hover:not([disabled]) { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .pag-btn[disabled] { opacity: 0.4; cursor: default; }
+    .pag-info { font-size: 12px; color: var(--gray-500); padding: 0 8px; }
+  
