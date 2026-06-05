@@ -251,7 +251,7 @@ async function showVoucherDetail(voucherStr) {
     data.entries.forEach((e, idx) => {
       html += '<tr>';
       html += '<td style="color:var(--gray-400)">' + (idx + 1) + '</td>';
-      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (e.summary || '') + '">' + (e.summary || '-') + '</td>';
+      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e.summary || '') + '">' + escapeHtml(e.summary || '-') + '</td>';
       html += '<td>' + e.account_code + '</td>';
       html += '<td>' + e.account_name + '</td>';
       html += '<td style="text-align:right;color:#e02424;font-weight:600">' + (e.debit_amount > 0 ? '¥' + e.debit_amount.toLocaleString() : '') + '</td>';

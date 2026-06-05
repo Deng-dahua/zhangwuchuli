@@ -1,5 +1,7 @@
 // ==================== 开具发票 ====================
 
+function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
 function fmtDate(d) {
   if (!d) return '';
   return d.replace(/-/g, '/');
@@ -92,7 +94,7 @@ async function renderSalesInvoices(container) {
         html += '<td>' + fmtDate(i.invoice_date) + '</td>';
         html += '<td>' + (i.tax_category_code || '-') + '</td>';
         html += '<td>' + (i.specific_business_type || '-') + '</td>';
-        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(i.goods_name || '') + '">' + escHtml(i.goods_name || '-') + '</td>';
         html += '<td>' + (i.spec || '-') + '</td>';
         html += '<td>' + (i.unit || '-') + '</td>';
         html += '<td style="text-align:right">' + (i.quantity != null ? i.quantity : '-') + '</td>';
@@ -107,7 +109,7 @@ async function renderSalesInvoices(container) {
         html += '<td>' + posText + '</td>';
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
-        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
+        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(i.remark || '') + '">' + escHtml(i.remark || '-') + '</td>';
         const jv = i.journal_voucher_no || '';
         html += '<td>' + (jv ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv + '</a>' : '-') + '</td>';
         html += '<td>' + (jv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromSalesInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
@@ -532,7 +534,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td>' + i.invoice_date + '</td>';
         html += '<td>' + (i.tax_category_code || '-') + '</td>';
         html += '<td>' + (i.specific_business_type || '-') + '</td>';
-        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(i.goods_name || '') + '">' + escHtml(i.goods_name || '-') + '</td>';
         html += '<td>' + (i.spec || '-') + '</td>';
         html += '<td>' + (i.unit || '-') + '</td>';
         html += '<td style="text-align:right">' + (i.quantity != null ? i.quantity : '-') + '</td>';
@@ -547,7 +549,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td>' + posText + '</td>';
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
-        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
+        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(i.remark || '') + '">' + escHtml(i.remark || '-') + '</td>';
         // 凭证号/生成凭证/操作：首行 rowspan 跨整组
         if (isFirst) {
           const pjv = i.journal_voucher_no || '';
