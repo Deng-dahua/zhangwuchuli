@@ -49,7 +49,8 @@ const pages = {
   'purchase-invoices': '取得发票',
   'input-vat-deductions': '进项抵扣',
   'bank-transactions': '银行流水',
-  'vat-declaration': '增值税申报'
+  'vat-declaration': '增值税申报',
+  'salary': '工资薪金'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -297,41 +298,39 @@ function navigateTo(page) {
   const container = _ensureContainer(page);
   container.style.display = '';
 
-  // 初次渲染：容器为空才渲染（已渲染过的保留 DOM）
-  if (!container.dataset.rendered) {
-    container.dataset.rendered = '1';
-    switch (page) {
-      case 'chat': renderChat(container); break;
-      case 'dashboard': renderDashboard(container); break;
-      case 'journal': renderJournal(container); break;
-      case 'general-ledger': renderGeneralLedger(container); break;
-      case 'detail-ledger': renderDetailLedger(container); break;
-      case 'employee-ledger': renderEmployeeLedger(container); break;
-      case 'customer-ledger': renderCustomerLedger(container); break;
-      case 'supplier-ledger': renderSupplierLedger(container); break;
-      case 'profit-loss': renderProfitLoss(container); break;
-      case 'balance-sheet': renderBalanceSheet(container); break;
-      case 'cash-flow': renderCashFlow(container); break;
-      case 'equity-changes': renderEquityChanges(container); break;
-      case 'account-balance': renderAccountBalance(container); break;
-      case 'accounts': renderAccounts(container); break;
-      case 'periods': renderPeriods(container); break;
-      case 'company': showCompanyManager(container); break;
-      case 'departments': renderDepartments(container); break;
-      case 'employees': renderEmployees(container); break;
-      case 'customers': renderCustomers(container); break;
-      case 'suppliers': renderSuppliers(container); break;
-      case 'fixed-assets': renderFixedAssets(container); break;
-      case 'intangible-assets': renderIntangibleAssets(container); break;
-      case 'inventory': renderInventory(container); break;
-      case 'contracts': renderContracts(container); break;
-      case 'payments': renderPayments(container); break;
-      case 'sales-invoices': renderSalesInvoices(container); break;
-      case 'purchase-invoices': renderPurchaseInvoices(container); break;
-      case 'input-vat-deductions': renderInputVATDeductions(container); break;
-      case 'bank-transactions': renderBankTransactions(container); break;
-      case 'vat-declaration': renderVATDeclaration(container); break;
-    }
+  // 每次切换都自动刷新页面
+  switch (page) {
+    case 'chat': renderChat(container); break;
+    case 'dashboard': renderDashboard(container); break;
+    case 'journal': renderJournal(container); break;
+    case 'general-ledger': renderGeneralLedger(container); break;
+    case 'detail-ledger': renderDetailLedger(container); break;
+    case 'employee-ledger': renderEmployeeLedger(container); break;
+    case 'customer-ledger': renderCustomerLedger(container); break;
+    case 'supplier-ledger': renderSupplierLedger(container); break;
+    case 'profit-loss': renderProfitLoss(container); break;
+    case 'balance-sheet': renderBalanceSheet(container); break;
+    case 'cash-flow': renderCashFlow(container); break;
+    case 'equity-changes': renderEquityChanges(container); break;
+    case 'account-balance': renderAccountBalance(container); break;
+    case 'accounts': renderAccounts(container); break;
+    case 'periods': renderPeriods(container); break;
+    case 'company': showCompanyManager(container); break;
+    case 'departments': renderDepartments(container); break;
+    case 'employees': renderEmployees(container); break;
+    case 'customers': renderCustomers(container); break;
+    case 'suppliers': renderSuppliers(container); break;
+    case 'fixed-assets': renderFixedAssets(container); break;
+    case 'intangible-assets': renderIntangibleAssets(container); break;
+    case 'inventory': renderInventory(container); break;
+    case 'contracts': renderContracts(container); break;
+    case 'payments': renderPayments(container); break;
+    case 'sales-invoices': renderSalesInvoices(container); break;
+    case 'purchase-invoices': renderPurchaseInvoices(container); break;
+    case 'input-vat-deductions': renderInputVATDeductions(container); break;
+    case 'bank-transactions': renderBankTransactions(container); break;
+    case 'vat-declaration': renderVATDeclaration(container); break;
+    case 'salary': showSalaryPage(container); break;
   }
 }
 

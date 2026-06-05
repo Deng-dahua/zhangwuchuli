@@ -8,23 +8,23 @@ let currentEditingSalaryId = null;
 
 // ========== 页面渲染 ==========
 
-function showSalaryPage() {
+function showSalaryPage(container) {
     const period = getCurrentPeriod();
     currentSalaryPeriod = period;
     api('/api/salary/periods').then(periods => {
         if (periods && periods.length > 0 && !currentSalaryPeriod) {
             currentSalaryPeriod = periods[0];
         }
-        renderSalaryPage();
+        renderSalaryPage(container);
         loadSalaryData();
     }).catch(() => {
-        renderSalaryPage();
+        renderSalaryPage(container);
         loadSalaryData();
     });
 }
 
-function renderSalaryPage() {
-    const app = document.getElementById('content-area');
+function renderSalaryPage(container) {
+    const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
     app.innerHTML = `
         <div class="page-header">
             <h2>Ⓜ️ 工资薪金所得</h2>
@@ -39,25 +39,60 @@ function renderSalaryPage() {
             </div>
         </div>
         <div id="salary-stats" class="stats-cards"></div>
-        <div class="table-container">
+        <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px">
             <table class="data-table" id="salary-table">
                 <thead>
                     <tr>
-                        <th><input type="checkbox" id="salary-select-all" onchange="toggleSelectAll('salary')"></th>
+                        <th style="width:36px"><input type="checkbox" id="salary-select-all" onchange="toggleSelectAll('salary')" title="全选"></th>
+                        <th>工号</th>
                         <th>姓名</th>
+                        <th>证件类型</th>
                         <th>证件号码</th>
-                        <th>本期收入</th>
-                        <th>专项扣除合计</th>
-                        <th>专项附加扣除合计</th>
-                        <th>应纳税所得额</th>
-                        <th>税率</th>
-                        <th>本期应预扣税额</th>
-                        <th>实发工资</th>
+                        <th>税款所属期起</th>
+                        <th>税款所属期止</th>
+                        <th>所得项目</th>
+                        <th style="text-align:right">本期收入</th>
+                        <th style="text-align:right">本期费用</th>
+                        <th style="text-align:right">本期免税收入</th>
+                        <th style="text-align:right">本期基本养老保险费</th>
+                        <th style="text-align:right">本期基本医疗保险费</th>
+                        <th style="text-align:right">本期失业保险费</th>
+                        <th style="text-align:right">本期住房公积金</th>
+                        <th style="text-align:right">本期企业年金</th>
+                        <th style="text-align:right">本期商业健康保险费</th>
+                        <th style="text-align:right">本期税延养老保险费</th>
+                        <th style="text-align:right">本期其他扣除</th>
+                        <th style="text-align:right">累计收入额</th>
+                        <th style="text-align:right">累计免税收入</th>
+                        <th style="text-align:right">累计减除费用</th>
+                        <th style="text-align:right">累计专项扣除</th>
+                        <th style="text-align:right">累计子女教育</th>
+                        <th style="text-align:right">累计继续教育</th>
+                        <th style="text-align:right">累计住房贷款利息</th>
+                        <th style="text-align:right">累计住房租金</th>
+                        <th style="text-align:right">累计赡养老人</th>
+                        <th style="text-align:right">累计3岁以下婴幼儿照护</th>
+                        <th style="text-align:right">累计个人养老金</th>
+                        <th style="text-align:right">累计其他扣除</th>
+                        <th style="text-align:right">累计准予扣除的捐赠</th>
+                        <th style="text-align:right">其他单位累计收入</th>
+                        <th style="text-align:right">其他单位累计扣除</th>
+                        <th style="text-align:right">其他单位累计减免税额</th>
+                        <th style="text-align:right">其他单位累计已缴税额</th>
+                        <th style="text-align:right">累计应纳税所得额</th>
+                        <th style="text-align:center">税率</th>
+                        <th style="text-align:right">速算扣除数</th>
+                        <th style="text-align:right">累计应纳税额</th>
+                        <th style="text-align:right">累计减免税额</th>
+                        <th style="text-align:right">累计应扣缴税额</th>
+                        <th style="text-align:right">已缴税额</th>
+                        <th style="text-align:right">应补(退)税额</th>
+                        <th style="text-align:right">实发工资</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="salary-tbody">
-                    <tr><td colspan="11" style="text-align:center;color:#999">加载中...</td></tr>
+                    <tr><td colspan="45" style="text-align:center;color:#999">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -81,7 +116,7 @@ function loadSalaryData() {
         renderSalaryTable(data);
     }).catch(err => {
         document.getElementById('salary-tbody').innerHTML =
-            '<tr><td colspan="11" style="text-align:center;color:#f44">加载失败：' + (err.message || '') + '</td></tr>';
+            '<tr><td colspan="45" style="text-align:center;color:#f44">加载失败：' + (err.message || '') + '</td></tr>';
     });
 }
 
@@ -100,23 +135,58 @@ function renderSalaryStats(stats) {
 function renderSalaryTable(records) {
     const tbody = document.getElementById('salary-tbody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="45" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
         return;
     }
     tbody.innerHTML = records.map(r => `
         <tr>
-            <td><input type="checkbox" class="salary-checkbox" value="${r.id}"></td>
+            <td style="text-align:center"><input type="checkbox" class="salary-checkbox" value="${r.id}"></td>
+            <td>${escapeHtml(r.employee_code || '-')}</td>
             <td>${escapeHtml(r.employee_name)}</td>
+            <td>${escapeHtml(r.id_type || '-')}</td>
             <td style="font-size:12px">${escapeHtml(r.id_number || '')}</td>
+            <td>${escapeHtml(r.tax_period_start || '-')}</td>
+            <td>${escapeHtml(r.tax_period_end || '-')}</td>
+            <td>${escapeHtml(r.income_type || '-')}</td>
             <td style="text-align:right">${(r.current_income || 0).toFixed(2)}</td>
-            <td style="text-align:right">${(r.special_deduction_total || 0).toFixed(2)}</td>
-            <td style="text-align:right">${(r.additional_deduction_total || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.basic_deduction || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.tax_free_income || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.pension_insurance || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.medical_insurance || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.unemployment_insurance || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.housing_fund || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.enterprise_annuity || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.commercial_health || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.tax_deferred_pension || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.other_deduction || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.cumulative_income || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.cumulative_tax_free || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.cumulative_deduction || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.cumulative_special || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.child_education || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.continuing_education || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.housing_loan_interest || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.housing_rent || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.elderly_support || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.infant_care || 0).toFixed(2)}</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">${(r.cumulative_other || 0).toFixed(2)}</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">0.00</td>
             <td style="text-align:right">${(r.taxable_income || 0).toFixed(2)}</td>
-            <td style="text-align:center">${(r.tax_rate || 0) * 100}%</td>
-            <td style="text-align:right;color:#e74c3c">${(r.tax_to_pay || 0).toFixed(2)}</td>
+            <td style="text-align:center">${((r.tax_rate || 0) * 100).toFixed(0)}%</td>
+            <td style="text-align:right">${(r.quick_deduction || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.tax_payable || 0).toFixed(2)}</td>
+            <td style="text-align:right">0.00</td>
+            <td style="text-align:right">${(r.tax_to_pay || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.tax_already_withheld || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.tax_refund || 0).toFixed(2)}</td>
             <td style="text-align:right;color:#27ae60;font-weight:bold">${(r.net_salary || 0).toFixed(2)}</td>
-            <td class="actions">
-                <button class="btn btn-sm btn-primary" onclick="showSalaryEditModal(${r.id})">编辑</button>
+            <td style="white-space:nowrap">
+                <button class="btn btn-sm btn-secondary" onclick="showSalaryEditModal(${r.id})">编辑</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>
             </td>
         </tr>
