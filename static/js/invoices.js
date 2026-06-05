@@ -480,6 +480,17 @@ async function renderPurchaseInvoices(container) {
       );
     }
 
+    // 三号分组：发票代码+发票号码+数电发票号码相同的行，只在首行显示选择框
+    const piGroupMap = new Map();
+    items.forEach(i => {
+      const key = (i.invoice_code || '') + '|' + (i.invoice_no || '') + '|' + (i.digital_invoice_no || '');
+      if (!piGroupMap.has(key)) piGroupMap.set(key, []);
+      piGroupMap.get(key).push(i);
+    });
+    // 为每个item标记是否为组首行
+    const piFirstInGroup = new Set();
+    piGroupMap.forEach((grp) => { piFirstInGroup.add(grp[0].id); });
+
     // 表格
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
@@ -492,8 +503,18 @@ async function renderPurchaseInvoices(container) {
       items.forEach(i => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
+        const isFirst = piFirstInGroup.has(i.id);
+        // 获取同组所有ID
+        const key = (i.invoice_code || '') + '|' + (i.invoice_no || '') + '|' + (i.digital_invoice_no || '');
+        const grp = piGroupMap.get(key) || [i];
+        const allIds = grp.map(g => g.id).join(',');
         html += '<tr>';
-        html += '<td><input type="checkbox" class="pi-check" data-id="' + i.id + '" onchange="updatePiBatchBtn()"></td>';
+        // 选择框：只在组首行显示，代表整组
+        if (isFirst) {
+          html += '<td><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
+        } else {
+          html += '<td></td>';
+        }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
@@ -554,7 +575,9 @@ function togglePiSelectAll() {
 }
 
 function updatePiBatchBtn() {
-  const count = document.querySelectorAll('.pi-check:checked').length;
+  const checked = document.querySelectorAll('.pi-check:checked');
+  let count = 0;
+  checked.forEach(cb => { count += parseInt(cb.dataset.count || '1'); });
   const delBtn = document.getElementById('piBatchDelBtn');
   if (delBtn) {
     delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
@@ -570,8 +593,11 @@ function updatePiBatchBtn() {
 async function batchDeletePurchaseInvoices() {
   const checked = document.querySelectorAll('.pi-check:checked');
   if (checked.length === 0) return;
-  if (!confirm('确认删除选中的 ' + checked.length + ' 条取得发票？此操作不可恢复。')) return;
-  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
+  const ids = [];
+  checked.forEach(cb => {
+    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+  });
+  if (!confirm('确认删除选中的 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
   try {
     const result = await api('/api/purchase-invoices/batch-delete', {
       method: 'POST',
@@ -589,7 +615,10 @@ async function batchDeletePurchaseInvoices() {
 async function batchGeneratePurchaseVouchers() {
   var checked = document.querySelectorAll('.pi-check:checked');
   if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  var ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
+  var ids = [];
+  checked.forEach(function(cb) {
+    String(cb.dataset.id).split(',').forEach(function(id) { var n = parseInt(id); if (n) ids.push(n); });
+  });
   if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
   var btn = document.getElementById('piBatchGenBtn');
   if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
