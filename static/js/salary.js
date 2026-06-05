@@ -106,8 +106,8 @@ function renderSalaryTable(records) {
     tbody.innerHTML = records.map(r => `
         <tr>
             <td><input type="checkbox" class="salary-checkbox" value="${r.id}"></td>
-            <td>${escHtml(r.employee_name)}</td>
-            <td style="font-size:12px">${escHtml(r.id_number || '')}</td>
+            <td>${escapeHtml(r.employee_name)}</td>
+            <td style="font-size:12px">${escapeHtml(r.id_number || '')}</td>
             <td style="text-align:right">${(r.current_income || 0).toFixed(2)}</td>
             <td style="text-align:right">${(r.special_deduction_total || 0).toFixed(2)}</td>
             <td style="text-align:right">${(r.additional_deduction_total || 0).toFixed(2)}</td>
@@ -154,15 +154,15 @@ function renderSalaryModal(r) {
                 </div>
                 <div class="form-row">
                     <label>姓名</label>
-                    <input type="text" id="sal-modal-name" value="${escHtml(r.employee_name || '')}" required>
+                    <input type="text" id="sal-modal-name" value="${escapeHtml(r.employee_name || '')}" required>
                 </div>
                 <div class="form-row">
                     <label>证件类型</label>
-                    <input type="text" id="sal-modal-id-type" value="${escHtml(r.id_type || '居民身份证')}">
+                    <input type="text" id="sal-modal-id-type" value="${escapeHtml(r.id_type || '居民身份证')}">
                 </div>
                 <div class="form-row">
                     <label>证件号码</label>
-                    <input type="text" id="sal-modal-id-number" value="${escHtml(r.id_number || '')}">
+                    <input type="text" id="sal-modal-id-number" value="${escapeHtml(r.id_number || '')}">
                 </div>
                 <div class="form-row">
                     <label>本期收入</label>
@@ -366,9 +366,5 @@ function toggleSelectAll(type) {
     document.querySelectorAll(`.${type}-checkbox`).forEach(cb => cb.checked = checked);
 }
 
-// closeModal 统一在 core.js 定义，salary 不再重复定义
+// escHtml/closeModal 统一用 core.js 的 escapeHtml(), 不再重复定义
 
-function escHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}

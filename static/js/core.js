@@ -13,6 +13,12 @@ let _importFile = null;
 let _importModule = '';
 let _importBankConfigId = null;
 
+// ==================== 全局工具函数 ====================
+function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 const pages = {
   'chat': 'AI 助手',
   'dashboard': '数据看板',

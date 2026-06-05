@@ -497,8 +497,8 @@ async function _loadContactList(apiPrefix) {
     var html = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">往来项目（' + data.length + '）</div>';
     data.forEach(function(c, i) {
       var netStr = c.net >= 0 ? ('¥' + fmt(Math.abs(c.net))) : ('<span style="color:var(--danger)">-¥' + fmt(Math.abs(c.net)) + '</span>');
-      html += '<div class="contact-item" data-name="' + escHtml(c.name) + '" onclick="_onContactClick(\'' + apiPrefix + '\', \'' + escJs(c.name) + '\')" style="padding:10px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;border:1px solid transparent">' +
-        '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(c.name) + '</div>' +
+      html += '<div class="contact-item" data-name="' + escapeHtml(c.name) + '" onclick="_onContactClick(\'' + apiPrefix + '\', \'' + escJs(c.name) + '\')" style="padding:10px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;border:1px solid transparent">' +
+        '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(c.name) + '</div>' +
         '<div style="font-size:11px;color:#6b7280;margin-top:4px;display:flex;justify-content:space-between">' +
           '<span>借 ¥' + fmt(c.total_debit) + '</span>' +
           '<span>贷 ¥' + fmt(c.total_credit) + '</span>' +
@@ -551,7 +551,7 @@ async function _loadContactDetail(apiPrefix, name) {
     var ob = data.opening_balance || 0;
     var obFmt = ob === 0 ? '¥0.00' : (ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>');
     var html = '<div style="font-size:13px;margin-bottom:10px;padding:8px 4px;border-bottom:1px solid #e5e7eb">' +
-      '<b>往来单位：</b>' + escHtml(name) +
+      '<b>往来单位：</b>' + escapeHtml(name) +
       ' &nbsp;&nbsp; <b>期初余额：</b>' + obFmt +
       ' &nbsp;&nbsp; <b>期间：</b>' + from + ' ~ ' + to + '</div>';
     html += '<table><thead><tr>' +
@@ -615,7 +615,6 @@ function _clearContactDetail(apiPrefix) {
 }
 
 // 转义函数
-function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function escJs(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n'); }
 
 // ==================== 人员明细账 ====================

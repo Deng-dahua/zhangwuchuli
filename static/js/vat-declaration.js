@@ -58,7 +58,7 @@ function renderVATTable() {
         const main = typeof d.form_main === 'string' ? JSON.parse(d.form_main) : (d.form_main || {});
         const taxPayable = main.row19_tax_payable || 0;
         const badge = {'草稿':'<span class="badge badge-draft">草稿</span>','已申报':'<span class="badge badge-audited">已申报</span>','已缴税':'<span class="badge badge-posted">已缴税</span>'}[d.status] || d.status;
-        html += '<tr><td><strong>' + escHtml(d.period) + '</strong></td><td>' + escHtml(d.taxpayer_name || '') + '</td>'
+        html += '<tr><td><strong>' + escapeHtml(d.period) + '</strong></td><td>' + escapeHtml(d.taxpayer_name || '') + '</td>'
           + '<td>' + (d.micro_enterprise ? '✅ 是' : '否') + '</td><td>' + (d.six_tax_reduction ? '✅ 是' : '否') + '</td>'
           + '<td>' + badge + '</td><td class="num" style="font-weight:600;color:' + (taxPayable > 0 ? '#d97706' : '#6b7280') + '">' + fmt(taxPayable) + '</td>'
           + '<td>' + (d.fill_date || '-') + '</td><td>' + (d.submitted_at ? new Date(d.submitted_at).toLocaleDateString('zh-CN') : '-') + '</td>'
@@ -130,7 +130,7 @@ function renderVATTemplateView(data) {
   const statusLabel = {'草稿':'草稿','已申报':'已申报','已缴税':'已缴税'}[data.status] || data.status;
 
   // 页签
-  let tabs = '<div class="detail-header" style="margin-bottom:0"><h2 style="margin:0">📋 增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escHtml(data.period) + '</span></h2>';
+  let tabs = '<div class="detail-header" style="margin-bottom:0"><h2 style="margin:0">📋 增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escapeHtml(data.period) + '</span></h2>';
   tabs += '<div style="display:flex;gap:6px"><span class="badge badge-info">' + statusLabel + '</span>';
   tabs += '<button class="btn btn-sm btn-outline" onclick="editVATDeclaration(' + data.id + ')">✏️ 编辑</button></div></div>';
 
@@ -178,11 +178,11 @@ function switchVATPage(pageId) {
 function editVATDeclaration(id) {
   const d = vatDeclarations.find(x => x.id === id);
   if (!d) return;
-  document.getElementById('vat-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">✏️ 编辑申报表 — ' + escHtml(d.period) + '</h2>'
+  document.getElementById('vat-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">✏️ 编辑申报表 — ' + escapeHtml(d.period) + '</h2>'
     + '<div class="form-group"><label style="display:block;margin-bottom:4px;font-size:13px">税款所属期</label>'
     + '<input type="month" class="form-control" id="vat-edit-period" value="' + d.period + '" style="width:100%"></div>'
     + '<div class="form-group" style="margin-top:10px"><label style="display:block;margin-bottom:4px;font-size:13px">纳税人名称</label>'
-    + '<input type="text" class="form-control" id="vat-edit-taxpayer" value="' + escHtml(d.taxpayer_name || '') + '" style="width:100%"></div>'
+    + '<input type="text" class="form-control" id="vat-edit-taxpayer" value="' + escapeHtml(d.taxpayer_name || '') + '" style="width:100%"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">'
     + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="vat-edit-micro" ' + (d.micro_enterprise ? 'checked' : '') + '> 小规模纳税人</label>'
     + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="vat-edit-six-tax" ' + (d.six_tax_reduction ? 'checked' : '') + '> 六税两费减征</label>'
@@ -679,7 +679,7 @@ function renderReductionForm(data) {
   } else {
     html += '<tbody>';
     taxReductionItems.forEach((item, i) => {
-      html += '<tr><td>' + escHtml(item.name || ('减税项目' + (i + 1))) + '</td><td style="text-align:center">' + (i + 1) + '</td>'
+      html += '<tr><td>' + escapeHtml(item.name || ('减税项目' + (i + 1))) + '</td><td style="text-align:center">' + (i + 1) + '</td>'
         + td(item.begin_balance) + td(item.current_amount) + td(item.should_reduce) + td(item.actual_reduce) + td(item.end_balance) + '</tr>';
     });
     html += '</tbody>';
@@ -699,7 +699,7 @@ function renderReductionForm(data) {
       + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">9</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
   } else {
     exemptItems.forEach((item, i) => {
-      html += '<tr><td>' + escHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 7) + '</td>'
+      html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 7) + '</td>'
         + td(item.exempt_sales) + td(item.deduction_amount) + td(item.after_deduction) + td(item.input_tax) + td(item.exempt_amount) + '</tr>';
     });
   }

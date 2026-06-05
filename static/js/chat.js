@@ -143,12 +143,6 @@ function formatFileSize(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
-function escapeHtml(text) {
-  const d = document.createElement('div');
-  d.textContent = text;
-  return d.innerHTML;
-}
-
 async function sendChat() {
   const input = document.getElementById('chat-input');
   const btn = document.getElementById('chat-send-btn');
