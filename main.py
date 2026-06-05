@@ -4184,7 +4184,14 @@ def list_input_vat_deductions(
         ))
     items = q.order_by(InputVATDeduction.invoice_date.desc(), InputVATDeduction.check_time.desc()).all()
     # 构建凭证号映射（进项抵扣 → 序时账，按期间匹配 source="进项抵扣" 的汇总凭证）
-    periods_set = list(set(it.deduction_period for it in items if it.deduction_period))
+    # 期间取值与凭证生成逻辑一致：deduction_period 优先，fallback 到 invoice_date 年月
+    def _effective_period(it):
+        if it.deduction_period:
+            return it.deduction_period
+        if it.invoice_date:
+            return it.invoice_date.strftime("%Y-%m")
+        return None
+    periods_set = list(set(_effective_period(it) for it in items if _effective_period(it)))
     period_vouchers = {}
     if periods_set:
         for je in db.query(JournalEntry).filter(
@@ -4196,8 +4203,9 @@ def list_input_vat_deductions(
             period_vouchers[je.period] = f"{je.voucher_word}-{je.voucher_no}"
     voucher_map = {}
     for it in items:
-        if it.deduction_period and it.deduction_period in period_vouchers:
-            voucher_map[it.id] = period_vouchers[it.deduction_period]
+        ep = _effective_period(it)
+        if ep and ep in period_vouchers:
+            voucher_map[it.id] = period_vouchers[ep]
     return [{
         "id": it.id, "purchase_invoice_id": it.purchase_invoice_id,
         "check_status": it.check_status or "未勾选",
