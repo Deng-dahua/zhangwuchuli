@@ -239,6 +239,8 @@ def _update_company_subtable(db, company, model, items):
 def list_departments(
     keyword: Optional[str] = None,
     company_id: int = Query(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(Department).filter(Department.company_id == company_id)
@@ -247,7 +249,7 @@ def list_departments(
             Department.code.contains(keyword),
             Department.name.contains(keyword)
         ))
-    depts = q.order_by(Department.code).all()
+    depts = q.order_by(Department.code).offset(skip).limit(limit).all()
     return [
         {
             "id": d.id, "code": d.code, "name": d.name,
@@ -388,6 +390,8 @@ async def import_departments(
 def list_employees(
     keyword: Optional[str] = None,
     company_id: int = Query(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(Employee).filter(Employee.company_id == company_id)
@@ -396,7 +400,7 @@ def list_employees(
             Employee.code.contains(keyword),
             Employee.name.contains(keyword)
         ))
-    emps = q.order_by(Employee.code).all()
+    emps = q.order_by(Employee.code).offset(skip).limit(limit).all()
     return [
         {
             "id": e.id, "code": e.code, "name": e.name,
@@ -455,6 +459,8 @@ def list_customers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
     company_id: int = Query(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(Customer).filter(Customer.company_id == company_id)
@@ -466,7 +472,7 @@ def list_customers(
         ))
     if is_active is not None:
         q = q.filter(Customer.is_active == is_active)
-    items = q.order_by(Customer.code).all()
+    items = q.order_by(Customer.code).offset(skip).limit(limit).all()
 
     # 检测哪些客户名称存在于序时账中（contact_project 或 summary）
     cust_names = [c.name for c in items if c.name]
@@ -582,6 +588,8 @@ def list_suppliers(
     keyword: Optional[str] = None,
     is_active: Optional[bool] = None,
     company_id: int = Query(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(Supplier).filter(Supplier.company_id == company_id)
@@ -592,7 +600,7 @@ def list_suppliers(
         ))
     if is_active is not None:
         q = q.filter(Supplier.is_active == is_active)
-    items = q.order_by(Supplier.code).all()
+    items = q.order_by(Supplier.code).offset(skip).limit(limit).all()
     return [
         {
             "id": s.id, "code": s.code, "name": s.name,
@@ -841,6 +849,8 @@ def list_accounts(
     level: Optional[int] = None,
     leaf_only: Optional[str] = None,
     company_id: int = Query(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(Account).filter(Account.company_id == company_id)
@@ -853,7 +863,7 @@ def list_accounts(
         ))
     if level:
         q = q.filter(Account.level == level)
-    accounts = q.order_by(Account.code).all()
+    accounts = q.order_by(Account.code).offset(skip).limit(limit).all()
 
     # 末级科目过滤：排除那些是其他科目parent_code的科目
     if leaf_only and leaf_only.lower() in ("1", "true", "yes"):
@@ -1937,6 +1947,8 @@ def list_sales_invoices(
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id)
@@ -1956,7 +1968,7 @@ def list_sales_invoices(
             SalesInvoice.buyer_name.contains(keyword),
             SalesInvoice.goods_name.contains(keyword)
         ))
-    invoices = q.order_by(SalesInvoice.invoice_date.desc()).all()
+    invoices = q.order_by(SalesInvoice.invoice_date.desc()).offset(skip).limit(limit).all()
     # 构建凭证号映射（销项发票 → 序时账，通过摘要+借方金额+科目1122判重）
     voucher_map = {}
     for inv in invoices:
@@ -2193,6 +2205,8 @@ def list_purchase_invoices(
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
@@ -2214,7 +2228,7 @@ def list_purchase_invoices(
             PurchaseInvoice.seller_name.contains(keyword),
             PurchaseInvoice.goods_name.contains(keyword)
         ))
-    invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).all()
+    invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).offset(skip).limit(limit).all()
     # 构建凭证号映射（进项发票 → 进项抵扣 → 序时账，按期间匹配 source="进项抵扣" 汇总凭证）
     invoice_nos = [inv.invoice_no for inv in invoices if inv.invoice_no]
     ded_period_map = {}
@@ -2670,6 +2684,8 @@ def list_bank_transactions(
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(BankTransaction).filter(BankTransaction.company_id == company_id)
@@ -2687,7 +2703,7 @@ def list_bank_transactions(
             BankTransaction.summary.contains(keyword),
             BankTransaction.reference_no.contains(keyword)
         ))
-    txs = q.order_by(BankTransaction.transaction_date.desc(), BankTransaction.id.desc()).all()
+    txs = q.order_by(BankTransaction.transaction_date.desc(), BankTransaction.id.desc()).offset(skip).limit(limit).all()
 
     # 动态查询凭证号：按 summary + 1002科目匹配（双分录中银行存款侧即代表该凭证）
     voucher_map = {}
@@ -2977,6 +2993,8 @@ def list_journal_entries(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     is_reviewed: Optional[bool] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     q = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
@@ -2996,7 +3014,7 @@ def list_journal_entries(
             JournalEntry.account_name.contains(keyword),
             JournalEntry.account_code.contains(keyword),
         ))
-    entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
+    entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).offset(skip).limit(limit).all()
     hierarchy = _build_account_hierarchy(db, company_id)
     return [{
         "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
