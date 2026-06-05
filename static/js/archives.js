@@ -436,7 +436,7 @@ async function renderCustomers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
-            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="custSelectAll" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
               ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
                 const locked = c.has_journal;
@@ -467,18 +467,26 @@ async function renderCustomers(container) {
 }
 
 function toggleSelectAllCust(el) {
-  document.querySelectorAll('.cust-check').forEach(cb => { cb.checked = el.checked; });
+  document.querySelectorAll('.cust-check:not(:disabled)').forEach(cb => { cb.checked = el.checked; });
   updateBatchDelCustBtn();
 }
 function updateBatchDelCustBtn() {
   const btn = document.getElementById('btn-batch-del-cust');
   if (!btn) return;
-  const checked = document.querySelectorAll('.cust-check:checked').length;
+  const enabledBoxes = document.querySelectorAll('.cust-check:not(:disabled)');
+  const checkedEnabled = document.querySelectorAll('.cust-check:not(:disabled):checked');
+  const checked = checkedEnabled.length;
   btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
   btn.disabled = checked === 0;
+  // 同步全选框状态
+  const selectAll = document.getElementById('custSelectAll');
+  if (selectAll) {
+    selectAll.checked = enabledBoxes.length > 0 && enabledBoxes.length === checkedEnabled.length;
+    selectAll.indeterminate = checkedEnabled.length > 0 && checkedEnabled.length < enabledBoxes.length;
+  }
 }
 async function batchDeleteCust() {
-  const checked = [...document.querySelectorAll('.cust-check:checked')].map(cb => parseInt(cb.value));
+  const checked = [...document.querySelectorAll('.cust-check:not(:disabled):checked')].map(cb => parseInt(cb.value));
   if (checked.length === 0) return;
   if (!confirm(`确认删除选中的 ${checked.length} 条客户记录？此操作不可撤销！`)) return;
   try {
