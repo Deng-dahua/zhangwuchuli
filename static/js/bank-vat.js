@@ -14,7 +14,7 @@ async function loadBankConfigs() {
 
 async function renderBankTransactions(container) {
   try {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const [configs, stats] = await Promise.all([
     loadBankConfigs(),
     api('/api/bank-transactions/stats' + (_currentBankId ? '?bank_config_id=' + _currentBankId : ''))
@@ -330,7 +330,7 @@ async function deleteBankConfig(id) {
 
 async function renderInputVATDeductions(container) {
   try {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   if (currentPeriod && !ivdFilter.dateFrom) { const r = periodToDateRange(currentPeriod); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
   const params = new URLSearchParams();
@@ -626,7 +626,7 @@ function autoCalcVAT() {
 function editVATDeduction(id) { showVATDeductionForm(id); }
 
 async function generateFromIVDGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
   if (!confirm('确认为该组 ' + ids.length + ' 条认证记录生成进项抵扣凭证？')) return;
   try {
     // 逐条生成凭证
@@ -641,10 +641,10 @@ async function generateFromIVDGroup(idStr) {
 }
 
 async function deleteIVDGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
   if (!confirm('确认删除该组 ' + ids.length + ' 条认证记录？此操作不可恢复。')) return;
   try {
-    var result = await api('/api/input-vat-deductions/batch-delete', {
+    let result = await api('/api/input-vat-deductions/batch-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)

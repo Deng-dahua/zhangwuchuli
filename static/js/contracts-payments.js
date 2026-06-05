@@ -15,8 +15,8 @@ async function renderContracts(container) {
 }
 
 async function loadContracts() {
-  var kw = document.getElementById('contractKeyword')?.value || '';
-  var url = '/api/contracts';
+  let kw = document.getElementById('contractKeyword')?.value || '';
+  let url = '/api/contracts';
   if (kw) url += '?keyword=' + encodeURIComponent(kw);
   try {
     const data = await api(url);

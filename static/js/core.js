@@ -251,8 +251,8 @@ function onGlobalPeriodConfirm() {
   toast('已切换到 ' + currentPeriod, 'success');
   // 同步所有已渲染页面的期间筛选框到新期间
   ['gl-from','gl-to','dl-from','dl-to','pl-from','pl-to','bs-from','bs-to','cf-from','cf-to','ec-from','tb-from','tb-to','je-from','je-to'].forEach(function(prefix) {
-    var ey = document.getElementById(prefix + '-y');
-    var em = document.getElementById(prefix + '-m');
+    let ey = document.getElementById(prefix + '-y');
+    let em = document.getElementById(prefix + '-m');
     if (ey) ey.value = y;
     if (em) em.value = m;
   });

@@ -18,7 +18,7 @@ async function renderGeneralLedger(container) {
 
 function glClearFilters() {
   document.querySelectorAll('select[id^="gl-"]').forEach(function(s) { s.value = ''; });
-  var el = document.getElementById('gl-table');
+  let el = document.getElementById('gl-table');
   if (el) el.innerHTML = '';
 }
 
@@ -96,10 +96,10 @@ async function renderDetailLedger(container) {
 }
 
 function dlClearFilters() {
-  var acc = document.getElementById('dl-account');
+  let acc = document.getElementById('dl-account');
   if (acc) acc.value = '';
   document.querySelectorAll('select[id^="dl-"]').forEach(function(s) { s.value = ''; });
-  var el = document.getElementById('dl-table');
+  let el = document.getElementById('dl-table');
   if (el) el.innerHTML = '';
 }
 
@@ -145,7 +145,7 @@ async function loadDetailLedger() {
     } else {
       data.rows.forEach(function(r) {
         // 余额方向：根据科目余额方向和余额符号判断，余额=0显示"平"
-        var balDir;
+        let balDir;
         if (r.balance === 0) {
           balDir = '平';
         } else if (dir === '借') {
@@ -153,7 +153,7 @@ async function loadDetailLedger() {
         } else {
           balDir = r.balance > 0 ? '贷' : '借';
         }
-        var balHtml = r.balance === 0 ? '¥0.00' : (r.balance > 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
+        let balHtml = r.balance === 0 ? '¥0.00' : (r.balance > 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
         html += '<tr>' +
           '<td>' + r.voucher_date + '</td>' +
           '<td>' + r.voucher_no + '</td>' +
@@ -172,10 +172,10 @@ async function loadDetailLedger() {
 
 // 清除筛选：只清下拉和表格，不重新渲染整个页面（避免 DOM 污染）
 async function clearFilters(page) {
-  var prefix = page;
+  let prefix = page;
   document.querySelectorAll('select[id^="' + prefix + '-"]').forEach(function(s) { s.value = ''; });
-  var tableMap = { gl: 'gl-table', dl: 'dl-table', pl: 'pl-table', bs: 'bs-table', cf: 'cf-table', ec: 'ec-table', tb: 'tb-table' };
-  var tbl = document.getElementById(tableMap[page] || '');
+  let tableMap = { gl: 'gl-table', dl: 'dl-table', pl: 'pl-table', bs: 'bs-table', cf: 'cf-table', ec: 'ec-table', tb: 'tb-table' };
+  let tbl = document.getElementById(tableMap[page] || '');
   if (tbl) tbl.innerHTML = '';
 }
 
@@ -204,10 +204,10 @@ function _periodSelectsHTML(prefix, value) {
     '<select id="' + prefix + '-m" style="padding:6px 6px;border:1px solid #d1d5db;border-radius:6px;width:62px"><option value="">月</option>' + _monthOptions(m) + '</select>';
 }
 function _readPeriod(prefix) {
-  var y = document.getElementById(prefix + '-y');
-  var m = document.getElementById(prefix + '-m');
+  let y = document.getElementById(prefix + '-y');
+  let m = document.getElementById(prefix + '-m');
   if (!y || !m) return '';
-  var yv = y.value, mv = m.value;
+  let yv = y.value, mv = m.value;
   return (yv && mv) ? yv + '-' + mv : '';
 }
 
@@ -235,11 +235,11 @@ async function loadProfitLoss() {
   el.innerHTML = '加载中...';
   try {
     const data = await api('/api/reports/profit-loss?period_from=' + from + '&period_to=' + to);
-    var rows = '';
+    let rows = '';
     for (var i = 0; i < data.items.length; i++) {
-      var it = data.items[i];
-      var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
-      var indent = (it.indent || 0) * 16;
+      let it = data.items[i];
+      let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+      let indent = (it.indent || 0) * 16;
       rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
         '<td class="num">' + plFmt(it.current) + '</td>' +
         '<td class="num">' + plFmt(it.prior) + '</td></tr>';
@@ -268,12 +268,12 @@ async function renderBalanceSheet(container) {
 function bsFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
 
 function bsRenderRows(rows, showHeader) {
-  var h = showHeader ? '<thead><tr><th>项目</th><th class="num">期末余额</th><th class="num">年初余额</th></tr></thead>' : '';
-  var r = '';
+  let h = showHeader ? '<thead><tr><th>项目</th><th class="num">期末余额</th><th class="num">年初余额</th></tr></thead>' : '';
+  let r = '';
   for (var i = 0; i < rows.length; i++) {
-    var it = rows[i];
-    var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
-    var indent = (it.indent || 0) * 16;
+    let it = rows[i];
+    let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+    let indent = (it.indent || 0) * 16;
     r += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
       '<td class="num">' + bsFmt(it.end) + '</td>' +
       '<td class="num">' + bsFmt(it.begin) + '</td></tr>';
@@ -298,7 +298,7 @@ async function loadBalanceSheet() {
 
 // ==================== 现金流量表 ====================
 async function renderCashFlow(container) {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -313,16 +313,16 @@ async function renderCashFlow(container) {
 }
 
 async function loadCashFlow() {
-  var from = _readPeriod('cf-from'); var to = _readPeriod('cf-to');
-  var el = document.getElementById('cf-table');
+  let from = _readPeriod('cf-from'); var to = _readPeriod('cf-to');
+  let el = document.getElementById('cf-table');
   el.innerHTML = '加载中...';
   try {
-    var data = await api('/api/reports/cash-flow?period_from=' + from + '&period_to=' + to);
-    var rows = '';
+    let data = await api('/api/reports/cash-flow?period_from=' + from + '&period_to=' + to);
+    let rows = '';
     for (var i = 0; i < data.items.length; i++) {
-      var it = data.items[i];
-      var cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
-      var indent = (it.indent || 0) * 16;
+      let it = data.items[i];
+      let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
+      let indent = (it.indent || 0) * 16;
       rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>' +
         '<td class="num">' + plFmt(it.current) + '</td>' +
         '<td class="num">' + plFmt(it.prior) + '</td></tr>';
@@ -336,7 +336,7 @@ async function loadCashFlow() {
 
 // ==================== 所有者权益变动表 ====================
 async function renderEquityChanges(container) {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
@@ -349,19 +349,19 @@ async function renderEquityChanges(container) {
 }
 
 async function loadEquityChanges() {
-  var period = _readPeriod('ec-from');
-  var el = document.getElementById('ec-table');
+  let period = _readPeriod('ec-from');
+  let el = document.getElementById('ec-table');
   el.innerHTML = '加载中...';
   try {
-    var data = await api('/api/reports/equity-changes?period=' + period);
-    var cols = data.columns;
-    var th = '<th>项目</th>';
+    let data = await api('/api/reports/equity-changes?period=' + period);
+    let cols = data.columns;
+    let th = '<th>项目</th>';
     for (var c = 0; c < cols.length; c++) { th += '<th class="num">' + cols[c] + '</th>'; }
-    var rows = '';
+    let rows = '';
     for (var i = 0; i < data.items.length; i++) {
-      var it = data.items[i];
-      var cls = (it.bold ? 'report-bold' : '') + (it.highlight ? ' report-highlight' : '');
-      var indent = (it.indent || 0) * 16;
+      let it = data.items[i];
+      let cls = (it.bold ? 'report-bold' : '') + (it.highlight ? ' report-highlight' : '');
+      let indent = (it.indent || 0) * 16;
       rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>';
       for (var j = 0; j < it.vals.length; j++) { rows += '<td class="num">' + plFmt(it.vals[j]) + '</td>'; }
       rows += '</tr>';
@@ -465,7 +465,7 @@ async function loadAccountBalance() {
 // ==================== 往来明细账（人员/客户/供应商） ====================
 // 三模块共用：从序时账往来项目自动填制，序时账有数据就自动显示
 
-var _contactCache = {}; // 缓存往来列表
+let _contactCache = {}; // 缓存往来列表
 
 function _contactPageHTML(title, apiPrefix) {
   return '<div class="card" style="margin-bottom:0;display:flex;flex-direction:column">' +
@@ -485,18 +485,18 @@ function _contactPageHTML(title, apiPrefix) {
 }
 
 async function _loadContactList(apiPrefix) {
-  var listEl = document.getElementById(apiPrefix + '-list');
+  let listEl = document.getElementById(apiPrefix + '-list');
   listEl.innerHTML = '<div style="color:#999;padding:12px;font-size:13px">加载中...</div>';
   try {
-    var data = await api('/api/ledger/' + apiPrefix + '-contacts');
+    let data = await api('/api/ledger/' + apiPrefix + '-contacts');
     _contactCache[apiPrefix] = data;
     if (data.length === 0) {
       listEl.innerHTML = '<div style="color:#9ca3af;padding:24px 12px;text-align:center;font-size:13px">暂无往来数据<br><span style="font-size:11px">序时账中录入往来项目后自动生成</span></div>';
       return;
     }
-    var html = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">往来项目（' + data.length + '）</div>';
+    let html = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">往来项目（' + data.length + '）</div>';
     data.forEach(function(c, i) {
-      var netStr = c.net >= 0 ? ('¥' + fmt(Math.abs(c.net))) : ('<span style="color:var(--danger)">-¥' + fmt(Math.abs(c.net)) + '</span>');
+      let netStr = c.net >= 0 ? ('¥' + fmt(Math.abs(c.net))) : ('<span style="color:var(--danger)">-¥' + fmt(Math.abs(c.net)) + '</span>');
       html += '<div class="contact-item" data-name="' + escapeHtml(c.name) + '" onclick="_onContactClick(\'' + apiPrefix + '\', \'' + escJs(c.name) + '\')" style="padding:10px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;border:1px solid transparent">' +
         '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(c.name) + '</div>' +
         '<div style="font-size:11px;color:#6b7280;margin-top:4px;display:flex;justify-content:space-between">' +
@@ -518,7 +518,7 @@ async function _loadContactList(apiPrefix) {
 
 function _onContactClick(apiPrefix, name) {
   // 高亮选中
-  var listEl = document.getElementById(apiPrefix + '-list');
+  let listEl = document.getElementById(apiPrefix + '-list');
   listEl.querySelectorAll('.contact-item').forEach(function(el) {
     el.classList.toggle('active', el.dataset.name === name);
     el.style.background = el.dataset.name === name ? 'var(--gray-100)' : '';
@@ -531,26 +531,26 @@ function _onContactClick(apiPrefix, name) {
 async function _loadContactDetail(apiPrefix, name) {
   if (!name) {
     // 尝试从当前激活的获取
-    var activeEl = document.querySelector('#' + apiPrefix + '-list .contact-item.active');
+    let activeEl = document.querySelector('#' + apiPrefix + '-list .contact-item.active');
     if (activeEl) name = activeEl.dataset.name;
   }
-  var tableEl = document.getElementById(apiPrefix + '-table');
+  let tableEl = document.getElementById(apiPrefix + '-table');
   if (!name) {
     tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请从左侧选择一个往来项目</div>';
     return;
   }
-  var from = _readPeriod(apiPrefix + '-from');
-  var to = _readPeriod(apiPrefix + '-to');
+  let from = _readPeriod(apiPrefix + '-from');
+  let to = _readPeriod(apiPrefix + '-to');
   if (!from || !to) {
     tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请选择起止期间</div>';
     return;
   }
   tableEl.innerHTML = '<div style="color:#999;padding:20px;font-size:13px">加载中...</div>';
   try {
-    var data = await api('/api/ledger/' + apiPrefix + '-detail?contact_name=' + encodeURIComponent(name) + '&period_from=' + from + '&period_to=' + to);
-    var ob = data.opening_balance || 0;
-    var obFmt = ob === 0 ? '¥0.00' : (ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>');
-    var html = '<div style="font-size:13px;margin-bottom:10px;padding:8px 4px;border-bottom:1px solid #e5e7eb">' +
+    let data = await api('/api/ledger/' + apiPrefix + '-detail?contact_name=' + encodeURIComponent(name) + '&period_from=' + from + '&period_to=' + to);
+    let ob = data.opening_balance || 0;
+    let obFmt = ob === 0 ? '¥0.00' : (ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>');
+    let html = '<div style="font-size:13px;margin-bottom:10px;padding:8px 4px;border-bottom:1px solid #e5e7eb">' +
       '<b>往来单位：</b>' + escapeHtml(name) +
       ' &nbsp;&nbsp; <b>期初余额：</b>' + obFmt +
       ' &nbsp;&nbsp; <b>期间：</b>' + from + ' ~ ' + to + '</div>';
@@ -560,7 +560,7 @@ async function _loadContactDetail(apiPrefix, name) {
       '<th class="num">余额</th>' +
       '</tr></thead><tbody>';
     // 期初行
-    var obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
+    let obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
     html += '<tr style="background:#f8fafc">' +
       '<td></td><td></td><td style="color:#6b7280;font-style:italic">上期结转</td><td></td>' +
       '<td class="num"></td><td class="num"></td>' +
@@ -569,12 +569,12 @@ async function _loadContactDetail(apiPrefix, name) {
     if (data.rows.length === 0) {
       html += '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:30px">该期间无往来明细记录</td></tr>';
     } else {
-      var totalDr = 0, totalCr = 0;
+      let totalDr = 0, totalCr = 0;
       data.rows.forEach(function(r) {
         totalDr += r.debit_amount || 0;
         totalCr += r.credit_amount || 0;
-        var balDir = r.balance === 0 ? '平' : (r.balance > 0 ? '借' : '贷');
-        var balHtml = r.balance === 0 ? '¥0.00' : (r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
+        let balDir = r.balance === 0 ? '平' : (r.balance > 0 ? '借' : '贷');
+        let balHtml = r.balance === 0 ? '¥0.00' : (r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
         html += '<tr>' +
           '<td>' + r.voucher_date + '</td>' +
           '<td>' + r.voucher_no + '</td>' +
@@ -586,9 +586,9 @@ async function _loadContactDetail(apiPrefix, name) {
           '</tr>';
       });
       // 本页合计行
-      var endBal = ob + totalDr - totalCr;
-      var endDir = endBal === 0 ? '平' : (endBal > 0 ? '借' : '贷');
-      var endFmt = endBal === 0 ? '¥0.00' : (endBal >= 0 ? '¥' + fmt(endBal) : '<span style="color:var(--danger)">-¥' + fmt(-endBal) + '</span>');
+      let endBal = ob + totalDr - totalCr;
+      let endDir = endBal === 0 ? '平' : (endBal > 0 ? '借' : '贷');
+      let endFmt = endBal === 0 ? '¥0.00' : (endBal >= 0 ? '¥' + fmt(endBal) : '<span style="color:var(--danger)">-¥' + fmt(-endBal) + '</span>');
       html += '<tr style="background:#f0f9ff;font-weight:600">' +
         '<td colspan="4" style="text-align:right;color:#6b7280">本页合计</td>' +
         '<td class="num">¥' + fmt(totalDr) + '</td>' +
@@ -602,9 +602,9 @@ async function _loadContactDetail(apiPrefix, name) {
 }
 
 function _clearContactDetail(apiPrefix) {
-  var tableEl = document.getElementById(apiPrefix + '-table');
+  let tableEl = document.getElementById(apiPrefix + '-table');
   if (tableEl) tableEl.innerHTML = '';
-  var listEl = document.getElementById(apiPrefix + '-list');
+  let listEl = document.getElementById(apiPrefix + '-list');
   if (listEl) {
     listEl.querySelectorAll('.contact-item').forEach(function(el) {
       el.classList.remove('active');
@@ -619,21 +619,21 @@ function escJs(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 
 // ==================== 人员明细账 ====================
 async function renderEmployeeLedger(container) {
-  var el = container || document.getElementById('page-employee-ledger') || document.getElementById('content-area');
+  let el = container || document.getElementById('page-employee-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('人员明细账', 'employee');
   _loadContactList('employee');
 }
 
 // ==================== 客户明细账 ====================
 async function renderCustomerLedger(container) {
-  var el = container || document.getElementById('page-customer-ledger') || document.getElementById('content-area');
+  let el = container || document.getElementById('page-customer-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('客户明细账', 'customer');
   _loadContactList('customer');
 }
 
 // ==================== 供应商明细账 ====================
 async function renderSupplierLedger(container) {
-  var el = container || document.getElementById('page-supplier-ledger') || document.getElementById('content-area');
+  let el = container || document.getElementById('page-supplier-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('供应商明细账', 'supplier');
   _loadContactList('supplier');
 }

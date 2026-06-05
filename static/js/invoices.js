@@ -10,7 +10,7 @@ let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices(container) {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -431,7 +431,7 @@ let piTab = 'all'; // all / zpt / ppt / tlp (专票/普票/铁路票)
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -575,10 +575,10 @@ async function renderPurchaseInvoices(container) {
 }
 
 async function generateFromPurchaseGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
   if (!confirm('确认为该组 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
   try {
-    var res = await api('/api/purchase-invoices/batch-to-journal', {
+    let res = await api('/api/purchase-invoices/batch-to-journal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: ids })
@@ -591,10 +591,10 @@ async function generateFromPurchaseGroup(idStr) {
 }
 
 async function deletePurchaseGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
   if (!confirm('确认删除该组 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
   try {
-    var result = await api('/api/purchase-invoices/batch-delete', {
+    let result = await api('/api/purchase-invoices/batch-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)
@@ -662,17 +662,17 @@ async function batchDeletePurchaseInvoices() {
 
 // 一键生成取得发票的进项抵扣凭证
 async function batchGeneratePurchaseVouchers() {
-  var checked = document.querySelectorAll('.pi-check:checked');
+  let checked = document.querySelectorAll('.pi-check:checked');
   if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  var ids = [];
+  let ids = [];
   checked.forEach(function(cb) {
     String(cb.dataset.id).split(',').forEach(function(id) { var n = parseInt(id); if (n) ids.push(n); });
   });
   if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
-  var btn = document.getElementById('piBatchGenBtn');
+  let btn = document.getElementById('piBatchGenBtn');
   if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
   try {
-    var res = await api('/api/purchase-invoices/batch-to-journal', {
+    let res = await api('/api/purchase-invoices/batch-to-journal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: ids })
@@ -680,7 +680,7 @@ async function batchGeneratePurchaseVouchers() {
     toast(res.message, 'success');
     renderPurchaseInvoices();
     // 重置序时账缓存
-    var jel = document.getElementById('page-journal');
+    let jel = document.getElementById('page-journal');
     if (jel) delete jel.dataset.rendered;
   } catch (e) {
     handleError(e, '批量生成凭证');
@@ -966,16 +966,16 @@ async function savePurchaseInvoice(id) {
 
 // 一键生成勾选发票的记账凭证
 async function batchGenerateVouchers() {
-  var checked = document.querySelectorAll('.si-check:checked');
+  let checked = document.querySelectorAll('.si-check:checked');
   if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  var ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
+  let ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
   if (!confirm('确认为选中的 ' + ids.length + ' 条发票生成记账凭证？')) return;
-  var btn = event.target;
+  let btn = event.target;
   btn.disabled = true;
-  var origText = btn.textContent;
+  let origText = btn.textContent;
   btn.textContent = '⏳ 生成中...';
   try {
-    var res = await api('/api/sales-invoices/batch-to-journal', {
+    let res = await api('/api/sales-invoices/batch-to-journal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: ids })
@@ -983,7 +983,7 @@ async function batchGenerateVouchers() {
     toast(res.message, 'success');
     renderSalesInvoices();
     // 重置序时账缓存，确保切换后刷新
-    var jel = document.getElementById('page-journal');
+    let jel = document.getElementById('page-journal');
     if (jel) delete jel.dataset.rendered;
   } catch (e) {
     handleError(e, '批量生成凭证');
@@ -996,11 +996,11 @@ async function batchGenerateVouchers() {
 // 自适应统计卡片字体：检测溢出自动缩小
 function fitInvoiceStatFonts() {
   document.querySelectorAll('.stat-grid-invoice .stat-value').forEach(function(el) {
-    var card = el.parentElement;
+    let card = el.parentElement;
     if (!card) return;
-    var maxW = card.clientWidth - 40;
+    let maxW = card.clientWidth - 40;
     if (maxW <= 0) return;
-    var fontSize = 26;
+    let fontSize = 26;
     el.style.fontSize = fontSize + 'px';
     while (el.scrollWidth > maxW && fontSize > 10) {
       fontSize -= 1;

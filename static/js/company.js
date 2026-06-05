@@ -29,7 +29,7 @@ function switchCompany() {
 
 // ==================== 公司信息 ====================
 async function showCompanyManager(container) {
-  var el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const c = await fetch('/api/company?company_id=' + currentCompanyId).then(r => r.json());
     if (!c || !c.company_name) { el.innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }

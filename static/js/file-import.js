@@ -374,7 +374,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     renderSalesInvoices();
     // 导入发票会自动生成凭证，重置序时账和客户档案的渲染缓存，确保下次切换时刷新数据
     ['page-journal', 'page-customers'].forEach(function(id) {
-      var el = document.getElementById(id);
+      let el = document.getElementById(id);
       if (el) delete el.dataset.rendered;
     });
   }

@@ -303,11 +303,11 @@ function updateDeptBatchBtn() {
 }
 
 async function batchDeleteDepts() {
-  var cbs = document.querySelectorAll('.dept-cb:checked');
+  let cbs = document.querySelectorAll('.dept-cb:checked');
   if (cbs.length === 0) { toast('请先选择要删除的部门', 'warn'); return; }
   if (!confirm('确认删除选中的 ' + cbs.length + ' 个部门？此操作不可恢复。')) return;
   try {
-    var ids = Array.from(cbs).map(c => parseInt(c.value));
+    let ids = Array.from(cbs).map(c => parseInt(c.value));
     await api('/api/departments/batch-delete', { method: 'POST', body: JSON.stringify({ ids: ids }) });
     toast('成功删除 ' + cbs.length + ' 个部门', 'success');
     renderDepartments();
