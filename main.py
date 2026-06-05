@@ -3142,11 +3142,11 @@ def _build_trial_balance_tree(company_id, period_raw, cum_raw, db):
         ccr = round(ct["credit"], 2)
         direction = acc.balance_direction
         if direction == "借":
-            net = cdr - ccr
-            end_debit = round(net, 2) if net >= 0 else 0
+            net = round(cdr - ccr, 2)
+            end_debit = net if net >= 0 else 0
             end_credit = round(-net, 2) if net < 0 else 0
         else:
-            net = ccr - cdr
+            net = round(ccr - cdr, 2)
             end_credit = round(net, 2) if net >= 0 else 0
             end_debit = round(-net, 2) if net < 0 else 0
         result.append({
