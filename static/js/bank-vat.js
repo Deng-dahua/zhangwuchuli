@@ -48,6 +48,7 @@ async function renderBankTransactions(container) {
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-primary" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
 
@@ -355,6 +356,7 @@ async function renderInputVATDeductions(container) {
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-primary" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';
 
@@ -582,5 +584,30 @@ async function deleteVATDeduction(id) {
   await api('/api/input-vat-deductions/' + id, { method: 'DELETE' });
   renderInputVATDeductions();
   toast('已删除');
+}
+
+async function batchGenerateIVDVouchers() {
+  const btn = document.getElementById('ivdBatchGenBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
+  try {
+    const res = await api('/api/input-vat-deductions/batch-to-journal', { method: 'POST' });
+    toast(res.message, 'success');
+    renderInputVATDeductions();
+  } catch (e) {
+    toast(e.message || '生成失败', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 一键生成凭证'; }
+  }
+}
+
+async function batchGenerateBankVouchers() {
+  if (!confirm('确认为所有未生成凭证的银行流水批量生成记账凭证？')) return;
+  try {
+    const res = await api('/api/bank-transactions/batch-to-journal', { method: 'POST' });
+    toast(res.message, 'success');
+    renderBankTransactions();
+  } catch (e) {
+    toast(e.message || '生成失败', 'error');
+  }
 }
 

@@ -4404,6 +4404,96 @@ def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(1
     }
 
 
+@app.post("/api/input-vat-deductions/batch-to-journal")
+def input_vat_batch_to_journal(company_id: int = Query(1), db: Session = Depends(get_db)):
+    """按当前公司所有进项抵扣记录的期间批量生成/重生成凭证"""
+    deductions = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id
+    ).all()
+    periods = set()
+    for d in deductions:
+        period = d.deduction_period or (d.invoice_date.strftime("%Y-%m") if d.invoice_date else None)
+        if period:
+            periods.add(period)
+    total = 0
+    vouchers = []
+    for period in sorted(periods):
+        try:
+            c = auto_generate_input_vat_for_period(db, company_id, period)
+            total += c
+            if c:
+                vouchers.append(period)
+        except Exception:
+            pass
+    db.commit()
+    return {
+        "message": f"已为 {len(periods)} 个期间生成进项抵扣凭证，共 {total} 条",
+        "periods": sorted(periods),
+        "vouchers": vouchers,
+        "total": total
+    }
+
+
+@app.post("/api/bank-transactions/batch-to-journal")
+def bank_transactions_batch_to_journal(company_id: int = Query(1), db: Session = Depends(get_db)):
+    """为所有未生成凭证的银行流水批量生成记账凭证"""
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.journal_voucher_no == None
+    ).all()
+    generated = 0
+    skipped = 0
+    errors = []
+    for tx in txs:
+        try:
+            period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
+            max_no = db.query(JournalEntry.voucher_no).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.period == period,
+                JournalEntry.voucher_word == "记"
+            ).order_by(JournalEntry.voucher_no.desc()).first()
+            next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+            date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
+            counterparty = tx.counterparty_name or tx.summary or "银行流水"
+            if not db.query(Account).filter(Account.company_id == company_id, Account.code == "1002").first():
+                db.add(Account(
+                    company_id=company_id, code="1002", name="银行存款",
+                    category="资产", balance_direction="借", level=1, parent_code="1",
+                ))
+                db.flush()
+            is_debit = tx.debit_amount and tx.debit_amount > 0
+            amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+            entry = JournalEntry(
+                company_id=company_id,
+                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                period=period,
+                voucher_word="记",
+                voucher_no=next_voucher_no,
+                summary=f"银行流水-{counterparty}",
+                account_code="1002",
+                account_name="银行存款",
+                debit_amount=amount if is_debit else 0,
+                credit_amount=0 if is_debit else amount,
+                contact_project=counterparty,
+                source="手动录入",
+            )
+            db.add(entry)
+            voucher_str = f"记-{next_voucher_no}"
+            tx.journal_voucher_no = voucher_str
+            db.flush()
+            generated += 1
+        except Exception as ex:
+            errors.append({"id": tx.id, "error": str(ex)})
+            skipped += 1
+    db.commit()
+    return {
+        "message": f"已生成 {generated} 条银行流水凭证，跳过 {skipped} 条",
+        "generated": generated,
+        "skipped": skipped,
+        "errors": errors
+    }
+
+
 @app.post("/api/input-vat-deductions/{item_id}/to-journal")
 def input_vat_deduction_to_journal(item_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
     """为进项抵扣记录所在期间重新生成凭证"""
