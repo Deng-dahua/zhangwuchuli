@@ -143,6 +143,7 @@ class Customer(Base):
     uscc = Column(String(50), comment="统一社会信用代码")
     is_active = Column(Boolean, default=True)
     remark = Column(String(200), comment="备注")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -847,7 +848,23 @@ def migrate_schema(db):
         except Exception as e:
             db.rollback()
 
-    # ── 7. 销售发票字段扩展（数电发票、销方、风险等级等） ──
+    # ── 7.1 客户档案 _fingerprint 字段扩展 ──
+    if "customers" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("customers")}
+        new_cust_cols = {
+            "_fingerprint": "ALTER TABLE customers ADD COLUMN _fingerprint VARCHAR(64)",
+        }
+        for col, sql in new_cust_cols.items():
+            if col not in existing_cols:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 customers 添加字段: {col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"customers 添加字段 {col} 失败（可能已存在）: {e}")
+
+    # ── 7.2 销售发票字段扩展（数电发票、销方、风险等级等） ──
     if "sales_invoices" in inspector.get_table_names():
         existing_cols = {c["name"] for c in inspector.get_columns("sales_invoices")}
         new_si_cols = {
