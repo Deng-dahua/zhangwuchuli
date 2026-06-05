@@ -4414,11 +4414,12 @@ def batch_certify_input_vat_deductions(ids: list[int], company_id: int = Query(1
 
 
 @app.post("/api/input-vat-deductions/batch-to-journal")
-def input_vat_batch_to_journal(company_id: int = Query(1), db: Session = Depends(get_db)):
-    """按当前公司所有进项抵扣记录的期间批量生成/重生成凭证"""
-    deductions = db.query(InputVATDeduction).filter(
-        InputVATDeduction.company_id == company_id
-    ).all()
+def input_vat_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(1), db: Session = Depends(get_db)):
+    """按指定进项抵扣记录的期间批量生成/重生成凭证；不传 ids 则处理全部"""
+    q = db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id)
+    if ids:
+        q = q.filter(InputVATDeduction.id.in_(ids))
+    deductions = q.all()
     periods = set()
     for d in deductions:
         period = d.deduction_period or (d.invoice_date.strftime("%Y-%m") if d.invoice_date else None)
@@ -4444,12 +4445,15 @@ def input_vat_batch_to_journal(company_id: int = Query(1), db: Session = Depends
 
 
 @app.post("/api/bank-transactions/batch-to-journal")
-def bank_transactions_batch_to_journal(company_id: int = Query(1), db: Session = Depends(get_db)):
-    """为所有未生成凭证的银行流水批量生成记账凭证"""
-    txs = db.query(BankTransaction).filter(
+def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), company_id: int = Query(1), db: Session = Depends(get_db)):
+    """为指定银行流水批量生成记账凭证；不传 ids 则处理全部"""
+    q = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id,
         BankTransaction.journal_voucher_no == None
-    ).all()
+    )
+    if ids:
+        q = q.filter(BankTransaction.id.in_(ids))
+    txs = q.all()
     generated = 0
     skipped = 0
     errors = []

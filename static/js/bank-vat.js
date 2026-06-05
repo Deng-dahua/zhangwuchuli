@@ -646,10 +646,21 @@ async function deleteVATDeduction(id) {
 }
 
 async function batchGenerateIVDVouchers() {
+  // 收集选中的进项抵扣ID
+  const checked = document.querySelectorAll('.ivd-check:checked');
+  if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
+  const ids = [];
+  checked.forEach(cb => {
+    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+  });
   const btn = document.getElementById('ivdBatchGenBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
   try {
-    const res = await api('/api/input-vat-deductions/batch-to-journal', { method: 'POST' });
+    const res = await api('/api/input-vat-deductions/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
     toast(res.message, 'success');
     renderInputVATDeductions();
   } catch (e) {
@@ -660,9 +671,18 @@ async function batchGenerateIVDVouchers() {
 }
 
 async function batchGenerateBankVouchers() {
-  if (!confirm('确认为所有未生成凭证的银行流水批量生成记账凭证？')) return;
+  // 收集选中的银行流水ID
+  const checked = document.querySelectorAll('.bt-check:checked');
+  if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
+  const ids = [];
+  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  if (!confirm('确认为选中的 ' + ids.length + ' 条银行流水生成记账凭证？')) return;
   try {
-    const res = await api('/api/bank-transactions/batch-to-journal', { method: 'POST' });
+    const res = await api('/api/bank-transactions/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
     toast(res.message, 'success');
     renderBankTransactions();
   } catch (e) {
