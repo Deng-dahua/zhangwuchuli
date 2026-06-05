@@ -4704,11 +4704,11 @@ async def analyze_file_headers(
     bank_config_id: Optional[int] = Form(None)
 ):
     """上传文件，返回表头列表供用户做列映射"""
+    fname = file.filename or "unknown"
+    ext = os.path.splitext(fname)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"不支持的文件类型: {ext}，仅接受 xlsx/xls/csv/pdf/txt")
     try:
-        fname = file.filename or "unknown"
-        ext = os.path.splitext(fname)[1].lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(400, f"不支持的文件类型: {ext}，仅接受 xlsx/xls/csv/pdf/txt")
         content_bytes = await file.read()
         if len(content_bytes) > MAX_UPLOAD_SIZE:
             raise HTTPException(400, f"文件过大（{len(content_bytes)/1024/1024:.1f}MB），上限10MB")
@@ -4818,6 +4818,8 @@ async def analyze_file_headers(
             "field_groups": field_groups,
             "field_order": field_order
         }
+    except HTTPException:
+        raise
     except Exception as e:
         return {"error": f"文件分析失败：{str(e)}"}
 

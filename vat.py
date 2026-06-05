@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/vat", tags=["增值税申报"])
 
 
 @router.get("/declarations")
-def list_vat_declarations(company_id: int = Query(1), period: str = Query(None), db: Session = Depends(get_db)):
+def list_vat_declarations(company_id: int, period: str = Query(None), db: Session = Depends(get_db)):
     q = db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id)
     if period:
         q = q.filter(VATDeclaration.period == period)
@@ -40,7 +40,7 @@ def list_vat_declarations(company_id: int = Query(1), period: str = Query(None),
 
 
 @router.post("/declarations")
-def create_vat_declaration(data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = Depends(get_db)):
     period = data.get("period", "")
     if not period:
         raise HTTPException(400, detail="税款所属期不能为空")
@@ -77,7 +77,7 @@ def create_vat_declaration(data: dict, company_id: int = Query(1), db: Session =
 
 
 @router.get("/declarations/{declaration_id}")
-def get_vat_declaration(declaration_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def get_vat_declaration(declaration_id: int, company_id: int = Query(), db: Session = Depends(get_db)):
     vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
@@ -109,7 +109,7 @@ def get_vat_declaration(declaration_id: int, company_id: int = Query(1), db: Ses
 
 
 @router.put("/declarations/{declaration_id}")
-def update_vat_declaration(declaration_id: int, data: dict, company_id: int = Query(1), db: Session = Depends(get_db)):
+def update_vat_declaration(declaration_id: int, data: dict, company_id: int = Query(), db: Session = Depends(get_db)):
     vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
@@ -131,8 +131,8 @@ def update_vat_declaration(declaration_id: int, data: dict, company_id: int = Qu
 
 
 @router.delete("/declarations/{declaration_id}")
-def delete_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
-    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id).first()
+def delete_vat_declaration(declaration_id: int, company_id: int = Query(), db: Session = Depends(get_db)):
+    vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
     db.delete(vd)
@@ -141,7 +141,7 @@ def delete_vat_declaration(declaration_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/declarations/{declaration_id}/recompute")
-def recompute_vat_declaration(declaration_id: int, company_id: int = Query(1), db: Session = Depends(get_db)):
+def recompute_vat_declaration(declaration_id: int, company_id: int = Query(), db: Session = Depends(get_db)):
     vd = db.query(VATDeclaration).filter(VATDeclaration.id == declaration_id, VATDeclaration.company_id == company_id).first()
     if not vd:
         raise HTTPException(404, detail="申报表不存在")
