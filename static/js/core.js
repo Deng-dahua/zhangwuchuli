@@ -42,7 +42,8 @@ const pages = {
   'sales-invoices': '开具发票',
   'purchase-invoices': '取得发票',
   'input-vat-deductions': '进项抵扣',
-  'bank-transactions': '银行流水'
+  'bank-transactions': '银行流水',
+  'vat-declaration': '增值税申报'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -321,6 +322,7 @@ function navigateTo(page) {
       case 'purchase-invoices': renderPurchaseInvoices(container); break;
       case 'input-vat-deductions': renderInputVATDeductions(container); break;
       case 'bank-transactions': renderBankTransactions(container); break;
+      case 'vat-declaration': renderVATDeclaration(container); break;
     }
   }
 }

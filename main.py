@@ -39,7 +39,10 @@ from database import (
     _normalize_customer_name, _match_customer, _generate_bank_journals
 )
 
+from vat import router as vat_router
+
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
+app.include_router(vat_router)
 
 # 启动时初始化数据库
 @app.on_event("startup")

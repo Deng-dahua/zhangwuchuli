@@ -1587,6 +1587,55 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     return {"generated": generated, "skipped": skipped, "infos": infos, "errors": errors}
 
 
+
+
+# ========== 增值税申报表模型 ==========
+
+class VATDeclaration(Base):
+    """增值税及附加税费申报表头"""
+    __tablename__ = "vat_declarations"
+    __table_args__ = (UniqueConstraint("company_id", "period", name="uq_vat_period"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False)  # YYYY-MM 税款所属期
+    # 纳税人信息
+    taxpayer_name = Column(String(100))
+    taxpayer_id = Column(String(50))
+    industry = Column(String(50))
+    register_type = Column(String(50))
+    legal_representative = Column(String(50))
+    address = Column(String(200))
+    bank_account = Column(String(100))
+    phone = Column(String(30))
+    # 填表信息
+    fill_date = Column(Date)
+    # 小微企业"六税两费"减免
+    micro_enterprise = Column(Boolean, default=False)
+    six_tax_reduction = Column(Boolean, default=False)
+    reduction_start = Column(String(10))
+    reduction_end = Column(String(10))
+    # 附加税费
+    city_maintenance_tax = Column(Float, default=0.0)
+    education_surcharge = Column(Float, default=0.0)
+    local_education_surcharge = Column(Float, default=0.0)
+    # 状态
+    status = Column(String(20), default="草稿")
+    submitted_at = Column(DateTime)
+    # 7张表的填报数据（JSON格式）
+    form_main = Column(Text)
+    form_sales = Column(Text)
+    form_input = Column(Text)
+    form_deduction = Column(Text)
+    form_credit = Column(Text)
+    form_surcharge = Column(Text)
+    form_reduction = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", backref="vat_declarations")
+
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
