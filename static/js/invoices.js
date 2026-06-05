@@ -539,17 +539,53 @@ async function renderPurchaseInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
-        const pjv = i.journal_voucher_no || '';
-        html += '<td>' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
-        html += '<td>' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
-        html += '<td style="white-space:nowrap">';
-        html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
-        html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseInvoice(' + i.id + ')">删除</button>';
-        html += '</td></tr>';
+        // 凭证号/生成凭证/操作：首行 rowspan 跨整组
+        if (isFirst) {
+          const pjv = i.journal_voucher_no || '';
+          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
+          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle">' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
+          html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;white-space:nowrap">';
+          html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
+          html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseGroup(\'' + allIds + '\')">删除</button>';
+          html += '</td>';
+        }
+        html += '</tr>';
       });
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function generateFromPurchaseGroup(idStr) {
+  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  if (!confirm('确认为该组 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
+  try {
+    var res = await api('/api/purchase-invoices/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    });
+    toast(res.message, 'success');
+    renderPurchaseInvoices();
+  } catch (e) {
+    handleError(e, '生成凭证');
+  }
+}
+
+async function deletePurchaseGroup(idStr) {
+  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
+  if (!confirm('确认删除该组 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
+  try {
+    var result = await api('/api/purchase-invoices/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+    renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
   }
