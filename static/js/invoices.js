@@ -81,8 +81,9 @@ async function renderSalesInvoices(container) {
       items.forEach(i => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : i.status === STATUS.RED ? 'badge-red' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
+        const jv = i.journal_voucher_no;
         html += '<tr>';
-        html += '<td><input type="checkbox" class="si-check" data-id="' + i.id + '" onchange="updateSiBatchBtn()"></td>';
+        html += '<td><input type="checkbox" class="si-check" data-id="' + i.id + '" onchange="updateSiBatchBtn()" ' + (jv ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showSalesDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
@@ -109,7 +110,6 @@ async function renderSalesInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
-        const jv = i.journal_voucher_no || '';
         html += '<td>' + (jv ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv + '</a>' : '-') + '</td>';
         html += '<td>' + (jv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromSalesInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
@@ -312,12 +312,14 @@ async function deleteSalesInvoice(id) {
 
 function toggleSiSelectAll() {
   const all = document.getElementById('siSelectAll');
-  document.querySelectorAll('.si-check').forEach(cb => cb.checked = all.checked);
+  document.querySelectorAll('.si-check:not(:disabled)').forEach(cb => cb.checked = all.checked);
   updateSiBatchBtn();
 }
 
 function updateSiBatchBtn() {
-  const count = document.querySelectorAll('.si-check:checked').length;
+  const enabledBoxes = document.querySelectorAll('.si-check:not(:disabled)');
+  const checkedEnabled = document.querySelectorAll('.si-check:not(:disabled):checked');
+  const count = checkedEnabled.length;
   const delBtn = document.getElementById('siBatchDelBtn');
   if (delBtn) {
     delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
@@ -326,6 +328,12 @@ function updateSiBatchBtn() {
   const genBtn = document.getElementById('siBatchGenBtn');
   if (genBtn) {
     genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+  }
+  // 同步全选框状态
+  const selectAll = document.getElementById('siSelectAll');
+  if (selectAll) {
+    selectAll.checked = enabledBoxes.length > 0 && enabledBoxes.length === checkedEnabled.length;
+    selectAll.indeterminate = checkedEnabled.length > 0 && checkedEnabled.length < enabledBoxes.length;
   }
 }
 
