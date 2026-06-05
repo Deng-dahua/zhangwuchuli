@@ -40,9 +40,11 @@ from database import (
 )
 
 from vat import router as vat_router
+from salary import router as salary_router
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0")
 app.include_router(vat_router)
+app.include_router(salary_router)
 
 # 启动时初始化数据库
 @app.on_event("startup")

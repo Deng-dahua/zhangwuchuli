@@ -1749,6 +1749,80 @@ def verify_dedup_columns(db):
 
 
 
+class SalaryRecord(Base):
+    """工资薪金所得预扣预缴明细 - 按税务模板"""
+    __tablename__ = "salary_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(20), nullable=False, index=True)  # 期间，如 2025-10
+
+    # 人员信息
+    employee_name = Column(String(100), nullable=False)       # 姓名
+    id_type = Column(String(50), default="居民身份证")          # 证件类型
+    id_number = Column(String(50), index=True)                 # 证件号码
+
+    # 税款所属期
+    tax_period_start = Column(String(20))  # 税款所属期起，如 2025-10-01
+    tax_period_end = Column(String(20))    # 税款所属期止，如 2025-10-31
+    income_type = Column(String(50), default="正常工资薪金")  # 所得项目
+
+    # 本期扣除
+    current_income = Column(Float, default=0.0)       # 本期收入
+    tax_free_income = Column(Float, default=0.0)       # 免税收入
+    basic_deduction = Column(Float, default=5000.0)    # 基本减除费用
+
+    # 专项扣除（本月）
+    pension_insurance = Column(Float, default=0.0)      # 基本养老保险
+    medical_insurance = Column(Float, default=0.0)     # 基本医疗保险
+    unemployment_insurance = Column(Float, default=0.0) # 失业保险
+    housing_fund = Column(Float, default=0.0)           # 住房公积金
+    enterprise_annuity = Column(Float, default=0.0)    # 企业年金
+    commercial_health = Column(Float, default=0.0)     # 商业健康保险
+    tax_deferred_pension = Column(Float, default=0.0)  # 税延养老保险
+    other_special_deduction = Column(Float, default=0.0) # 其他专项扣除
+
+    # 专项附加扣除（本月）
+    child_education = Column(Float, default=0.0)        # 子女教育
+    continuing_education = Column(Float, default=0.0)   # 继续教育
+    housing_loan_interest = Column(Float, default=0.0)  # 住房贷款利息
+    housing_rent = Column(Float, default=0.0)            # 住房租金
+    elderly_support = Column(Float, default=0.0)        # 赡养老人
+    infant_care = Column(Float, default=0.0)            # 3岁以下婴幼儿照护
+    major_medical = Column(Float, default=0.0)           # 大病医疗
+    other_additional_deduction = Column(Float, default=0.0) # 其他附加扣除
+
+    # 累计数据
+    cumulative_income = Column(Float, default=0.0)           # 累计收入额
+    cumulative_tax_free = Column(Float, default=0.0)         # 累计免税收入
+    cumulative_deduction = Column(Float, default=0.0)        # 累计减除费用
+    cumulative_special = Column(Float, default=0.0)          # 累计专项扣除
+    cumulative_additional = Column(Float, default=0.0)       # 累计专项附加扣除
+    cumulative_other = Column(Float, default=0.0)            # 累计其他扣除
+    cumulative_tax_withheld = Column(Float, default=0.0)    # 累计已预扣预缴税额
+
+    # 本期其他扣除
+    other_deduction = Column(Float, default=0.0)             # 本期其他扣除
+
+    # 税额计算
+    taxable_income = Column(Float, default=0.0)      # 应纳税所得额
+    tax_rate = Column(Float, default=0.0)            # 税率
+    quick_deduction = Column(Float, default=0.0)     # 速算扣除数
+    tax_payable = Column(Float, default=0.0)         # 累计应预扣预缴税额
+    tax_already_withheld = Column(Float, default=0.0) # 本期已预扣预缴税额
+    tax_to_pay = Column(Float, default=0.0)          # 本期应预扣预缴税额（实际应缴）
+    tax_refund = Column(Float, default=0.0)          # 应补(退)税额
+
+    # 实发工资
+    net_salary = Column(Float, default=0.0)           # 实发工资
+
+    # 原始行数据（JSON，保留导入时的完整列）
+    raw_data = Column(Text)  # JSON string，存储Excel原始行
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 def init_db():
     """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据
     

@@ -1,0 +1,377 @@
+/**
+ * 工资薪金所得模块 - 前端
+ * 功能：按期间管理工资表、导入税务模板、自动建人员档案、计算个税
+ */
+let currentSalaryPeriod = '';
+let currentSalaryRecords = [];
+let currentEditingSalaryId = null;
+
+// ========== 页面渲染 ==========
+
+function showSalaryPage() {
+    const period = getCurrentPeriod();
+    currentSalaryPeriod = period;
+    api('/api/salary/periods').then(periods => {
+        if (periods && periods.length > 0 && !currentSalaryPeriod) {
+            currentSalaryPeriod = periods[0];
+        }
+        renderSalaryPage();
+        loadSalaryData();
+    }).catch(() => {
+        renderSalaryPage();
+        loadSalaryData();
+    });
+}
+
+function renderSalaryPage() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        <div class="page-header">
+            <h2>Ⓜ️ 工资薪金所得</h2>
+            <div class="page-actions">
+                <input type="text" id="salary-period-input" value="${currentSalaryPeriod}" placeholder="期间 如 2025-10" style="width:140px">
+                <button class="btn btn-primary" onclick="loadSalaryData()">📅 查询</button>
+                <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增</button>
+                <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入Excel</button>
+                <button class="btn btn-info" onclick="autoCreateEmployeesFromSalary()">👤 自动建人员档案</button>
+                <button class="btn btn-secondary" onclick="computeSalaryTax()">🧮 计算个税</button>
+                <button class="btn btn-danger" onclick="batchDeleteSalary()">🗑️ 批量删除</button>
+            </div>
+        </div>
+        <div id="salary-stats" class="stats-cards"></div>
+        <div class="table-container">
+            <table class="data-table" id="salary-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="salary-select-all" onchange="toggleSelectAll('salary')"></th>
+                        <th>姓名</th>
+                        <th>证件号码</th>
+                        <th>本期收入</th>
+                        <th>专项扣除合计</th>
+                        <th>专项附加扣除合计</th>
+                        <th>应纳税所得额</th>
+                        <th>税率</th>
+                        <th>本期应预扣税额</th>
+                        <th>实发工资</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="salary-tbody">
+                    <tr><td colspan="11" style="text-align:center;color:#999">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ========== 数据加载 ==========
+
+function loadSalaryData() {
+    const periodInput = document.getElementById('salary-period-input');
+    currentSalaryPeriod = periodInput ? periodInput.value : getCurrentPeriod();
+
+    // 加载统计
+    api('/api/salary/stats', { period: currentSalaryPeriod }).then(stats => {
+        renderSalaryStats(stats);
+    }).catch(() => {});
+
+    // 加载列表
+    api('/api/salary/records', { period: currentSalaryPeriod }).then(data => {
+        currentSalaryRecords = data;
+        renderSalaryTable(data);
+    }).catch(err => {
+        document.getElementById('salary-tbody').innerHTML =
+            '<tr><td colspan="11" style="text-align:center;color:#f44">加载失败：' + (err.message || '') + '</td></tr>';
+    });
+}
+
+function renderSalaryStats(stats) {
+    const el = document.getElementById('salary-stats');
+    if (!el) return;
+    el.innerHTML = `
+        <div class="stat-card"><div class="stat-label">人数</div><div class="stat-value">${stats.count || 0}</div></div>
+        <div class="stat-card"><div class="stat-label">本期收入合计</div><div class="stat-value">${(stats.total_income || 0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="stat-label">个税合计</div><div class="stat-value">${(stats.total_tax || 0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="stat-label">实发工资合计</div><div class="stat-value">${(stats.total_net || 0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="stat-label">人均收入</div><div class="stat-value">${(stats.avg_income || 0).toFixed(2)}</div></div>
+    `;
+}
+
+function renderSalaryTable(records) {
+    const tbody = document.getElementById('salary-tbody');
+    if (!records || records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
+        return;
+    }
+    tbody.innerHTML = records.map(r => `
+        <tr>
+            <td><input type="checkbox" class="salary-checkbox" value="${r.id}"></td>
+            <td>${escHtml(r.employee_name)}</td>
+            <td style="font-size:12px">${escHtml(r.id_number || '')}</td>
+            <td style="text-align:right">${(r.current_income || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.special_deduction_total || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.additional_deduction_total || 0).toFixed(2)}</td>
+            <td style="text-align:right">${(r.taxable_income || 0).toFixed(2)}</td>
+            <td style="text-align:center">${(r.tax_rate || 0) * 100}%</td>
+            <td style="text-align:right;color:#e74c3c">${(r.tax_to_pay || 0).toFixed(2)}</td>
+            <td style="text-align:right;color:#27ae60;font-weight:bold">${(r.net_salary || 0).toFixed(2)}</td>
+            <td class="actions">
+                <button class="btn btn-sm btn-primary" onclick="showSalaryEditModal(${r.id})">编辑</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ========== 新增/编辑 ==========
+
+function showSalaryAddModal() {
+    currentEditingSalaryId = null;
+    renderSalaryModal({});
+}
+
+function showSalaryEditModal(id) {
+    currentEditingSalaryId = id;
+    const r = currentSalaryRecords.find(x => x.id === id);
+    if (!r) return;
+    renderSalaryModal(r);
+}
+
+function renderSalaryModal(r) {
+    const isEdit = currentEditingSalaryId !== null;
+    const title = isEdit ? '编辑工资记录' : '新增工资记录';
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'salary-modal';
+    modal.innerHTML = `
+        <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
+            <div class="modal-header"><h3>${title}</h3><button class="modal-close" onclick="closeModal('salary-modal')">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <label>期间</label>
+                    <input type="text" id="sal-modal-period" value="${r.period || currentSalaryPeriod}" placeholder="2025-10" required>
+                </div>
+                <div class="form-row">
+                    <label>姓名</label>
+                    <input type="text" id="sal-modal-name" value="${escHtml(r.employee_name || '')}" required>
+                </div>
+                <div class="form-row">
+                    <label>证件类型</label>
+                    <input type="text" id="sal-modal-id-type" value="${escHtml(r.id_type || '居民身份证')}">
+                </div>
+                <div class="form-row">
+                    <label>证件号码</label>
+                    <input type="text" id="sal-modal-id-number" value="${escHtml(r.id_number || '')}">
+                </div>
+                <div class="form-row">
+                    <label>本期收入</label>
+                    <input type="number" step="0.01" id="sal-modal-income" value="${r.current_income || 0}" onchange="calcSalaryNet()">
+                </div>
+                <div class="form-row">
+                    <label>基本减除费用</label>
+                    <input type="number" step="0.01" id="sal-modal-basic-deduction" value="${r.basic_deduction || 5000}" onchange="calcSalaryNet()">
+                </div>
+                <h4 style="margin:12px 0 8px;color:#555">专项扣除</h4>
+                <div class="form-row"><label>基本养老保险</label><input type="number" step="0.01" id="sal-modal-pension" value="${r.pension_insurance || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>基本医疗保险</label><input type="number" step="0.01" id="sal-modal-medical" value="${r.medical_insurance || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>失业保险</label><input type="number" step="0.01" id="sal-modal-unemployment" value="${r.unemployment_insurance || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>住房公积金</label><input type="number" step="0.01" id="sal-modal-housing" value="${r.housing_fund || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>企业年金</label><input type="number" step="0.01" id="sal-modal-annuity" value="${r.enterprise_annuity || 0}" onchange="calcSalaryNet()"></div>
+                <h4 style="margin:12px 0 8px;color:#555">专项附加扣除</h4>
+                <div class="form-row"><label>子女教育</label><input type="number" step="0.01" id="sal-modal-child" value="${r.child_education || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>继续教育</label><input type="number" step="0.01" id="sal-modal-continuing" value="${r.continuing_education || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>住房贷款利息</label><input type="number" step="0.01" id="sal-modal-loan" value="${r.housing_loan_interest || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>住房租金</label><input type="number" step="0.01" id="sal-modal-rent" value="${r.housing_rent || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>赡养老人</label><input type="number" step="0.01" id="sal-modal-elderly" value="${r.elderly_support || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>3岁以下婴幼儿照护</label><input type="number" step="0.01" id="sal-modal-infant" value="${r.infant_care || 0}" onchange="calcSalaryNet()"></div>
+                <div class="form-row"><label>大病医疗</label><input type="number" step="0.01" id="sal-modal-major" value="${r.major_medical || 0}" onchange="calcSalaryNet()"></div>
+                <h4 style="margin:12px 0 8px;color:#555">税额</h4>
+                <div class="form-row"><label>本期应预扣税额</label><input type="number" step="0.01" id="sal-modal-tax-to-pay" value="${r.tax_to_pay || 0}"></div>
+                <div class="form-row"><label>实发工资（自动算）</label><input type="number" step="0.01" id="sal-modal-net" value="${r.net_salary || 0}" readonly style="background:#f5f5f5"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('salary-modal')">取消</button>
+                <button class="btn btn-primary" onclick="saveSalaryRecord()">保存</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+}
+
+function calcSalaryNet() {
+    const income = parseFloat(document.getElementById('sal-modal-income')?.value || 0);
+    const tax = parseFloat(document.getElementById('sal-modal-tax-to-pay')?.value || 0);
+    const special = (parseFloat(document.getElementById('sal-modal-pension')?.value || 0) +
+                     parseFloat(document.getElementById('sal-modal-medical')?.value || 0) +
+                     parseFloat(document.getElementById('sal-modal-unemployment')?.value || 0) +
+                     parseFloat(document.getElementById('sal-modal-housing')?.value || 0));
+    // 自动估算个税（简化）
+    const net = income - special - tax;
+    const netInput = document.getElementById('sal-modal-net');
+    if (netInput) netInput.value = Math.round(net * 100) / 100;
+}
+
+function saveSalaryRecord() {
+    const period = document.getElementById('sal-modal-period').value.trim();
+    const name = document.getElementById('sal-modal-name').value.trim();
+    if (!period || !name) { alert('期间和姓名必填'); return; }
+
+    const data = {
+        period,
+        employee_name: name,
+        id_type: document.getElementById('sal-modal-id-type').value.trim(),
+        id_number: document.getElementById('sal-modal-id-number').value.trim(),
+        current_income: parseFloat(document.getElementById('sal-modal-income').value || 0),
+        basic_deduction: parseFloat(document.getElementById('sal-modal-basic-deduction').value || 5000),
+        pension_insurance: parseFloat(document.getElementById('sal-modal-pension').value || 0),
+        medical_insurance: parseFloat(document.getElementById('sal-modal-medical').value || 0),
+        unemployment_insurance: parseFloat(document.getElementById('sal-modal-unemployment').value || 0),
+        housing_fund: parseFloat(document.getElementById('sal-modal-housing').value || 0),
+        enterprise_annuity: parseFloat(document.getElementById('sal-modal-annuity').value || 0),
+        child_education: parseFloat(document.getElementById('sal-modal-child').value || 0),
+        continuing_education: parseFloat(document.getElementById('sal-modal-continuing').value || 0),
+        housing_loan_interest: parseFloat(document.getElementById('sal-modal-loan').value || 0),
+        housing_rent: parseFloat(document.getElementById('sal-modal-rent').value || 0),
+        elderly_support: parseFloat(document.getElementById('sal-modal-elderly').value || 0),
+        infant_care: parseFloat(document.getElementById('sal-modal-infant').value || 0),
+        major_medical: parseFloat(document.getElementById('sal-modal-major').value || 0),
+        tax_to_pay: parseFloat(document.getElementById('sal-modal-tax-to-pay').value || 0),
+        net_salary: parseFloat(document.getElementById('sal-modal-net').value || 0),
+    };
+
+    const method = currentEditingSalaryId ? 'PUT' : 'POST';
+    const url = currentEditingSalaryId ? `/api/salary/records/${currentEditingSalaryId}` : '/api/salary/records';
+
+    api(url, data, { method }).then(() => {
+        closeModal('salary-modal');
+        loadSalaryData();
+        showToast('保存成功');
+    }).catch(err => alert('保存失败：' + (err.message || '')));
+}
+
+// ========== 删除 ==========
+
+function deleteSalaryRecord(id) {
+    if (!confirm('确定删除该条工资记录？')) return;
+    api(`/api/salary/records/${id}`, {}, { method: 'DELETE' }).then(() => {
+        loadSalaryData();
+        showToast('已删除');
+    }).catch(err => alert('删除失败：' + (err.message || '')));
+}
+
+function batchDeleteSalary() {
+    const ids = getSelectedIds('salary');
+    if (ids.length === 0) { alert('请先选择要删除的记录'); return; }
+    if (!confirm(`确定删除选中的 ${ids.length} 条记录？`)) return;
+    api('/api/salary/records/batch-delete', ids, { method: 'POST' }).then(() => {
+        loadSalaryData();
+        showToast(`已删除 ${ids.length} 条记录`);
+    }).catch(err => alert('删除失败：' + (err.message || '')));
+}
+
+// ========== 导入Excel ==========
+
+function showSalaryImportModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'salary-import-modal';
+    modal.innerHTML = `
+        <div class="modal" style="max-width:500px">
+            <div class="modal-header"><h3>📁 导入工资表（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
+            <div class="modal-body">
+                <p style="color:#666;margin-bottom:12px">支持税务局"综合所得月工资薪所得"Excel模板（.xls/.xlsx）</p>
+                <div class="form-row">
+                    <label>期间</label>
+                    <input type="text" id="sal-import-period" value="${currentSalaryPeriod}" placeholder="2025-10" required>
+                </div>
+                <div class="form-row">
+                    <label>选择文件</label>
+                    <input type="file" id="sal-import-file" accept=".xls,.xlsx" required>
+                </div>
+                <div id="sal-import-progress" style="margin-top:12px;color:#3498db;display:none">
+                    导入中，请稍候...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('salary-import-modal')">取消</button>
+                <button class="btn btn-primary" onclick="importSalaryExcel()">开始导入</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+}
+
+function importSalaryExcel() {
+    const period = document.getElementById('sal-import-period').value.trim();
+    const fileInput = document.getElementById('sal-import-file');
+    if (!period) { alert('请填写期间'); return; }
+    if (!fileInput.files.length) { alert('请选择文件'); return; }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('company_id', currentCompanyId);
+    formData.append('period', period);
+
+    const progress = document.getElementById('sal-import-progress');
+    progress.style.display = 'block';
+
+    fetch(`/api/salary/import?company_id=${currentCompanyId}&period=${encodeURIComponent(period)}`, {
+        method: 'POST',
+        body: fileInput.files[0]
+    }).then(res => res.json()).then(data => {
+        progress.style.display = 'none';
+        closeModal('salary-import-modal');
+        loadSalaryData();
+        showToast(data.msg || '导入完成');
+    }).catch(err => {
+        progress.style.display = 'none';
+        alert('导入失败：' + (err.message || ''));
+    });
+}
+
+// ========== 自动建人员档案 ==========
+
+function autoCreateEmployeesFromSalary() {
+    if (!confirm('将根据工资表中的所有人员信息自动创建/更新人员档案（按证件号码匹配）？')) return;
+    api('/api/salary/auto-create-employees', { period: currentSalaryPeriod }, { method: 'POST' })
+        .then(data => {
+            showToast(data.msg || '完成');
+        }).catch(err => alert('操作失败：' + (err.message || '')));
+}
+
+// ========== 计算个税 ==========
+
+function computeSalaryTax() {
+    if (!confirm(`将重新计算 ${currentSalaryPeriod} 期间所有员工的个税（累计预扣法），确定？`)) return;
+    api('/api/salary/compute', { period: currentSalaryPeriod }, { method: 'POST' })
+        .then(data => {
+            showToast(data.msg || '计算完成');
+            loadSalaryData();
+        }).catch(err => alert('计算失败：' + (err.message || '')));
+}
+
+// ========== 辅助 ==========
+
+function getSelectedIds(type) {
+    const checkboxes = document.querySelectorAll(`.${type}-checkbox:checked`);
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+function toggleSelectAll(type) {
+    const master = document.getElementById(`${type}-select-all`);
+    const checked = master.checked;
+    document.querySelectorAll(`.${type}-checkbox`).forEach(cb => cb.checked = checked);
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.remove();
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
