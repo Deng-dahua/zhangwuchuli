@@ -44,12 +44,6 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
     period = data.get("period", "")
     if not period:
         raise HTTPException(400, detail="税款所属期不能为空")
-    existing = db.query(VATDeclaration).filter(
-        VATDeclaration.company_id == company_id,
-        VATDeclaration.period == period
-    ).first()
-    if existing:
-        raise HTTPException(400, detail=f"{period} 已有申报表，不能重复创建")
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(404, detail="公司不存在")

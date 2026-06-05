@@ -7,14 +7,12 @@ from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 from sqlalchemy import func, and_, or_
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
 from contextlib import asynccontextmanager
 import os
 import csv
-import hashlib
 import io
 import re
 import uuid
@@ -260,8 +258,6 @@ def list_departments(
 
 @app.post("/api/departments")
 def create_department(data: DepartmentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(Department).filter(Department.company_id == company_id, Department.code == data.code).first():
-        raise HTTPException(400, detail=f"部门编码 {data.code} 已存在")
     d = Department(company_id=company_id, **data.model_dump())
     db.add(d)
     db.commit()
@@ -411,8 +407,6 @@ def list_employees(
 
 @app.post("/api/employees")
 def create_employee(data: EmployeeCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.code).first():
-        raise HTTPException(400, detail=f"工号 {data.code} 已存在")
     e = Employee(company_id=company_id, **data.model_dump())
     db.add(e)
     db.commit()
@@ -514,13 +508,6 @@ def list_customers(
 
 @app.post("/api/customers")
 def create_customer(data: CustomerCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    # 去重：编码/名称/统一社会信用代码 任一重复即拦截
-    conds = [Customer.code == data.code, Customer.name == data.name]
-    if data.uscc:
-        conds.append(Customer.uscc == data.uscc)
-    dup = db.query(Customer).filter(Customer.company_id == company_id, or_(*conds))
-    if dup.first():
-        raise HTTPException(400, detail="客户编码、名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -535,16 +522,6 @@ def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
-    # 去重：编码/名称/统一社会信用代码 任一重复即拦截（排除自身）
-    name = data.name if data.name is not None else c.name
-    uscc = data.uscc if data.uscc is not None else c.uscc
-    code = data.code if data.code is not None else c.code
-    conds = [Customer.code == code, Customer.name == name]
-    if uscc:
-        conds.append(Customer.uscc == uscc)
-    dup = db.query(Customer).filter(Customer.company_id == company_id, Customer.id != cust_id, or_(*conds))
-    if dup.first():
-        raise HTTPException(400, detail="客户编码、名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -615,13 +592,6 @@ def list_suppliers(
 
 @app.post("/api/suppliers")
 def create_supplier(data: SupplierCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    # 去重：编码/名称/统一社会信用代码 任一重复即拦截
-    conds = [Supplier.code == data.code, Supplier.name == data.name]
-    if data.uscc:
-        conds.append(Supplier.uscc == data.uscc)
-    dup = db.query(Supplier).filter(Supplier.company_id == company_id, or_(*conds))
-    if dup.first():
-        raise HTTPException(400, detail="供应商编码、名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -636,16 +606,6 @@ def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
-    # 去重：编码/名称/统一社会信用代码 任一重复即拦截（排除自身）
-    name = data.name if data.name is not None else s.name
-    uscc = data.uscc if data.uscc is not None else s.uscc
-    code = data.code if data.code is not None else s.code
-    conds = [Supplier.code == code, Supplier.name == name]
-    if uscc:
-        conds.append(Supplier.uscc == uscc)
-    dup = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id != supp_id, or_(*conds))
-    if dup.first():
-        raise HTTPException(400, detail="供应商编码、名称或统一社会信用代码已存在，请勿重复录入")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -896,8 +856,6 @@ def create_account(data: dict, company_id: int = Query(...), db: Session = Depen
     parent_code = data.get("parent_code")
     if not code or not name:
         raise HTTPException(400, detail="科目编码和名称不能为空")
-    if db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
-        raise HTTPException(400, detail=f"科目编码 {code} 已存在")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code,
                   opening_balance=data.get("opening_balance", 0.0))
@@ -1046,8 +1004,6 @@ def list_companies(db: Session = Depends(get_db)):
 @app.post("/api/companies")
 def create_company(data: CompanyCreate, db: Session = Depends(get_db)):
     """创建新公司/账套"""
-    if db.query(Company).filter(Company.name == data.name).first():
-        raise HTTPException(400, detail=f"公司 '{data.name}' 已存在")
     if data.uscc:
         ok, msg = validate_uscc(data.uscc)
         if not ok:
@@ -1222,8 +1178,6 @@ def list_fixed_assets(
 
 @app.post("/api/fixed-assets")
 def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.code == data.code).first():
-        raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
     # 计算月折旧额（直线法）
     monthly = 0.0
     if data.useful_life_months > 0:
@@ -1373,8 +1327,6 @@ def list_intangible_assets(
 
 @app.post("/api/intangible-assets")
 def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.code == data.code).first():
-        raise HTTPException(400, detail=f"资产编码 {data.code} 已存在")
     monthly = round((data.original_value - data.residual_value) / data.useful_life_months, 2) if data.useful_life_months > 0 else 0
     ia = IntangibleAsset(
         company_id=company_id, code=data.code, name=data.name,
@@ -1513,8 +1465,6 @@ def list_inventory_items(
 
 @app.post("/api/inventory-items")
 def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == data.code).first():
-        raise HTTPException(400, detail=f"商品编码 {data.code} 已存在")
     item = InventoryItem(company_id=company_id, **data.model_dump())
     db.add(item)
     db.commit()
@@ -1659,8 +1609,6 @@ def list_contracts(
 
 @app.post("/api/contracts")
 def create_contract(data: ContractCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(Contract).filter(Contract.company_id == company_id, Contract.contract_no == data.contract_no).first():
-        raise HTTPException(400, detail=f"合同编号 {data.contract_no} 已存在")
     contract = Contract(company_id=company_id, **data.model_dump())
     db.add(contract)
     db.commit()
@@ -1812,8 +1760,6 @@ def list_payments(
 
 @app.post("/api/payments")
 def create_payment(data: PaymentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if db.query(Payment).filter(Payment.company_id == company_id, Payment.payment_no == data.payment_no).first():
-        raise HTTPException(400, detail=f"付款单号 {data.payment_no} 已存在")
     payment = Payment(company_id=company_id, **data.model_dump())
     db.add(payment)
     db.commit()
@@ -2017,8 +1963,6 @@ def list_sales_invoices(
 
 @app.post("/api/sales-invoices")
 def create_sales_invoice(data: SalesInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if data.invoice_no and db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id, SalesInvoice.invoice_no == data.invoice_no).first():
-        raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = SalesInvoice(company_id=company_id, **data.model_dump())
     db.add(inv)
     db.commit()
@@ -2292,8 +2236,6 @@ def list_purchase_invoices(
 
 @app.post("/api/purchase-invoices")
 def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    if data.invoice_no and db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.invoice_no == data.invoice_no).first():
-        raise HTTPException(400, detail=f"发票号码 {data.invoice_no} 已存在")
     inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
     db.add(inv)
     db.commit()
@@ -4848,7 +4790,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
     bank_config_id: Optional[int] = Form(None),
     column_mapping: str = Form(...),  # JSON: {标准字段: 文件列名}
     company_id: int = Form(...),
-    force: str = Form(""),  # 强制导入（忽略去重检查）
     db: Session = Depends(get_db)
 ):
     """根据列映射导入文件数据"""
@@ -5001,13 +4942,8 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         remark=mapped.get("remark", "")
                     )
                     db.add(tx)
-                    try:
-                        db.flush()
-                        new_bank_tx_ids.append(tx.id)
-                    except IntegrityError:
-                        db.rollback()
-                        errors.append(f"第{i+2}行: 数据重复，已跳过")
-                        continue
+                    db.flush()
+                    new_bank_tx_ids.append(tx.id)
 
                 elif module in ("sales-invoice", "purchase-invoice"):
                     inv_date = None
@@ -5057,34 +4993,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
-                        # 全行指纹去重
-                        fp_values = (
-                            str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
-                            str(mapped.get("digital_invoice_no", "")),
-                            str(mapped.get("seller_tax_no", "")), str(mapped.get("seller_name", "")),
-                            str(mapped.get("buyer_tax_no", "")), str(mapped.get("buyer_name", "")),
-                            str(inv_date) if inv_date else "",
-                            str(mapped.get("tax_category_code", "")), str(mapped.get("specific_business_type", "")),
-                            str(mapped.get("goods_name", "")), str(mapped.get("spec", "")),
-                            str(mapped.get("unit", "")), str(qty), str(uprice),
-                            str(amt), str(tr), str(tax_amt), str(total),
-                            str(mapped.get("invoice_source", "")),
-                            str(mapped.get("invoice_category", "增值税专用发票")),
-                            str(mapped.get("status", "正常")),
-                            str(mapped.get("is_positive", "是")),
-                            str(mapped.get("invoice_risk_level", "")),
-                            str(mapped.get("issuer", "")),
-                            str(mapped.get("remark", "")),
-                        )
-                        fp_raw = "|".join(fp_values)
-                        fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
-                        existing = db.query(SalesInvoice).filter(
-                            SalesInvoice.company_id == company_id,
-                            SalesInvoice._fingerprint == fp
-                        ).first()
-                        if existing and force != "true":
-                            errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            continue
                         inv = SalesInvoice(
                             company_id=company_id, invoice_no=inv_no,
                             invoice_code=mapped.get("invoice_code", ""),
@@ -5110,15 +5018,9 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             issuer=mapped.get("issuer", ""),
                             remark=mapped.get("remark", ""),
                             raw_data=json.dumps(extra) if extra else None,
-                            _fingerprint=fp if force != "true" else f"{fp}_force_{i}"
                         )
                         db.add(inv)
-                        try:
-                            db.flush()
-                        except IntegrityError:
-                            db.rollback()
-                            errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            continue
+                        db.flush()
                         new_invoices.append(inv)
                         # 收集购买方信息，导入后自动添加客户档案
                         buyer_nm = mapped.get("buyer_name", "").strip()
@@ -5126,38 +5028,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         if buyer_nm:
                             new_customers[(buyer_tn, buyer_nm)] = True
                     else:  # purchase-invoice
-                        # 全行指纹去重
-                        fp_values = (
-                            str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
-                            str(mapped.get("digital_invoice_no", "")),
-                            str(mapped.get("seller_tax_no", "")), str(mapped.get("seller_name", "")),
-                            str(mapped.get("buyer_tax_no", "")), str(mapped.get("buyer_name", "")),
-                            str(inv_date) if inv_date else "",
-                            str(mapped.get("tax_category_code", "")), str(mapped.get("specific_business_type", "")),
-                            str(mapped.get("goods_name", "")), str(mapped.get("spec", "")),
-                            str(mapped.get("unit", "")), str(qty), str(uprice),
-                            str(amt), str(tr), str(tax_amt), str(total),
-                            str(mapped.get("invoice_source", "")),
-                            str(mapped.get("invoice_category", "增值税专用发票")),
-                            str(mapped.get("status", "正常")),
-                            str(mapped.get("is_positive", "是")),
-                            str(mapped.get("invoice_risk_level", "")),
-                            str(mapped.get("issuer", "")),
-                            str(mapped.get("certification_status", "未认证")),
-                            str(mapped.get("deduction_period", "")),
-                            str(mapped.get("remark", "")),
-                        )
-                        fp_raw = "|".join(fp_values)
-                        fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
-                        if force != "true":
-                            existing = db.query(PurchaseInvoice).filter(
-                                PurchaseInvoice.company_id == company_id,
-                                PurchaseInvoice._fingerprint == fp
-                            ).first()
-                            if existing:
-                                errors.append(f"第{i+2}行: 数据重复，已跳过")
-                                continue
-
                         cert_date = None
                         cert_date_str = mapped.get("certification_date", "")
                         if cert_date_str:
@@ -5194,15 +5064,9 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             deduction_period=mapped.get("deduction_period", ""),
                             remark=mapped.get("remark", ""),
                             raw_data=json.dumps(extra) if extra else None,
-                            _fingerprint=fp if force != "true" else f"{fp}_force_{i}"
                         )
                         db.add(inv)
-                        try:
-                            db.flush()
-                        except IntegrityError:
-                            db.rollback()
-                            errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            continue
+                        db.flush()
                         new_invoices.append(inv)
 
                 elif module == "input-vat-deduction":
@@ -5262,12 +5126,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         import_batch_id=import_batch_id
                     )
                     db.add(inv)
-                    try:
-                        db.flush()
-                    except IntegrityError:
-                        db.rollback()
-                        errors.append(f"第{i+2}行: 数据重复，已跳过")
-                        continue
+                    db.flush()
                     new_deductions.append(inv)
 
                 elif module == "employee":
@@ -5277,15 +5136,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         continue
                     # P1-4: 通用导入检查 id_card 去重
                     id_card = mapped.get("id_card", "").strip() or None
-                    if id_card:
-                        dup = db.query(Employee).filter(
-                            Employee.company_id == company_id,
-                            Employee.id_card == id_card
-                        ).first()
-                        if dup:
-                            errors.append(f"第{i+2}行: 身份证号 {id_card} 已存在于【{dup.name}】，已跳过")
-                            continue
-                                        # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
+                    # 编码自动生成 RY001 格式：首次查DB取最大code，后续内存递增
                     if 'emp_code_counter' not in locals():
                         existing_codes = db.query(Employee.code).filter(
                             Employee.company_id == company_id,
@@ -5438,12 +5289,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
             if customer_added > 0:
                 infos.append(f"自动新增 {customer_added} 个客户到客户档案")
 
-        try:
-            db.commit()
-        except IntegrityError as e:
-            db.rollback()
-            errors.append("部分数据重复，已自动跳过重复记录")
-
+        db.commit()
         # 开具发票导入后自动生成序时账凭证
         if module == "sales-invoice" and new_invoices:
             try:
@@ -6279,15 +6125,6 @@ def save_customer(data, db, sess, sid, company_id):
     try:
         name = data.get("name", "")
         code = data.get("code", "")
-        # 去重：编码/名称/统一社会信用代码 任一重复即拦截
-        dup_q = db.query(Customer).filter(Customer.company_id == company_id)
-        conds = [Customer.code == code, Customer.name == name]
-        uscc = data.get("uscc")
-        if uscc:
-            conds.append(Customer.uscc == uscc)
-        dup_q = dup_q.filter(or_(*conds))
-        if dup_q.first():
-            return {"reply": "⚠️ 客户编码、名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
         c = Customer(
             company_id=company_id,
             code=data.get("code", ""),
@@ -6347,15 +6184,6 @@ def save_supplier(data, db, sess, sid, company_id):
     try:
         name = data.get("name", "")
         code = data.get("code", "")
-        uscc = data.get("uscc")
-        # 去重：编码/名称/统一社会信用代码 任一重复即拦截
-        dup_q = db.query(Supplier).filter(Supplier.company_id == company_id)
-        conds = [Supplier.code == code, Supplier.name == name]
-        if uscc:
-            conds.append(Supplier.uscc == uscc)
-        dup_q = dup_q.filter(or_(*conds))
-        if dup_q.first():
-            return {"reply": "⚠️ 供应商编码、名称或统一社会信用代码已存在，请勿重复录入。", "session_id": sid, "action": None}
         s = Supplier(company_id=company_id, code=data.get("code", ""), name=name, uscc=uscc)
         db.add(s); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}
@@ -6407,8 +6235,6 @@ def handle_create_employee(sess, msg, db, sid, company_id):
 
 def save_employee(data, db, sess, sid, company_id):
     try:
-        if db.query(Employee).filter(Employee.company_id == company_id, Employee.code == data.get("code", "")).first():
-            return {"reply": f"⚠️ 工号 {data['code']} 已存在。", "session_id": sid, "action": None}
         e = Employee(company_id=company_id, code=data.get("code", ""), name=data.get("name", ""), id_card=data.get("id_card"), email=data.get("email"))
         db.add(e); db.commit()
         sess["intent"] = None; sess["step"] = 0; sess["data"] = {}

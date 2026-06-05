@@ -3,7 +3,7 @@
 """
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, Date, Time, DateTime,
-    Text, Boolean, ForeignKey, inspect, text as TextClause, UniqueConstraint, Index,
+    Text, Boolean, ForeignKey, inspect, text as TextClause, Index,
     func, distinct, or_, and_
 )
 from sqlalchemy.orm import declarative_base, relationship, Session, sessionmaker
@@ -93,9 +93,7 @@ class CompanyFinanceContact(Base):
 
 class Department(Base):
     __tablename__ = "departments"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_dept_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="部门编码")
@@ -112,9 +110,7 @@ class Department(Base):
 
 class Employee(Base):
     __tablename__ = "employees"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_emp_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="工号")
@@ -131,9 +127,7 @@ class Employee(Base):
 
 class Customer(Base):
     __tablename__ = "customers"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_cust_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="客户编码")
@@ -157,9 +151,7 @@ class Customer(Base):
 
 class Supplier(Base):
     __tablename__ = "suppliers"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_supp_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="供应商编码")
@@ -179,9 +171,7 @@ class Supplier(Base):
 class Account(Base):
     """会计科目 - 每个公司有独立的科目表"""
     __tablename__ = "accounts"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_acct_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(20), nullable=False, comment="科目编码")
@@ -200,9 +190,7 @@ class Account(Base):
 class Period(Base):
     """会计期间 - 每个公司独立管理期间"""
     __tablename__ = "periods"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'period', name='uq_period_company_period'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     period = Column(String(7), nullable=False, comment="YYYY-MM")
@@ -216,7 +204,6 @@ class FixedAsset(Base):
     """固定资产卡片"""
     __tablename__ = "fixed_assets"
     __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_fa_company_code'),
         Index('idx_fa_company_status', 'company_id', 'status'),
         Index('idx_fa_company_dept', 'company_id', 'dept_code'),
     )
@@ -271,9 +258,7 @@ class FixedAssetDepreciation(Base):
 class IntangibleAsset(Base):
     """无形资产卡片"""
     __tablename__ = "intangible_assets"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_ia_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(30), nullable=False, comment="资产编码")
@@ -315,9 +300,7 @@ class IntangibleAssetAmortization(Base):
 class InventoryItem(Base):
     """库存商品/物料档案"""
     __tablename__ = "inventory_items"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'code', name='uq_ii_company_code'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     code = Column(String(30), nullable=False, comment="商品编码")
@@ -364,9 +347,7 @@ class InventoryTransaction(Base):
 class InventoryBalance(Base):
     """库存余额快照（按期计算）"""
     __tablename__ = "inventory_balances"
-    __table_args__ = (
-        UniqueConstraint('company_id', 'item_code', 'period', name='uq_ib_company_item_period'),
-    )
+
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     item_code = Column(String(30), nullable=False, comment="商品编码")
@@ -385,7 +366,6 @@ class Contract(Base):
     """合同台账"""
     __tablename__ = "contracts"
     __table_args__ = (
-        UniqueConstraint('company_id', 'contract_no', name='uq_contract_company_no'),
         Index('idx_contract_company_status', 'company_id', 'status'),
         Index('idx_contract_company_type', 'company_id', 'contract_type'),
     )
@@ -433,7 +413,6 @@ class Payment(Base):
     """付款记录"""
     __tablename__ = "payments"
     __table_args__ = (
-        UniqueConstraint('company_id', 'payment_no', name='uq_payment_company_no'),
         Index('idx_payment_company_status', 'company_id', 'status'),
         Index('idx_payment_company_supplier', 'company_id', 'supplier_id'),
     )
@@ -471,8 +450,6 @@ class SalesInvoice(Base):
     """开具发票 - 企业开出的销售发票"""
     __tablename__ = "sales_invoices"
     __table_args__ = (
-        UniqueConstraint('company_id', 'invoice_no', name='uq_si_company_no'),
-        UniqueConstraint('company_id', '_fingerprint', name='uq_si_company_fp'),
         Index('idx_si_company_date', 'company_id', 'invoice_date'),
         Index('idx_si_company_buyer', 'company_id', 'buyer_name'),
         Index('idx_si_company_status', 'company_id', 'status'),
@@ -514,10 +491,8 @@ class SalesInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
-    _fingerprint = Column(String(64), nullable=True, comment="全行指纹去重（仅导入时使用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
 
 # ==================== 取得发票（采购发票）====================
 
@@ -525,8 +500,6 @@ class PurchaseInvoice(Base):
     """取得发票 - 企业收到的采购发票"""
     __tablename__ = "purchase_invoices"
     __table_args__ = (
-        UniqueConstraint('company_id', 'invoice_no', name='uq_pi_company_no'),
-        UniqueConstraint('company_id', '_fingerprint', name='uq_pi_company_fp'),
         Index('idx_pi_company_date', 'company_id', 'invoice_date'),
         Index('idx_pi_company_seller', 'company_id', 'seller_name'),
         Index('idx_pi_company_cert', 'company_id', 'certification_status'),
@@ -573,10 +546,8 @@ class PurchaseInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
-    _fingerprint = Column(String(64), nullable=True, comment="全行指纹去重（仅导入时使用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
 
 # ==================== 银行配置（不同银行不同列映射）====================
 
@@ -692,7 +663,6 @@ class ColumnTemplate(Base):
     """列映射模板 - 保存各模块上传文件的列对应关系"""
     __tablename__ = "column_templates"
     __table_args__ = (
-        UniqueConstraint('company_id', 'module', 'template_name', name='uq_ct_company_module_name'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -890,7 +860,6 @@ def migrate_schema(db):
             "invoice_risk_level": "ALTER TABLE sales_invoices ADD COLUMN invoice_risk_level VARCHAR(10)",
             "issuer": "ALTER TABLE sales_invoices ADD COLUMN issuer VARCHAR(30)",
             "invoice_category": "ALTER TABLE sales_invoices ADD COLUMN invoice_category VARCHAR(20)",
-            "_fingerprint": "ALTER TABLE sales_invoices ADD COLUMN _fingerprint VARCHAR(64)",
         }
         for col, sql in new_si_cols.items():
             if col not in existing_cols:
@@ -1093,15 +1062,6 @@ def auto_generate_journals(db):
             buyer = inv.buyer_name or "客户"
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"
-
-            # 跳过已生成凭证的发票（按发票ID精确去重，避免同金额发票被错误跳过）
-            existing = db.query(JournalEntry).filter(
-                JournalEntry.company_id == comp.id,
-                JournalEntry.source == "开具发票",
-                JournalEntry.ref_id == inv.id
-            ).first()
-            if existing:
-                continue
 
             def get_full_name(code):
                 """构建科目的全级次名称"""
@@ -1519,16 +1479,6 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
         try:
             cp = tx.counterparty_name or tx.summary or "银行流水"
             summary_tag = f"银行流水-#{tx.id}-{cp}"
-            # 去重：同一流水只应生成一次凭证
-            existing = db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.summary == summary_tag,
-                JournalEntry.account_code == "1002",
-            ).first()
-            if existing:
-                skipped += 1
-                continue
-
             period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
             max_no = db.query(JournalEntry.voucher_no).filter(
                 JournalEntry.company_id == company_id,
@@ -1593,7 +1543,6 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
 class VATDeclaration(Base):
     """增值税及附加税费申报表头"""
     __tablename__ = "vat_declarations"
-    __table_args__ = (UniqueConstraint("company_id", "period", name="uq_vat_period"),)
 
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
@@ -1742,11 +1691,6 @@ def init_company_data(db, company_id: int):
     db.commit()
 
 
-def verify_dedup_columns(db):
-    """已禁用：去重列自检"""
-    pass
-
-
 
 class SalaryRecord(Base):
     """工资薪金所得预扣预缴明细 - 按税务模板"""
@@ -1822,7 +1766,6 @@ class SalaryRecord(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
-        UniqueConstraint('company_id', 'period', 'id_number', name='uq_salary_company_period_id'),
         Index('idx_salary_company_period', 'company_id', 'period'),
     )
 def init_db():
