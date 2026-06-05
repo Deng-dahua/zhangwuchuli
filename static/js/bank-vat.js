@@ -375,6 +375,11 @@ async function renderInputVATDeductions(container) {
   });
   const ivdFirstInGroup = new Set();
   ivdGroupMap.forEach((grp) => { ivdFirstInGroup.add(grp[0].id); });
+  // 计算每组是否有凭证号
+  const ivdGroupHasVoucher = new Set();
+  ivdGroupMap.forEach((grp, key) => {
+    if (grp.some(i => i.journal_voucher_no)) ivdGroupHasVoucher.add(key);
+  });
 
   // 表格
   const riskColors = { [STATUS.RISK_NORMAL]: '#059669', [STATUS.RISK_WARN]: '#d97706', [STATUS.RISK_ABNORMAL]: '#e02424', [STATUS.RISK_LOST]: '#7c3aed' };
@@ -395,7 +400,8 @@ async function renderInputVATDeductions(container) {
       html += '<tr>';
       // 选择框：首行 rowspan 跨整组，垂直居中
       if (isFirst) {
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="ivd-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updateIVDBatchBtn()"></td>';
+        const groupHasVoucher = ivdGroupHasVoucher.has(key);
+        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="ivd-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updateIVDBatchBtn()" ' + (groupHasVoucher ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
       }
       html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';
@@ -440,14 +446,15 @@ async function renderInputVATDeductions(container) {
 
 function toggleIVDSelectAll() {
   const all = document.getElementById('ivdSelectAll');
-  document.querySelectorAll('.ivd-check').forEach(cb => cb.checked = all.checked);
+  document.querySelectorAll('.ivd-check:not(:disabled)').forEach(cb => cb.checked = all.checked);
   updateIVDBatchBtn();
 }
 
 function updateIVDBatchBtn() {
-  const checked = document.querySelectorAll('.ivd-check:checked');
+  const enabledBoxes = document.querySelectorAll('.ivd-check:not(:disabled)');
+  const checkedEnabled = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   let count = 0;
-  checked.forEach(cb => { count += parseInt(cb.dataset.count || '1'); });
+  checkedEnabled.forEach(cb => { count += parseInt(cb.dataset.count || '1'); });
   const delBtn = document.getElementById('ivdBatchDelBtn');
   const certBtn = document.getElementById('ivdBatchCertBtn');
   if (delBtn) {
@@ -461,11 +468,18 @@ function updateIVDBatchBtn() {
   const genBtn = document.getElementById('ivdBatchGenBtn');
   if (genBtn) {
     genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.disabled = count === 0;
+  }
+  // 同步全选框状态
+  const selectAll = document.getElementById('ivdSelectAll');
+  if (selectAll) {
+    selectAll.checked = enabledBoxes.length > 0 && enabledBoxes.length === checkedEnabled.length;
+    selectAll.indeterminate = checkedEnabled.length > 0 && checkedEnabled.length < enabledBoxes.length;
   }
 }
 
 async function batchDeleteIVD() {
-  const checked = document.querySelectorAll('.ivd-check:checked');
+  const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) return;
   const ids = [];
   checked.forEach(cb => {
@@ -484,7 +498,7 @@ async function batchDeleteIVD() {
 }
 
 async function batchCertifyIVD() {
-  const checked = document.querySelectorAll('.ivd-check:checked');
+  const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) return;
   const ids = [];
   checked.forEach(cb => {
@@ -665,7 +679,7 @@ async function deleteVATDeduction(id) {
 
 async function batchGenerateIVDVouchers() {
   // 收集选中的进项抵扣ID
-  const checked = document.querySelectorAll('.ivd-check:checked');
+  const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
   const ids = [];
   checked.forEach(cb => {
@@ -684,7 +698,8 @@ async function batchGenerateIVDVouchers() {
   } catch (e) {
     toast(e.message || '生成失败', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '⚡ 一键生成凭证'; }
+    // 不直接启用按钮，让 renderInputVATDeductions 重新渲染
+    renderInputVATDeductions();
   }
 }
 
