@@ -480,72 +480,52 @@ async function renderPurchaseInvoices(container) {
       );
     }
 
-    // 三号去重：发票代码+发票号码+数电发票号码一致的记录合并为一行
-    const groupedMap = new Map();
-    const groupedItems = [];
-    items.forEach(i => {
-      const key = (i.invoice_code || '') + '|' + (i.invoice_no || '') + '|' + (i.digital_invoice_no || '');
-      if (groupedMap.has(key)) {
-        groupedMap.get(key).push(i);
-      } else {
-        const grp = [i];
-        groupedMap.set(key, grp);
-        groupedItems.push(grp);
-      }
-    });
-
     // 表格
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
     html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
-    if (groupedItems.length === 0) {
+    if (items.length === 0) {
       html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
-      groupedItems.forEach(grp => {
-        const first = grp[0];
-        const allIds = grp.map(g => g.id).join(',');
-        const stCls = first.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
-        const posText = first.is_positive === true ? '是' : first.is_positive === false ? '否' : '-';
+      items.forEach(i => {
+        const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
+        const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         html += '<tr>';
-        // 复选框：存储组内所有ID
-        html += '<td><input type="checkbox" class="pi-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updatePiBatchBtn()"></td>';
-        html += '<td>' + (first.invoice_code || '-') + '</td>';
-        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + first.id + ')">' + (first.invoice_no || '-') + (grp.length > 1 ? ' <span style="color:#f59e0b;font-size:11px">×' + grp.length + '</span>' : '') + '</a></td>';
-        html += '<td>' + (first.digital_invoice_no || '-') + '</td>';
-        html += '<td>' + (first.seller_tax_no || '-') + '</td>';
-        html += '<td>' + (first.seller_name || '-') + '</td>';
-        html += '<td>' + (first.buyer_tax_no || '-') + '</td>';
-        html += '<td>' + (first.buyer_name || '-') + '</td>';
-        html += '<td>' + first.invoice_date + '</td>';
-        html += '<td>' + (first.tax_category_code || '-') + '</td>';
-        html += '<td>' + (first.specific_business_type || '-') + '</td>';
-        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (first.goods_name || '') + '">' + (first.goods_name || '-') + '</td>';
-        html += '<td>' + (first.spec || '-') + '</td>';
-        html += '<td>' + (first.unit || '-') + '</td>';
-        html += '<td style="text-align:right">' + (first.quantity != null ? first.quantity : '-') + '</td>';
-        html += '<td style="text-align:right">' + (first.unit_price != null ? first.unit_price.toFixed(2) : '-') + '</td>';
-        html += '<td style="text-align:right">' + fmt(first.amount) + '</td>';
-        html += '<td style="text-align:right">' + (first.tax_rate || 0) + '%</td>';
-        html += '<td style="text-align:right">' + fmt(first.tax_amount) + '</td>';
-        html += '<td style="text-align:right;font-weight:600">' + fmt(first.total_amount) + '</td>';
-        html += '<td>' + (first.invoice_source || '-') + '</td>';
-        html += '<td>' + (first.invoice_category || '-') + '</td>';
-        html += '<td><span class="' + stCls + '">' + first.status + '</span></td>';
+        html += '<td><input type="checkbox" class="pi-check" data-id="' + i.id + '" onchange="updatePiBatchBtn()"></td>';
+        html += '<td>' + (i.invoice_code || '-') + '</td>';
+        html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
+        html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
+        html += '<td>' + (i.seller_tax_no || '-') + '</td>';
+        html += '<td>' + (i.seller_name || '-') + '</td>';
+        html += '<td>' + (i.buyer_tax_no || '-') + '</td>';
+        html += '<td>' + (i.buyer_name || '-') + '</td>';
+        html += '<td>' + i.invoice_date + '</td>';
+        html += '<td>' + (i.tax_category_code || '-') + '</td>';
+        html += '<td>' + (i.specific_business_type || '-') + '</td>';
+        html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.goods_name || '') + '">' + (i.goods_name || '-') + '</td>';
+        html += '<td>' + (i.spec || '-') + '</td>';
+        html += '<td>' + (i.unit || '-') + '</td>';
+        html += '<td style="text-align:right">' + (i.quantity != null ? i.quantity : '-') + '</td>';
+        html += '<td style="text-align:right">' + (i.unit_price != null ? i.unit_price.toFixed(2) : '-') + '</td>';
+        html += '<td style="text-align:right">' + fmt(i.amount) + '</td>';
+        html += '<td style="text-align:right">' + (i.tax_rate || 0) + '%</td>';
+        html += '<td style="text-align:right">' + fmt(i.tax_amount) + '</td>';
+        html += '<td style="text-align:right;font-weight:600">' + fmt(i.total_amount) + '</td>';
+        html += '<td>' + (i.invoice_source || '-') + '</td>';
+        html += '<td>' + (i.invoice_category || '-') + '</td>';
+        html += '<td><span class="' + stCls + '">' + i.status + '</span></td>';
         html += '<td>' + posText + '</td>';
-        html += '<td>' + (first.invoice_risk_level || '-') + '</td>';
-        html += '<td>' + (first.issuer || '-') + '</td>';
-        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (first.remark || '') + '">' + (first.remark || '-') + '</td>';
-        // 凭证号：只要有任一条已生成就显示凭证号
-        const pjv = first.journal_voucher_no || '';
+        html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
+        html += '<td>' + (i.issuer || '-') + '</td>';
+        html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (i.remark || '') + '">' + (i.remark || '-') + '</td>';
+        const pjv = i.journal_voucher_no || '';
         html += '<td>' + (pjv ? '<span style="color:#1d4ed8;font-weight:500">' + pjv + '</span>' : '-') + '</td>';
-        // 生成凭证：传递组内所有ID
-        html += '<td>' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseGroup(\'' + allIds + '\')">生成凭证</button>') + '</td>';
-        // 操作列
+        html += '<td>' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchaseInvoice(' + i.id + ')">生成凭证</button>') + '</td>';
         html += '<td style="white-space:nowrap">';
-        html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + first.id + ')">编辑</button>';
-        html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseGroup(\'' + allIds + '\')">删除</button>';
+        html += '<button class="btn btn-sm btn-secondary" onclick="showPurchaseInvoiceForm(' + i.id + ')">编辑</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="deletePurchaseInvoice(' + i.id + ')">删除</button>';
         html += '</td></tr>';
       });
     }
@@ -574,10 +554,7 @@ function togglePiSelectAll() {
 }
 
 function updatePiBatchBtn() {
-  const checked = document.querySelectorAll('.pi-check:checked');
-  // 统计实际记录数（data-count 属性记录组内条数）
-  let count = 0;
-  checked.forEach(cb => { count += parseInt(cb.dataset.count || '1'); });
+  const count = document.querySelectorAll('.pi-check:checked').length;
   const delBtn = document.getElementById('piBatchDelBtn');
   if (delBtn) {
     delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
@@ -593,12 +570,8 @@ function updatePiBatchBtn() {
 async function batchDeletePurchaseInvoices() {
   const checked = document.querySelectorAll('.pi-check:checked');
   if (checked.length === 0) return;
-  // 展开逗号分隔的ID（三号去重后一组一行多个ID）
-  const ids = [];
-  checked.forEach(cb => {
-    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
-  });
-  if (!confirm('确认删除选中的 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
+  if (!confirm('确认删除选中的 ' + checked.length + ' 条取得发票？此操作不可恢复。')) return;
+  const ids = Array.from(checked).map(cb => parseInt(cb.dataset.id));
   try {
     const result = await api('/api/purchase-invoices/batch-delete', {
       method: 'POST',
@@ -616,11 +589,7 @@ async function batchDeletePurchaseInvoices() {
 async function batchGeneratePurchaseVouchers() {
   var checked = document.querySelectorAll('.pi-check:checked');
   if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  // 展开逗号分隔的ID（三号去重后一组一行多个ID）
-  var ids = [];
-  checked.forEach(function(cb) {
-    String(cb.dataset.id).split(',').forEach(function(id) { var n = parseInt(id); if (n) ids.push(n); });
-  });
+  var ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
   if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
   var btn = document.getElementById('piBatchGenBtn');
   if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
@@ -639,40 +608,6 @@ async function batchGeneratePurchaseVouchers() {
     handleError(e, '批量生成凭证');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = origText; }
-  }
-}
-
-// 三号去重组：单行生成凭证（组内所有未生成的ID）
-async function generateFromPurchaseGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认为该组 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
-  try {
-    var res = await api('/api/purchase-invoices/batch-to-journal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: ids })
-    });
-    toast(res.message, 'success');
-    renderPurchaseInvoices();
-  } catch (e) {
-    handleError(e, '生成凭证');
-  }
-}
-
-// 三号去重组：单行删除（组内所有ID）
-async function deletePurchaseGroup(idStr) {
-  var ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认删除该组 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
-  try {
-    var result = await api('/api/purchase-invoices/batch-delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids)
-    });
-    toast(result.message, 'success');
-    renderPurchaseInvoices();
-  } catch (e) {
-    toast(e.message, 'error');
   }
 }
 
