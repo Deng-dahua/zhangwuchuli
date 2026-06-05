@@ -40,7 +40,7 @@ async function renderJournal(container) {
 
     // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
-    html += '<th style="width:36px;position:sticky;left:0;background:#f5f5f5;z-index:2"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
+    html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
     html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
@@ -66,7 +66,7 @@ async function renderJournal(container) {
           html += '<tr>';
           if (idx === 0) {
             // 同一凭证号只显示一个复选框
-            html += '<td rowspan="' + sz + '" style="text-align:center;position:sticky;left:0;background:#fff;z-index:1"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
+            html += '<td rowspan="' + sz + '" style="text-align:center"><input type="checkbox" class="je-row-check" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
           }
           html += '<td>' + r.period + '</td>';
           html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';

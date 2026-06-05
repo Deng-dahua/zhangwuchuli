@@ -401,7 +401,7 @@ async function renderInputVATDeductions(container) {
       // 选择框：首行 rowspan 跨整组，垂直居中
       if (isFirst) {
         const groupHasVoucher = ivdGroupHasVoucher.has(key);
-        html += '<td rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="ivd-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updateIVDBatchBtn()" ' + (groupHasVoucher ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
+        html += '<td class="col-checkbox" rowspan="' + grp.length + '" style="vertical-align:middle;text-align:center"><input type="checkbox" class="ivd-check" data-id="' + allIds + '" data-count="' + grp.length + '" onchange="updateIVDBatchBtn()" ' + (groupHasVoucher ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
       }
       html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';

@@ -110,14 +110,18 @@
     .table-wrap table tbody .row-selected td:last-child { background: #eff6ff; }
     /* 所有在 table-wrap 中的表格第一列自动 sticky（复选框列） */
     .table-wrap table th:first-child,
-    .table-wrap table td:first-child {
+    .table-wrap table td:first-child,
+    .table-wrap table .col-checkbox {
       position: sticky; left: 0; z-index: 5;
       background: inherit;
       box-shadow: 2px 0 6px rgba(0,0,0,0.06);
     }
-    .table-wrap table thead th:first-child { background: var(--gray-50); z-index: 17; }
-    .table-wrap table tbody tr:hover td:first-child { background: var(--gray-50); }
-    .table-wrap table tbody .row-selected td:first-child { background: #eff6ff; }
+    .table-wrap table thead th:first-child,
+    .table-wrap table thead .col-checkbox { background: var(--gray-50); z-index: 17; }
+    .table-wrap table tbody tr:hover td:first-child,
+    .table-wrap table tbody tr:hover .col-checkbox { background: var(--gray-50); }
+    .table-wrap table tbody .row-selected td:first-child,
+    .table-wrap table tbody .row-selected .col-checkbox { background: #eff6ff; }
     /* 报表不需要 sticky（最后一列是数字而非操作） */
     .report-table th:last-child,
     .report-table td:last-child { position: static; box-shadow: none; }
