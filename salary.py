@@ -777,3 +777,14 @@ def auto_create_employees(company_id: int = Query(...), period: Optional[str] = 
 
     db.commit()
     return {"msg": f"已自动创建/更新{created}条人员档案"}
+
+
+# ========== 生成凭证 ==========
+
+@router.post("/generate-journals")
+def generate_salary_journals(period: str = Query(...), company_id: int = Query(...), db: Session = Depends(get_db)):
+    """为指定期间的工资记录生成凭证（4笔分录）"""
+    from database import _generate_salary_journals
+    result = _generate_salary_journals(db, company_id, period)
+    db.commit()
+    return result

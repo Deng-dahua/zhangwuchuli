@@ -13,7 +13,7 @@ from typing import Optional, List
 
 from database import (
     SocialSecurityDeclaration, SocialSecurityDetail, Company, get_db,
-    _generate_ss_accrual_journals,
+    _generate_ss_accrual_journals, _match_ss_payment_journals,
 )
 
 router = APIRouter(prefix="/api/social-security", tags=["社保申报"])
@@ -387,3 +387,21 @@ async def import_excel(
         "message": f"成功导入 {len(details)} 条记录",
         "journal": result
     }
+
+
+# ========== 生成凭证 ==========
+
+@router.post("/generate-payment-journals")
+def generate_ss_payment_journals(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """手动触发社保缴纳凭证匹配（银行流水 → 社保缴纳凭证）"""
+    result = _match_ss_payment_journals(db, company_id)
+    db.commit()
+    return result
+
+
+@router.post("/declarations/{declaration_id}/generate-accrual-journal")
+def generate_ss_accrual_journal(declaration_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    """手动触发社保计提凭证生成"""
+    result = _generate_ss_accrual_journals(db, company_id, declaration_id)
+    db.commit()
+    return result

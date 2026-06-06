@@ -38,6 +38,7 @@ from database import (
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
+    _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals,
 )
 

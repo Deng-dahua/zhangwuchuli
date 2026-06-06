@@ -129,6 +129,7 @@ function renderSalaryPage(container) {
                 <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入文件</button>
                 <button class="btn btn-info" onclick="autoCreateEmployeesFromSalary()">👤 自动建人员档案</button>
                 <button class="btn btn-secondary" onclick="computeSalaryTax()">🧮 计算个税</button>
+                <button class="btn btn-primary" onclick="generateSalaryVouchers()" style="background:#7c3aed">⚡ 生成凭证</button>
                 <button class="btn btn-danger" onclick="batchDeleteSalary()">🗑️ 批量删除</button>
             </div>
         </div>
@@ -192,6 +193,29 @@ function renderSalaryPage(container) {
         </div>
     `;
 }
+
+// ========== 凭证生成 ==========
+
+async function generateSalaryVouchers() {
+    const period = document.getElementById('salary-year-sel')?.value + '-' + 
+                   document.getElementById('salary-month-sel')?.value;
+    if (!period || period.length !== 7) {
+        alert('请先选择期间');
+        return;
+    }
+    if (!confirm(`确认生成 ${period} 的工资凭证？（将生成计提/发放/个税/社保公积金4组凭证）`)) return;
+    try {
+        const result = await api(`/api/salary/generate-journals?company_id=${currentCompanyId}&period=${period}`, {
+            method: 'POST'
+        });
+        alert(`生成成功！共生成 ${result.generated} 张凭证\n` + (result.message || ''));
+        // 刷新序时账（如果用户正在看）
+        if (typeof loadJePage === 'function') loadJePage(1);
+    } catch (e) {
+        alert('生成失败：' + e.message);
+    }
+}
+
 
 // ========== 数据加载 ==========
 

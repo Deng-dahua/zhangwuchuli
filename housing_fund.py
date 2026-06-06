@@ -8,7 +8,7 @@ import openpyxl
 import io
 from typing import Optional, List
 
-from database import HousingFundDetail, Company, get_db
+from database import HousingFundDetail, Company, get_db, _generate_hf_accrual_journals, _match_hf_payment_journals
 
 router = APIRouter(prefix="/api/housing-fund", tags=["公积金缴存"])
 
@@ -316,3 +316,36 @@ async def import_excel(
         "errors": errors[:10],
         "message": f"成功导入 {imported} 条记录",
     }
+
+
+# ========== 凭证生成 ==========
+
+@router.post("/generate-accrual")
+def generate_hf_accrual(
+    company_id: int = Query(...),
+    period: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    为指定期间的公积金明细生成计提凭证。
+    借：管理费用-住房公积金（单位部分）
+    贷：应付职工薪酬-住房公积金（单位部分）
+    """
+    result = _generate_hf_accrual_journals(db, company_id, period)
+    db.commit()
+    return result
+
+
+@router.post("/match-payment")
+def match_hf_payment(
+    company_id: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    匹配银行流水与公积金明细，生成缴纳凭证。
+    借：应付职工薪酬-住房公积金（单位+个人）
+    贷：银行存款
+    """
+    result = _match_hf_payment_journals(db, company_id)
+    db.commit()
+    return result

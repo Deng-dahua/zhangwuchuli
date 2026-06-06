@@ -19,6 +19,7 @@ async function renderHousingFund(container) {
         <div class="toolbar-right" style="display:flex;gap:8px;">
           <button class="btn btn-primary" onclick="hfShowCreate()">+ 新增</button>
           <button class="btn btn-outline" onclick="hfShowImport()">📁 导入</button>
+          <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">⚡ 生成凭证</button>
           <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
         </div>
       </div>
@@ -313,4 +314,26 @@ async function hfDoImport() {
   } catch (e) {
     alert('导入失败: ' + (e.message || e));
   }
+}
+
+// ============ 生成凭证 ============
+
+async function generateHfVouchers() {
+    const period = document.getElementById('hf-period-filter')?.value;
+    if (!period) {
+        alert('请先选择期间');
+        return;
+    }
+    if (!confirm(`确认生成 ${period} 的公积金凭证？（将生成计提+缴纳2组凭证）`)) return;
+    try {
+        // 1. 生成计提凭证
+        const result1 = await api('POST', `/api/housing-fund/generate-accrual?company_id=${currentCompanyId}&period=${period}`);
+        // 2. 匹配缴纳凭证
+        const result2 = await api('POST', `/api/housing-fund/match-payment?company_id=${currentCompanyId}`);
+        alert(`生成成功！\n计提凭证：${result1.generated || 0} 张\n缴纳凭证：${result2.generated || 0} 张`);
+        // 刷新序时账（如果用户正在看）
+        if (typeof loadJePage === 'function') loadJePage(1);
+    } catch (e) {
+        alert('生成失败：' + e.message);
+    }
 }
