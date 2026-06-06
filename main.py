@@ -900,6 +900,21 @@ def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
     dual_names = pi_names & bt_names
     existing_supp_norms = set(idx['suppliers'].keys())
 
+    # 3.5 清理：移除不符合双源信号的现有供应商
+    removed = []
+    for supp in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        if supp.name:
+            supp_norm = _normalize_customer_name(supp.name)
+            if supp_norm not in dual_names:
+                db.delete(supp)
+                removed.append(supp.name)
+    if removed:
+        db.flush()
+        removed_str = '，'.join(removed[:5])
+        if len(removed) > 5:
+            removed_str += f' 等{len(removed)}条'
+        infos.append(f"已移除不符合双源信号的供应商：{removed_str}")
+
     for norm in dual_names:
         if norm in shareholder_norms:
             skipped += 1
