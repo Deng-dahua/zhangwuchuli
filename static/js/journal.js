@@ -22,7 +22,7 @@ async function renderJournal(container) {
     // 期间选择栏 + 批量删除按钮
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px">';
-    html += '<div id="je-period-bar"></div>';
+    html += '<div id="je-period-bar" style="display:flex;align-items:center;gap:4px"></div>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
     html += '</div>';
     html += '</div>';
