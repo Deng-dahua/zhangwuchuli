@@ -1,30 +1,26 @@
 // ==================== 总账 ====================
 async function renderGeneralLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
-  const yearMonth = currentPeriod;
   el.innerHTML = `
     <div class="card card-fill">
-      <div class="filter-bar" style="gap:8px;">
-        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('gl-from', yearMonth)}
-        <span style="color:#9ca3af">至</span>
-        ${_periodSelectsHTML('gl-to', yearMonth)}<span style="font-size:13px;color:#6b7280">截止</span>
-        <button class="btn btn-primary" onclick="loadGeneralLedger()">🔍 查询</button>
-        <button onclick="glClearFilters()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
+      <div class="filter-bar" style="gap:8px;align-items:center;">
+        <div id="gl-period-bar" style="display:flex;align-items:center;gap:4px"></div>
       </div>
       <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px" id="gl-table"></div>
     </div>
   `;
+  _buildStandardPeriodBar('gl-', { onQuery: loadGeneralLedger, onClear: glClearFilters });
 }
 
 function glClearFilters() {
-  document.querySelectorAll('select[id^="gl-"]').forEach(function(s) { s.value = ''; });
+  _resetStandardPeriod('gl-');
   let el = document.getElementById('gl-table');
   if (el) el.innerHTML = '';
 }
 
 async function loadGeneralLedger() {
-  const from = _readPeriod('gl-from');
-  const to = _readPeriod('gl-to');
+  const from = _getStandardPeriod('gl-', 'from');
+  const to = _getStandardPeriod('gl-', 'to');
   const el = document.getElementById('gl-table');
   el.innerHTML = '加载中...';
   try {
@@ -81,24 +77,21 @@ async function renderDetailLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
+      '<div class="filter-bar" style="gap:8px;align-items:center;flex-wrap:wrap;">' +
         '<select class="form-control" id="dl-account" style="width:240px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">' +
           '<option value="">-- 选择科目 --</option>' + accountOptions +
         '</select>' +
-        '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('dl-from', currentPeriod) +
-        '<span style="color:#9ca3af">至</span>' +
-        _periodSelectsHTML('dl-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
-        '<button class="btn btn-primary" onclick="loadDetailLedger()">🔍 查询</button>' +
-        '<button onclick="dlClearFilters()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
+        '<div id="dl-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
       '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px" id="dl-table"></div>' +
     '</div>';
+  _buildStandardPeriodBar('dl-', { onQuery: loadDetailLedger, onClear: dlClearFilters });
 }
 
 function dlClearFilters() {
   let acc = document.getElementById('dl-account');
   if (acc) acc.value = '';
-  document.querySelectorAll('select[id^="dl-"]').forEach(function(s) { s.value = ''; });
+  _resetStandardPeriod('dl-');
   let el = document.getElementById('dl-table');
   if (el) el.innerHTML = '';
 }
@@ -119,8 +112,8 @@ function _dlOpenRow(data, ob) {
 
 async function loadDetailLedger() {
   const code = document.getElementById('dl-account').value;
-  const from = _readPeriod('dl-from');
-  const to = _readPeriod('dl-to');
+  const from = _getStandardPeriod('dl-', 'from');
+  const to = _getStandardPeriod('dl-', 'to');
   if (!code) { toast('请选择科目', 'error'); return; }
   if (!from || !to) { toast('请选择起止期间', 'error'); return; }
   const el = document.getElementById('dl-table');
@@ -209,6 +202,110 @@ function _readPeriod(prefix) {
   if (!y || !m) return '';
   let yv = y.value, mv = m.value;
   return (yv && mv) ? yv + '-' + mv : '';
+}
+
+// ===== 共享期间选择栏组件（带▲▼箭头） =====
+function _buildStandardPeriodBar(prefix, options) {
+  let bar = document.getElementById(prefix + 'period-bar');
+  if (!bar) return;
+  bar.innerHTML =
+    '<div class="period-stepper">' +
+      '<select id="' + prefix + 'from-y" class="period-selector-year">' + _yearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="year" data-delta="-1" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="' + prefix + 'from-m" class="period-selector-month">' + _monthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="month" data-delta="-1" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<span style="color:#9ca3af;font-size:13px;line-height:32px">至</span>' +
+    '<div class="period-stepper">' +
+      '<select id="' + prefix + 'to-y" class="period-selector-year">' + _yearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="year" data-delta="-1" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="' + prefix + 'to-m" class="period-selector-month">' + _monthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn btn-primary std-query-btn">🔍 查询</button>' +
+    '<button class="std-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+
+  bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var side = this.getAttribute('data-side');
+      var type = this.getAttribute('data-type');
+      var delta = parseInt(this.getAttribute('data-delta'));
+      if (type === 'year') _stepStandardYear(prefix, side, delta);
+      else _stepStandardMonth(prefix, side, delta);
+    });
+  });
+
+  var queryBtn = bar.querySelector('.std-query-btn');
+  if (queryBtn && options.onQuery) queryBtn.addEventListener('click', options.onQuery);
+
+  var clearBtn = bar.querySelector('.std-clear-btn');
+  if (clearBtn && options.onClear) clearBtn.addEventListener('click', options.onClear);
+
+  _setStandardPeriod(prefix, 'from', currentPeriod);
+  _setStandardPeriod(prefix, 'to', currentPeriod);
+}
+
+function _setStandardPeriod(prefix, side, period) {
+  if (!period) return;
+  let parts = period.split('-');
+  if (parts.length < 2) return;
+  let ySel = document.getElementById(prefix + side + '-y');
+  let mSel = document.getElementById(prefix + side + '-m');
+  if (ySel) ySel.value = parts[0];
+  if (mSel) mSel.value = parts[1];
+}
+
+function _getStandardPeriod(prefix, side) {
+  let y = document.getElementById(prefix + side + '-y');
+  let m = document.getElementById(prefix + side + '-m');
+  if (!y || !m) return '';
+  let yv = y.value, mv = m.value;
+  return (yv && mv) ? yv + '-' + mv : '';
+}
+
+function _stepStandardYear(prefix, side, delta) {
+  let sel = document.getElementById(prefix + side + '-y');
+  if (!sel || !sel.value) return;
+  sel.value = parseInt(sel.value) + delta;
+}
+
+function _stepStandardMonth(prefix, side, delta) {
+  let ySel = document.getElementById(prefix + side + '-y');
+  let mSel = document.getElementById(prefix + side + '-m');
+  if (!ySel || !mSel || !mSel.value) return;
+  let y = parseInt(ySel.value) || new Date().getFullYear();
+  let m = parseInt(mSel.value) + delta;
+  if (m > 12) { m = 1; y++; }
+  else if (m < 1) { m = 12; y--; }
+  ySel.value = y;
+  mSel.value = String(m).padStart(2, '0');
+}
+
+function _resetStandardPeriod(prefix) {
+  let fromY = document.getElementById(prefix + 'from-y');
+  let fromM = document.getElementById(prefix + 'from-m');
+  let toY = document.getElementById(prefix + 'to-y');
+  let toM = document.getElementById(prefix + 'to-m');
+  if (fromY) fromY.value = '';
+  if (fromM) fromM.value = '';
+  if (toY) toY.value = '';
+  if (toM) toM.value = '';
 }
 
 // ==================== 利润表 ====================
