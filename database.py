@@ -1629,7 +1629,7 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     """智能分类单条银行流水，返回 (other_side_code, other_side_name, match_type)
 
     新规则优先级（老邓 2026-06-06）：
-    内部转账 > 规则匹配 > 税费识别 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商） > 默认往来
+    内部转账 > 规则匹配 > 税费识别 > 银行手续费 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商） > 默认往来
     股东特判：先查发票（销项购方=也是客户/进项销方=也是供应商），再查摘要关键词（货款/服务费等），
     有业务证据→应收/应付，无证据→实收资本/股利
     """
@@ -1676,6 +1676,19 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     for kw, (code, name) in tax_keywords.items():
         if kw in full_text:
             return (code, name, "tax")
+
+    # 3.5 银行手续费识别（老邓 2026-06-06 确认）
+    # 综合对方户名、对方行名、摘要、交易附言四字段判断
+    fee_text = (tx.counterparty_name or "") + " " + (tx.counterparty_bank or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
+    _FEE_KEYWORDS = [
+        "手续费", "工本费", "网银服务月费", "短信月费",
+        "网上银行公司业务手续费收入",
+        "及时语短信通知服务手续费收入",
+        "结算业务委托书工本费",
+        "待处理本币统一支付系统手续费款项",
+    ]
+    if any(kw in fee_text for kw in _FEE_KEYWORDS):
+        return ("660301", "财务费用-手续费", "bank_fee")
 
     # 4. 工资薪金
     if any(kw in full_text for kw in ["工资", "薪资", "薪酬", "奖金", "绩效"]):
@@ -1777,6 +1790,7 @@ def _ensure_account(db, company_id, code, name, category, direction):
             "6602": "6602", "660201": "6602", "660202": "6602", "660203": "6602",
             "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
             "660208": "6602", "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
+            "6603": "6603", "660301": "6603",
         }
         parent = parent_map.get(code, "1")
         db.add(Account(
@@ -1819,6 +1833,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     _ensure_account(db, company_id, "222107", "应交税费-应交个人所得税", "负债", "贷")
     _ensure_account(db, company_id, "222108", "应交税费-印花税", "负债", "贷")
     _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    _ensure_account(db, company_id, "6603", "财务费用", "损益", "借")
+    _ensure_account(db, company_id, "660301", "财务费用-手续费", "损益", "借")
     _ensure_account(db, company_id, "660201", "管理费用-房租", "损益", "借")
     _ensure_account(db, company_id, "660202", "管理费用-水电费", "损益", "借")
     _ensure_account(db, company_id, "660203", "管理费用-办公费", "损益", "借")
