@@ -2285,6 +2285,30 @@ class SocialSecurityDetail(Base):
     declaration = relationship("SocialSecurityDeclaration", back_populates="details")
 
 
+# ========== 公积金缴存模型 ==========
+
+class HousingFundDetail(Base):
+    """公积金缴存明细（一人一行）"""
+    __tablename__ = "housing_fund_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)  # YYYY-MM
+    employee_name = Column(String(50), nullable=False, comment="姓名")
+    id_number = Column(String(18), comment="身份证号")
+    deposit_base = Column(Float, default=0.0, comment="缴存基数")
+    company_ratio = Column(Float, default=0.0, comment="单位缴存比例(%)")
+    personal_ratio = Column(Float, default=0.0, comment="个人缴存比例(%)")
+    total_amount = Column(Float, default=0.0, comment="缴存额（月缴存额合计）")
+    company_amount = Column(Float, default=0.0, comment="单位缴存额")
+    personal_amount = Column(Float, default=0.0, comment="个人缴存额")
+    status = Column(String(20), default="正常", comment="正常/封存")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", backref="housing_fund_details")
+
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
