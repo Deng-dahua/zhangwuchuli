@@ -34,8 +34,8 @@ function showSalaryPage(container) {
         // 先渲染页面
         renderSalaryPage(container);
 
-        // 初始化年份/月份选择器
-        initSalaryPeriodSelectors();
+        // 初始化期间选择栏
+        buildSalaryPeriodBar();
 
         // 再加载数据
         loadSalaryData();
@@ -48,92 +48,126 @@ function showSalaryPage(container) {
     }
 }
 
-// 初始化年份/月份下拉
-function initSalaryPeriodSelectors() {
-    const yearSel = document.getElementById('salary-year-sel');
-    const monthSel = document.getElementById('salary-month-sel');
-    if (!yearSel || !monthSel) return;
+// ========== 期间选择栏（序时账同款样式，单期间）==========
 
-    // 填充年份：当前年份前后各5年
-    const now = new Date();
-    const curYear = now.getFullYear();
-    let html = '';
-    for (let y = curYear - 5; y <= curYear + 1; y++) {
-        html += '<option value="' + y + '">' + y + '年</option>';
-    }
-    yearSel.innerHTML = html;
-
-    // 根据 currentSalaryPeriod 设置选中值
-    let y = '', m = '';
-    if (currentSalaryPeriod && currentSalaryPeriod.includes('-')) {
-        const parts = currentSalaryPeriod.split('-');
-        y = parts[0];
-        m = parts[1];
-    } else {
-        y = String(curYear);
-        m = String(now.getMonth() + 1).padStart(2, '0');
-    }
-    yearSel.value = y;
-    monthSel.value = m;
+function _salYearOptions() {
+    const y = new Date().getFullYear();
+    let ops = '<option value="">年</option>';
+    for (let i = y - 5; i <= y + 1; i++) ops += '<option value="' + i + '">' + i + '年</option>';
+    return ops;
 }
 
-function changeSalaryYear(delta) {
-    const sel = document.getElementById('salary-year-sel');
-    if (!sel) return;
-    const opts = Array.from(sel.options);
-    let idx = sel.selectedIndex + delta;
-    if (idx < 0) idx = 0;
-    if (idx >= opts.length) idx = opts.length - 1;
-    sel.selectedIndex = idx;
+function _salMonthOptions() {
+    return '<option value="">月</option><option value="01">01月</option><option value="02">02月</option><option value="03">03月</option><option value="04">04月</option><option value="05">05月</option><option value="06">06月</option><option value="07">07月</option><option value="08">08月</option><option value="09">09月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>';
+}
+
+function buildSalaryPeriodBar() {
+    let bar = document.getElementById('salary-period-bar');
+    if (!bar) return;
+    bar.innerHTML =
+        '<div class="period-stepper">' +
+            '<select id="salary-y" class="period-selector-year">' + _salYearOptions() + '</select>' +
+            '<div class="stepper-arrows">' +
+                '<button class="stepper-btn stepper-up" data-type="year" data-delta="1" title="下一年">▲</button>' +
+                '<button class="stepper-btn stepper-down" data-type="year" data-delta="-1" title="上一年">▼</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="period-stepper">' +
+            '<select id="salary-m" class="period-selector-month">' + _salMonthOptions() + '</select>' +
+            '<div class="stepper-arrows">' +
+                '<button class="stepper-btn stepper-up" data-type="month" data-delta="1" title="下一月">▲</button>' +
+                '<button class="stepper-btn stepper-down" data-type="month" data-delta="-1" title="上一月">▼</button>' +
+            '</div>' +
+        '</div>' +
+        '<button class="sal-query-btn" style="padding:6px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px">查询</button>' +
+        '<button class="sal-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+
+    // stepper 按钮
+    bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var type = this.getAttribute('data-type');
+            var delta = parseInt(this.getAttribute('data-delta'));
+            if (type === 'year') _stepSalYear(delta);
+            else _stepSalMonth(delta);
+        });
+    });
+
+    // 下拉变化
+    bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
+        sel.addEventListener('change', loadSalaryData);
+    });
+
+    // 查询/清除按钮
+    var queryBtn = bar.querySelector('.sal-query-btn');
+    if (queryBtn) queryBtn.addEventListener('click', loadSalaryData);
+    var clearBtn = bar.querySelector('.sal-clear-btn');
+    if (clearBtn) clearBtn.addEventListener('click', function() {
+        document.getElementById('salary-y').value = '';
+        document.getElementById('salary-m').value = '';
+        loadSalaryData();
+    });
+
+    // 默认期间
+    _setSalPeriod(currentSalaryPeriod);
+}
+
+function _stepSalYear(delta) {
+    let sel = document.getElementById('salary-y');
+    if (!sel || !sel.value) return;
+    sel.value = parseInt(sel.value) + delta;
     loadSalaryData();
 }
 
-function changeSalaryMonth(delta) {
-    const sel = document.getElementById('salary-month-sel');
-    if (!sel) return;
-    let idx = sel.selectedIndex + delta;
-    if (idx < 0) idx = 0;
-    if (idx >= sel.options.length) idx = sel.options.length - 1;
-    sel.selectedIndex = idx;
+function _stepSalMonth(delta) {
+    let ySel = document.getElementById('salary-y');
+    let mSel = document.getElementById('salary-m');
+    if (!ySel || !mSel || !mSel.value) return;
+    let y = parseInt(ySel.value) || new Date().getFullYear();
+    let m = parseInt(mSel.value) + delta;
+    if (m > 12) { m = 1; y++; }
+    else if (m < 1) { m = 12; y--; }
+    ySel.value = y;
+    mSel.value = String(m).padStart(2, '0');
     loadSalaryData();
 }
+
+function _setSalPeriod(period) {
+    if (!period || !period.includes('-')) {
+        let now = new Date();
+        period = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    }
+    let parts = period.split('-');
+    let ySel = document.getElementById('salary-y');
+    let mSel = document.getElementById('salary-m');
+    if (ySel) ySel.value = parts[0];
+    if (mSel) mSel.value = parts[1];
+}
+
+function getSalaryPeriod() {
+    let y = document.getElementById('salary-y')?.value;
+    let m = document.getElementById('salary-m')?.value;
+    if (!y || !m) return '';
+    return y + '-' + m;
+}
+
+// ========== 页面渲染 ==========
 
 function renderSalaryPage(container) {
     const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
     app.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0';
     app.innerHTML = `
+        <div id="salary-stats" class="stats-cards"></div>
         <div class="page-header">
             <div></div>
             <div class="page-actions">
-                <div class="period-spinner">
-                    <select id="salary-year-sel" style="width:90px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"></select>
-                    <div class="spinner-arrows">
-                        <button class="spinner-btn" onclick="changeSalaryYear(1)">▲</button>
-                        <button class="spinner-btn" onclick="changeSalaryYear(-1)">▼</button>
-                    </div>
-                </div>
-                <div class="period-spinner">
-                    <select id="salary-month-sel" style="width:70px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
-                        <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
-                        <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
-                        <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
-                        <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
-                    </select>
-                    <div class="spinner-arrows">
-                        <button class="spinner-btn" onclick="changeSalaryMonth(1)">▲</button>
-                        <button class="spinner-btn" onclick="changeSalaryMonth(-1)">▼</button>
-                    </div>
-                </div>
+                <div id="salary-period-bar" style="display:flex;align-items:center;gap:4px"></div>
                 <button class="btn btn-primary" onclick="loadSalaryData()">查询</button>
-                <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增</button>
+                <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增工资薪金</button>
                 <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入文件</button>
-                <button class="btn btn-info" onclick="autoCreateEmployeesFromSalary()">👤 自动建人员档案</button>
                 <button class="btn btn-secondary" onclick="computeSalaryTax()">🧮 计算个税</button>
-                <button class="btn btn-primary" onclick="generateSalaryVouchers()" style="background:#7c3aed">⚡ 生成凭证</button>
-                <button class="btn btn-danger" onclick="batchDeleteSalary()">🗑️ 批量删除</button>
+                <button class="btn btn-danger" onclick="batchDeleteSalary()">批量删除</button>
             </div>
         </div>
-        <div id="salary-stats" class="stats-cards"></div>
         <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;padding-bottom:4px">
             <table class="data-table" id="salary-table">
                 <thead>
@@ -220,10 +254,8 @@ async function generateSalaryVouchers() {
 // ========== 数据加载 ==========
 
 function loadSalaryData() {
-    const yearSel = document.getElementById('salary-year-sel');
-    const monthSel = document.getElementById('salary-month-sel');
-    if (!yearSel || !monthSel) return;
-    const period = yearSel.value + '-' + monthSel.value;
+    const period = getSalaryPeriod();
+    if (!period) return;
     currentSalaryPeriod = period;
 
     // 加载统计
@@ -473,32 +505,46 @@ function showSalaryImportModal() {
     const curYear = now.getFullYear();
     let yearOpts = '';
     for (let y = curYear - 5; y <= curYear + 1; y++) {
-        yearOpts += '<option value="' + y + '">' + y + '年</option>';
+        yearOpts += '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '年</option>';
     }
+    const curMonth = String(now.getMonth() + 1).padStart(2, '0');
 
     modal.innerHTML = `
         <div class="modal" style="max-width:480px">
-            <div class="modal-header"><h3>导入文件（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
+            <div class="modal-header"><h3>导入工资薪金（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body">
-                <p style="color:#666;margin-bottom:12px">支持税务局"综合所得工资薪金所得"Excel模板（.xls/.xlsx）</p>
+                <p style="color:#6b7280;margin-bottom:16px;font-size:13px">支持税务局"综合所得工资薪金所得"Excel模板（.xls/.xlsx）</p>
                 <div class="form-row">
                     <label>年度</label>
-                    <select id="sal-import-year">${yearOpts}</select>
+                    <select id="sal-import-year" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:100px">${yearOpts}</select>
                 </div>
                 <div class="form-row">
                     <label>月份</label>
-                    <select id="sal-import-month">
-                        <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
-                        <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
-                        <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
-                        <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                    <select id="sal-import-month" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:100px">
+                        <option value="01"${curMonth==='01'?' selected':''}>01月</option>
+                        <option value="02"${curMonth==='02'?' selected':''}>02月</option>
+                        <option value="03"${curMonth==='03'?' selected':''}>03月</option>
+                        <option value="04"${curMonth==='04'?' selected':''}>04月</option>
+                        <option value="05"${curMonth==='05'?' selected':''}>05月</option>
+                        <option value="06"${curMonth==='06'?' selected':''}>06月</option>
+                        <option value="07"${curMonth==='07'?' selected':''}>07月</option>
+                        <option value="08"${curMonth==='08'?' selected':''}>08月</option>
+                        <option value="09"${curMonth==='09'?' selected':''}>09月</option>
+                        <option value="10"${curMonth==='10'?' selected':''}>10月</option>
+                        <option value="11"${curMonth==='11'?' selected':''}>11月</option>
+                        <option value="12"${curMonth==='12'?' selected':''}>12月</option>
                     </select>
                 </div>
                 <div class="form-row">
                     <label>选择文件</label>
-                    <input type="file" id="sal-import-file" accept=".xls,.xlsx" required>
+                    <div style="display:flex;align-items:center;gap:8px;flex:1">
+                        <label style="padding:6px 14px;border:1px solid var(--gray-300);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:var(--gray-700);white-space:nowrap;transition:all .15s" onmouseover="this.style.borderColor='#2563eb';this.style.color='#2563eb'" onmouseout="this.style.borderColor='';this.style.color=''">📁 选择文件
+                            <input type="file" id="sal-import-file" accept=".xls,.xlsx" style="display:none" onchange="document.getElementById('sal-file-name').textContent=this.files[0]?this.files[0].name:'未选择文件'">
+                        </label>
+                        <span id="sal-file-name" style="color:#9ca3af;font-size:13px">未选择文件</span>
+                    </div>
                 </div>
-                <div id="sal-import-progress" style="margin-top:12px;color:#3498db;display:none">
+                <div id="sal-import-progress" style="margin-top:12px;color:#3498db;display:none;font-size:13px">
                     导入中，请稍候...
                 </div>
             </div>
@@ -509,10 +555,6 @@ function showSalaryImportModal() {
         </div>
     `;
     document.body.appendChild(modal);
-    // 设置默认月份
-    const now2 = new Date();
-    const curMonth = String(now2.getMonth() + 1).padStart(2, '0');
-    document.getElementById('sal-import-month').value = curMonth;
     modal.style.display = 'flex';
 }
 
