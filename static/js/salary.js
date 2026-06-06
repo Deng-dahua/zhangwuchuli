@@ -106,19 +106,23 @@ function renderSalaryPage(container) {
             <div></div>
             <div class="page-actions">
                 <div class="period-spinner">
-                    <button class="spinner-btn" onclick="changeSalaryYear(1)">▲</button>
                     <select id="salary-year-sel" style="width:90px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"></select>
-                    <button class="spinner-btn" onclick="changeSalaryYear(-1)">▼</button>
+                    <div class="spinner-arrows">
+                        <button class="spinner-btn" onclick="changeSalaryYear(1)">▲</button>
+                        <button class="spinner-btn" onclick="changeSalaryYear(-1)">▼</button>
+                    </div>
                 </div>
                 <div class="period-spinner">
-                    <button class="spinner-btn" onclick="changeSalaryMonth(1)">▲</button>
                     <select id="salary-month-sel" style="width:70px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
                         <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
                         <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
                         <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
                         <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
                     </select>
-                    <button class="spinner-btn" onclick="changeSalaryMonth(-1)">▼</button>
+                    <div class="spinner-arrows">
+                        <button class="spinner-btn" onclick="changeSalaryMonth(1)">▲</button>
+                        <button class="spinner-btn" onclick="changeSalaryMonth(-1)">▼</button>
+                    </div>
                 </div>
                 <button class="btn btn-primary" onclick="loadSalaryData()">查询</button>
                 <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增</button>

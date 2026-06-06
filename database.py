@@ -48,6 +48,7 @@ class Company(Base):
     directors = relationship("CompanyDirector", back_populates="company", cascade="all, delete-orphan")
     supervisors = relationship("CompanySupervisor", back_populates="company", cascade="all, delete-orphan")
     finance_contacts = relationship("CompanyFinanceContact", back_populates="company", cascade="all, delete-orphan")
+    bank_rules = relationship("BankRule", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyShareholder(Base):
@@ -1465,10 +1466,119 @@ def _match_customer(db: Session, company_id: int, counterparty_name: str = None,
     return None
 
 
+def _classify_bank_tx(db, company_id, tx):
+    """智能分类单条银行流水，返回 (other_side_code, other_side_name, bank_side_is_debit)
+    规则优先级：内部转账 > 规则匹配 > 税费识别 > 工资社保识别 > 客户匹配 > 默认往来科目
+    """
+    cp = tx.counterparty_name or tx.summary or ""
+    full_text = (tx.summary or "") + " " + (tx.counterparty_name or "") + " " + (tx.transaction_remark or "")
+    full_text_lower = full_text.lower()
+
+    # 1. 内部转账识别：对方账号匹配本公司已配置的银行账户
+    if tx.counterparty_account:
+        own_accounts = db.query(BankConfig).filter(
+            BankConfig.company_id == company_id,
+            BankConfig.is_active == 1,
+        ).all()
+        for bc in own_accounts:
+            if bc.account_number and tx.counterparty_account.strip() == bc.account_number.strip():
+                return ("1002", "银行存款-内部转账", "internal_transfer")
+
+    is_debit = tx.debit_amount and tx.debit_amount > 0
+    tx_type = "支出" if is_debit else "收入"
+
+    # 2. 规则匹配：按关键词匹配 BankRule
+    rules = db.query(BankRule).filter(
+        BankRule.company_id == company_id,
+        BankRule.is_active == 1,
+    ).order_by(BankRule.priority.desc(), BankRule.id.asc()).all()
+    for rule in rules:
+        if rule.keyword in full_text:
+            # 检查规则适用类型
+            if rule.transaction_type == "全部" or rule.transaction_type == tx_type:
+                return (rule.account_code, rule.account_name or rule.account_code, "rule")
+
+    # 3. 税费关键词识别
+    tax_keywords = {
+        "应交增值税": ("222101", "应交税费-应交增值税"),
+        "未交增值税": ("222102", "应交税费-未交增值税"),
+        "增值税": ("222101", "应交税费-应交增值税"),
+        "城建税": ("222103", "应交税费-城市维护建设税"),
+        "城市维护建设税": ("222103", "应交税费-城市维护建设税"),
+        "教育费附加": ("222104", "应交税费-教育费附加"),
+        "地方教育附加": ("222105", "应交税费-地方教育附加"),
+        "企业所得税": ("222106", "应交税费-企业所得税"),
+        "个人所得税": ("222107", "应交税费-应交个人所得税"),
+        "印花税": ("222108", "应交税费-印花税"),
+    }
+    for kw, (code, name) in tax_keywords.items():
+        if kw in full_text:
+            return (code, name, "tax")
+
+    # 4. 工资薪金识别
+    if any(kw in full_text for kw in ["工资", "薪资", "薪酬", "奖金", "绩效"]):
+        return ("221101", "应付职工薪酬-工资", "salary")
+
+    # 5. 社保公积金识别
+    if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
+        return ("221102", "应付职工薪酬-社会保险费", "social_security")
+    if any(kw in full_text for kw in ["公积金", "住房公积金"]):
+        return ("221103", "应付职工薪酬-住房公积金", "housing_fund")
+
+    # 6. 费用类关键词识别（常见费用）
+    expense_keywords = {
+        "房租": ("660201", "管理费用-房租"),
+        "租金": ("660201", "管理费用-房租"),
+        "水电": ("660202", "管理费用-水电费"),
+        "办公": ("660203", "管理费用-办公费"),
+        "差旅": ("660204", "管理费用-差旅费"),
+        "招待": ("660205", "管理费用-业务招待费"),
+        "交通": ("660206", "管理费用-交通费"),
+        "通讯": ("660207", "管理费用-通讯费"),
+        "折旧": ("660208", "管理费用-折旧费"),
+        "摊销": ("660209", "管理费用-摊销费"),
+        "咨询": ("660210", "管理费用-咨询费"),
+        "培训": ("660211", "管理费用-培训费"),
+        "维修": ("660212", "管理费用-维修费"),
+    }
+    for kw, (code, name) in expense_keywords.items():
+        if kw in full_text:
+            return (code, name, "expense")
+
+    # 7. 客户/供应商匹配（原有逻辑）
+    matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
+
+    if is_debit:
+        # 付款：对方科目在借方
+        return ("2202", "应付账款", "vendor") if matched_customer else ("1221", "其他应收款", "other")
+    else:
+        # 收款：对方科目在贷方
+        return ("1122", "应收账款", "customer") if matched_customer else ("2241", "其他应付款", "other")
+
+
+def _ensure_account(db, company_id, code, name, category, direction):
+    """确保科目存在，不存在则创建"""
+    if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
+        # 确定 parent_code
+        parent_map = {
+            "2211": "2211", "221101": "2211", "221102": "2211", "221103": "2211",
+            "2221": "2221", "222101": "2221", "222102": "2221", "222103": "2221",
+            "222104": "2221", "222105": "2221", "222106": "2221", "222107": "2221", "222108": "2221",
+            "6602": "6602", "660201": "6602", "660202": "6602", "660203": "6602",
+            "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
+            "660208": "6602", "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
+        }
+        parent = parent_map.get(code, "1")
+        db.add(Account(
+            company_id=company_id, code=code, name=name,
+            category=category, balance_direction=direction,
+            level=len(code) // 2, parent_code=parent,
+        ))
+        db.flush()
+
+
 def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[int]] = None):
-    """为银行流水批量生成双分录记账凭证（借贷必相等）。
-    收款：借 1002 银行存款 / 贷 1122应收账款(匹配客户)或2241其他应付款(未匹配)
-    付款：借 2202应付账款(匹配客户)或1221其他应收款(未匹配) / 贷 1002 银行存款
+    """为银行流水批量生成双分录记账凭证（借贷必相等），支持智能分类。
     返回 {"generated": int, "skipped": int, "infos": [str], "errors": [str]}"""
     q = db.query(BankTransaction).filter(BankTransaction.company_id == company_id)
     if tx_ids:
@@ -1480,19 +1590,37 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     errors = []
 
     # 确保所需科目存在
-    def _ensure_account(code, name, category, direction):
-        if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
-            db.add(Account(
-                company_id=company_id, code=code, name=name,
-                category=category, balance_direction=direction, level=1, parent_code="1",
-            ))
-            db.flush()
-
-    _ensure_account("1002", "银行存款", "资产", "借")
-    _ensure_account("1122", "应收账款", "资产", "借")
-    _ensure_account("2202", "应付账款", "负债", "贷")
-    _ensure_account("1221", "其他应收款", "资产", "借")
-    _ensure_account("2241", "其他应付款", "负债", "贷")
+    _ensure_account(db, company_id, "1002", "银行存款", "资产", "借")
+    _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
+    _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
+    _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
+    _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
+    _ensure_account(db, company_id, "221101", "应付职工薪酬-工资", "负债", "贷")
+    _ensure_account(db, company_id, "221102", "应付职工薪酬-社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "221103", "应付职工薪酬-住房公积金", "负债", "贷")
+    _ensure_account(db, company_id, "2221", "应交税费", "负债", "贷")
+    _ensure_account(db, company_id, "222101", "应交税费-应交增值税", "负债", "贷")
+    _ensure_account(db, company_id, "222102", "应交税费-未交增值税", "负债", "贷")
+    _ensure_account(db, company_id, "222103", "应交税费-城市维护建设税", "负债", "贷")
+    _ensure_account(db, company_id, "222104", "应交税费-教育费附加", "负债", "贷")
+    _ensure_account(db, company_id, "222105", "应交税费-地方教育附加", "负债", "贷")
+    _ensure_account(db, company_id, "222106", "应交税费-企业所得税", "负债", "贷")
+    _ensure_account(db, company_id, "222107", "应交税费-应交个人所得税", "负债", "贷")
+    _ensure_account(db, company_id, "222108", "应交税费-印花税", "负债", "贷")
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    _ensure_account(db, company_id, "660201", "管理费用-房租", "损益", "借")
+    _ensure_account(db, company_id, "660202", "管理费用-水电费", "损益", "借")
+    _ensure_account(db, company_id, "660203", "管理费用-办公费", "损益", "借")
+    _ensure_account(db, company_id, "660204", "管理费用-差旅费", "损益", "借")
+    _ensure_account(db, company_id, "660205", "管理费用-业务招待费", "损益", "借")
+    _ensure_account(db, company_id, "660206", "管理费用-交通费", "损益", "借")
+    _ensure_account(db, company_id, "660207", "管理费用-通讯费", "损益", "借")
+    _ensure_account(db, company_id, "660208", "管理费用-折旧费", "损益", "借")
+    _ensure_account(db, company_id, "660209", "管理费用-摊销费", "损益", "借")
+    _ensure_account(db, company_id, "660210", "管理费用-咨询费", "损益", "借")
+    _ensure_account(db, company_id, "660211", "管理费用-培训费", "损益", "借")
+    _ensure_account(db, company_id, "660212", "管理费用-维修费", "损益", "借")
 
     for tx in txs:
         try:
@@ -1510,16 +1638,34 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             is_debit = tx.debit_amount and tx.debit_amount > 0
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-            # 匹配客户档案（标准化名称 + 银行账号两级匹配）
-            matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
+            # 智能分类
+            other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx)
 
-            if is_debit:
-                # 付款：借 应付账款/其他应收款  贷 银行存款
-                cp_code, cp_name = ("2202", "应付账款") if matched_customer else ("1221", "其他应收款")
+            # 确保对方科目存在
+            acct = db.query(Account).filter(Account.company_id == company_id, Account.code == other_code).first()
+            if acct:
+                other_name = acct.name
+
+            if match_type == "internal_transfer":
+                # 内部转账：借1002 贷1002（不同明细）
                 entry1 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag, account_code=cp_code, account_name=cp_name,
+                    summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
+                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水",
+                )
+                entry2 = JournalEntry(
+                    company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
+                    summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
+                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
+                )
+            elif is_debit:
+                # 付款：借 other 贷 1002
+                entry1 = JournalEntry(
+                    company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
+                    summary=summary_tag, account_code=other_code, account_name=other_name,
                     debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水",
                 )
                 entry2 = JournalEntry(
@@ -1529,8 +1675,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
                 )
             else:
-                # 收款：借 银行存款  贷 应收账款/其他应付款
-                cp_code, cp_name = ("1122", "应收账款") if matched_customer else ("2241", "其他应付款")
+                # 收款：借 1002 贷 other
                 entry1 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
@@ -1540,7 +1685,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 entry2 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag, account_code=cp_code, account_name=cp_name,
+                    summary=summary_tag, account_code=other_code, account_name=other_name,
                     debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
                 )
             db.add(entry1)
@@ -1555,6 +1700,25 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     return {"generated": generated, "skipped": skipped, "infos": infos, "errors": errors}
 
 
+# ========== 银行流水凭证规则库 ==========
+
+class BankRule(Base):
+    """银行流水智能分类规则：关键词 → 会计科目"""
+    __tablename__ = "bank_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    keyword = Column(String(100), nullable=False, index=True)  # 匹配关键词（摘要/对方户名）
+    account_code = Column(String(20), nullable=False)  # 匹配到的借方或贷方科目代码
+    account_name = Column(String(100))  # 科目名称（冗余，便于展示）
+    transaction_type = Column(String(10), default="全部")  # 收入 / 支出 / 全部
+    direction = Column(String(4), default="auto")  # 规则适用的方向：debit(支出侧) / credit(收入侧) / auto
+    priority = Column(Integer, default=0)  # 优先级，数字越大越优先
+    is_active = Column(Integer, default=1)  # 1=启用, 0=禁用
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", back_populates="bank_rules")
 
 
 # ========== 增值税申报表模型 ==========

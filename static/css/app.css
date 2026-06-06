@@ -75,14 +75,16 @@
     #salary-stats .stat-value { font-size: 16px; }
 
     /* 年月选择器上下箭头 */
-    .period-spinner { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; }
+    .period-spinner { display: inline-flex; flex-direction: row; align-items: stretch; vertical-align: middle; }
+    .spinner-arrows { display: flex; flex-direction: column; margin-left: 2px; }
     .spinner-btn {
-      width: 100%; height: 18px; padding: 0; font-size: 10px; line-height: 1;
+      flex: 1; width: 22px; padding: 0; font-size: 9px; line-height: 1;
       border: 1px solid var(--gray-300); background: #fff; color: var(--gray-500);
-      cursor: pointer; border-radius: 4px; margin-bottom: 1px;
+      cursor: pointer; border-radius: 3px;
       display: flex; align-items: center; justify-content: center;
     }
-    .spinner-btn:last-child { margin-bottom: 0; margin-top: 1px; }
+    .spinner-arrows .spinner-btn:first-child { border-bottom: none; border-radius: 3px 3px 0 0; }
+    .spinner-arrows .spinner-btn:last-child { border-radius: 0 0 3px 3px; }
     .spinner-btn:hover { background: var(--gray-100); color: var(--gray-700); }
 
     /* 按钮 */

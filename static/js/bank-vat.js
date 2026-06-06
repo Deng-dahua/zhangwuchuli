@@ -48,6 +48,7 @@ async function renderBankTransactions(container) {
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-secondary" onclick="showBankRuleModal()">⚙️ 规则管理</button>';
   html += '<button class="btn btn-primary" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
   html += '</div></div>';
@@ -726,12 +727,221 @@ async function batchGenerateBankVouchers() {
   if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
   const ids = [];
   checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
-  if (!confirm('确认为选中的 ' + ids.length + ' 条银行流水生成凭证？')) return;
+  // 先预览
+  try {
+    const data = await api('/api/bank-transactions/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    showBankVoucherPreview(data.results, ids);
+  } catch (e) {
+    toast(e.message || '预览失败', 'error');
+  }
+}
+
+// ==================== 银行规则库管理 ====================
+
+let _bankRules = [];
+
+async function showBankRuleModal() {
+  try {
+    const rules = await api('/api/bank-rules');
+    _bankRules = rules;
+    const txTypes = ['全部', '收入', '支出'];
+    let rows = rules.map(r => `
+      <tr>
+        <td style="padding:6px 8px">${r.keyword}</td>
+        <td style="padding:6px 8px">${r.account_code}</td>
+        <td style="padding:6px 8px">${r.account_name || ''}</td>
+        <td style="padding:6px 8px">${r.transaction_type}</td>
+        <td style="padding:6px 8px">${r.direction}</td>
+        <td style="padding:6px 8px">${r.priority}</td>
+        <td style="padding:6px 8px">${r.is_active ? '<span style="color:#0e9f6e">启用</span>' : '<span style="color:#9ca3af">禁用</span>'}</td>
+        <td style="padding:6px 8px;white-space:nowrap">
+          <button class="btn btn-sm btn-secondary" onclick="editBankRule(${r.id})">编辑</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteBankRule(${r.id})">删除</button>
+        </td>
+      </tr>`).join('');
+
+    const modal = createModal('银行规则库', `
+      <div style="margin-bottom:12px">
+        <button class="btn btn-primary btn-sm" onclick="showBankRuleForm(0)">＋ 新增规则</button>
+        <span style="font-size:12px;color:var(--gray-500);margin-left:8px">规则按优先级从高到低匹配，关键词命中即使用对应科目</span>
+      </div>
+      <div class="table-wrap" style="max-height:400px;overflow:auto">
+      <table class="data-table" style="font-size:13px">
+        <thead><tr>
+          <th>关键词</th><th>科目代码</th><th>科目名称</th><th>收支类型</th><th>方向</th><th>优先级</th><th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody>${rows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--gray-500)">暂无规则，请新增</td></tr>'}</tbody>
+      </table>
+      </div>
+      <div style="text-align:right;margin-top:12px"><button class="btn" onclick="closeModal()">关闭</button></div>
+    `);
+    document.body.appendChild(modal);
+  } catch (e) {
+    toast('加载规则失败: ' + e.message, 'error');
+  }
+}
+
+async function showBankRuleForm(ruleId) {
+  const isEdit = !!ruleId;
+  const title = isEdit ? '编辑规则' : '新增规则';
+  const txOpts = ['全部', '收入', '支出'].map(t => `<option value="${t}">${t}</option>`).join('');
+  const dirOpts = ['auto', 'debit', 'credit'].map(d => `<option value="${d}">${d}</option>`).join('');
+
+  const modal = createModal(title, `
+    <div class="form-grid">
+      <div class="form-group"><label>关键词 *</label><input id="brf-keyword" class="form-input" placeholder="如：工资、增值税、房租"></div>
+      <div class="form-group"><label>科目代码 *</label><input id="brf-code" class="form-input" placeholder="如：221101"></div>
+      <div class="form-group"><label>科目名称</label><input id="brf-name" class="form-input" placeholder="自动填充" disabled></div>
+      <div class="form-group"><label>收支类型</label><select id="brf-type" class="form-input">${txOpts}</select></div>
+      <div class="form-group"><label>方向</label><select id="brf-dir" class="form-input">${dirOpts}</select></div>
+      <div class="form-group"><label>优先级</label><input id="brf-priority" type="number" class="form-input" value="0" placeholder="数字越大越优先"></div>
+    </div>
+    <div style="text-align:right;margin-top:16px">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBankRule(${ruleId})">保存</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  // 科目代码输入时自动查询科目名称
+  document.getElementById('brf-code').addEventListener('blur', async function() {
+    const code = this.value.trim();
+    if (!code) return;
+    try {
+      const accts = await api('/api/accounts?keyword=' + encodeURIComponent(code));
+      const found = accts.find(a => a.code === code);
+      if (found) document.getElementById('brf-name').value = found.name;
+    } catch(e) {}
+  });
+
+  if (isEdit) {
+    const r = _bankRules.find(x => x.id === ruleId);
+    if (r) {
+      document.getElementById('brf-keyword').value = r.keyword;
+      document.getElementById('brf-code').value = r.account_code;
+      document.getElementById('brf-name').value = r.account_name || '';
+      document.getElementById('brf-type').value = r.transaction_type || '全部';
+      document.getElementById('brf-dir').value = r.direction || 'auto';
+      document.getElementById('brf-priority').value = r.priority || 0;
+    }
+  }
+}
+
+async function saveBankRule(ruleId) {
+  const isEdit = !!ruleId;
+  const keyword = document.getElementById('brf-keyword').value.trim();
+  const account_code = document.getElementById('brf-code').value.trim();
+  if (!keyword || !account_code) { toast('关键词和科目代码必填', 'warn'); return; }
+  const body = {
+    keyword, account_code,
+    account_name: document.getElementById('brf-name').value.trim() || undefined,
+    transaction_type: document.getElementById('brf-type').value,
+    direction: document.getElementById('brf-dir').value,
+    priority: parseInt(document.getElementById('brf-priority').value) || 0,
+  };
+  try {
+    if (isEdit) {
+      await api('/api/bank-rules/' + ruleId, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+    } else {
+      await api('/api/bank-rules', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+    }
+    toast('规则已保存', 'success');
+    closeModal();
+    showBankRuleModal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function editBankRule(ruleId) {
+  closeModal();
+  setTimeout(() => showBankRuleForm(ruleId), 200);
+}
+
+async function deleteBankRule(ruleId) {
+  if (!confirm('确认删除该规则？')) return;
+  try {
+    await api('/api/bank-rules/' + ruleId, { method: 'DELETE' });
+    toast('规则已删除', 'success');
+    showBankRuleModal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== 凭证生成预览 ====================
+
+let _previewIds = [];
+
+async function showBankVoucherPreview(results, ids) {
+  _previewIds = ids;
+  const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let rows = results.map((r, i) => `
+    <tr>
+      <td style="padding:4px 6px;font-size:13px">${r.summary}</td>
+      <td style="padding:4px 6px;font-size:13px;color:${r.is_debit ? '#e02424' : '#0e9f6e'};font-weight:600">¥${fmt(r.amount)}</td>
+      <td style="padding:4px 6px;font-size:13px">
+        <input value="${r.debit_account}" data-idx="${i}" data-field="debit_account" class="preview-acct" style="width:70px;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;font-size:13px">
+        <span style="font-size:12px;color:#6b7280">${r.debit_name}</span>
+      </td>
+      <td style="padding:4px 6px;font-size:13px">
+        <input value="${r.credit_account}" data-idx="${i}" data-field="credit_account" class="preview-acct" style="width:70px;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;font-size:13px">
+        <span style="font-size:12px;color:#6b7280">${r.credit_name}</span>
+      </td>
+      <td style="padding:4px 6px;font-size:12px;color:#6b7280">${r.match_type}</td>
+    </tr>`).join('');
+
+  const modal = createModal('预览凭证生成', `
+    <p style="font-size:13px;color:#6b7280;margin-bottom:10px">请确认以下流水将生成的凭证分录，可修改科目代码：</p>
+    <div class="table-wrap" style="max-height:400px;overflow:auto">
+    <table class="data-table" id="bank-preview-table" style="font-size:13px">
+      <thead><tr>
+        <th>摘要</th><th>金额</th><th>借方科目</th><th>贷方科目</th><th>匹配类型</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmGenerateBankVouchers()">✅ 确认生成凭证</button>
+    </div>
+  `);
+  document.body.appendChild(modal);
+
+  // 科目代码失焦时自动填充名称
+  document.querySelectorAll('.preview-acct').forEach(inp => {
+    inp.addEventListener('blur', async function() {
+      const code = this.value.trim();
+      if (!code) return;
+      try {
+        const accts = await api('/api/accounts?keyword=' + encodeURIComponent(code));
+        const found = accts.find(a => a.code === code);
+        if (found) {
+          const idx = this.dataset.idx;
+          const field = this.dataset.field;
+          // 更新名称显示（下一个 sibling 是 span）
+          const span = this.parentElement.querySelector('span');
+          if (span) span.textContent = found.name;
+        }
+      } catch(e) {}
+    });
+  });
+}
+
+async function confirmGenerateBankVouchers() {
+  // 收集预览表格中的科目代码（用户可能已修改）
+  const rows = document.querySelectorAll('#bank-preview-table tbody tr');
+  // 目前后端不支持自定义科目，先按原有逻辑生成
+  closeModal();
   try {
     const res = await api('/api/bank-transactions/batch-to-journal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids)
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_previewIds)
     });
     toast(res.message, 'success');
     renderBankTransactions();

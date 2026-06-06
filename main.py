@@ -37,7 +37,7 @@ from database import (
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
-    _normalize_customer_name, _match_customer, _generate_bank_journals
+    _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx
 )
 
 from vat import router as vat_router
@@ -2633,6 +2633,26 @@ def purchase_invoice_batch_to_journal(
     return {"message": msg, "generated": generated, "skipped": skipped, "vouchers": voucher_count, "errors": errors}
 
 
+
+# ==================== 银行流水规则库 ====================
+
+class BankRuleCreate(BaseModel):
+    keyword: str
+    account_code: str
+    account_name: Optional[str] = None
+    transaction_type: str = "全部"  # 收入 / 支出 / 全部
+    direction: str = "auto"  # debit / credit / auto
+    priority: int = 0
+
+class BankRuleUpdate(BaseModel):
+    keyword: Optional[str] = None
+    account_code: Optional[str] = None
+    account_name: Optional[str] = None
+    transaction_type: Optional[str] = None
+    direction: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[int] = None
+
 # ==================== 银行配置 ====================
 
 class BankConfigCreate(BaseModel):
@@ -2692,6 +2712,73 @@ def delete_bank_config(config_id: int, company_id: int = Query(...), db: Session
     cfg.is_active = False
     db.commit()
     return {"message": "已停用"}
+
+
+# ==================== 银行流水规则库 ====================
+
+@app.get("/api/bank-rules")
+def list_bank_rules(
+    company_id: int = Query(...),
+    transaction_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    q = db.query(BankRule).filter(BankRule.company_id == company_id, BankRule.is_active == 1)
+    if transaction_type and transaction_type != "全部":
+        q = q.filter(or_(BankRule.transaction_type == transaction_type, BankRule.transaction_type == "全部"))
+    rules = q.order_by(BankRule.priority.desc(), BankRule.id.asc()).all()
+    return [{
+        "id": r.id, "keyword": r.keyword, "account_code": r.account_code,
+        "account_name": r.account_name, "transaction_type": r.transaction_type,
+        "direction": r.direction, "priority": r.priority, "is_active": r.is_active,
+    } for r in rules]
+
+
+@app.post("/api/bank-rules")
+def create_bank_rule(data: BankRuleCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    # 确保科目存在
+    acct = db.query(Account).filter(Account.company_id == company_id, Account.code == data.account_code).first()
+    rule = BankRule(
+        company_id=company_id,
+        keyword=data.keyword,
+        account_code=data.account_code,
+        account_name=acct.name if acct else data.account_name,
+        transaction_type=data.transaction_type,
+        direction=data.direction,
+        priority=data.priority,
+        is_active=1,
+    )
+    db.add(rule)
+    db.commit()
+    return {"message": "规则已添加", "id": rule.id}
+
+
+@app.put("/api/bank-rules/{rule_id}")
+def update_bank_rule(rule_id: int, data: BankRuleUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    rule = db.query(BankRule).filter(BankRule.company_id == company_id, BankRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(404, detail="规则不存在")
+    for field in ["keyword", "account_code", "account_name", "transaction_type", "direction", "priority", "is_active"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            if field == "account_code":
+                acct = db.query(Account).filter(Account.company_id == company_id, Account.code == val).first()
+                if acct:
+                    setattr(rule, "account_name", acct.name)
+            setattr(rule, field, val)
+    rule.updated_at = datetime.now()
+    db.commit()
+    return {"message": "规则已更新"}
+
+
+@app.delete("/api/bank-rules/{rule_id}")
+def delete_bank_rule(rule_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    rule = db.query(BankRule).filter(BankRule.company_id == company_id, BankRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(404, detail="规则不存在")
+    rule.is_active = 0
+    rule.updated_at = datetime.now()
+    db.commit()
+    return {"message": "规则已删除"}
 
 
 # ==================== 银行流水 ====================
@@ -4700,6 +4787,52 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
         "skipped": result["skipped"],
         "errors": result["errors"]
     }
+
+
+@app.post("/api/bank-transactions/classify")
+def classify_bank_transactions(ids: List[int] = Body(...), company_id: int = Query(...), db: Session = Depends(get_db)):
+    """预览银行流水凭证分类结果（不生成凭证），返回每条流水的建议科目"""
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.id.in_(ids)
+    ).all()
+    results = []
+    for tx in txs:
+        other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx)
+        is_debit = tx.debit_amount and tx.debit_amount > 0
+        amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        # 确定借贷方向
+        if match_type == "internal_transfer":
+            results.append({
+                "tx_id": tx.id,
+                "summary": tx.summary or tx.counterparty_name or "银行流水",
+                "amount": amount,
+                "is_debit": is_debit,
+                "debit_account": "1002", "debit_name": "银行存款",
+                "credit_account": "1002", "credit_name": "银行存款(内部转账)",
+                "match_type": match_type,
+            })
+        elif is_debit:
+            results.append({
+                "tx_id": tx.id,
+                "summary": tx.summary or tx.counterparty_name or "银行流水",
+                "amount": amount,
+                "is_debit": True,
+                "debit_account": other_code, "debit_name": other_name,
+                "credit_account": "1002", "credit_name": "银行存款",
+                "match_type": match_type,
+            })
+        else:
+            results.append({
+                "tx_id": tx.id,
+                "summary": tx.summary or tx.counterparty_name or "银行流水",
+                "amount": amount,
+                "is_debit": False,
+                "debit_account": "1002", "debit_name": "银行存款",
+                "credit_account": other_code, "credit_name": other_name,
+                "match_type": match_type,
+            })
+    return {"results": results}
 
 
 @app.post("/api/input-vat-deductions/{item_id}/to-journal")
