@@ -1183,6 +1183,20 @@ def list_accounts(
     # 构建全级次名称映射
     hierarchy = _build_account_hierarchy(db, company_id)
 
+    # 检查哪些科目有下级
+    all_codes = {a.code for a in accounts}
+    parent_codes = {a.parent_code for a in accounts if a.parent_code}
+    has_children_codes = parent_codes & all_codes
+
+    # 检查哪些科目被序时账使用
+    journal_codes = set()
+    try:
+        journal_codes = {r[0] for r in db.query(JournalEntry.account_code).filter(
+            JournalEntry.company_id == company_id
+        ).distinct().all()}
+    except Exception:
+        pass
+
     return [
         {
             "id": a.id, "code": a.code, "name": a.name,
@@ -1190,7 +1204,9 @@ def list_accounts(
             "category": a.category, "balance_direction": a.balance_direction,
             "level": a.level, "parent_code": a.parent_code,
             "is_active": a.is_active,
-            "opening_balance": a.opening_balance or 0.0
+            "opening_balance": a.opening_balance or 0.0,
+            "has_children": a.code in has_children_codes,
+            "has_journal": a.code in journal_codes,
         } for a in accounts
     ]
 
@@ -1214,9 +1230,33 @@ def create_account(data: dict, company_id: int = Query(...), db: Session = Depen
     return {"id": acc.id, "code": acc.code, "name": acc.name, "message": "创建成功"}
 
 
+ACCOUNT_PWD = "123456"
+
+def _account_needs_password(db, company_id, account_id):
+    """检查科目是否有下级或被序时账使用，需要密码才能修改/删除"""
+    acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
+    if not acc:
+        return False, None, "科目不存在"
+    # 检查是否有下级科目
+    has_child = db.query(Account).filter(Account.company_id == company_id, Account.parent_code == acc.code).first()
+    if has_child:
+        return True, acc, "该科目下有下级科目，修改/删除需要密码"
+    # 检查是否被序时账使用
+    has_journal = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.account_code == acc.code
+    ).first()
+    if has_journal:
+        return True, acc, "该科目已被序时账使用，修改/删除需要密码"
+    return False, acc, ""
+
 @app.put("/api/accounts/{account_id}")
 def update_account(account_id: int, data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
-    acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
+    needs_pwd, acc, msg = _account_needs_password(db, company_id, account_id)
+    if needs_pwd:
+        pwd = data.get("password", "")
+        if pwd != ACCOUNT_PWD:
+            raise HTTPException(403, detail=f"{msg}，请输入正确密码")
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     if "name" in data and data["name"] is not None:
@@ -1230,8 +1270,15 @@ def update_account(account_id: int, data: dict, company_id: int = Query(...), db
 
 
 @app.delete("/api/accounts/{account_id}")
-def delete_account(account_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
-    acc = db.query(Account).filter(Account.company_id == company_id, Account.id == account_id).first()
+def delete_account(account_id: int, company_id: int = Query(...), db: Session = Depends(get_db), data: dict = None):
+    # 从 query 或 body 获取密码
+    pwd = ""
+    if data and isinstance(data, dict):
+        pwd = data.get("password", "")
+    needs_pwd, acc, msg = _account_needs_password(db, company_id, account_id)
+    if needs_pwd:
+        if pwd != ACCOUNT_PWD:
+            raise HTTPException(403, detail=f"{msg}，请输入正确密码")
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     db.delete(acc)

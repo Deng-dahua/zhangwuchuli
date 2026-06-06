@@ -33,7 +33,19 @@ async function loadAccounts() {
       <table>
         <thead><tr><th>科目编码</th><th>科目名称</th><th>类别</th><th>余额方向</th><th>级次</th><th>上级科目</th><th>期初金额</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
-          ${data.map(a => `
+          ${data.map(a => {
+                const locked = a.has_children || a.has_journal;
+                const reason = a.has_children ? '该科目下有下级科目' : (a.has_journal ? '该科目已被序时账使用' : '');
+                const editBtn = locked
+                  ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="${reason}，需要密码才能修改">编辑</button>`
+                  : `<button class="btn btn-sm btn-secondary" onclick="showEditAccount(${a.id},'${esc(a.code)}','${esc(a.name)}','${a.category}','${a.balance_direction}',${a.level},'${a.parent_code||''}',${a.opening_balance||0})">编辑</button>`;
+                const delBtn = locked
+                  ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="${reason}，需要密码才能删除">删除</button>`
+                  : `<button class="btn btn-sm btn-danger" onclick="deleteAccount(${a.id},false)">删除</button>`;
+                const toggleBtn = locked
+                  ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="${reason}，需要密码才能修改">${a.is_active ? '停用' : '启用'}</button>`
+                  : `<button class="btn btn-sm btn-secondary" onclick="toggleAccount(${a.id},${!a.is_active},false)">${a.is_active ? '停用' : '启用'}</button>`;
+                return `
             <tr>
               <td style="font-weight:500">${a.code}</td>
               <td>${a.name.trim()}</td>
@@ -44,11 +56,13 @@ async function loadAccounts() {
               <td style="text-align:right">${(a.opening_balance || 0).toFixed(2)}</td>
               <td>${a.is_active ? '<span class="badge badge-audited">启用</span>' : '<span class="badge" style="background:#f3f4f6;color:#6b7280">停用</span>'}</td>
               <td style="white-space:nowrap">
-                <button class="btn btn-sm btn-secondary" onclick="toggleAccount(${a.id}, ${!a.is_active})">${a.is_active ? '停用' : '启用'}</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteAccount(${a.id})">删除</button>
+                ${editBtn}
+                ${delBtn}
+                ${toggleBtn}
               </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
     `;
@@ -77,7 +91,7 @@ function showAddAccount() {
       </div>
       <div class="form-group">
         <label>级次</label>
-        <select class="form-control" id="na-level"><option value="1">一级</option><option value="2">二级</option></select>
+        <select class="form-control" id="na-level" onchange="onAccLevelChange()"><option value="1">一级</option><option value="2">二级</option></select>
       </div>
       <div class="form-group">
         <label>上级科目</label>
@@ -92,6 +106,82 @@ function showAddAccount() {
       <button class="btn btn-primary" onclick="saveNewAccount()">保存</button>
     </div>
   `);
+}
+
+function onAccLevelChange() {
+  const level = parseInt(document.getElementById('na-level').value);
+  const parentEl = document.getElementById('na-parent');
+  if (parentEl) parentEl.disabled = (level === 1);
+}
+
+function showEditAccount(id, code, name, category, balance_direction, level, parent_code, opening_balance) {
+  const parentOptions = allAccounts.filter(a => a.level === 1 && a.code !== code).map(a => {
+    const sel = (a.code === parent_code) ? 'selected' : '';
+    return `<option value="${a.code}" ${sel}>${a.code} ${a.name}</option>`;
+  }).join('');
+  const catOptions = ['资产','负债','权益','收入','费用','成本'].map(c => {
+    return `<option ${c === category ? 'selected' : ''}>${c}</option>`;
+  }).join('');
+  const dirOptions = ['借','贷'].map(d => {
+    return `<option ${d === balance_direction ? 'selected' : ''}>${d}</option>`;
+  }).join('');
+  showModal(`
+    <div class="modal-title">编辑会计科目</div>
+    <div class="form-grid">
+      <div class="form-group"><label>科目编码 *</label><input class="form-control" id="na-code" value="${code}" disabled style="background:#f3f4f6"></div>
+      <div class="form-group"><label>科目名称 *</label><input class="form-control" id="na-name" value="${esc(name)}"></div>
+      <div class="form-group">
+        <label>科目类别 *</label>
+        <select class="form-control" id="na-cat">${catOptions}</select>
+      </div>
+      <div class="form-group">
+        <label>余额方向 *</label>
+        <select class="form-control" id="na-dir">${dirOptions}</select>
+      </div>
+      <div class="form-group">
+        <label>级次</label>
+        <select class="form-control" id="na-level" onchange="onAccLevelChange()"><option value="1" ${level==1?'selected':''}>一级</option><option value="2" ${level==2?'selected':''}>二级</option></select>
+      </div>
+      <div class="form-group">
+        <label>上级科目</label>
+        <select class="form-control" id="na-parent" ${level==1?'disabled':''}><option value="">无</option>${parentOptions}</select>
+      </div>
+      <div class="form-group">
+        <label>期初金额</label><input class="form-control" id="na-ob" type="number" step="0.01" value="${opening_balance||0}">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveEditAccount(${id})">保存</button>
+    </div>
+  `);
+}
+
+async function saveEditAccount(id, skipPwd = false) {
+  if (!skipPwd) {
+    const acc = allAccounts.find(a => a.id === id);
+    if (acc && (acc.has_children || acc.has_journal)) {
+      promptAccountPwd(id, 'edit');
+      return;
+    }
+  }
+  const name = document.getElementById('na-name').value.trim();
+  const category = document.getElementById('na-cat').value;
+  const balance_direction = document.getElementById('na-dir').value;
+  const level = parseInt(document.getElementById('na-level').value);
+  const parent_code = level === 1 ? null : (document.getElementById('na-parent').value || null);
+  const opening_balance = parseFloat(document.getElementById('na-ob').value) || 0;
+  if (!name) { toast('请填写科目名称', 'error'); return; }
+  try {
+    const body = { name, category, balance_direction, level, parent_code, opening_balance };
+    if (skipPwd) body.password = '123456';
+    await api(`/api/accounts/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    toast('科目修改成功', 'success');
+    closeModal();
+    await loadAccounts();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 async function saveNewAccount() {
@@ -113,7 +203,14 @@ async function saveNewAccount() {
   }
 }
 
-async function toggleAccount(id, active) {
+async function toggleAccount(id, active, skipPwd = false) {
+  if (!skipPwd) {
+    const acc = allAccounts.find(a => a.id === id);
+    if (acc && (acc.has_children || acc.has_journal)) {
+      promptAccountPwd(id, 'toggle', active);
+      return;
+    }
+  }
   try {
     await api(`/api/accounts/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: active }) });
     toast(active ? '科目已启用' : '科目已停用', 'success');
@@ -123,7 +220,14 @@ async function toggleAccount(id, active) {
   }
 }
 
-async function deleteAccount(id) {
+async function deleteAccount(id, skipPwd = false) {
+  if (!skipPwd) {
+    const acc = allAccounts.find(a => a.id === id);
+    if (acc && (acc.has_children || acc.has_journal)) {
+      promptAccountPwd(id, 'delete');
+      return;
+    }
+  }
   if (!confirm('确认删除该科目？')) return;
   try {
     await api(`/api/accounts/${id}`, { method: 'DELETE' });
@@ -131,6 +235,38 @@ async function deleteAccount(id) {
     await loadAccounts();
   } catch (e) {
     toast(e.message, 'error');
+  }
+}
+
+function promptAccountPwd(id, action, extra) {
+  showModal(`
+    <div class="modal-title">需要密码</div>
+    <p style="margin-bottom:12px;color:var(--gray-600);font-size:14px">该科目受保护（有下级科目或被序时账使用），请输入密码才能操作。</p>
+    <div class="form-field">
+      <label>密码</label>
+      <input type="password" id="acc-pwd" class="form-control" placeholder="请输入密码" onkeydown="if(event.key==='Enter')submitAccountPwd(${id},'${action}',${extra||''})">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitAccountPwd(${id},'${action}',${extra||''})">确认</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('acc-pwd')?.focus(), 100);
+}
+
+async function submitAccountPwd(id, action, extra) {
+  const pwd = document.getElementById('acc-pwd').value;
+  if (pwd !== '123456') {
+    toast('密码错误', 'error');
+    return;
+  }
+  closeModal();
+  if (action === 'toggle') {
+    await toggleAccount(id, extra, true);
+  } else if (action === 'delete') {
+    await deleteAccount(id, true);
+  } else if (action === 'edit') {
+    await saveEditAccount(id, true);
   }
 }
 
