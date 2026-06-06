@@ -6,10 +6,11 @@ let ssFilterPeriod = '';
 async function renderSocialSecurity(container) {
   const el = container || document.getElementById('content-area');
   if (!el) return;
-  el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
+    el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
     + '<div class="toolbar"><div class="toolbar-left">'
     + '<button class="btn btn-primary" onclick="showSSCreateModal()">＋ 新建申报</button> '
     + '<button class="btn btn-outline" onclick="showSSImportModal()">📁 导入Excel</button>'
+    + '<button class="btn btn-info" onclick="generateSSPaymentVoucher()" style="background:#7c3aed">⚡ 生成缴纳凭证</button>'
     + '</div>'
     + '<div class="toolbar-right"><input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px" placeholder="选择期间"></div></div>'
     + '<div id="ss-list-table"></div>'
@@ -58,6 +59,7 @@ function renderSSTable() {
         + '<td>' + escapeHtml(d.note || '-') + '</td>'
         + '<td>' + (d.updated_at ? new Date(d.updated_at).toLocaleString('zh-CN') : '-') + '</td>'
         + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openSSDetail(' + d.id + ')">📋 查看详情</button> '
+        + '<button class="btn btn-sm btn-info" onclick="generateSSAccrualJournal(' + d.id + ')" style="background:#10b981;color:#fff">📝 生成计提凭证</button> '
         + '<button class="btn btn-sm btn-danger" onclick="deleteSSDeclaration(' + d.id + ',\'' + escJs(d.period) + '\')">🗑</button></td></tr>';
     });
   }
@@ -236,6 +238,36 @@ async function doSSImport() {
   } catch (e) {
     handleError(e, '导入社保申报');
     resultEl.innerHTML = '<div style="padding:8px;background:#fef2f2;color:#dc2626;border-radius:4px">❌ 导入失败</div>';
+  }
+}
+
+// ==================== 凭证生成 ====================
+
+async function generateSSPaymentVoucher() {
+  if (!confirm('将根据银行流水智能匹配社保缴纳记录并生成凭证，确定？')) return;
+  try {
+    const result = await api('/api/social-security/generate-payment-journals?company_id=' + currentCompanyId, {
+      method: 'POST'
+    });
+    alert('生成成功！共匹配 ' + (result.generated || 0) + ' 张凭证');
+    // 刷新序时账
+    if (typeof loadJePage === 'function') loadJePage(1);
+  } catch (e) {
+    alert('生成失败：' + e.message);
+  }
+}
+
+async function generateSSAccrualJournal(id) {
+  if (!confirm('确认为此申报表生成社保计提凭证？')) return;
+  try {
+    const result = await api('/api/social-security/declarations/' + id + '/generate-accrual-journal?company_id=' + currentCompanyId, {
+      method: 'POST'
+    });
+    alert('生成成功！共 ' + (result.generated || 0) + ' 张凭证');
+    // 刷新序时账
+    if (typeof loadJePage === 'function') loadJePage(1);
+  } catch (e) {
+    alert('生成失败：' + e.message);
   }
 }
 
