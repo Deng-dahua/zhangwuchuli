@@ -355,17 +355,19 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // ==================== API 工具（多公司版本） ====================
 async function api(method, url, body) {
   // 支持三种调用方式：api(url) / api(url, options) / api(method, url, body)
+  var extraHeaders = {};  // 旧式调用传递的自定义 headers
   if (arguments.length === 1) {
     // api(url) → GET 请求
     body = undefined;
     url = method;
     method = 'GET';
   } else if (arguments.length === 2 && typeof method === 'string' && !['GET','POST','PUT','DELETE','PATCH'].includes(method)) {
-    // 旧式调用 api(url, options)
+    // 旧式调用 api(url, options) — 提取 headers 避免丢失
     let options = url;
     url = method;
     method = (options && options.method) || 'GET';
     body = (options && options.body) || undefined;
+    if (options && options.headers) extraHeaders = options.headers;
   }
   // 强制附加 company_id 参数（/api/companies 自身除外）
   if (url.includes('/api/') && !url.startsWith('/api/companies')) {
@@ -383,10 +385,12 @@ async function api(method, url, body) {
       fetchOptions.body = body;
       // 不设置 Content-Type，让浏览器自动设置（含 boundary）
     } else if (typeof body === 'object') {
-      fetchOptions.headers = { 'Content-Type': 'application/json' };
+      fetchOptions.headers = Object.assign({}, extraHeaders, { 'Content-Type': 'application/json' });
       fetchOptions.body = JSON.stringify(body);
     } else {
       fetchOptions.body = body;
+      // 字符串 body（通常已是 JSON.stringify 结果）：设置 Content-Type
+      fetchOptions.headers = Object.assign({}, extraHeaders, { 'Content-Type': 'application/json' });
     }
   }
   const res = await fetch(url, fetchOptions);
