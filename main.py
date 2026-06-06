@@ -610,9 +610,9 @@ def delete_customer(cust_id: int, company_id: int = Query(...), db: Session = De
 @app.post("/api/customers/auto-create")
 def auto_create_customers(company_id: int = Query(...), db: Session = Depends(get_db)):
     """智能客户建档：
-    1. 主要来源：销项发票购方名称
-    2. 银行流水收款方（排除人员/内部人）也可创建
-    3. 排除人员档案和公司内部人
+    1. 唯一来源：销项发票购方名称
+    2. 只要开具发票模块有信息，就一定是客户
+    3. 排除人员档案和公司内部人（存量清理）
     """
     created = 0
     updated = 0
@@ -658,26 +658,6 @@ def auto_create_customers(company_id: int = Query(...), db: Session = Depends(ge
                 'tax_no': inv.buyer_tax_no.strip() if inv.buyer_tax_no else None,
                 'source': f'销项发票:{inv.invoice_no or inv.id}',
             })
-
-    # 2. 银行流水收款方（借方=收款，即 credit_amount > 0）
-    txs = db.query(BankTransaction).filter(
-        BankTransaction.company_id == company_id,
-        BankTransaction.credit_amount > 0,
-        BankTransaction.counterparty_name.isnot(None)
-    ).all()
-    for tx in txs:
-        name = tx.counterparty_name.strip() if tx.counterparty_name else ""
-        if not name:
-            continue
-        norm = _normalize_customer_name(name)
-        # 排除：人员档案中的人 & 公司内部人 → 不是客户
-        if norm in insider_norms:
-            continue
-        sources.append({
-            'name': name,
-            'tax_no': None,
-            'source': f'银行流水:#{tx.id}',
-        })
 
     # 去重 & 过滤
     seen = {}
