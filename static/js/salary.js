@@ -9,18 +9,28 @@ let currentEditingSalaryId = null;
 // ========== 页面渲染 ==========
 
 function showSalaryPage(container) {
-    const period = getCurrentPeriod();
-    currentSalaryPeriod = period;
-    api('/api/salary/periods').then(periods => {
-        if (periods && periods.length > 0 && !currentSalaryPeriod) {
-            currentSalaryPeriod = periods[0];
+    try {
+        // 安全获取期间
+        try {
+            if (typeof getCurrentPeriod === 'function') {
+                currentSalaryPeriod = getCurrentPeriod();
+            }
+        } catch(e) {}
+        if (!currentSalaryPeriod) currentSalaryPeriod = '';
+
+        // 先渲染页面
+        renderSalaryPage(container);
+
+        // 再加载数据
+        loadSalaryData();
+    } catch(err) {
+        // 任何错误都显示到页面上，方便排查
+        const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
+        if (app) {
+            app.innerHTML = '<div style="padding:40px;text-align:center;color:#f44">工资薪金模块加载失败：' + escapeHtml(err.message || String(err)) + '<br><br>请按F12打开控制台查看详细错误</div>';
+            app.style.display = 'block';
         }
-        renderSalaryPage(container);
-        loadSalaryData();
-    }).catch(() => {
-        renderSalaryPage(container);
-        loadSalaryData();
-    });
+    }
 }
 
 function renderSalaryPage(container) {
