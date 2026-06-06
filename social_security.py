@@ -12,7 +12,8 @@ import re
 from typing import Optional, List
 
 from database import (
-    SocialSecurityDeclaration, SocialSecurityDetail, Company, get_db
+    SocialSecurityDeclaration, SocialSecurityDetail, Company, get_db,
+    _generate_ss_accrual_journals,
 )
 
 router = APIRouter(prefix="/api/social-security", tags=["社保申报"])
@@ -173,7 +174,11 @@ def create_declaration(
             db.add(detail)
 
     db.commit()
-    return {"id": decl.id, "message": "保存成功"}
+
+    # 自动生成社保计提凭证
+    result = _generate_ss_accrual_journals(db, company_id, decl.id)
+
+    return {"id": decl.id, "message": "保存成功", "journal": result}
 
 
 @router.delete("/declarations/{declaration_id}")
@@ -371,10 +376,14 @@ async def import_excel(
 
     db.commit()
 
+    # 自动生成社保计提凭证
+    result = _generate_ss_accrual_journals(db, company_id, decl.id)
+
     return {
         "imported": len(details),
         "total": len(details),
         "declaration_id": decl.id,
         "errors": errors[:10],
-        "message": f"成功导入 {len(details)} 条记录"
+        "message": f"成功导入 {len(details)} 条记录",
+        "journal": result
     }
