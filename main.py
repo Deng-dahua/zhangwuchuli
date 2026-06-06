@@ -37,7 +37,7 @@ from database import (
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
-    _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index
+    _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account
 )
 
 from vat import router as vat_router
@@ -3289,7 +3289,7 @@ def delete_bank_transaction(tx_id: int, company_id: int = Query(...), db: Sessio
 
 @app.post("/api/bank-transactions/{tx_id}/to-journal")
 def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
-    """为单条银行流水生成双分录记账凭证（借贷必相等）"""
+    """为单条银行流水生成双分录记账凭证（使用与批量生成相同的智能分类逻辑）"""
     tx = db.query(BankTransaction).filter(
         BankTransaction.id == tx_id,
         BankTransaction.company_id == company_id
@@ -3300,7 +3300,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     cp = tx.counterparty_name or tx.summary or "银行流水"
     summary_tag = f"银行流水-#{tx_id}-{cp}"
 
-    # P1-8: 去重改用 journal_voucher_no 字段判断，不再依赖摘要文本匹配
+    # 去重：已生成凭证则跳过
     if tx.journal_voucher_no:
         raise HTTPException(400, f"该流水已生成凭证：{tx.journal_voucher_no}")
 
@@ -3313,50 +3313,67 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
     date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
-    def _ensure_account(code, name, category, direction):
-        if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
-            db.add(Account(company_id=company_id, code=code, name=name,
-                           category=category, balance_direction=direction, level=1, parent_code="1"))
-            db.flush()
-    _ensure_account("1002", "银行存款", "资产", "借")
-    _ensure_account("1122", "应收账款", "资产", "借")
-    _ensure_account("2202", "应付账款", "负债", "贷")
-    _ensure_account("1221", "其他应收款", "资产", "借")
-    _ensure_account("2241", "其他应付款", "负债", "贷")
+    # 确保科目存在（复用 _generate_bank_journals 的依赖）
+    _ensure_account(db, company_id, "1002", "银行存款", "资产", "借")
+    _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
+    _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
+    _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
+    _ensure_account(db, company_id, "4001", "实收资本", "权益", "贷")
+    _ensure_account(db, company_id, "410401", "利润分配-应付股利", "权益", "贷")
+    _ensure_account(db, company_id, "221101", "应付职工薪酬-工资", "负债", "贷")
 
     is_debit = tx.debit_amount and tx.debit_amount > 0
     amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-    # 匹配客户档案（标准化名称 + 银行账号两级匹配）
-    matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
+    # 使用与批量生成相同的智能分类逻辑（跨实体匹配：股东/人员/客户/供应商）
+    cp_code, cp_name, match_type = _classify_bank_tx(db, company_id, tx)
 
     if is_debit:
-        # 付款：借 应付账款/其他应收款  贷 银行存款
-        cp_code, cp_name = ("2202", "应付账款") if matched_customer else ("1221", "其他应收款")
-        db.add(JournalEntry(company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                            period=period, voucher_word="记", voucher_no=next_voucher_no,
-                            summary=summary_tag, account_code=cp_code, account_name=cp_name,
-                            debit_amount=amount, credit_amount=0, contact_project=cp, source="手动录入"))
-        db.add(JournalEntry(company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                            period=period, voucher_word="记", voucher_no=next_voucher_no,
-                            summary=summary_tag, account_code="1002", account_name="银行存款",
-                            debit_amount=0, credit_amount=amount, contact_project=cp, source="手动录入"))
+        # 付款：借 对方科目  贷 银行存款
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag,
+            account_code=cp_code, account_name=cp_name,
+            debit_amount=amount, credit_amount=0,
+            contact_project=cp, source="银行流水"
+        ))
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag,
+            account_code="1002", account_name="银行存款",
+            debit_amount=0, credit_amount=amount,
+            contact_project=cp, source="银行流水"
+        ))
     else:
-        # 收款：借 银行存款  贷 应收账款/其他应付款
-        cp_code, cp_name = ("1122", "应收账款") if matched_customer else ("2241", "其他应付款")
-        db.add(JournalEntry(company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                            period=period, voucher_word="记", voucher_no=next_voucher_no,
-                            summary=summary_tag, account_code="1002", account_name="银行存款",
-                            debit_amount=amount, credit_amount=0, contact_project=cp, source="手动录入"))
-        db.add(JournalEntry(company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                            period=period, voucher_word="记", voucher_no=next_voucher_no,
-                            summary=summary_tag, account_code=cp_code, account_name=cp_name,
-                            debit_amount=0, credit_amount=amount, contact_project=cp, source="手动录入"))
+        # 收款：借 银行存款  贷 对方科目
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag,
+            account_code="1002", account_name="银行存款",
+            debit_amount=amount, credit_amount=0,
+            contact_project=cp, source="银行流水"
+        ))
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag,
+            account_code=cp_code, account_name=cp_name,
+            debit_amount=0, credit_amount=amount,
+            contact_project=cp, source="银行流水"
+        ))
 
     voucher_str = f"记-{next_voucher_no}"
     tx.journal_voucher_no = voucher_str
     db.commit()
-    return {"message": f"已生成双分录凭证，凭证号：{voucher_str}", "voucher_no": voucher_str, "period": period}
+    return {"message": f"已生成凭证：{voucher_str}（匹配类型：{match_type}，科目：{cp_name}）", "voucher_no": voucher_str, "period": period}
 
 
 # ==================== 序时账 ====================
