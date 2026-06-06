@@ -37,7 +37,7 @@ from database import (
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
     auto_generate_single_invoice,
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
-    _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx
+    _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index
 )
 
 from vat import router as vat_router
@@ -605,7 +605,129 @@ def delete_customer(cust_id: int, company_id: int = Query(...), db: Session = De
     return {"message": "删除成功"}
 
 
-# ==================== 客户自动建档 ====================
+# ==================== 客户智能建档（新规则 2026-06-06） ====================
+
+@app.post("/api/customers/auto-create")
+def auto_create_customers(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """智能客户建档：
+    1. 主要来源：销项发票购方名称
+    2. 银行流水收款方（排除人员/内部人）也可创建
+    3. 排除人员档案和公司内部人
+    """
+    created = 0
+    updated = 0
+    skipped = 0
+    infos = []
+
+    # 构建实体索引
+    idx = _build_entity_index(db, company_id)
+    existing_cust_map = {}  # norm -> Customer obj
+    for cust in db.query(Customer).filter(Customer.company_id == company_id).all():
+        if cust._fingerprint:
+            existing_cust_map[cust._fingerprint] = cust
+        elif cust.name:
+            existing_cust_map[_normalize_customer_name(cust.name)] = cust
+    insider_norms = idx['insiders'] | idx['shareholders']
+
+    sources = []
+
+    # 1. 销项发票购方名称（主要来源）
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).all()
+    for inv in invoices:
+        name = inv.buyer_name.strip() if inv.buyer_name else ""
+        if name:
+            sources.append({
+                'name': name,
+                'tax_no': inv.buyer_tax_no.strip() if inv.buyer_tax_no else None,
+                'source': f'销项发票:{inv.invoice_no or inv.id}',
+            })
+
+    # 2. 银行流水收款方（借方=收款，即 credit_amount > 0）
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.credit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all()
+    for tx in txs:
+        name = tx.counterparty_name.strip() if tx.counterparty_name else ""
+        if not name:
+            continue
+        norm = _normalize_customer_name(name)
+        # 排除：人员档案中的人 & 公司内部人 → 不是客户
+        if norm in insider_norms:
+            continue
+        sources.append({
+            'name': name,
+            'tax_no': None,
+            'source': f'银行流水:#{tx.id}',
+        })
+
+    # 去重 & 过滤
+    seen = {}
+    for s in sources:
+        norm = _normalize_customer_name(s['name'])
+        # 跳过公司内部人
+        if norm in insider_norms:
+            skipped += 1
+            continue
+        # 跳过已存在的客户
+        if norm in existing_cust_map:
+            skipped += 1
+            # 如果有税号且现有记录没有，更新税号
+            cust = existing_cust_map[norm]
+            if s['tax_no'] and not cust.uscc:
+                cust.uscc = s['tax_no']
+                cust.tax_no = s['tax_no']
+                db.flush()
+                updated += 1
+            continue
+        if norm not in seen:
+            seen[norm] = s
+        elif s['tax_no'] and not seen[norm]['tax_no']:
+            seen[norm] = s
+
+    # 逐个创建
+    for norm, s in seen.items():
+        # 生成编码
+        max_cust = db.query(Customer.code).filter(
+            Customer.company_id == company_id,
+            Customer.code.like('KH%')
+        ).order_by(Customer.code.desc()).first()
+        if max_cust and max_cust[0] and max_cust[0].startswith('KH'):
+            try:
+                num = int(max_cust[0][2:]) + 1
+            except ValueError:
+                num = 1
+        else:
+            num = 1
+        code = f"KH{num:03d}"
+
+        cust = Customer(
+            company_id=company_id,
+            code=code,
+            name=s['name'],
+            tax_no=s['tax_no'] or '',
+            uscc=s['tax_no'] or '',
+            is_active=True,
+            _fingerprint=norm,
+        )
+        db.add(cust)
+        db.flush()
+        created += 1
+        infos.append(f"已创建客户：{s['name']}（来源：{s['source']}）")
+
+    db.commit()
+    return {
+        "message": f"智能建档完成：新建{created}条，跳过{skipped}条",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "infos": infos,
+    }
+
 
 # ==================== 供应商档案 ====================
 
@@ -700,6 +822,130 @@ def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = De
     _renumber_archive(db, company_id, Supplier, 'GYS')
     db.commit()
     return {"message": "删除成功"}
+
+
+# ==================== 供应商智能建档（新规则 2026-06-06） ====================
+
+@app.post("/api/suppliers/auto-create")
+def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """智能供应商建档：
+    1. 取得发票销方 + 银行流水付款方共同确定
+    2. 排除股东（投资款归实收资本，付款归分红）
+    3. 在发两个模块都有记录的为强信号供应商
+    """
+    created = 0
+    updated = 0
+    skipped = 0
+    infos = []
+
+    # 构建实体索引
+    idx = _build_entity_index(db, company_id)
+    shareholder_norms = idx['shareholders']
+
+    # 1. 取得发票销方名称集合
+    pi_names = set()
+    pi_sources = {}  # name -> source
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).all()
+    for inv in invoices:
+        name = inv.seller_name.strip() if inv.seller_name else ""
+        if not name:
+            continue
+        norm = _normalize_customer_name(name)
+        pi_names.add(norm)
+        pi_sources[norm] = {
+            'name': name,
+            'tax_no': inv.seller_tax_no.strip() if inv.seller_tax_no else None,
+            'source': f'进项发票:{inv.invoice_no or inv.id}',
+        }
+
+    # 2. 银行流水付款方（借方=付款，即 debit_amount > 0）
+    bt_names = set()
+    bt_sources = {}
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all()
+    for tx in txs:
+        name = tx.counterparty_name.strip() if tx.counterparty_name else ""
+        if not name:
+            continue
+        norm = _normalize_customer_name(name)
+        # 排除股东（股东付款=分红）
+        if norm in shareholder_norms:
+            continue
+        bt_names.add(norm)
+        if norm not in bt_sources:
+            bt_sources[norm] = {
+                'name': name,
+                'tax_no': None,
+                'source': f'银行流水:#{tx.id}',
+            }
+
+    # 3. 合并：两个来源都有 = 强信号；只有一个 = 弱信号（仍创建）
+    all_names = pi_names | bt_names
+    existing_supp_norms = set(idx['suppliers'].keys())
+
+    for norm in all_names:
+        # 排除股东
+        if norm in shareholder_norms:
+            skipped += 1
+            continue
+        # 排除已存在的供应商
+        if norm in existing_supp_norms:
+            skipped += 1
+            continue
+
+        # 取来源信息
+        s = pi_sources.get(norm) or bt_sources.get(norm)
+        if not s:
+            continue
+
+        source_tag = []
+        if norm in pi_names:
+            source_tag.append('取得发票')
+        if norm in bt_names:
+            source_tag.append('银行流水')
+        full_source = '+'.join(source_tag)
+
+        # 生成编码
+        max_supp = db.query(Supplier.code).filter(
+            Supplier.company_id == company_id,
+            Supplier.code.like('GYS%')
+        ).order_by(Supplier.code.desc()).first()
+        if max_supp and max_supp[0] and max_supp[0].startswith('GYS'):
+            try:
+                num = int(max_supp[0][3:]) + 1
+            except ValueError:
+                num = 1
+        else:
+            num = 1
+        code = f"GYS{num:03d}"
+
+        supp = Supplier(
+            company_id=company_id,
+            code=code,
+            name=s['name'],
+            uscc=s['tax_no'] if s['tax_no'] and s['tax_no'].strip() else None,
+            _fingerprint=norm,
+            is_active=True,
+        )
+        db.add(supp)
+        db.flush()
+        created += 1
+        infos.append(f"已创建供应商：{s['name']}（来源：{full_source}）")
+
+    db.commit()
+    return {
+        "message": f"智能建档完成：新建{created}条，跳过{skipped}条",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "infos": infos,
+    }
 
 
 @app.post("/api/generate-sample-archives")
@@ -4797,8 +5043,10 @@ def classify_bank_transactions(ids: List[int] = Body(...), company_id: int = Que
         BankTransaction.id.in_(ids)
     ).all()
     results = []
+    # 预建跨实体索引
+    entity_index = _build_entity_index(db, company_id)
     for tx in txs:
-        other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx)
+        other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx, entity_index)
         is_debit = tx.debit_amount and tx.debit_amount > 0
         amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
         # 确定借贷方向

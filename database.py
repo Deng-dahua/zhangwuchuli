@@ -1449,6 +1449,102 @@ def _normalize_customer_name(name: str) -> str:
     return name
 
 
+def _build_entity_index(db, company_id):
+    """构建全实体匹配索引，供跨境匹配使用。
+    返回：{personnel: {norm->{name,code}}, shareholders: set(norm), insiders: set(norm),
+           customers: {norm->{name,code}}, suppliers: {norm->{name,code}}}
+    """
+    idx = {
+        'personnel': {},
+        'shareholders': set(),
+        'insiders': set(),
+        'customers': {},
+        'suppliers': {},
+    }
+
+    # --- 人员档案 ---
+    for emp in db.query(Employee).filter(Employee.company_id == company_id).all():
+        if emp.name:
+            norm = _normalize_customer_name(emp.name)
+            idx['personnel'][norm] = {'name': emp.name, 'code': emp.code}
+            idx['insiders'].add(norm)
+
+    # --- 股东 ---
+    for sh in db.query(CompanyShareholder).filter(
+        CompanyShareholder.company_id == company_id
+    ).all():
+        if sh.name:
+            norm = _normalize_customer_name(sh.name)
+            idx['shareholders'].add(norm)
+            idx['insiders'].add(norm)
+
+    # --- 公司内部人（法人/董事/监事/财务负责人） ---
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if company:
+        insiders_list = []
+        if company.legal_representative:
+            insiders_list.append(company.legal_representative)
+        for d in company.directors:
+            if d.name:
+                insiders_list.append(d.name)
+        for s in company.supervisors:
+            if s.name:
+                insiders_list.append(s.name)
+        for fc in company.finance_contacts:
+            if fc.name:
+                insiders_list.append(fc.name)
+        for name in insiders_list:
+            idx['insiders'].add(_normalize_customer_name(name))
+
+    # --- 客户档案（按 _fingerprint 匹配） ---
+    for cust in db.query(Customer).filter(Customer.company_id == company_id).all():
+        if cust._fingerprint:
+            idx['customers'][cust._fingerprint] = {'name': cust.name, 'code': cust.code}
+        elif cust.name:
+            norm = _normalize_customer_name(cust.name)
+            idx['customers'][norm] = {'name': cust.name, 'code': cust.code}
+
+    # --- 供应商档案（按 _fingerprint 匹配） ---
+    for supp in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        if supp._fingerprint:
+            idx['suppliers'][supp._fingerprint] = {'name': supp.name, 'code': supp.code}
+        elif supp.name:
+            norm = _normalize_customer_name(supp.name)
+            idx['suppliers'][norm] = {'name': supp.name, 'code': supp.code}
+
+    return idx
+
+
+def _match_entity(name, entity_index):
+    """跨境匹配：在实体索引中查找名称。
+    返回：(entity_type, entity_name, entity_code)
+    entity_type: personnel | shareholder | insider | customer | supplier | unknown
+    """
+    norm = _normalize_customer_name(name) if name else ""
+    if not norm:
+        return ('unknown', name, None)
+
+    if norm in entity_index['personnel']:
+        info = entity_index['personnel'][norm]
+        return ('personnel', info['name'], info['code'])
+
+    if norm in entity_index['shareholders']:
+        return ('shareholder', name, None)
+
+    if norm in entity_index['insiders']:
+        return ('insider', name, None)
+
+    if norm in entity_index['customers']:
+        info = entity_index['customers'][norm]
+        return ('customer', info['name'], info['code'])
+
+    if norm in entity_index['suppliers']:
+        info = entity_index['suppliers'][norm]
+        return ('supplier', info['name'], info['code'])
+
+    return ('unknown', name, None)
+
+
 def _match_customer(db: Session, company_id: int, counterparty_name: str = None, counterparty_account: str = None):
     """匹配客户档案：先按标准化名称匹配，再按银行账号匹配"""
     if counterparty_name:
@@ -1467,15 +1563,17 @@ def _match_customer(db: Session, company_id: int, counterparty_name: str = None,
     return None
 
 
-def _classify_bank_tx(db, company_id, tx):
-    """智能分类单条银行流水，返回 (other_side_code, other_side_name, bank_side_is_debit)
-    规则优先级：内部转账 > 规则匹配 > 税费识别 > 工资社保识别 > 客户匹配 > 默认往来科目
+def _classify_bank_tx(db, company_id, tx, entity_index=None):
+    """智能分类单条银行流水，返回 (other_side_code, other_side_name, match_type)
+
+    新规则优先级（老邓 2026-06-06）：
+    内部转账 > 规则匹配 > 税费识别 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商/序时账/发票） > 默认往来
     """
     cp = tx.counterparty_name or tx.summary or ""
     full_text = (tx.summary or "") + " " + (tx.counterparty_name or "") + " " + (tx.transaction_remark or "")
     full_text_lower = full_text.lower()
 
-    # 1. 内部转账识别：对方账号匹配本公司已配置的银行账户
+    # 1. 内部转账识别
     if tx.counterparty_account:
         own_accounts = db.query(BankConfig).filter(
             BankConfig.company_id == company_id,
@@ -1488,18 +1586,17 @@ def _classify_bank_tx(db, company_id, tx):
     is_debit = tx.debit_amount and tx.debit_amount > 0
     tx_type = "支出" if is_debit else "收入"
 
-    # 2. 规则匹配：按关键词匹配 BankRule
+    # 2. 规则匹配
     rules = db.query(BankRule).filter(
         BankRule.company_id == company_id,
         BankRule.is_active == 1,
     ).order_by(BankRule.priority.desc(), BankRule.id.asc()).all()
     for rule in rules:
         if rule.keyword in full_text:
-            # 检查规则适用类型
             if rule.transaction_type == "全部" or rule.transaction_type == tx_type:
                 return (rule.account_code, rule.account_name or rule.account_code, "rule")
 
-    # 3. 税费关键词识别
+    # 3. 税费关键词
     tax_keywords = {
         "应交增值税": ("222101", "应交税费-应交增值税"),
         "未交增值税": ("222102", "应交税费-未交增值税"),
@@ -1516,17 +1613,17 @@ def _classify_bank_tx(db, company_id, tx):
         if kw in full_text:
             return (code, name, "tax")
 
-    # 4. 工资薪金识别
+    # 4. 工资薪金
     if any(kw in full_text for kw in ["工资", "薪资", "薪酬", "奖金", "绩效"]):
         return ("221101", "应付职工薪酬-工资", "salary")
 
-    # 5. 社保公积金识别
+    # 5. 社保公积金
     if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
         return ("221102", "应付职工薪酬-社会保险费", "social_security")
     if any(kw in full_text for kw in ["公积金", "住房公积金"]):
         return ("221103", "应付职工薪酬-住房公积金", "housing_fund")
 
-    # 6. 费用类关键词识别（常见费用）
+    # 6. 费用类关键词
     expense_keywords = {
         "房租": ("660201", "管理费用-房租"),
         "租金": ("660201", "管理费用-房租"),
@@ -1546,15 +1643,66 @@ def _classify_bank_tx(db, company_id, tx):
         if kw in full_text:
             return (code, name, "expense")
 
-    # 7. 客户/供应商匹配（原有逻辑）
-    matched_customer = _match_customer(db, company_id, tx.counterparty_name, tx.counterparty_account)
+    # ====== 7. 跨实体智能匹配（新规则核心） ======
+    if entity_index is None:
+        entity_index = _build_entity_index(db, company_id)
 
+    entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp else ('unknown', cp, None)
+
+    # 7a. 股东 → 投资款（收） / 分红（付）
+    if entity_type == 'shareholder':
+        if is_debit:
+            return ("410401", "利润分配-应付股利", "dividend")
+        else:
+            return ("4001", "实收资本", "capital")
+
+    # 7b. 人员/内部人 → 其他应收/其他应付
+    if entity_type in ('personnel', 'insider'):
+        if is_debit:
+            return ("1221", "其他应收款", "personnel_payment")
+        else:
+            return ("2241", "其他应付款", "personnel_receipt")
+
+    # 7c. 客户 → 应收账款（含退款）
+    if entity_type == 'customer':
+        return ("1122", "应收账款", "customer")
+
+    # 7d. 供应商 → 应付账款（含退款）
+    if entity_type == 'supplier':
+        return ("2202", "应付账款", "supplier")
+
+    # 7e. 未知实体 → 查序时账历史 + 发票模块辅助判断
+    if cp and cp.strip():
+        # 7e1. 查序时账历史：该往来项目最近使用的科目
+        past_entry = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project == cp,
+            JournalEntry.account_code.notin_(["1002", "1001"]),
+        ).order_by(JournalEntry.entry_date.desc()).first()
+        if past_entry:
+            return (past_entry.account_code, past_entry.account_name or past_entry.account_code, "journal_history")
+
+        # 7e2. 查销项发票购方（可能是新客户）
+        si = db.query(SalesInvoice).filter(
+            SalesInvoice.company_id == company_id,
+            SalesInvoice.buyer_name == cp
+        ).first()
+        if si:
+            return ("1122", "应收账款", "sales_invoice")
+
+        # 7e3. 查进项发票销方（可能是新供应商）
+        pi = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.seller_name == cp
+        ).first()
+        if pi:
+            return ("2202", "应付账款", "purchase_invoice")
+
+    # 8. 默认兜底（未能匹配）
     if is_debit:
-        # 付款：对方科目在借方
-        return ("2202", "应付账款", "vendor") if matched_customer else ("1221", "其他应收款", "other")
+        return ("1221", "其他应收款", "other")
     else:
-        # 收款：对方科目在贷方
-        return ("1122", "应收账款", "customer") if matched_customer else ("2241", "其他应付款", "other")
+        return ("2241", "其他应付款", "other")
 
 
 def _ensure_account(db, company_id, code, name, category, direction):
@@ -1622,6 +1770,11 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     _ensure_account(db, company_id, "660210", "管理费用-咨询费", "损益", "借")
     _ensure_account(db, company_id, "660211", "管理费用-培训费", "损益", "借")
     _ensure_account(db, company_id, "660212", "管理费用-维修费", "损益", "借")
+    _ensure_account(db, company_id, "4001", "实收资本", "权益", "贷")
+    _ensure_account(db, company_id, "410401", "利润分配-应付股利", "权益", "贷")
+
+    # 预建跨实体索引（一次查询，全循环复用）
+    entity_index = _build_entity_index(db, company_id)
 
     for tx in txs:
         try:
@@ -1639,8 +1792,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             is_debit = tx.debit_amount and tx.debit_amount > 0
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-            # 智能分类
-            other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx)
+            # 智能分类（传入预建索引）
+            other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx, entity_index)
 
             # 确保对方科目存在
             acct = db.query(Account).filter(Account.company_id == company_id, Account.code == other_code).first()
