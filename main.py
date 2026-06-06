@@ -3973,7 +3973,7 @@ def _build_pl(company_id, from_period, to_period, db):
     rd_exp = _pl_net(b, "6604", False)
     fin_exp = _pl_net(b, "6603", False)
     fin_inc = _pl_net(b, "660301")  # 利息收入
-    fin_cost = _pl_net(b, "660302", False)  # 利息费用
+    fin_cost = _pl_net(b, "660301", False)  # 利息费用
     inv_inc = _pl_net(b, "6111")
     credit_loss = _pl_net(b, "6701", False)
     asset_impair = _pl_net(b, "6702", False)

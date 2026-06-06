@@ -1050,27 +1050,27 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"  [X] 221001001 销项税额 迁移失败: {e}")
 
-    # ── 12.5. 已有公司补充 待认证进项税额 科目（222101） ──
+    # ── 12.5. 已有公司补充 待认证进项税额 科目（221001003） ──
     if "accounts" in inspector.get_table_names():
         companies = db.query(Company).order_by(Company.id).all()
         for comp in companies:
             existing = db.query(Account).filter(
                 Account.company_id == comp.id,
-                Account.code == "222101"
+                Account.code == "221001003"
             ).first()
             if not existing:
                 try:
                     db.add(Account(
                         company_id=comp.id,
-                        code="222101", name="待认证进项税额",
+                        code="221001003", name="待认证进项税额",
                         category="负债", balance_direction="贷",
-                        level=2, parent_code="2210"
+                        level=3, parent_code="221001"
                     ))
                     db.commit()
-                    print(f"  [OK] 为 {comp.name} 添加科目 222101 待认证进项税额")
+                    print(f"  [OK] 为 {comp.name} 添加科目 221001003 待认证进项税额")
                 except Exception as e:
                     db.rollback()
-                    print(f"  [X] 222101 待认证进项税额 迁移失败: {e}")
+                    print(f"  [X] 221001003 待认证进项税额 迁移失败: {e}")
 
 
     # ── 12.7. 为档案表补充 updated_at 列 ──
@@ -1352,7 +1352,7 @@ def auto_generate_single_invoice(db, inv):
 
 def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     """为一个期间的进项抵扣汇总生成凭证（每月一笔认证汇总凭证）
-    借：221001002 进项税额 = 贷：222101 待认证进项税额
+    借：221001002 进项税额 = 贷：221001003 待认证进项税额
     
     如果 total_tax 为 None，自动从数据库汇总（优先用 deduction_period，为空则用 invoice_date 年月）
     """
@@ -1408,11 +1408,11 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
         ))
         db.flush()
 
-    # 确保 222101 待认证进项税额 科目存在
-    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "222101").first():
+    # 确保 221001003 待认证进项税额 科目存在
+    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "221001003").first():
         db.add(Account(
-            company_id=company_id, code="222101", name="待认证进项税额",
-            category="负债", balance_direction="贷", level=2, parent_code="2210",
+            company_id=company_id, code="221001003", name="待认证进项税额",
+            category="负债", balance_direction="贷", level=3, parent_code="221001",
         ))
         db.flush()
 
@@ -1427,7 +1427,7 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
 
     summary = f"{period}月进项认证汇总"
     tax_name = get_full_name("221001002")
-    pending_name = get_full_name("222101")
+    pending_name = get_full_name("221001003")
 
     entries = [
         JournalEntry(
@@ -1440,7 +1440,7 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
         JournalEntry(
             company_id=company_id, entry_date=entry_date,
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary, account_code="222101", account_name=pending_name,
+            summary=summary, account_code="221001003", account_name=pending_name,
             debit_amount=0, credit_amount=total_tax,
             contact_project="", source="进项抵扣",
         ),
@@ -1678,16 +1678,16 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
 
     # 3. 税费关键词
     tax_keywords = {
-        "应交增值税": ("222101", "应交税费-应交增值税"),
-        "未交增值税": ("222102", "应交税费-未交增值税"),
-        "增值税": ("222101", "应交税费-应交增值税"),
-        "城建税": ("222103", "应交税费-城市维护建设税"),
-        "城市维护建设税": ("222103", "应交税费-城市维护建设税"),
-        "教育费附加": ("222104", "应交税费-教育费附加"),
-        "地方教育附加": ("222105", "应交税费-地方教育附加"),
-        "企业所得税": ("222106", "应交税费-企业所得税"),
-        "个人所得税": ("222107", "应交税费-应交个人所得税"),
-        "印花税": ("222108", "应交税费-印花税"),
+        "应交增值税": ("221001003", "待认证进项税额"),
+        "未交增值税": ("221004", "未交增值税"),
+        "增值税": ("221001003", "待认证进项税额"),
+        "城建税": ("221005", "应交城市维护建设税"),
+        "城市维护建设税": ("221005", "应交城市维护建设税"),
+        "教育费附加": ("221006", "应交教育费附加"),
+        "地方教育附加": ("221007", "应交地方教育附加"),
+        "企业所得税": ("221002", "应交企业所得税"),
+        "个人所得税": ("221003", "应交个人所得税"),
+        "印花税": ("221008", "应交印花税"),
     }
     for kw, (code, name) in tax_keywords.items():
         if kw in full_text:
@@ -1712,25 +1712,25 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
 
     # 5. 社保公积金
     if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
-        return ("221102", "应付职工薪酬-社会保险费", "social_security")
+        return ("221102", "社会保险费", "social_security")
     if any(kw in full_text for kw in ["公积金", "住房公积金"]):
-        return ("221103", "应付职工薪酬-住房公积金", "housing_fund")
+        return ("221103", "住房公积金", "housing_fund")
 
     # 6. 费用类关键词
     expense_keywords = {
-        "房租": ("660201", "管理费用-房租"),
-        "租金": ("660201", "管理费用-房租"),
-        "水电": ("660202", "管理费用-水电费"),
-        "办公": ("660203", "管理费用-办公费"),
-        "差旅": ("660204", "管理费用-差旅费"),
-        "招待": ("660205", "管理费用-业务招待费"),
-        "交通": ("660206", "管理费用-交通费"),
-        "通讯": ("660207", "管理费用-通讯费"),
-        "折旧": ("660208", "管理费用-折旧费"),
-        "摊销": ("660209", "管理费用-摊销费"),
-        "咨询": ("660210", "管理费用-咨询费"),
-        "培训": ("660211", "管理费用-培训费"),
-        "维修": ("660212", "管理费用-维修费"),
+        "房租": ("660214", "租赁费"),
+        "租金": ("660214", "租赁费"),
+        "水电": ("660215", "水电费"),
+        "办公": ("660201", "办公费"),
+        "差旅": ("660202", "差旅费"),
+        "招待": ("660216", "业务招待费"),
+        "交通": ("660206", "交通费"),
+        "通讯": ("660207", "通讯费"),
+        "折旧": ("660203", "折旧费"),
+        "摊销": ("660209", "摊销费"),
+        "咨询": ("660210", "咨询费"),
+        "培训": ("660211", "培训费"),
+        "维修": ("660212", "维修费"),
     }
     for kw, (code, name) in expense_keywords.items():
         if kw in full_text:
@@ -1801,14 +1801,16 @@ def _ensure_account(db, company_id, code, name, category, direction):
         # 确定 parent_code
         parent_map = {
             "2211": "2211", "221101": "2211", "221102": "2211", "221103": "2211",
-            "2221": "2221", "222101": "2221", "222102": "2221", "222103": "2221",
-            "222104": "2221", "222105": "2221", "222106": "2221", "222107": "2221", "222108": "2221",
+            "2221": "2221", "222101": "2221",
+            "2210": "2210", "221001": "2210", "221001001": "221001", "221001002": "221001", "221001003": "221001",
+            "221002": "2210", "221003": "2210", "221004": "2210", "221005": "2210",
+            "221006": "2210", "221007": "2210", "221008": "2210",
             "6602": "6602", "660201": "6602", "660202": "6602", "660203": "6602",
             "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
-            "660208": "6602", "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
-            "660213": "6602",
+            "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
+            "660213": "6602", "660214": "6602", "660215": "6602", "660216": "6602",
             "6603": "6603", "660301": "6603",
-            "2241": "2241", "224102": "2241",
+            "2241": "2241",
         }
         parent = parent_map.get(code, "1")
         db.add(Account(
@@ -1836,39 +1838,49 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
     _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
     _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
-    _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
+    _ensure_account(db, company_id, "2241", "递延收益", "负债", "贷")
     _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
-    _ensure_account(db, company_id, "221101", "应付职工薪酬-工资", "负债", "贷")
-    _ensure_account(db, company_id, "221102", "应付职工薪酬-社会保险费", "负债", "贷")
-    _ensure_account(db, company_id, "221103", "应付职工薪酬-住房公积金", "负债", "贷")
-    _ensure_account(db, company_id, "2221", "应交税费", "负债", "贷")
-    _ensure_account(db, company_id, "222101", "应交税费-应交增值税", "负债", "贷")
-    _ensure_account(db, company_id, "222102", "应交税费-未交增值税", "负债", "贷")
-    _ensure_account(db, company_id, "222103", "应交税费-城市维护建设税", "负债", "贷")
-    _ensure_account(db, company_id, "222104", "应交税费-教育费附加", "负债", "贷")
-    _ensure_account(db, company_id, "222105", "应交税费-地方教育附加", "负债", "贷")
-    _ensure_account(db, company_id, "222106", "应交税费-企业所得税", "负债", "贷")
-    _ensure_account(db, company_id, "222107", "应交税费-应交个人所得税", "负债", "贷")
-    _ensure_account(db, company_id, "222108", "应交税费-印花税", "负债", "贷")
+    _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
+    _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "221103", "住房公积金", "负债", "贷")
+    # 应交税费 体系
+    _ensure_account(db, company_id, "2210", "应交税费", "负债", "贷")
+    _ensure_account(db, company_id, "221001", "应交增值税", "负债", "贷")
+    _ensure_account(db, company_id, "221001001", "销项税额", "负债", "贷")
+    _ensure_account(db, company_id, "221001002", "进项税额", "负债", "借")
+    _ensure_account(db, company_id, "221001003", "待认证进项税额", "负债", "贷")
+    _ensure_account(db, company_id, "221002", "应交企业所得税", "负债", "贷")
+    _ensure_account(db, company_id, "221003", "应交个人所得税", "负债", "贷")
+    _ensure_account(db, company_id, "221004", "未交增值税", "负债", "贷")
+    _ensure_account(db, company_id, "221005", "应交城市维护建设税", "负债", "贷")
+    _ensure_account(db, company_id, "221006", "应交教育费附加", "负债", "贷")
+    _ensure_account(db, company_id, "221007", "应交地方教育附加", "负债", "贷")
+    _ensure_account(db, company_id, "221008", "应交印花税", "负债", "贷")
+    # 其他应付款
+    _ensure_account(db, company_id, "2221", "其他应付款", "负债", "贷")
+    _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
+    # 管理费用
     _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    _ensure_account(db, company_id, "660201", "办公费", "损益", "借")
+    _ensure_account(db, company_id, "660202", "差旅费", "损益", "借")
+    _ensure_account(db, company_id, "660203", "折旧费", "损益", "借")
+    _ensure_account(db, company_id, "660204", "工资", "损益", "借")
+    _ensure_account(db, company_id, "660205", "社保费", "损益", "借")
+    _ensure_account(db, company_id, "660206", "交通费", "损益", "借")
+    _ensure_account(db, company_id, "660207", "通讯费", "损益", "借")
+    _ensure_account(db, company_id, "660209", "摊销费", "损益", "借")
+    _ensure_account(db, company_id, "660210", "咨询费", "损益", "借")
+    _ensure_account(db, company_id, "660211", "培训费", "损益", "借")
+    _ensure_account(db, company_id, "660212", "维修费", "损益", "借")
+    _ensure_account(db, company_id, "660213", "社会保险费", "损益", "借")
+    _ensure_account(db, company_id, "660214", "租赁费", "损益", "借")
+    _ensure_account(db, company_id, "660215", "水电费", "损益", "借")
+    _ensure_account(db, company_id, "660216", "业务招待费", "损益", "借")
+    # 财务费用
     _ensure_account(db, company_id, "6603", "财务费用", "损益", "借")
-    _ensure_account(db, company_id, "660301", "财务费用-手续费", "损益", "借")
-    _ensure_account(db, company_id, "660201", "管理费用-房租", "损益", "借")
-    _ensure_account(db, company_id, "660202", "管理费用-水电费", "损益", "借")
-    _ensure_account(db, company_id, "660203", "管理费用-办公费", "损益", "借")
-    _ensure_account(db, company_id, "660204", "管理费用-差旅费", "损益", "借")
-    _ensure_account(db, company_id, "660205", "管理费用-业务招待费", "损益", "借")
-    _ensure_account(db, company_id, "660206", "管理费用-交通费", "损益", "借")
-    _ensure_account(db, company_id, "660207", "管理费用-通讯费", "损益", "借")
-    _ensure_account(db, company_id, "660208", "管理费用-折旧费", "损益", "借")
-    _ensure_account(db, company_id, "660209", "管理费用-摊销费", "损益", "借")
-    _ensure_account(db, company_id, "660210", "管理费用-咨询费", "损益", "借")
-    _ensure_account(db, company_id, "660211", "管理费用-培训费", "损益", "借")
-    _ensure_account(db, company_id, "660212", "管理费用-维修费", "损益", "借")
-    _ensure_account(db, company_id, "660213", "管理费用-社会保险费", "损益", "借")
-    _ensure_account(db, company_id, "224102", "其他应付款-代扣社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "660301", "手续费", "损益", "借")
     _ensure_account(db, company_id, "4001", "实收资本", "权益", "贷")
-    _ensure_account(db, company_id, "410401", "利润分配-应付股利", "权益", "贷")
+    _ensure_account(db, company_id, "410401", "应付股利", "权益", "贷")
 
     # 预建跨实体索引（一次查询，全循环复用）
     entity_index = _build_entity_index(db, company_id)
@@ -1982,9 +1994,9 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
     total_personal = sum(d.personal_amount or 0 for d in details)
 
     # 确保科目
-    _ensure_account(db, company_id, "660213", "管理费用-社会保险费", "损益", "借")
-    _ensure_account(db, company_id, "221102", "应付职工薪酬-社会保险费", "负债", "贷")
-    _ensure_account(db, company_id, "224102", "其他应付款-代扣社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "660213", "社会保险费", "损益", "借")
+    _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
 
     period = decl.period
     summary_tag = f"社保计提-{period}"
@@ -2023,14 +2035,14 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
     entry1 = JournalEntry(
         company_id=company_id, entry_date=entry_date,
         period=period, voucher_word="记", voucher_no=next_voucher_no,
-        summary=summary_tag, account_code="660213", account_name="管理费用-社会保险费",
+        summary=summary_tag, account_code="660213", account_name="社会保险费",
         debit_amount=round(total_company, 2), credit_amount=0,
         source="社保申报-计提",
     )
     entry2 = JournalEntry(
         company_id=company_id, entry_date=entry_date,
         period=period, voucher_word="记", voucher_no=next_voucher_no,
-        summary=summary_tag, account_code="221102", account_name="应付职工薪酬-社会保险费",
+        summary=summary_tag, account_code="221102", account_name="社会保险费",
         debit_amount=0, credit_amount=round(total_company, 2),
         source="社保申报-计提",
     )
@@ -2157,7 +2169,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag + "(缴纳社保-代扣个人)",
-                account_code="224102", account_name="其他应付款-代扣社会保险费",
+                account_code="222101", account_name="代扣社会保险费",
                 debit_amount=round(total_personal, 2), credit_amount=0,
                 source="社保申报-缴纳",
             ))
@@ -2336,12 +2348,19 @@ ACCOUNTS_TEMPLATE = [
     ("221001", "应交增值税", "负债", "贷", 2, "2210"),
     ("221001001", "销项税额", "负债", "贷", 3, "221001"),
     ("221001002", "进项税额", "负债", "借", 3, "221001"),
-    ("222101", "待认证进项税额", "负债", "贷", 2, "2210"),
+    ("221001003", "待认证进项税额", "负债", "贷", 3, "221001"),
     ("221002", "应交企业所得税", "负债", "贷", 2, "2210"),
     ("221003", "应交个人所得税", "负债", "贷", 2, "2210"),
+    ("221004", "未交增值税", "负债", "贷", 2, "2210"),
+    ("221005", "应交城市维护建设税", "负债", "贷", 2, "2210"),
+    ("221006", "应交教育费附加", "负债", "贷", 2, "2210"),
+    ("221007", "应交地方教育附加", "负债", "贷", 2, "2210"),
+    ("221008", "应交印花税", "负债", "贷", 2, "2210"),
     ("2211", "应付职工薪酬", "负债", "贷", 1),
     ("221101", "工资", "负债", "贷", 2, "2211"),
     ("221102", "社会保险费", "负债", "贷", 2, "2211"),
+    ("221103", "住房公积金", "负债", "贷", 2, "2211"),
+    ("222101", "代扣社会保险费", "负债", "贷", 2, "2221"),
     ("4001", "实收资本", "权益", "贷", 1),
     ("4002", "资本公积", "权益", "贷", 1),
     ("4101", "盈余公积", "权益", "贷", 1),
@@ -2366,9 +2385,21 @@ ACCOUNTS_TEMPLATE = [
     ("660203", "折旧费", "费用", "借", 2, "6602"),
     ("660204", "工资", "费用", "借", 2, "6602"),
     ("660205", "社保费", "费用", "借", 2, "6602"),
+    ("660206", "交通费", "费用", "借", 2, "6602"),
+    ("660207", "通讯费", "费用", "借", 2, "6602"),
+    ("660209", "摊销费", "费用", "借", 2, "6602"),
+    ("660210", "咨询费", "费用", "借", 2, "6602"),
+    ("660211", "培训费", "费用", "借", 2, "6602"),
+    ("660212", "维修费", "费用", "借", 2, "6602"),
+    ("660213", "社会保险费", "费用", "借", 2, "6602"),
+    ("660214", "租赁费", "费用", "借", 2, "6602"),
+    ("660215", "水电费", "费用", "借", 2, "6602"),
+    ("660216", "业务招待费", "费用", "借", 2, "6602"),
     ("6603", "财务费用", "费用", "借", 1),
-    ("660301", "利息支出", "费用", "借", 2, "6603"),
-    ("660302", "手续费", "费用", "借", 2, "6603"),
+    ("660301", "手续费", "费用", "借", 2, "6603"),
+    ("660214", "租赁费", "费用", "借", 2, "6602"),
+    ("660215", "水电费", "费用", "借", 2, "6602"),
+    ("660216", "业务招待费", "费用", "借", 2, "6602"),
     ("6711", "营业外支出", "费用", "借", 1),
     ("6801", "所得税费用", "费用", "借", 1),
 ]
