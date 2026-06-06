@@ -432,6 +432,7 @@ async function renderCustomers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
+          <button class="btn btn-secondary btn-sm" onclick="autoCreateCustomers()">📥 自动建档</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">🗑 批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -553,6 +554,7 @@ async function renderSuppliers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
+          <button class="btn btn-secondary btn-sm" onclick="autoCreateSuppliers()">📥 自动建档</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">🗑 批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -662,4 +664,30 @@ async function deleteSupp(id) {
     renderSuppliers();
   } catch (e) { toast(e.message, 'error'); }
 }
+
+// ==================== 自动建档 ====================
+
+async function autoCreateCustomers() {
+  if (!confirm('将从销项发票购方名称、银行流水收款方户名中自动提取客户信息，并创建客户档案。\n\n确认执行？')) return;
+  try {
+    const res = await api('/api/customers/auto-create', { method: 'POST' });
+    toast(res.message, 'success');
+    if (res.infos && res.infos.length > 0) {
+      console.log('自动建档详情：', res.infos);
+    }
+    renderCustomers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function autoCreateSuppliers() {
+  if (!confirm('将从进项发票销方名称、银行流水付款方户名中自动提取供应商信息，并创建供应商档案。\n\n确认执行？')) return;
+  try {
+    const res = await api('/api/suppliers/auto-create', { method: 'POST' });
+    toast(res.message, 'success');
+    if (res.infos && res.infos.length > 0) {
+      console.log('自动建档详情：', res.infos);
+    }
+    renderSuppliers();
+  } catch (e) { toast(e.message, 'error'); }
+  }
 

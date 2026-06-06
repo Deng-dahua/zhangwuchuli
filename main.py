@@ -31,7 +31,7 @@ from database import (
     Contract, ContractPayment,
     Payment,
     SalesInvoice, PurchaseInvoice,
-    BankConfig, BankTransaction,
+    BankConfig, BankTransaction, BankRule,
     InputVATDeduction, ColumnTemplate, JournalEntry,
     SalaryRecord, VATDeclaration,
     CompanyShareholder, CompanyDirector, CompanySupervisor, CompanyFinanceContact,
@@ -605,6 +605,127 @@ def delete_customer(cust_id: int, company_id: int = Query(...), db: Session = De
     return {"message": "删除成功"}
 
 
+# ==================== 客户自动建档 ====================
+
+@app.post("/api/customers/auto-create")
+def auto_create_customers(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """从销项发票购方名称、银行流水收款方户名自动创建客户档案"""
+    created = 0
+    updated = 0
+    skipped = 0
+    infos = []
+
+    # 1. 从销项发票提取购方名称
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).all()
+    sources = []
+    for inv in invoices:
+        if inv.buyer_name and inv.buyer_name.strip():
+            sources.append({
+                'name': inv.buyer_name.strip(),
+                'tax_no': inv.buyer_tax_no.strip() if inv.buyer_tax_no else None,
+                'source': f'销项发票:{inv.invoice_no or inv.id}',
+            })
+
+    # 2. 从银行流水提取对方户名（收款类：credit_amount > 0）
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.credit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all()
+    for tx in txs:
+        if tx.counterparty_name and tx.counterparty_name.strip():
+            sources.append({
+                'name': tx.counterparty_name.strip(),
+                'tax_no': None,
+                'source': f'银行流水:#{tx.id}',
+            })
+
+    # 去重：按标准化名称
+    seen = {}
+    for s in sources:
+        norm = _normalize_customer_name(s['name'])
+        if norm not in seen:
+            seen[norm] = s
+        elif s['tax_no'] and not seen[norm]['tax_no']:
+            seen[norm] = s
+
+    # 3. 逐个匹配并创建/更新
+    for norm, s in seen.items():
+        # 先按税号匹配
+        if s['tax_no']:
+            existing = db.query(Customer).filter(
+                Customer.company_id == company_id,
+                Customer.uscc == s['tax_no']
+            ).first()
+            if existing:
+                if existing.name != s['name']:
+                    existing.name = s['name']
+                    db.flush()
+                    updated += 1
+                skipped += 1
+                continue
+
+        # 按标准化名称匹配
+        existing = db.query(Customer).filter(
+            Customer.company_id == company_id,
+            Customer._fingerprint == norm
+        ).first()
+        if not existing:
+            # 也按 name 精确匹配（兼容旧数据）
+            existing = db.query(Customer).filter(
+                Customer.company_id == company_id,
+                Customer.name == s['name']
+            ).first()
+
+        if existing:
+            if s['tax_no'] and not existing.uscc:
+                existing.uscc = s['tax_no']
+                db.flush()
+                updated += 1
+            skipped += 1
+            continue
+
+        # 创建新客户
+        max_cust = db.query(Customer.code).filter(
+            Customer.company_id == company_id,
+            Customer.code.like('KH%')
+        ).order_by(Customer.code.desc()).first()
+        if max_cust and max_cust[0] and max_cust[0].startswith('KH'):
+            try:
+                num = int(max_cust[0][2:]) + 1
+            except ValueError:
+                num = 1
+        else:
+            num = 1
+        code = f"KH{num:03d}"
+
+        cust = Customer(
+            company_id=company_id,
+            code=code,
+            name=s['name'],
+            tax_no=s['tax_no'] or '',
+            uscc=s['tax_no'] or '',
+            is_active=True,
+            _fingerprint=norm,
+        )
+        db.add(cust)
+        db.flush()
+        created += 1
+        infos.append(f"已创建客户：{s['name']}（来源：{s['source']}）")
+
+    db.commit()
+    return {
+        "message": f"自动建档完成：新建{created}条，更新{updated}条，跳过{skipped}条",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "infos": infos,
+    }
+
+
 # ==================== 供应商档案 ====================
 
 @app.get("/api/suppliers")
@@ -700,7 +821,128 @@ def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = De
     return {"message": "删除成功"}
 
 
-# ==================== 样本数据生成 ====================
+# ==================== 供应商自动建档 ====================
+
+@app.post("/api/suppliers/auto-create")
+def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """从进项发票销方名称、银行流水付款方户名自动创建供应商档案"""
+    created = 0
+    updated = 0
+    skipped = 0
+    infos = []
+
+    # 1. 从进项发票提取销方名称
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).all()
+    sources = []
+    for inv in invoices:
+        if inv.seller_name and inv.seller_name.strip():
+            sources.append({
+                'name': inv.seller_name.strip(),
+                'tax_no': inv.seller_tax_no.strip() if inv.seller_tax_no else None,
+                'source': f'进项发票:{inv.invoice_no or inv.id}',
+            })
+
+    # 2. 从银行流水提取对方户名（付款类：debit_amount > 0）
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all()
+    for tx in txs:
+        if tx.counterparty_name and tx.counterparty_name.strip():
+            sources.append({
+                'name': tx.counterparty_name.strip(),
+                'tax_no': None,  # 银行流水一般没有税号
+                'source': f'银行流水:#{tx.id}',
+            })
+
+    # 去重：按标准化名称
+    seen = {}
+    for s in sources:
+        norm = _normalize_customer_name(s['name'])
+        if norm not in seen:
+            seen[norm] = s
+        elif s['tax_no'] and not seen[norm]['tax_no']:
+            # 如果有税号而已存在的没有，替换
+            seen[norm] = s
+
+    # 3. 逐个匹配并创建/更新
+    for norm, s in seen.items():
+        # 先按税号匹配
+        if s['tax_no']:
+            existing = db.query(Supplier).filter(
+                Supplier.company_id == company_id,
+                Supplier.uscc == s['tax_no']
+            ).first()
+            if existing:
+                # 更新名称（如果不同）
+                if existing.name != s['name']:
+                    existing.name = s['name']
+                    db.flush()
+                    updated += 1
+                skipped += 1
+                continue
+
+        # 按标准化名称匹配
+        existing = db.query(Supplier).filter(
+            Supplier.company_id == company_id,
+            Supplier._fingerprint == norm
+        ).first()
+        if not existing:
+            # 也按 name 精确匹配（兼容旧数据）
+            existing = db.query(Supplier).filter(
+                Supplier.company_id == company_id,
+                Supplier.name == s['name']
+            ).first()
+
+        if existing:
+            # 如果有税号且现有记录没有，更新税号
+            if s['tax_no'] and not existing.uscc:
+                existing.uscc = s['tax_no']
+                db.flush()
+                updated += 1
+            skipped += 1
+            continue
+
+        # 创建新供应商
+        # 生成编码
+        max_supp = db.query(Supplier.code).filter(
+            Supplier.company_id == company_id,
+            Supplier.code.like('GYS%')
+        ).order_by(Supplier.code.desc()).first()
+        if max_supp and max_supp[0] and max_supp[0].startswith('GYS'):
+            try:
+                num = int(max_supp[0][3:]) + 1
+            except ValueError:
+                num = 1
+        else:
+            num = 1
+        code = f"GYS{num:03d}"
+
+        supp = Supplier(
+            company_id=company_id,
+            code=code,
+            name=s['name'],
+            uscc=s['tax_no'] or '',
+            _fingerprint=norm,
+            is_active=True,
+        )
+        db.add(supp)
+        db.flush()
+        created += 1
+        infos.append(f"已创建供应商：{s['name']}（来源：{s['source']}）")
+
+    db.commit()
+    return {
+        "message": f"自动建档完成：新建{created}条，更新{updated}条，跳过{skipped}条",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "infos": infos,
+    }
 
 @app.post("/api/generate-sample-archives")
 def generate_sample_archives(company_id: int = Query(...), db: Session = Depends(get_db)):
