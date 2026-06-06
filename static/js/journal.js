@@ -1,6 +1,12 @@
 // ==================== 序时账 ====================
 let _jeData = null;
 
+// 6个往来科目：应收账款/应付账款/其他应收款/其他应付款/预收账款/预付账款
+function isContactAccount(code) {
+  if (!code) return false;
+  return ['1122','2202','1221','2241','2203','1123'].some(function(c) { return code.startsWith(c); });
+}
+
 async function renderJournal(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
@@ -59,7 +65,7 @@ function renderJeTable(data) {
 
   let html = '<table><thead><tr>';
   html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
-  html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
+  html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
   html += '</tr></thead><tbody>';
 
   // 按凭证号分组
@@ -77,13 +83,15 @@ function renderJeTable(data) {
   groups.forEach(g => {
     const allIds = g.entries.map(e => e.id).join(',');
     g.entries.forEach((r, idx) => {
+      var showContact = isContactAccount(r.account_code);
       html += '<tr>';
       html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
       html += '<td>' + r.period + '</td>';
       html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
+      html += '<td style="font-family:monospace;font-size:12px">' + (r.account_code || '-') + '</td>';
       html += '<td>' + (r.account_name || '-') + '</td>';
-      html += '<td>' + (r.contact_project || '-') + '</td>';
+      html += '<td>' + (showContact ? (r.contact_project || '-') : '-') + '</td>';
       html += '<td>' + (r.spec_model || '-') + '</td>';
       html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
       html += '<td>' + (r.unit || '-') + '</td>';
@@ -467,15 +475,17 @@ function buildJePeriodBar() {
       var delta = parseInt(this.getAttribute('data-delta'));
       if (type === 'year') stepJeYear(side, delta);
       else stepJeMonth(side, delta);
+      _enforceJePeriodOrder(side);
     });
   });
 
-  // 月份下拉变化时触发
-  bar.querySelectorAll('.period-selector-month').forEach(function(sel) {
-    sel.addEventListener('change', onJePeriodChange);
-  });
-  bar.querySelectorAll('.period-selector-year').forEach(function(sel) {
-    sel.addEventListener('change', onJePeriodChange);
+  // 下拉变化时触发
+  bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
+      _enforceJePeriodOrder(side);
+      onJePeriodChange();
+    });
   });
 
   // 清除按钮
@@ -544,4 +554,23 @@ function clearJePeriod() {
   document.getElementById('je-to-y').value = '';
   document.getElementById('je-to-m').value = '';
   if (_jeData) renderJeTable(_jeData);
+}
+
+function _enforceJePeriodOrder(changedSide) {
+  var fy = document.getElementById('je-from-y')?.value || '';
+  var fm = document.getElementById('je-from-m')?.value || '';
+  var ty = document.getElementById('je-to-y')?.value || '';
+  var tm = document.getElementById('je-to-m')?.value || '';
+  if (!fy || !fm || !ty || !tm) return;
+  var from = fy + '-' + fm;
+  var to = ty + '-' + tm;
+  if (from > to) {
+    if (changedSide === 'from') {
+      document.getElementById('je-to-y').value = fy;
+      document.getElementById('je-to-m').value = fm;
+    } else {
+      document.getElementById('je-from-y').value = ty;
+      document.getElementById('je-from-m').value = tm;
+    }
+  }
 }

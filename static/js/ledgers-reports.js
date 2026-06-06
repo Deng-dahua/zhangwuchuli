@@ -247,6 +247,17 @@ function _buildStandardPeriodBar(prefix, options) {
       var delta = parseInt(this.getAttribute('data-delta'));
       if (type === 'year') _stepStandardYear(prefix, side, delta);
       else _stepStandardMonth(prefix, side, delta);
+      _enforcePeriodOrder(prefix, side);
+      if (options.onQuery) options.onQuery();
+    });
+  });
+
+  // 下拉变化时触发查询 + 约束检查
+  bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
+      _enforcePeriodOrder(prefix, side);
+      if (options.onQuery) options.onQuery();
     });
   });
 
@@ -302,6 +313,26 @@ function _resetStandardPeriod(prefix) {
   if (fromM) fromM.value = '';
   if (toY) toY.value = '';
   if (toM) toM.value = '';
+}
+
+// 期间前后约束：后时间不能早于前时间
+function _enforcePeriodOrder(basePrefix, changedSide) {
+  var fy = document.getElementById(basePrefix + 'from-y');
+  var fm = document.getElementById(basePrefix + 'from-m');
+  var ty = document.getElementById(basePrefix + 'to-y');
+  var tm = document.getElementById(basePrefix + 'to-m');
+  if (!fy || !fm || !ty || !tm) return;
+  var fyv = fy.value, fmv = fm.value, tyv = ty.value, tmv = tm.value;
+  if (!fyv || !fmv || !tyv || !tmv) return;
+  var from = fyv + '-' + fmv;
+  var to = tyv + '-' + tmv;
+  if (from > to) {
+    if (changedSide === 'from') {
+      ty.value = fyv; tm.value = fmv;
+    } else {
+      fy.value = tyv; fm.value = tmv;
+    }
+  }
 }
 
 // ==================== 利润表 ====================
@@ -613,12 +644,17 @@ function _buildContactPeriodBar(apiPrefix) {
       var delta = parseInt(this.getAttribute('data-delta'));
       if (type === 'year') _stepContactYear(apiPrefix, side, delta);
       else _stepContactMonth(apiPrefix, side, delta);
+      _enforcePeriodOrder(apiPrefix + '-', side);
     });
   });
 
   // 下拉变化时触发
   bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
-    sel.addEventListener('change', function() { _onContactPeriodChange(apiPrefix); });
+    sel.addEventListener('change', function() {
+      var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
+      _enforcePeriodOrder(apiPrefix + '-', side);
+      _onContactPeriodChange(apiPrefix);
+    });
   });
 
   // 清除按钮
