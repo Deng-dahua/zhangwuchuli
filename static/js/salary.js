@@ -23,13 +23,8 @@ window.addEventListener('error', function(e) {
 
 function showSalaryPage(container) {
     try {
-        // 安全获取期间
-        try {
-            if (typeof getCurrentPeriod === 'function') {
-                currentSalaryPeriod = getCurrentPeriod();
-            }
-        } catch(e) {}
-        if (!currentSalaryPeriod) currentSalaryPeriod = '';
+        // 期间与顶栏会计期间保持一致
+        currentSalaryPeriod = currentPeriod || '';
 
         // 先渲染页面
         renderSalaryPage(container);

@@ -251,6 +251,21 @@ function onPeriodSelectChange() {
     if (ey) ey.value = y;
     if (em) em.value = m;
   });
+  // 同步工资薪金
+  try { currentSalaryPeriod = newPeriod; } catch(e) {}
+  let sy = document.getElementById('salary-y');
+  let sm = document.getElementById('salary-m');
+  if (sy) sy.value = y;
+  if (sm) sm.value = m;
+  // 同步往来明细账（人员/客户/供应商）
+  ['employee','customer','supplier'].forEach(function(type) {
+    ['from','to'].forEach(function(side) {
+      let ey = document.getElementById(type + '-' + side + '-y');
+      let em = document.getElementById(type + '-' + side + '-m');
+      if (ey) ey.value = y;
+      if (em) em.value = m;
+    });
+  });
   try { siFilter.dateFrom = ''; siFilter.dateTo = ''; } catch(e) {}
   try { piFilter.dateFrom = ''; piFilter.dateTo = ''; } catch(e) {}
   try { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; } catch(e) {}
