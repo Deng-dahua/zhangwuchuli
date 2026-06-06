@@ -19,70 +19,87 @@ async function renderJournal(container) {
     html += '<div class="stat-card"><div class="stat-value" style="color:var(--warning)">' + stats.unreviewed_count + '</div><div class="stat-label">未复核</div></div>';
     html += '</div>';
 
-    // 批量删除按钮
+    // 期间选择栏 + 批量删除按钮
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px">';
+    html += '<div id="je-period-bar"></div>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
     html += '</div>';
     html += '</div>';
 
-    let items = data;
+    // 表格容器
+    html += '<div id="je-table-wrap" class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"></div>';
 
-    // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
-    html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
-    html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
-    html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
-    html += '</tr></thead><tbody>';
-
-    if (items.length === 0) {
-      html += '<tr><td colspan="14" style="text-align:center;color:#9ca3af;padding:40px">暂无记录</td></tr>';
-    } else {
-      // 按凭证号分组
-      const groups = [];
-      let cur = null;
-      items.forEach(r => {
-        const key = r.period + '|' + (r.voucher_word || '记') + '|' + r.voucher_no;
-        if (!cur || cur.key !== key) {
-          cur = { key, entries: [] };
-          groups.push(cur);
-        }
-        cur.entries.push(r);
-      });
-
-      groups.forEach(g => {
-        const sz = g.entries.length;
-        const allIds = g.entries.map(e => e.id).join(',');
-        g.entries.forEach((r, idx) => {
-          html += '<tr>';
-          // 每行独立复选框（不再 rowspan 合并）
-          html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
-          html += '<td>' + r.period + '</td>';
-          html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
-          html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
-          html += '<td>' + (r.account_name || '-') + '</td>';
-          html += '<td>' + (r.contact_project || '-') + '</td>';
-          html += '<td>' + (r.spec_model || '-') + '</td>';
-          html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
-          html += '<td>' + (r.unit || '-') + '</td>';
-          html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
-          html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
-          html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
-          const src = r.source || '手动录入';
-          const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
-          html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
-          html += '<td style="white-space:nowrap">';
-          html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')">编辑</button>';
-          html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
-          html += '</td></tr>';
-        });
-      });
-    }
-    html += '</tbody></table></div>';
     el.innerHTML = html;
+    buildJePeriodBar();
+    renderJeTable(data);
     updateJeBatchBtn();
   } catch (e) {
     showError(el, e, '加载序时账');
   }
+}
+
+function renderJeTable(data) {
+  const el = document.getElementById('je-table-wrap');
+  if (!el) return;
+
+  // 根据期间选择过滤数据
+  let from = getJePeriod('from');
+  let to = getJePeriod('to');
+  let items = data;
+  if (from) items = items.filter(r => r.period && r.period >= from);
+  if (to) items = items.filter(r => r.period && r.period <= to);
+
+  if (items.length === 0) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">暂无记录</div>';
+    return;
+  }
+
+  let html = '<table><thead><tr>';
+  html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
+  html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
+  html += '</tr></thead><tbody>';
+
+  // 按凭证号分组
+  const groups = [];
+  let cur = null;
+  items.forEach(r => {
+    const key = r.period + '|' + (r.voucher_word || '记') + '|' + r.voucher_no;
+    if (!cur || cur.key !== key) {
+      cur = { key, entries: [] };
+      groups.push(cur);
+    }
+    cur.entries.push(r);
+  });
+
+  groups.forEach(g => {
+    const allIds = g.entries.map(e => e.id).join(',');
+    g.entries.forEach((r, idx) => {
+      html += '<tr>';
+      html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
+      html += '<td>' + r.period + '</td>';
+      html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
+      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
+      html += '<td>' + (r.account_name || '-') + '</td>';
+      html += '<td>' + (r.contact_project || '-') + '</td>';
+      html += '<td>' + (r.spec_model || '-') + '</td>';
+      html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
+      html += '<td>' + (r.unit || '-') + '</td>';
+      html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
+      html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
+      html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+      const src = r.source || '手动录入';
+      const srcColors = { '开具发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
+      html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '开具发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
+      html += '<td style="white-space:nowrap">';
+      html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')">编辑</button>';
+      html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';
+      html += '</td></tr>';
+    });
+  });
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
 }
 
 
@@ -401,4 +418,103 @@ async function deleteJournal(id) {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+// ==================== 序时账期间选择栏 ====================
+
+function buildJePeriodBar() {
+  let bar = document.getElementById('je-period-bar');
+  if (!bar) return;
+  bar.innerHTML =
+    '<div class="period-stepper">' +
+      '<select id="je-from-y" class="period-selector-year">' + jeYearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="stepJeYear(\'from\',1)" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="stepJeYear(\'from\',-1)" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="je-from-m" class="period-selector-month" onchange="onJePeriodChange()">' + jeMonthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="stepJeMonth(\'from\',1)" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="stepJeMonth(\'from\',-1)" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<span style="color:#9ca3af;font-size:13px;line-height:32px">至</span>' +
+    '<div class="period-stepper">' +
+      '<select id="je-to-y" class="period-selector-year">' + jeYearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="stepJeYear(\'to\',1)" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="stepJeYear(\'to\',-1)" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="je-to-m" class="period-selector-month" onchange="onJePeriodChange()">' + jeMonthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="stepJeMonth(\'to\',1)" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="stepJeMonth(\'to\',-1)" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn btn-primary" onclick="onJePeriodChange()">🔍 查询</button>' +
+    '<button onclick="clearJePeriod()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+  // 默认设置当前期间
+  setJePeriod('from', currentPeriod);
+  setJePeriod('to', currentPeriod);
+}
+
+function jeYearOptions() {
+  let now = new Date(), y = now.getFullYear(), ops = '<option value="">年</option>';
+  for (let i = y - 5; i <= y + 5; i++) ops += '<option value="' + i + '">' + i + '年</option>';
+  return ops;
+}
+
+function jeMonthOptions() {
+  return '<option value="">月</option><option value="01">01月</option><option value="02">02月</option><option value="03">03月</option><option value="04">04月</option><option value="05">05月</option><option value="06">06月</option><option value="07">07月</option><option value="08">08月</option><option value="09">09月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>';
+}
+
+function setJePeriod(side, period) {
+  if (!period) return;
+  let parts = period.split('-');
+  if (parts.length < 2) return;
+  let ySel = document.getElementById('je-' + side + '-y');
+  let mSel = document.getElementById('je-' + side + '-m');
+  if (ySel) ySel.value = parts[0];
+  if (mSel) mSel.value = parts[1];
+}
+
+function getJePeriod(side) {
+  let y = document.getElementById('je-' + side + '-y')?.value;
+  let m = document.getElementById('je-' + side + '-m')?.value;
+  if (!y || !m) return '';
+  return y + '-' + m;
+}
+
+function stepJeYear(side, delta) {
+  let sel = document.getElementById('je-' + side + '-y');
+  if (!sel || !sel.value) return;
+  sel.value = parseInt(sel.value) + delta;
+  onJePeriodChange();
+}
+
+function stepJeMonth(side, delta) {
+  let ySel = document.getElementById('je-' + side + '-y');
+  let mSel = document.getElementById('je-' + side + '-m');
+  if (!ySel || !mSel || !mSel.value) return;
+  let y = parseInt(ySel.value) || new Date().getFullYear();
+  let m = parseInt(mSel.value) + delta;
+  if (m > 12) { m = 1; y++; }
+  else if (m < 1) { m = 12; y--; }
+  ySel.value = y;
+  mSel.value = String(m).padStart(2, '0');
+  onJePeriodChange();
+}
+
+function onJePeriodChange() {
+  renderJournal();
+}
+
+function clearJePeriod() {
+  setJePeriod('from', '');
+  setJePeriod('to', '');
+  renderJournal();
 }
