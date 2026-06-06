@@ -356,23 +356,36 @@ document.querySelectorAll('.nav-item').forEach(el => {
 async function api(method, url, body) {
   // 支持三种调用方式：api(url) / api(url, options) / api(method, url, body)
   var extraHeaders = {};  // 旧式调用传递的自定义 headers
+  var extraQuery = {};    // 旧式调用传递的 URL 查询参数（skip/limit 等）
   if (arguments.length === 1) {
     // api(url) → GET 请求
     body = undefined;
     url = method;
     method = 'GET';
   } else if (arguments.length === 2 && typeof method === 'string' && !['GET','POST','PUT','DELETE','PATCH'].includes(method)) {
-    // 旧式调用 api(url, options) — 提取 headers 避免丢失
+    // 旧式调用 api(url, options) — 提取 method/body/headers，其余视为查询参数
     let options = url;
     url = method;
     method = (options && options.method) || 'GET';
     body = (options && options.body) || undefined;
     if (options && options.headers) extraHeaders = options.headers;
+    // 其余非 method/headers/body 的属性 → URL 查询参数
+    if (options) {
+      for (var k in options) {
+        if (options.hasOwnProperty(k) && k !== 'method' && k !== 'headers' && k !== 'body') {
+          extraQuery[k] = options[k];
+        }
+      }
+    }
   }
   // 强制附加 company_id 参数（/api/companies 自身除外）
   if (url.includes('/api/') && !url.startsWith('/api/companies')) {
     const [base, query] = url.split('?');
     const params = new URLSearchParams(query || '');
+    // 合并旧式调用的查询参数
+    for (var k in extraQuery) {
+      if (extraQuery.hasOwnProperty(k)) params.set(k, extraQuery[k]);
+    }
     params.set('company_id', currentCompanyId || 1);
     url = base + '?' + params.toString();
   }
