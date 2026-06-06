@@ -340,15 +340,13 @@ async function renderProfitLoss(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
-        '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('pl-from', currentPeriod) +
-        '<span style="color:#9ca3af">至</span>' +
-        _periodSelectsHTML('pl-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<div id="pl-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
         '<button class="btn btn-primary" onclick="loadProfitLoss()">生成报表</button>' +
-        '<button onclick="clearFilters(\'pl\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
       '<div id="pl-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
+  _buildStandardPeriodBar('pl-', { onQuery: loadProfitLoss, onClear: () => clearFilters('pl') });
 }
 
 function plFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
@@ -380,13 +378,13 @@ async function renderBalanceSheet(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
-        '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('bs-from', currentPeriod) +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<div id="bs-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
         '<button class="btn btn-primary" onclick="loadBalanceSheet()">生成报表</button>' +
-        '<button onclick="clearFilters(\'bs\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
       '<div id="bs-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
+  _buildStandardPeriodBar('bs-', { onQuery: loadBalanceSheet, onClear: () => clearFilters('bs') });
 }
 
 function bsFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
@@ -425,15 +423,13 @@ async function renderCashFlow(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
-        '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('cf-from', currentPeriod) +
-        '<span style="color:#9ca3af">至</span>' +
-        _periodSelectsHTML('cf-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<div id="cf-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
         '<button class="btn btn-primary" onclick="loadCashFlow()">生成报表</button>' +
-        '<button onclick="clearFilters(\'cf\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
       '<div id="cf-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
+  _buildStandardPeriodBar('cf-', { onQuery: loadCashFlow, onClear: () => clearFilters('cf') });
 }
 
 async function loadCashFlow() {
@@ -463,13 +459,13 @@ async function renderEquityChanges(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;">' +
-        '<span style="font-size:13px;color:#6b7280">截止</span>' + _periodSelectsHTML('ec-from', currentPeriod) +
+      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<div id="ec-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
         '<button class="btn btn-primary" onclick="loadEquityChanges()">生成报表</button>' +
-        '<button onclick="clearFilters(\'ec\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>' +
       '</div>' +
       '<div id="ec-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
+  _buildStandardPeriodBar('ec-', { onQuery: loadEquityChanges, onClear: () => clearFilters('ec') });
 }
 
 async function loadEquityChanges() {
@@ -501,17 +497,14 @@ async function renderAccountBalance(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card card-fill">
-      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;">
-        <span style="font-size:13px;color:#6b7280">起始</span>${_periodSelectsHTML('tb-from', currentPeriod)}
-        <span style="color:#9ca3af">至</span>
-        ${_periodSelectsHTML('tb-to', currentPeriod)}<span style="font-size:13px;color:#6b7280">截止</span>
-        <button class="btn btn-primary" onclick="loadAccountBalance()">🔍 生成报表</button>
-        <button onclick="clearFilters('tb')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">清除筛选</button>
+      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">
+        <div id="tb-period-bar" style="display:flex;align-items:center;gap:4px"></div>
+        <button class="btn btn-primary" onclick="loadAccountBalance()">生成报表</button>
       </div>
       <div id="tb-table"></div>
     </div>
   `;
-  loadAccountBalance();
+  _buildStandardPeriodBar('tb-', { onQuery: loadAccountBalance, onClear: () => clearFilters('tb') });
 }
 
 async function loadAccountBalance() {

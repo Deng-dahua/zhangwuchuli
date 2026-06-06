@@ -29,7 +29,7 @@ async function renderJournal(container) {
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px">';
     html += '<div id="je-period-bar" style="display:flex;align-items:center;gap:4px"></div>';
-    html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
+    html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">批量删除</button>';
     html += '</div>';
     html += '</div>';
 
@@ -249,7 +249,7 @@ function updateJeBatchBtn() {
   const count = document.querySelectorAll('.je-row-check:checked').length;
   const btn = document.getElementById('jeBatchDelBtn');
   if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     btn.disabled = count === 0;
   }
 }
