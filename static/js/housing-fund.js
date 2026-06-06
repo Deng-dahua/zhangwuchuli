@@ -3,6 +3,10 @@
 let hfPeriod = '';
 let hfStats = {};
 let hfSelectedIds = new Set();
+let hfEditId = null;  // 编辑时暂存ID
+
+// 自定义escAttr（escapeHtml已有，但attr需额外转引号）
+function hfEscAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 async function renderHousingFund(container) {
   container.innerHTML = `
@@ -49,13 +53,13 @@ async function hfRefresh() {
   let url = `/api/housing-fund/details?company_id=${currentCompanyId}`;
   if (hfPeriod) url += `&period=${hfPeriod}`;
 
-  const statsUrl = `/api/housing-fund/stats?company_id=${currentCompanyId}`;
-  if (hfPeriod) url += `&period=${hfPeriod}`;
+  let statsUrl = `/api/housing-fund/stats?company_id=${currentCompanyId}`;
+  if (hfPeriod) statsUrl += `&period=${hfPeriod}`;
 
   try {
     const [data, stats] = await Promise.all([
       api('GET', url),
-      api('GET', statsUrl + (hfPeriod ? `&period=${hfPeriod}` : '')),
+      api('GET', statsUrl),
     ]);
     hfStats = stats;
     hfRenderStats(stats);
@@ -70,9 +74,9 @@ function hfRenderStats(stats) {
   if (!el) return;
   const cards = [
     { label: '缴存人数', value: stats.person_count || 0 },
-    { label: '单位缴存合计', value: '¥' + (stats.total_company_amount || 0).toLocaleString() },
-    { label: '个人缴存合计', value: '¥' + (stats.total_personal_amount || 0).toLocaleString() },
-    { label: '缴存总额', value: '¥' + (stats.total_amount || 0).toLocaleString() },
+    { label: '单位缴存合计', value: '\u00a5' + (stats.total_company_amount || 0).toLocaleString() },
+    { label: '个人缴存合计', value: '\u00a5' + (stats.total_personal_amount || 0).toLocaleString() },
+    { label: '缴存总额', value: '\u00a5' + (stats.total_amount || 0).toLocaleString() },
   ];
   el.innerHTML = cards.map(c => `
     <div class="stat-card">
@@ -91,16 +95,16 @@ function hfRenderTable(items) {
     : items.map(item => `
       <tr>
         <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)" /></td>
-        <td>${escHtml(item.employee_id || '-')}</td>
-        <td>${escHtml(item.employee_name)}</td>
-        <td>${escHtml(item.id_number || '-')}</td>
+        <td>${escapeHtml(item.employee_id || '-')}</td>
+        <td>${escapeHtml(item.employee_name)}</td>
+        <td>${escapeHtml(item.id_number || '-')}</td>
         <td class="num">${(item.deposit_base || 0).toLocaleString()}</td>
         <td class="num">${item.company_ratio || 0}%</td>
         <td class="num">${item.personal_ratio || 0}%</td>
         <td class="num">${(item.total_amount || 0).toLocaleString()}</td>
         <td class="num">${(item.company_amount || 0).toLocaleString()}</td>
         <td class="num">${(item.personal_amount || 0).toLocaleString()}</td>
-        <td><span class="tag tag-green">${escHtml(item.status || '正常')}</span></td>
+        <td><span class="tag tag-green">${escapeHtml(item.status || '正常')}</span></td>
         <td>
           <button class="btn btn-sm btn-outline" onclick="hfShowEdit(${item.id})">编辑</button>
           <button class="btn btn-sm btn-danger" onclick="hfDelete(${item.id})">删除</button>
@@ -139,7 +143,8 @@ async function hfBatchDelete() {
 // ============ 新增/编辑弹窗 ============
 
 function hfShowCreate() {
-  showModal('新增公积金缴存记录', `
+  showModal(`
+    <div class="modal-title">新增公积金缴存记录</div>
     <div class="form-group">
       <label>工号</label>
       <input class="form-input" id="hf-emp-id" placeholder="工号（选填）" />
@@ -173,40 +178,48 @@ function hfShowCreate() {
         <option value="封存">封存</option>
       </select>
     </div>
-  `, async () => {
-    const name = document.getElementById('hf-emp-name').value.trim();
-    if (!name) return alert('请输入姓名');
-    const body = {
-      company_id: currentCompanyId,
-      period: hfPeriod || new Date().toISOString().slice(0, 7),
-      employee_id: document.getElementById('hf-emp-id').value.trim(),
-      employee_name: name,
-      id_number: document.getElementById('hf-id-number').value.trim(),
-      deposit_base: parseFloat(document.getElementById('hf-deposit-base').value) || 0,
-      company_ratio: parseFloat(document.getElementById('hf-company-ratio').value) || 0,
-      personal_ratio: parseFloat(document.getElementById('hf-personal-ratio').value) || 0,
-      status: document.getElementById('hf-status').value,
-    };
-    await api('POST', `/api/housing-fund/details?${new URLSearchParams(body).toString()}`);
-    closeModal();
-    hfRefresh();
-  });
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="hfDoCreate()">保存</button>
+    </div>
+  `);
+}
+
+async function hfDoCreate() {
+  const name = document.getElementById('hf-emp-name').value.trim();
+  if (!name) return alert('请输入姓名');
+  const body = {
+    company_id: currentCompanyId,
+    period: hfPeriod || new Date().toISOString().slice(0, 7),
+    employee_id: document.getElementById('hf-emp-id').value.trim(),
+    employee_name: name,
+    id_number: document.getElementById('hf-id-number').value.trim(),
+    deposit_base: parseFloat(document.getElementById('hf-deposit-base').value) || 0,
+    company_ratio: parseFloat(document.getElementById('hf-company-ratio').value) || 0,
+    personal_ratio: parseFloat(document.getElementById('hf-personal-ratio').value) || 0,
+    status: document.getElementById('hf-status').value,
+  };
+  await api('POST', `/api/housing-fund/details?${new URLSearchParams(body).toString()}`);
+  closeModal();
+  hfRefresh();
 }
 
 async function hfShowEdit(id) {
   const data = await api('GET', `/api/housing-fund/details/${id}?company_id=${currentCompanyId}`);
-  showModal('编辑公积金缴存记录', `
+  hfEditId = id;
+  showModal(`
+    <div class="modal-title">编辑公积金缴存记录</div>
     <div class="form-group">
       <label>工号</label>
-      <input class="form-input" id="hf-emp-id" value="${escAttr(data.employee_id || '')}" />
+      <input class="form-input" id="hf-emp-id" value="${hfEscAttr(data.employee_id || '')}" />
     </div>
     <div class="form-group">
       <label>姓名 <span style="color:red">*</span></label>
-      <input class="form-input" id="hf-emp-name" value="${escAttr(data.employee_name)}" />
+      <input class="form-input" id="hf-emp-name" value="${hfEscAttr(data.employee_name)}" />
     </div>
     <div class="form-group">
       <label>身份证号</label>
-      <input class="form-input" id="hf-id-number" value="${escAttr(data.id_number || '')}" />
+      <input class="form-input" id="hf-id-number" value="${hfEscAttr(data.id_number || '')}" />
     </div>
     <div class="form-group">
       <label>缴存基数</label>
@@ -229,23 +242,29 @@ async function hfShowEdit(id) {
         <option value="封存" ${data.status === '封存' ? 'selected' : ''}>封存</option>
       </select>
     </div>
-  `, async () => {
-    const name = document.getElementById('hf-emp-name').value.trim();
-    if (!name) return alert('请输入姓名');
-    const body = new URLSearchParams({
-      company_id: currentCompanyId,
-      employee_id: document.getElementById('hf-emp-id').value.trim(),
-      employee_name: name,
-      id_number: document.getElementById('hf-id-number').value.trim(),
-      deposit_base: document.getElementById('hf-deposit-base').value,
-      company_ratio: document.getElementById('hf-company-ratio').value,
-      personal_ratio: document.getElementById('hf-personal-ratio').value,
-      status: document.getElementById('hf-status').value,
-    });
-    await api('PUT', `/api/housing-fund/details/${id}?${body.toString()}`);
-    closeModal();
-    hfRefresh();
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="hfDoEdit()">保存</button>
+    </div>
+  `);
+}
+
+async function hfDoEdit() {
+  const name = document.getElementById('hf-emp-name').value.trim();
+  if (!name) return alert('请输入姓名');
+  const body = new URLSearchParams({
+    company_id: currentCompanyId,
+    employee_id: document.getElementById('hf-emp-id').value.trim(),
+    employee_name: name,
+    id_number: document.getElementById('hf-id-number').value.trim(),
+    deposit_base: document.getElementById('hf-deposit-base').value,
+    company_ratio: document.getElementById('hf-company-ratio').value,
+    personal_ratio: document.getElementById('hf-personal-ratio').value,
+    status: document.getElementById('hf-status').value,
   });
+  await api('PUT', `/api/housing-fund/details/${hfEditId}?${body.toString()}`);
+  closeModal();
+  hfRefresh();
 }
 
 async function hfDelete(id) {
@@ -257,7 +276,8 @@ async function hfDelete(id) {
 // ============ 导入弹窗 ============
 
 function hfShowImport() {
-  showModal('导入公积金缴存明细', `
+  showModal(`
+    <div class="modal-title">导入公积金缴存明细</div>
     <div class="form-group">
       <label>汇缴期间</label>
       <input type="month" class="form-input" id="hf-import-period" value="${hfPeriod || new Date().toISOString().slice(0, 7)}" />
@@ -269,22 +289,28 @@ function hfShowImport() {
     <div style="font-size:12px;color:#888;margin-top:8px;">
       表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
     </div>
-  `, async () => {
-    const file = document.getElementById('hf-import-file').files[0];
-    if (!file) return alert('请选择文件');
-    const period = document.getElementById('hf-import-period').value;
-    if (!period) return alert('请选择汇缴期间');
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="hfDoImport()">导入</button>
+    </div>
+  `);
+}
 
-    const formData = new FormData();
-    formData.append('file', file);
+async function hfDoImport() {
+  const file = document.getElementById('hf-import-file').files[0];
+  if (!file) return alert('请选择文件');
+  const period = document.getElementById('hf-import-period').value;
+  if (!period) return alert('请选择汇缴期间');
 
-    try {
-      const result = await api('POST', `/api/housing-fund/import?company_id=${currentCompanyId}&period=${period}`, formData);
-      alert(result.message || `成功导入 ${result.imported} 条`);
-      closeModal();
-      hfRefresh();
-    } catch (e) {
-      alert('导入失败: ' + (e.message || e));
-    }
-  });
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const result = await api('POST', `/api/housing-fund/import?company_id=${currentCompanyId}&period=${period}`, formData);
+    alert(result.message || `成功导入 ${result.imported} 条`);
+    closeModal();
+    hfRefresh();
+  } catch (e) {
+    alert('导入失败: ' + (e.message || e));
+  }
 }
