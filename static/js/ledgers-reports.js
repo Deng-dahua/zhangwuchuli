@@ -10,6 +10,7 @@ async function renderGeneralLedger(container) {
     </div>
   `;
   _buildStandardPeriodBar('gl-', { onQuery: loadGeneralLedger, onClear: glClearFilters });
+  loadGeneralLedger();
 }
 
 function glClearFilters() {
