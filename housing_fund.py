@@ -91,6 +91,10 @@ def create_detail(
     db: Session = Depends(get_db),
 ):
     """新增一条缴存记录（自动计算缴存额）"""
+    if 0 < company_ratio <= 1:
+        company_ratio *= 100
+    if 0 < personal_ratio <= 1:
+        personal_ratio *= 100
     company_amount = round(deposit_base * company_ratio / 100, 2)
     personal_amount = round(deposit_base * personal_ratio / 100, 2)
     total_amount = round(company_amount + personal_amount, 2)
@@ -151,8 +155,16 @@ def update_detail(
         item.status = status
 
     # 重新计算缴存额
-    item.company_amount = round((item.deposit_base or 0) * (item.company_ratio or 0) / 100, 2)
-    item.personal_amount = round((item.deposit_base or 0) * (item.personal_ratio or 0) / 100, 2)
+    cr = (item.company_ratio or 0)
+    pr = (item.personal_ratio or 0)
+    if 0 < cr <= 1:
+        cr *= 100
+        item.company_ratio = cr
+    if 0 < pr <= 1:
+        pr *= 100
+        item.personal_ratio = pr
+    item.company_amount = round((item.deposit_base or 0) * cr / 100, 2)
+    item.personal_amount = round((item.deposit_base or 0) * pr / 100, 2)
     item.total_amount = round(item.company_amount + item.personal_amount, 2)
     item.updated_at = datetime.now()
 
@@ -266,6 +278,12 @@ async def import_excel(
             deposit_base = float(row[col_map["deposit_base"]] or 0) if "deposit_base" in col_map else 0
             company_ratio = float(row[col_map["company_ratio"]] or 0) if "company_ratio" in col_map else 0
             personal_ratio = float(row[col_map["personal_ratio"]] or 0) if "personal_ratio" in col_map else 0
+
+            # 自动检测小数比例（如 0.1=10%），转换为百分比
+            if 0 < company_ratio <= 1:
+                company_ratio *= 100
+            if 0 < personal_ratio <= 1:
+                personal_ratio *= 100
 
             company_amount = round(deposit_base * company_ratio / 100, 2)
             personal_amount = round(deposit_base * personal_ratio / 100, 2)
