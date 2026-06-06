@@ -33,6 +33,7 @@ class SalaryRecordCreate(BaseModel):
     period: str
     employee_name: str
     id_number: str
+    employee_code: Optional[str] = None
     id_type: str = "居民身份证"
     tax_period_start: Optional[str] = None
     tax_period_end: Optional[str] = None
@@ -114,6 +115,7 @@ class SalaryRecordUpdate(BaseModel):
     tax_to_pay: Optional[float] = None
     tax_refund: Optional[float] = None
     net_salary: Optional[float] = None
+    employee_code: Optional[str] = None
 
 
 # ========== 工具函数 ==========
@@ -263,6 +265,7 @@ def list_salary_records(
         {
             "id": r.id,
             "period": r.period,
+            "employee_code": r.employee_code or '',
             "employee_name": r.employee_name,
             "id_number": r.id_number,
             "id_type": r.id_type,
@@ -769,6 +772,7 @@ def auto_create_employees(company_id: int = Query(...), period: Optional[str] = 
     for r in records:
         emp = _auto_create_employee(db, company_id, r.employee_name, r.id_number)
         if emp:
+            r.employee_code = emp.code
             created += 1
 
     db.commit()

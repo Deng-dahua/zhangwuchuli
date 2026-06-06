@@ -34,10 +34,12 @@ function showSalaryPage(container) {
         // 先渲染页面
         renderSalaryPage(container);
 
+        // 初始化年份/月份选择器
+        initSalaryPeriodSelectors();
+
         // 再加载数据
         loadSalaryData();
     } catch(err) {
-        // 任何错误都显示到页面上，方便排查
         const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
         if (app) {
             app.innerHTML = '<div style="padding:40px;text-align:center;color:#f44">工资薪金模块加载失败：' + escapeHtml(err.message || String(err)) + '<br><br>请按F12打开控制台查看详细错误</div>';
@@ -46,17 +48,52 @@ function showSalaryPage(container) {
     }
 }
 
+// 初始化年份/月份下拉
+function initSalaryPeriodSelectors() {
+    const yearSel = document.getElementById('salary-year-sel');
+    const monthSel = document.getElementById('salary-month-sel');
+    if (!yearSel || !monthSel) return;
+
+    // 填充年份：当前年份前后各5年
+    const now = new Date();
+    const curYear = now.getFullYear();
+    let html = '';
+    for (let y = curYear - 5; y <= curYear + 1; y++) {
+        html += '<option value="' + y + '">' + y + '年</option>';
+    }
+    yearSel.innerHTML = html;
+
+    // 根据 currentSalaryPeriod 设置选中值
+    let y = '', m = '';
+    if (currentSalaryPeriod && currentSalaryPeriod.includes('-')) {
+        const parts = currentSalaryPeriod.split('-');
+        y = parts[0];
+        m = parts[1];
+    } else {
+        y = String(curYear);
+        m = String(now.getMonth() + 1).padStart(2, '0');
+    }
+    yearSel.value = y;
+    monthSel.value = m;
+}
+
 function renderSalaryPage(container) {
     const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
     app.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0';
     app.innerHTML = `
         <div class="page-header">
-            <h2>工资薪金所得</h2>
+            <div></div>
             <div class="page-actions">
-                <input type="text" id="salary-period-input" value="${currentSalaryPeriod}" placeholder="期间 如 2025-10" style="width:140px">
-                <button class="btn btn-primary" onclick="loadSalaryData()">📅 查询</button>
+                <select id="salary-year-sel" style="width:90px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"></select>
+                <select id="salary-month-sel" style="width:70px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
+                    <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
+                    <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
+                    <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
+                    <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadSalaryData()">查询</button>
                 <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增</button>
-                <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入Excel</button>
+                <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入文件</button>
                 <button class="btn btn-info" onclick="autoCreateEmployeesFromSalary()">👤 自动建人员档案</button>
                 <button class="btn btn-secondary" onclick="computeSalaryTax()">🧮 计算个税</button>
                 <button class="btn btn-danger" onclick="batchDeleteSalary()">🗑️ 批量删除</button>
@@ -126,16 +163,19 @@ function renderSalaryPage(container) {
 // ========== 数据加载 ==========
 
 function loadSalaryData() {
-    const periodInput = document.getElementById('salary-period-input');
-    currentSalaryPeriod = periodInput ? periodInput.value : getCurrentPeriod();
+    const yearSel = document.getElementById('salary-year-sel');
+    const monthSel = document.getElementById('salary-month-sel');
+    if (!yearSel || !monthSel) return;
+    const period = yearSel.value + '-' + monthSel.value;
+    currentSalaryPeriod = period;
 
     // 加载统计
-    api('/api/salary/stats?period=' + encodeURIComponent(currentSalaryPeriod)).then(stats => {
+    api('/api/salary/stats?period=' + encodeURIComponent(period)).then(stats => {
         renderSalaryStats(stats);
     }).catch(() => {});
 
     // 加载列表
-    api('/api/salary/records?period=' + encodeURIComponent(currentSalaryPeriod)).then(data => {
+    api('/api/salary/records?period=' + encodeURIComponent(period)).then(data => {
         currentSalaryRecords = data;
         renderSalaryTable(data);
     }).catch(err => {
@@ -371,14 +411,31 @@ function showSalaryImportModal() {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'salary-import-modal';
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    let yearOpts = '';
+    for (let y = curYear - 5; y <= curYear + 1; y++) {
+        yearOpts += '<option value="' + y + '">' + y + '年</option>';
+    }
+
     modal.innerHTML = `
-        <div class="modal" style="max-width:500px">
-            <div class="modal-header"><h3>📁 导入工资表（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header"><h3>导入文件（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body">
-                <p style="color:#666;margin-bottom:12px">支持税务局"综合所得月工资薪所得"Excel模板（.xls/.xlsx）</p>
+                <p style="color:#666;margin-bottom:12px">支持税务局"综合所得工资薪金所得"Excel模板（.xls/.xlsx）</p>
                 <div class="form-row">
-                    <label>期间</label>
-                    <input type="text" id="sal-import-period" value="${currentSalaryPeriod}" placeholder="2025-10" required>
+                    <label>年度</label>
+                    <select id="sal-import-year">${yearOpts}</select>
+                </div>
+                <div class="form-row">
+                    <label>月份</label>
+                    <select id="sal-import-month">
+                        <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
+                        <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
+                        <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
+                        <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                    </select>
                 </div>
                 <div class="form-row">
                     <label>选择文件</label>
@@ -395,26 +452,32 @@ function showSalaryImportModal() {
         </div>
     `;
     document.body.appendChild(modal);
+    // 设置默认月份
+    const now2 = new Date();
+    const curMonth = String(now2.getMonth() + 1).padStart(2, '0');
+    document.getElementById('sal-import-month').value = curMonth;
     modal.style.display = 'flex';
 }
 
 function importSalaryExcel() {
-    const period = document.getElementById('sal-import-period').value.trim();
+    const yearSel = document.getElementById('sal-import-year');
+    const monthSel = document.getElementById('sal-import-month');
+    if (!yearSel || !monthSel) { toast('页面未加载完成，请重试', 'error'); return; }
+    const period = yearSel.value + '-' + monthSel.value;
     const fileInput = document.getElementById('sal-import-file');
-    if (!period) { toast('请填写期间', 'error'); return; }
     if (!fileInput.files.length) { toast('请选择文件', 'error'); return; }
+
+    const progress = document.getElementById('sal-import-progress');
+    progress.style.display = 'block';
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('company_id', currentCompanyId);
     formData.append('period', period);
 
-    const progress = document.getElementById('sal-import-progress');
-    progress.style.display = 'block';
-
-    fetch(`/api/salary/import?company_id=${currentCompanyId}&period=${encodeURIComponent(period)}`, {
+    fetch('/api/salary/import?company_id=' + currentCompanyId + '&period=' + encodeURIComponent(period), {
         method: 'POST',
-        body: fileInput.files[0]
+        body: formData
     }).then(res => res.json()).then(data => {
         progress.style.display = 'none';
         closeModal('salary-import-modal');
@@ -426,13 +489,15 @@ function importSalaryExcel() {
     });
 }
 
-// ========== 自动建人员档案 ==========
 
 function autoCreateEmployeesFromSalary() {
     if (!confirm('将根据工资表中的所有人员信息自动创建/更新人员档案（按证件号码匹配）？')) return;
     api('/api/salary/auto-create-employees?period=' + encodeURIComponent(currentSalaryPeriod), { method: 'POST' })
         .then(data => {
             toast(data.msg || '完成', 'success');
+            // 自动建档后重新加载，后端会在 employees 表更新 employee_code
+            // 如果后端已回填 salary 表的 employee_code，直接重新加载即可
+            loadSalaryData();
         }).catch(err => toast(err.message || '操作失败', 'error'));
 }
 

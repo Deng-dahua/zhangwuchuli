@@ -1720,9 +1720,10 @@ class SalaryRecord(Base):
     period = Column(String(20), nullable=False, index=True)  # 期间，如 2025-10
 
     # 人员信息
+    employee_code = Column(String(50), index=True)          # 工号（关联人员档案 code）
     employee_name = Column(String(100), nullable=False)       # 姓名
-    id_type = Column(String(50), default="居民身份证")          # 证件类型
-    id_number = Column(String(50), index=True)                 # 证件号码
+    id_type = Column(String(50), default="居民身份证")       # 证件类型
+    id_number = Column(String(50), index=True)                # 证件号码
 
     # 税款所属期
     tax_period_start = Column(String(20))  # 税款所属期起，如 2025-10-01
