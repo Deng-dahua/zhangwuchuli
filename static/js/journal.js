@@ -429,34 +429,62 @@ function buildJePeriodBar() {
     '<div class="period-stepper">' +
       '<select id="je-from-y" class="period-selector-year">' + jeYearOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="stepJeYear(\'from\',1)" title="下一年">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="stepJeYear(\'from\',-1)" title="上一年">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="year" data-delta="-1" title="上一年">▼</button>' +
       '</div>' +
     '</div>' +
     '<div class="period-stepper">' +
-      '<select id="je-from-m" class="period-selector-month" onchange="onJePeriodChange()">' + jeMonthOptions() + '</select>' +
+      '<select id="je-from-m" class="period-selector-month">' + jeMonthOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="stepJeMonth(\'from\',1)" title="下一月">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="stepJeMonth(\'from\',-1)" title="上一月">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
     '<span style="color:#9ca3af;font-size:13px;line-height:32px">至</span>' +
     '<div class="period-stepper">' +
       '<select id="je-to-y" class="period-selector-year">' + jeYearOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="stepJeYear(\'to\',1)" title="下一年">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="stepJeYear(\'to\',-1)" title="上一年">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="year" data-delta="-1" title="上一年">▼</button>' +
       '</div>' +
     '</div>' +
     '<div class="period-stepper">' +
-      '<select id="je-to-m" class="period-selector-month" onchange="onJePeriodChange()">' + jeMonthOptions() + '</select>' +
+      '<select id="je-to-m" class="period-selector-month">' + jeMonthOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="stepJeMonth(\'to\',1)" title="下一月">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="stepJeMonth(\'to\',-1)" title="上一月">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
-    '<button class="btn btn-primary" onclick="onJePeriodChange()">🔍 查询</button>' +
-    '<button onclick="clearJePeriod()" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+    '<button class="btn btn-primary je-query-btn">🔍 查询</button>' +
+    '<button class="je-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+
+  // 为所有 stepper 按钮绑定点击事件
+  bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var side = this.getAttribute('data-side');
+      var type = this.getAttribute('data-type');
+      var delta = parseInt(this.getAttribute('data-delta'));
+      if (type === 'year') stepJeYear(side, delta);
+      else stepJeMonth(side, delta);
+    });
+  });
+
+  // 月份下拉变化时触发
+  bar.querySelectorAll('.period-selector-month').forEach(function(sel) {
+    sel.addEventListener('change', onJePeriodChange);
+  });
+  bar.querySelectorAll('.period-selector-year').forEach(function(sel) {
+    sel.addEventListener('change', onJePeriodChange);
+  });
+
+  // 查询按钮
+  var queryBtn = bar.querySelector('.je-query-btn');
+  if (queryBtn) queryBtn.addEventListener('click', onJePeriodChange);
+
+  // 清除按钮
+  var clearBtn = bar.querySelector('.je-clear-btn');
+  if (clearBtn) clearBtn.addEventListener('click', clearJePeriod);
+
   // 默认设置当前期间
   setJePeriod('from', currentPeriod);
   setJePeriod('to', currentPeriod);

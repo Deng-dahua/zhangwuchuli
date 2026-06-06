@@ -484,34 +484,59 @@ function _buildContactPeriodBar(apiPrefix) {
     '<div class="period-stepper">' +
       '<select id="' + apiPrefix + '-from-y" class="period-selector-year">' + _yearOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="_stepContactYear(\'' + apiPrefix + '\',\'from\',1)" title="下一年">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="_stepContactYear(\'' + apiPrefix + '\',\'from\',-1)" title="上一年">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="year" data-delta="-1" title="上一年">▼</button>' +
       '</div>' +
     '</div>' +
     '<div class="period-stepper">' +
-      '<select id="' + apiPrefix + '-from-m" class="period-selector-month" onchange="_onContactPeriodChange(\'' + apiPrefix + '\')">' + _monthOptions() + '</select>' +
+      '<select id="' + apiPrefix + '-from-m" class="period-selector-month">' + _monthOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'from\',1)" title="下一月">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'from\',-1)" title="上一月">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="from" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="from" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
     '<span style="color:#9ca3af;font-size:13px;line-height:32px">至</span>' +
     '<div class="period-stepper">' +
       '<select id="' + apiPrefix + '-to-y" class="period-selector-year">' + _yearOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="_stepContactYear(\'' + apiPrefix + '\',\'to\',1)" title="下一年">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="_stepContactYear(\'' + apiPrefix + '\',\'to\',-1)" title="上一年">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="year" data-delta="1" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="year" data-delta="-1" title="上一年">▼</button>' +
       '</div>' +
     '</div>' +
     '<div class="period-stepper">' +
-      '<select id="' + apiPrefix + '-to-m" class="period-selector-month" onchange="_onContactPeriodChange(\'' + apiPrefix + '\')">' + _monthOptions() + '</select>' +
+      '<select id="' + apiPrefix + '-to-m" class="period-selector-month">' + _monthOptions() + '</select>' +
       '<div class="stepper-arrows">' +
-        '<button class="stepper-btn stepper-up" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'to\',1)" title="下一月">▲</button>' +
-        '<button class="stepper-btn stepper-down" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'to\',-1)" title="上一月">▼</button>' +
+        '<button class="stepper-btn stepper-up" data-side="to" data-type="month" data-delta="1" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
-    '<button class="btn btn-primary" onclick="_onContactPeriodChange(\'' + apiPrefix + '\')">🔍 查询</button>' +
-    '<button onclick="_clearContactDetail(\'' + apiPrefix + '\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+    '<button class="btn btn-primary contact-query-btn">🔍 查询</button>' +
+    '<button class="contact-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+
+  // 为所有 stepper 按钮绑定点击事件
+  bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var side = this.getAttribute('data-side');
+      var type = this.getAttribute('data-type');
+      var delta = parseInt(this.getAttribute('data-delta'));
+      if (type === 'year') _stepContactYear(apiPrefix, side, delta);
+      else _stepContactMonth(apiPrefix, side, delta);
+    });
+  });
+
+  // 下拉变化时触发
+  bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
+    sel.addEventListener('change', function() { _onContactPeriodChange(apiPrefix); });
+  });
+
+  // 查询按钮
+  var queryBtn = bar.querySelector('.contact-query-btn');
+  if (queryBtn) queryBtn.addEventListener('click', function() { _onContactPeriodChange(apiPrefix); });
+
+  // 清除按钮
+  var clearBtn = bar.querySelector('.contact-clear-btn');
+  if (clearBtn) clearBtn.addEventListener('click', function() { _clearContactDetail(apiPrefix); });
+
   // 默认设置当前期间
   _setContactPeriod(apiPrefix, 'from', currentPeriod);
   _setContactPeriod(apiPrefix, 'to', currentPeriod);
