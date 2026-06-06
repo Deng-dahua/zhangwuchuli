@@ -1,4 +1,5 @@
 // ==================== 序时账 ====================
+let _jeData = null;
 
 async function renderJournal(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
@@ -31,6 +32,7 @@ async function renderJournal(container) {
     html += '<div id="je-table-wrap" class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"></div>';
 
     el.innerHTML = html;
+    _jeData = data;
     buildJePeriodBar();
     renderJeTable(data);
     updateJeBatchBtn();
@@ -538,11 +540,13 @@ function stepJeMonth(side, delta) {
 }
 
 function onJePeriodChange() {
-  renderJournal();
+  if (_jeData) renderJeTable(_jeData);
 }
 
 function clearJePeriod() {
-  setJePeriod('from', '');
-  setJePeriod('to', '');
-  renderJournal();
+  document.getElementById('je-from-y').value = '';
+  document.getElementById('je-from-m').value = '';
+  document.getElementById('je-to-y').value = '';
+  document.getElementById('je-to-m').value = '';
+  if (_jeData) renderJeTable(_jeData);
 }
