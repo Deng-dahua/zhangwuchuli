@@ -1,5 +1,7 @@
 // ==================== 序时账 ====================
-let _jeData = null;
+let _jePage = 1;
+let _jeTotal = 0;
+let _jePageSize = 100;
 
 // 6个往来科目：应收账款/应付账款/其他应收款/其他应付款/预收账款/预付账款
 function isContactAccount(code) {
@@ -11,10 +13,7 @@ async function renderJournal(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
   try {
-    const [data, stats] = await Promise.all([
-      api('/api/journal-entries'),
-      api('/api/journal-entries/stats')
-    ]);
+    const stats = await api('/api/journal-entries/stats');
     let html = '';
 
     // 统计卡片
@@ -36,27 +35,63 @@ async function renderJournal(container) {
 
     // 表格容器
     html += '<div id="je-table-wrap" class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"></div>';
+    // 分页栏
+    html += '<div id="je-pagination" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 0;flex-shrink:0"></div>';
 
     el.innerHTML = html;
-    _jeData = data;
     buildJePeriodBar();
-    renderJeTable(data);
-    updateJeBatchBtn();
+    loadJePage(1);
   } catch (e) {
     showError(el, e, '加载序时账');
   }
+}
+
+async function loadJePage(page) {
+  var from = getJePeriod('from');
+  var to = getJePeriod('to');
+  var params = { skip: (page - 1) * _jePageSize, limit: _jePageSize };
+  if (from) params.period_from = from;
+  if (to) params.period_to = to;
+
+  try {
+    var res = await api('/api/journal-entries', params);
+    _jePage = page;
+    _jeTotal = res.total || 0;
+    renderJeTable(res.items || []);
+    renderJePagination();
+    updateJeBatchBtn();
+  } catch (e) {
+    toast('加载失败: ' + e.message, 'error');
+  }
+}
+
+function renderJePagination() {
+  var bar = document.getElementById('je-pagination');
+  if (!bar) return;
+  var totalPages = Math.ceil(_jeTotal / _jePageSize) || 0;
+  if (totalPages <= 1) { bar.innerHTML = ''; return; }
+
+  bar.innerHTML =
+    '<button class="btn btn-sm" ' + (_jePage <= 1 ? 'disabled' : '') + ' onclick="jePrevPage()">◀ 上一页</button>' +
+    '<span style="font-size:13px;color:#374151">第 <b>' + _jePage + '</b>/' + totalPages + ' 页</span>' +
+    '<button class="btn btn-sm" ' + (_jePage >= totalPages ? 'disabled' : '') + ' onclick="jeNextPage()">下一页 ▶</button>' +
+    '<span style="font-size:12px;color:#9ca3af;margin-left:8px">共 ' + _jeTotal + ' 条</span>';
+}
+
+function jePrevPage() {
+  if (_jePage > 1) loadJePage(_jePage - 1);
+}
+
+function jeNextPage() {
+  var totalPages = Math.ceil(_jeTotal / _jePageSize);
+  if (_jePage < totalPages) loadJePage(_jePage + 1);
 }
 
 function renderJeTable(data) {
   const el = document.getElementById('je-table-wrap');
   if (!el) return;
 
-  // 根据期间选择过滤数据
-  let from = getJePeriod('from');
-  let to = getJePeriod('to');
-  let items = data;
-  if (from) items = items.filter(r => r.period && r.period >= from);
-  if (to) items = items.filter(r => r.period && r.period <= to);
+  let items = data || [];
 
   if (items.length === 0) {
     el.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">暂无记录</div>';
@@ -545,7 +580,7 @@ function stepJeMonth(side, delta) {
 }
 
 function onJePeriodChange() {
-  if (_jeData) renderJeTable(_jeData);
+  loadJePage(1);
 }
 
 function clearJePeriod() {
@@ -553,7 +588,7 @@ function clearJePeriod() {
   document.getElementById('je-from-m').value = '';
   document.getElementById('je-to-y').value = '';
   document.getElementById('je-to-m').value = '';
-  if (_jeData) renderJeTable(_jeData);
+  loadJePage(1);
 }
 
 function _enforceJePeriodOrder(changedSide) {

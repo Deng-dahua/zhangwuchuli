@@ -3507,6 +3507,8 @@ class JournalEntryUpdate(BaseModel):
 def list_journal_entries(
     company_id: int = Query(...),
     period: Optional[str] = None,
+    period_from: Optional[str] = None,
+    period_to: Optional[str] = None,
     voucher_word: Optional[str] = None,
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
@@ -3519,6 +3521,10 @@ def list_journal_entries(
     q = db.query(JournalEntry).filter(JournalEntry.company_id == company_id)
     if period:
         q = q.filter(JournalEntry.period == period)
+    if period_from:
+        q = q.filter(JournalEntry.period >= period_from)
+    if period_to:
+        q = q.filter(JournalEntry.period <= period_to)
     if voucher_word:
         q = q.filter(JournalEntry.voucher_word == voucher_word)
     if is_reviewed is not None:
@@ -3533,24 +3539,28 @@ def list_journal_entries(
             JournalEntry.account_name.contains(keyword),
             JournalEntry.account_code.contains(keyword),
         ))
+    total = q.count()
     entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).offset(skip).limit(limit).all()
     hierarchy = _build_account_hierarchy(db, company_id)
-    return [{
-        "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
-        "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
-        "attach_count": e.attach_count or 0, "summary": e.summary or "",
-        "account_code": e.account_code, "account_name": e.account_name or "",
-        "account_full_name": hierarchy.get(e.account_code, e.account_name or ""),
-        "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
-        "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
-        "is_reviewed": e.is_reviewed, "remark": e.remark or "",
-        "contact_project": e.contact_project or "",
-        "spec_model": e.spec_model or "",
-        "quantity": e.quantity or 0, "unit": e.unit or "",
-        "unit_price": e.unit_price or 0,
-        "source": e.source or "手动录入",
-        "created_at": str(e.created_at) if e.created_at else None,
-    } for e in entries]
+    return {
+        "total": total,
+        "items": [{
+            "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
+            "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
+            "attach_count": e.attach_count or 0, "summary": e.summary or "",
+            "account_code": e.account_code, "account_name": e.account_name or "",
+            "account_full_name": hierarchy.get(e.account_code, e.account_name or ""),
+            "debit_amount": e.debit_amount or 0, "credit_amount": e.credit_amount or 0,
+            "prepared_by": e.prepared_by or "", "reviewed_by": e.reviewed_by or "",
+            "is_reviewed": e.is_reviewed, "remark": e.remark or "",
+            "contact_project": e.contact_project or "",
+            "spec_model": e.spec_model or "",
+            "quantity": e.quantity or 0, "unit": e.unit or "",
+            "unit_price": e.unit_price or 0,
+            "source": e.source or "手动录入",
+            "created_at": str(e.created_at) if e.created_at else None,
+        } for e in entries]
+    }
 
 
 @app.get("/api/journal-entries/stats")
