@@ -843,9 +843,10 @@ def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = De
 @app.post("/api/suppliers/auto-create")
 def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(get_db)):
     """智能供应商建档：
-    1. 取得发票销方 + 银行流水付款方共同确定
-    2. 排除股东（投资款归实收资本，付款归分红）
-    3. 在发两个模块都有记录的为强信号供应商
+    1. 以银行流水付款方为注来源
+    2. 银行流水 + 取得发票双源出现 → 强信号 → 创建
+    3. 单源（仅银行或仅发票）→ 不创建
+    4. 排除股东（投资款归实收资本，付款归分红）
     """
     created = 0
     updated = 0
@@ -912,11 +913,12 @@ def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(ge
                 'source': f'银行流水:#{tx.id}',
             }
 
-    # 3. 合并：两个来源都有 = 强信号；只有一个 = 弱信号（仍创建）
-    all_names = pi_names | bt_names
+    # 3. 双源信号：银行流水 + 取得发票 都出现才创建
+    # 以银行流水为主来源，仅双源交集才进入候选
+    dual_names = pi_names & bt_names  # 双源交集 = 强信号
     existing_supp_norms = set(idx['suppliers'].keys())
 
-    for norm in all_names:
+    for norm in dual_names:
         # 排除股东
         if norm in shareholder_norms:
             skipped += 1
