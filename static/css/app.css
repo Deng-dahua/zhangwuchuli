@@ -74,6 +74,17 @@
     #salary-stats .stat-label { font-size: 11px; margin-bottom: 2px; }
     #salary-stats .stat-value { font-size: 16px; }
 
+    /* 年月选择器上下箭头 */
+    .period-spinner { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; }
+    .spinner-btn {
+      width: 100%; height: 18px; padding: 0; font-size: 10px; line-height: 1;
+      border: 1px solid var(--gray-300); background: #fff; color: var(--gray-500);
+      cursor: pointer; border-radius: 4px; margin-bottom: 1px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .spinner-btn:last-child { margin-bottom: 0; margin-top: 1px; }
+    .spinner-btn:hover { background: var(--gray-100); color: var(--gray-700); }
+
     /* 按钮 */
     .btn {
       display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;

@@ -77,6 +77,27 @@ function initSalaryPeriodSelectors() {
     monthSel.value = m;
 }
 
+function changeSalaryYear(delta) {
+    const sel = document.getElementById('salary-year-sel');
+    if (!sel) return;
+    const opts = Array.from(sel.options);
+    let idx = sel.selectedIndex + delta;
+    if (idx < 0) idx = 0;
+    if (idx >= opts.length) idx = opts.length - 1;
+    sel.selectedIndex = idx;
+    loadSalaryData();
+}
+
+function changeSalaryMonth(delta) {
+    const sel = document.getElementById('salary-month-sel');
+    if (!sel) return;
+    let idx = sel.selectedIndex + delta;
+    if (idx < 0) idx = 0;
+    if (idx >= sel.options.length) idx = sel.options.length - 1;
+    sel.selectedIndex = idx;
+    loadSalaryData();
+}
+
 function renderSalaryPage(container) {
     const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
     app.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0';
@@ -84,13 +105,21 @@ function renderSalaryPage(container) {
         <div class="page-header">
             <div></div>
             <div class="page-actions">
-                <select id="salary-year-sel" style="width:90px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"></select>
-                <select id="salary-month-sel" style="width:70px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
-                    <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
-                    <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
-                    <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
-                    <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
-                </select>
+                <div class="period-spinner">
+                    <button class="spinner-btn" onclick="changeSalaryYear(1)">▲</button>
+                    <select id="salary-year-sel" style="width:90px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"></select>
+                    <button class="spinner-btn" onclick="changeSalaryYear(-1)">▼</button>
+                </div>
+                <div class="period-spinner">
+                    <button class="spinner-btn" onclick="changeSalaryMonth(1)">▲</button>
+                    <select id="salary-month-sel" style="width:70px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
+                        <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
+                        <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
+                        <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
+                        <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                    </select>
+                    <button class="spinner-btn" onclick="changeSalaryMonth(-1)">▼</button>
+                </div>
                 <button class="btn btn-primary" onclick="loadSalaryData()">查询</button>
                 <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增</button>
                 <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入文件</button>
