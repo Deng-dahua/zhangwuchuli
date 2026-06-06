@@ -51,7 +51,8 @@ const pages = {
   'bank-transactions': '银行流水',
   'vat-declaration': '增值税申报',
   'salary': '工资薪金',
-  'social-security': '社保申报'
+  'social-security': '社保申报',
+  'housing-fund': '公积金缴存'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -334,6 +335,7 @@ function navigateTo(page) {
     case 'vat-declaration': renderVATDeclaration(container); break;
     case 'salary': showSalaryPage(container); break;
     case 'social-security': renderSocialSecurity(container); break;
+    case 'housing-fund': renderHousingFund(container); break;
   }
 }
 

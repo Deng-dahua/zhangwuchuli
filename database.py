@@ -1115,6 +1115,12 @@ def migrate_schema(db):
         db.commit()
         print("  [OK] 已创建 social_security_details 表")
 
+    # ── 16. 公积金缴存表──
+    if "housing_fund_declarations" not in inspector.get_table_names():
+        HousingFundDeclaration.__table__.create(bind=db.get_bind())
+        db.commit()
+        print("  [OK] 已创建 housing_fund_declarations 表")
+
 
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
@@ -2050,6 +2056,41 @@ class SocialSecurityDetail(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     declaration = relationship("SocialSecurityDeclaration", back_populates="details")
+
+# ========== 公积金缴存模型 ==========
+
+class HousingFundDeclaration(Base):
+    """单位住房公积金汇缴书"""
+    __tablename__ = "housing_fund_declarations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)  # YYYY-MM 汇缴年月
+    unit_name = Column(String(100), comment="汇缴单位名称（公章）")
+    unit_account = Column(String(50), comment="汇缴单位账号")
+    funding_source = Column(String(20), default="非财政统发", comment="资金来源：财政统发/非财政统发")
+    amount = Column(Float, default=0.0, comment="汇缴金额（数字）")
+    amount_capital = Column(String(100), comment="汇缴金额（大写）")
+    person_count_last = Column(Integer, default=0, comment="上月汇缴人数")
+    person_count_increase = Column(Integer, default=0, comment="本月增加人数")
+    person_count_decrease = Column(Integer, default=0, comment="本月减少人数")
+    person_count_this = Column(Integer, default=0, comment="本月汇缴人数")
+    amount_last = Column(Float, default=0.0, comment="上月汇缴金额")
+    amount_increase = Column(Float, default=0.0, comment="本月增加金额")
+    amount_decrease = Column(Float, default=0.0, comment="本月减少金额")
+    amount_this = Column(Float, default=0.0, comment="本月汇缴金额")
+    payment_method = Column(String(20), default="委托扣款", comment="缴款方式：委托扣款/主动汇款/暂存款")
+    temp_deposit_amount = Column(Float, default=0.0, comment="暂存款使用金额")
+    payer_account_name = Column(String(100), comment="付款账户名称（主动汇款需填）")
+    payer_bank_name = Column(String(100), comment="付款银行名称（主动汇款需填）")
+    payer_account = Column(String(50), comment="付款账号（主动汇款需填）")
+    note = Column(String(500), comment="备注")
+    fill_date = Column(String(10), comment="填表日期（YYYY-MM-DD）")
+    status = Column(String(20), default="草稿", comment="草稿/已确认")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", backref="housing_fund_declarations")
 
 
 # 基础科目数据模板（中小制造业标准科目表）
