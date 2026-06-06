@@ -174,14 +174,26 @@
         <span id="company-name-display"></span>
       </div>
       <div class="period-selector-bar">
-        <select id="period-year" class="period-selector-year" onchange="onPeriodSelectChange()"><option value="">年</option></select>
-        <select id="period-month" class="period-selector-month" onchange="onPeriodSelectChange()">
-          <option value="">月</option>
-          <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
-          <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
-          <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
-          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
-        </select>
+        <div class="period-stepper">
+          <select id="period-year" class="period-selector-year" onchange="onPeriodSelectChange()"><option value="">年</option></select>
+          <div class="stepper-arrows">
+            <button class="stepper-btn stepper-up" onclick="stepPeriodYear(1)" title="下一年">▲</button>
+            <button class="stepper-btn stepper-down" onclick="stepPeriodYear(-1)" title="上一年">▼</button>
+          </div>
+        </div>
+        <div class="period-stepper">
+          <select id="period-month" class="period-selector-month" onchange="onPeriodSelectChange()">
+            <option value="">月</option>
+            <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
+            <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
+            <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
+            <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select>
+          <div class="stepper-arrows">
+            <button class="stepper-btn stepper-up" onclick="stepPeriodMonth(1)" title="下一月">▲</button>
+            <button class="stepper-btn stepper-down" onclick="stepPeriodMonth(-1)" title="上一月">▼</button>
+          </div>
+        </div>
       </div>
       <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
     </div>
