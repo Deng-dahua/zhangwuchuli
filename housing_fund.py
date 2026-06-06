@@ -34,6 +34,7 @@ def list_details(
             "id": item.id,
             "company_id": item.company_id,
             "period": item.period,
+            "employee_id": item.employee_id,
             "employee_name": item.employee_name,
             "id_number": item.id_number,
             "deposit_base": item.deposit_base,
@@ -62,6 +63,7 @@ def get_detail(detail_id: int, company_id: int, db: Session = Depends(get_db)):
         "id": item.id,
         "company_id": item.company_id,
         "period": item.period,
+        "employee_id": item.employee_id,
         "employee_name": item.employee_name,
         "id_number": item.id_number,
         "deposit_base": item.deposit_base,
@@ -79,7 +81,8 @@ def get_detail(detail_id: int, company_id: int, db: Session = Depends(get_db)):
 def create_detail(
     company_id: int,
     period: str,
-    employee_name: str,
+    employee_id: str = "",
+    employee_name: str = "",
     id_number: str = "",
     deposit_base: float = 0,
     company_ratio: float = 0,
@@ -95,6 +98,7 @@ def create_detail(
     detail = HousingFundDetail(
         company_id=company_id,
         period=period,
+        employee_id=employee_id,
         employee_name=employee_name,
         id_number=id_number,
         deposit_base=deposit_base,
@@ -114,6 +118,7 @@ def create_detail(
 def update_detail(
     detail_id: int,
     company_id: int,
+    employee_id: str = None,
     employee_name: str = None,
     id_number: str = None,
     deposit_base: float = None,
@@ -130,6 +135,8 @@ def update_detail(
     if not item:
         raise HTTPException(404, "记录不存在")
 
+    if employee_id is not None:
+        item.employee_id = employee_id
     if employee_name is not None:
         item.employee_name = employee_name
     if id_number is not None:
@@ -231,7 +238,7 @@ async def import_excel(
     header = rows[0]
     col_map = {}
     field_names = {
-        "姓名": "employee_name", "身份证号": "id_number",
+        "工号": "employee_id", "姓名": "employee_name", "身份证号": "id_number",
         "缴存基数": "deposit_base", "单位缴存比例": "company_ratio",
         "个人缴存比例": "personal_ratio", "缴存额": "total_amount",
         "单位缴存额": "company_amount", "个人缴存额": "personal_amount",
@@ -254,6 +261,7 @@ async def import_excel(
             continue
 
         try:
+            emp_id = str(row[col_map["employee_id"]] or "").strip() if "employee_id" in col_map else ""
             id_num = str(row[col_map["id_number"]] or "").strip() if "id_number" in col_map else ""
             deposit_base = float(row[col_map["deposit_base"]] or 0) if "deposit_base" in col_map else 0
             company_ratio = float(row[col_map["company_ratio"]] or 0) if "company_ratio" in col_map else 0
@@ -266,6 +274,7 @@ async def import_excel(
             detail = HousingFundDetail(
                 company_id=company_id,
                 period=period,
+                employee_id=emp_id,
                 employee_name=name,
                 id_number=id_num,
                 deposit_base=deposit_base,

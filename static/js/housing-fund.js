@@ -18,11 +18,12 @@ async function renderHousingFund(container) {
           <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
         </div>
       </div>
-      <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">
+        <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">
         <table class="data-table" id="hf-table">
           <thead>
             <tr>
               <th style="width:36px;"><input type="checkbox" onchange="hfToggleAll(this)" /></th>
+              <th>工号</th>
               <th>姓名</th>
               <th>身份证号</th>
               <th>缴存基数</th>
@@ -86,10 +87,11 @@ function hfRenderTable(items) {
   if (!tbody) return;
   hfSelectedIds.clear();
   tbody.innerHTML = items.length === 0
-    ? '<tr><td colspan="11" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
+    ? '<tr><td colspan="12" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
     : items.map(item => `
       <tr>
         <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)" /></td>
+        <td>${escHtml(item.employee_id || '-')}</td>
         <td>${escHtml(item.employee_name)}</td>
         <td>${escHtml(item.id_number || '-')}</td>
         <td class="num">${(item.deposit_base || 0).toLocaleString()}</td>
@@ -139,6 +141,10 @@ async function hfBatchDelete() {
 function hfShowCreate() {
   showModal('新增公积金缴存记录', `
     <div class="form-group">
+      <label>工号</label>
+      <input class="form-input" id="hf-emp-id" placeholder="工号（选填）" />
+    </div>
+    <div class="form-group">
       <label>姓名 <span style="color:red">*</span></label>
       <input class="form-input" id="hf-emp-name" placeholder="姓名" />
     </div>
@@ -173,6 +179,7 @@ function hfShowCreate() {
     const body = {
       company_id: currentCompanyId,
       period: hfPeriod || new Date().toISOString().slice(0, 7),
+      employee_id: document.getElementById('hf-emp-id').value.trim(),
       employee_name: name,
       id_number: document.getElementById('hf-id-number').value.trim(),
       deposit_base: parseFloat(document.getElementById('hf-deposit-base').value) || 0,
@@ -189,6 +196,10 @@ function hfShowCreate() {
 async function hfShowEdit(id) {
   const data = await api('GET', `/api/housing-fund/details/${id}?company_id=${currentCompanyId}`);
   showModal('编辑公积金缴存记录', `
+    <div class="form-group">
+      <label>工号</label>
+      <input class="form-input" id="hf-emp-id" value="${escAttr(data.employee_id || '')}" />
+    </div>
     <div class="form-group">
       <label>姓名 <span style="color:red">*</span></label>
       <input class="form-input" id="hf-emp-name" value="${escAttr(data.employee_name)}" />
@@ -223,6 +234,7 @@ async function hfShowEdit(id) {
     if (!name) return alert('请输入姓名');
     const body = new URLSearchParams({
       company_id: currentCompanyId,
+      employee_id: document.getElementById('hf-emp-id').value.trim(),
       employee_name: name,
       id_number: document.getElementById('hf-id-number').value.trim(),
       deposit_base: document.getElementById('hf-deposit-base').value,
@@ -255,7 +267,7 @@ function hfShowImport() {
       <input type="file" class="form-input" id="hf-import-file" accept=".xlsx,.xls" />
     </div>
     <div style="font-size:12px;color:#888;margin-top:8px;">
-      表头要求：姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
+      表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
     </div>
   `, async () => {
     const file = document.getElementById('hf-import-file').files[0];

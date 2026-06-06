@@ -344,18 +344,38 @@ document.querySelectorAll('.nav-item').forEach(el => {
 });
 
 // ==================== API 工具（多公司版本） ====================
-async function api(url, options = {}) {
-  // 强制附加/替换 company_id 参数（/api/companies 自身除外）
+async function api(method, url, body) {
+  // 支持两种调用方式：api(method, url, body) 或 api(url, options)
+  if (arguments.length === 2 && typeof method === 'string' && !['GET','POST','PUT','DELETE','PATCH'].includes(method)) {
+    // 旧式调用 api(url, options)
+    let options = url;
+    url = method;
+    method = (options && options.method) || 'GET';
+    body = (options && options.body) || undefined;
+  }
+  // 强制附加 company_id 参数（/api/companies 自身除外）
   if (url.includes('/api/') && !url.startsWith('/api/companies')) {
     const [base, query] = url.split('?');
     const params = new URLSearchParams(query || '');
     params.set('company_id', currentCompanyId || 1);
     url = base + '?' + params.toString();
   }
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
+  const isFormData = body instanceof FormData;
+  const fetchOptions = {
+    method: method,
+  };
+  if (body !== undefined && body !== null) {
+    if (isFormData) {
+      fetchOptions.body = body;
+      // 不设置 Content-Type，让浏览器自动设置（含 boundary）
+    } else if (typeof body === 'object') {
+      fetchOptions.headers = { 'Content-Type': 'application/json' };
+      fetchOptions.body = JSON.stringify(body);
+    } else {
+      fetchOptions.body = body;
+    }
+  }
+  const res = await fetch(url, fetchOptions);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '请求失败' }));
     throw new Error(err.detail || '请求失败');

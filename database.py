@@ -2294,6 +2294,7 @@ class HousingFundDetail(Base):
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     period = Column(String(7), nullable=False, index=True)  # YYYY-MM
+    employee_id = Column(String(20), comment="工号")
     employee_name = Column(String(50), nullable=False, comment="姓名")
     id_number = Column(String(18), comment="身份证号")
     deposit_base = Column(Float, default=0.0, comment="缴存基数")
