@@ -536,10 +536,11 @@ async function _loadContactDetail(apiPrefix, name) {
     let data = await api('/api/ledger/' + apiPrefix + '-detail?contact_name=' + encodeURIComponent(name) + '&period_from=' + from + '&period_to=' + to);
     let ob = data.opening_balance || 0;
     let obFmt = ob === 0 ? '¥0.00' : (ob >= 0 ? '¥' + fmt(ob) : '<span style="color:var(--danger)">-¥' + fmt(-ob) + '</span>');
-    let html = '<div style="font-size:13px;margin-bottom:10px;padding:8px 4px;border-bottom:1px solid #e5e7eb">' +
-      '<b>往来单位：</b>' + escapeHtml(name) +
-      ' &nbsp;&nbsp; <b>期初余额：</b>' + obFmt +
-      ' &nbsp;&nbsp; <b>期间：</b>' + from + ' ~ ' + to + '</div>';
+    let html = '<div class="period-selector-bar" style="padding:6px 12px;margin-bottom:10px;display:flex;align-items:center;gap:16px">' +
+      '<span style="font-size:13px;color:var(--gray-800);font-weight:600">' + escapeHtml(name) + '</span>' +
+      '<span style="font-size:13px;color:#6b7280">期初余额：' + obFmt + '</span>' +
+      '<span style="font-size:13px;color:#6b7280">期间：<b style="color:var(--gray-800)">' + from + ' ~ ' + to + '</b></span>' +
+      '</div>';
     html += '<table><thead><tr>' +
       '<th>日期</th><th>凭证号</th><th>摘要</th><th>科目</th>' +
       '<th class="num">借方</th><th class="num">贷方</th>' +
