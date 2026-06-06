@@ -1452,7 +1452,8 @@ def _normalize_customer_name(name: str) -> str:
 def _build_entity_index(db, company_id):
     """构建全实体匹配索引，供跨境匹配使用。
     返回：{personnel: {norm->{name,code}}, shareholders: set(norm), insiders: set(norm),
-           customers: {norm->{name,code}}, suppliers: {norm->{name,code}}}
+           customers: {norm->{name,code}}, suppliers: {norm->{name,code}},
+           shareholder_as_customer: set(norm), shareholder_as_supplier: set(norm)}
     """
     idx = {
         'personnel': {},
@@ -1460,6 +1461,8 @@ def _build_entity_index(db, company_id):
         'insiders': set(),
         'customers': {},
         'suppliers': {},
+        'shareholder_as_customer': set(),   # 股东同时是客户（有销项发票）
+        'shareholder_as_supplier': set(),   # 股东同时是供应商（有进项发票）
     }
 
     # --- 人员档案 ---
@@ -1511,6 +1514,29 @@ def _build_entity_index(db, company_id):
         elif supp.name:
             norm = _normalize_customer_name(supp.name)
             idx['suppliers'][norm] = {'name': supp.name, 'code': supp.code}
+
+    # --- 股东与发票交叉比对：股东是否同时也是客户/供应商 ---
+    # 检查销项发票：股东名称出现在购方 → 股东也是客户
+    si_buyers = db.query(SalesInvoice.buyer_name).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).distinct().all()
+    buyer_norms = set()
+    for (bn,) in si_buyers:
+        if bn:
+            buyer_norms.add(_normalize_customer_name(bn))
+    idx['shareholder_as_customer'] = idx['shareholders'] & buyer_norms
+
+    # 检查进项发票：股东名称出现在销方 → 股东也是供应商
+    pi_sellers = db.query(PurchaseInvoice.seller_name).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).distinct().all()
+    seller_norms = set()
+    for (sn,) in pi_sellers:
+        if sn:
+            seller_norms.add(_normalize_customer_name(sn))
+    idx['shareholder_as_supplier'] = idx['shareholders'] & seller_norms
 
     return idx
 
@@ -1567,7 +1593,9 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     """智能分类单条银行流水，返回 (other_side_code, other_side_name, match_type)
 
     新规则优先级（老邓 2026-06-06）：
-    内部转账 > 规则匹配 > 税费识别 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商/序时账/发票） > 默认往来
+    内部转账 > 规则匹配 > 税费识别 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商） > 默认往来
+    股东特判：先查发票（销项购方=也是客户/进项销方=也是供应商），再查摘要关键词（货款/服务费等），
+    有业务证据→应收/应付，无证据→实收资本/股利
     """
     cp = tx.counterparty_name or tx.summary or ""
     full_text = (tx.summary or "") + " " + (tx.counterparty_name or "") + " " + (tx.transaction_remark or "")
@@ -1648,9 +1676,36 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         entity_index = _build_entity_index(db, company_id)
 
     entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp else ('unknown', cp, None)
+    norm = _normalize_customer_name(cp) if cp else ""
 
-    # 7a. 股东 → 投资款（收） / 分红（付）
+    # 7a. 股东 → 先判断是否有业务往来（股东也是客户/供应商），再决定
     if entity_type == 'shareholder':
+        # 7a1. 发票证据：股东在销项发票中出现过 → 也是客户
+        if norm in entity_index.get('shareholder_as_customer', set()):
+            return ("1122", "应收账款", "shareholder_customer")
+        # 7a2. 发票证据：股东在进项发票中出现过 → 也是供应商
+        if norm in entity_index.get('shareholder_as_supplier', set()):
+            return ("2202", "应付账款", "shareholder_supplier")
+
+        # 7a3. 摘要关键词：业务往来信号
+        biz_keywords = [
+            "货款", "采购", "购买", "下单", "订单",
+            "服务费", "咨询费", "技术服务", "技术开发",
+            "租金", "物业", "工程", "施工",
+            "合同", "协议", "结算", "对账",
+            "往来款", "预付款", "保证金", "押金",
+            "发票", "invoice", "报销",
+        ]
+        summary_lower = (tx.summary or "").lower()
+        remark_lower = (tx.transaction_remark or "").lower()
+        biz_text = summary_lower + " " + remark_lower
+        if any(kw in biz_text for kw in biz_keywords):
+            if is_debit:
+                return ("2202", "应付账款", "shareholder_biz")
+            else:
+                return ("1122", "应收账款", "shareholder_biz")
+
+        # 7a4. 无业务往来证据 → 投资款/分红
         if is_debit:
             return ("410401", "利润分配-应付股利", "dividend")
         else:
