@@ -1694,8 +1694,8 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
             return (code, name, "tax")
 
     # 3.5 银行手续费识别（老邓 2026-06-06 确认）
-    # 综合对方户名、对方行名、摘要、交易附言四字段判断
-    fee_text = (tx.counterparty_name or "") + " " + (tx.counterparty_bank or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
+    # 综合对方户名、摘要、交易附言三字段判断
+    fee_text = (tx.counterparty_name or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
     _FEE_KEYWORDS = [
         "手续费", "工本费", "网银服务月费", "短信月费",
         "网上银行公司业务手续费收入",
