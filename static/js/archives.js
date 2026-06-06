@@ -608,8 +608,8 @@ async function saveEmp(id) {
   if (!id && !body.code) body.code = '';
   try {
     const list = await api('/api/employees');
-    const dup = list.find(e => e.name === body.name && e.id !== id && e.id_card && body.id_card && e.id_card === body.id_card);
-    if (dup) { toast('人员"' + body.name + '"（' + body.id_card + '）已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+    const dup = list.find(e => e.id !== id && body.id_card && e.id_card === body.id_card);
+    if (dup) { toast('人员"' + body.name + '" 身份证号已存在（' + dup.code + ' ' + dup.name + '），请勿重复添加', 'warn'); return; }
   } catch (e) {}
   try {
     if (id) {
@@ -735,8 +735,10 @@ async function saveCust(id) {
   if (!id && !body.code) body.code = '';
   try {
     const list = await api('/api/customers');
-    const dup = list.find(c => c.name === body.name && c.id !== id && c.uscc && body.uscc && c.uscc === body.uscc);
-    if (dup) { toast('客户"' + body.name + '"（' + body.uscc + '）已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+    const dup = list.find(c => c.id !== id && (
+      (body.name && c.name === body.name) || (body.uscc && c.uscc === body.uscc)
+    ));
+    if (dup) { toast('客户"' + body.name + '"（' + body.uscc + '）与已有记录冲突（' + dup.code + ' ' + dup.name + '），请勿重复添加', 'warn'); return; }
   } catch (e) {}
   try {
     if (id) {
@@ -861,8 +863,10 @@ async function saveSupp(id) {
   if (!id && !body.code) body.code = '';
   try {
     const list = await api('/api/suppliers');
-    const dup = list.find(s => s.name === body.name && s.id !== id && s.uscc && body.uscc && s.uscc === body.uscc);
-    if (dup) { toast('供应商"' + body.name + '"（' + body.uscc + '）已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+    const dup = list.find(s => s.id !== id && (
+      (body.name && s.name === body.name) || (body.uscc && s.uscc === body.uscc)
+    ));
+    if (dup) { toast('供应商"' + body.name + '"（' + body.uscc + '）与已有记录冲突（' + dup.code + ' ' + dup.name + '），请勿重复添加', 'warn'); return; }
   } catch (e) {}
   try {
     if (id) {
