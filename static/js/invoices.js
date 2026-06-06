@@ -32,7 +32,7 @@ async function renderSalesInvoices(container) {
     // 工具栏
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">📁 导入文件</button>';
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">导入文件</button>';
     html += '<button class="btn btn-primary" id="siBatchGenBtn" onclick="batchGenerateVouchers()">⚡ 一键生成凭证</button>';
     html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
         html += '<div class="tab-btn-group">';
@@ -476,7 +476,7 @@ async function renderPurchaseInvoices(container) {
 
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">📁 导入文件</button>';
+    html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
     html += '<button class="btn btn-primary" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">⚡ 一键生成凭证</button>';
     html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
     html += '<div class="tab-btn-group">';

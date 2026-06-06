@@ -9,7 +9,7 @@ async function renderSocialSecurity(container) {
     el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
     + '<div class="toolbar"><div class="toolbar-left">'
     + '<button class="btn btn-primary" onclick="showSSCreateModal()">＋ 新建申报</button> '
-    + '<button class="btn btn-outline" onclick="showSSImportModal()">📁 导入Excel</button>'
+    + '<button class="btn btn-outline" onclick="showSSImportModal()">导入Excel</button>'
     + '<button class="btn btn-info" onclick="generateSSPaymentVoucher()" style="background:#7c3aed">⚡ 生成缴纳凭证</button>'
     + '</div>'
     + '<div class="toolbar-right"><input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px" placeholder="选择期间"></div></div>'
@@ -49,7 +49,7 @@ function renderSSTable() {
   const el = document.getElementById('ss-list-table'); if (!el) return;
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>税款所属期</th><th>参保人数</th><th>状态</th><th>备注</th><th>更新时间</th><th>操作</th></tr></thead><tbody>';
   if (ssDeclarations.length === 0) {
-    html += '<tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">暂无申报记录，点击「＋ 新建申报」或「📁 导入Excel」创建</td></tr>';
+    html += '<tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">暂无申报记录，点击「＋ 新建申报」或「导入Excel」创建</td></tr>';
   } else {
     ssDeclarations.forEach(d => {
       const badge = {'草稿':'<span class="badge badge-draft">草稿</span>','已确认':'<span class="badge badge-posted">已确认</span>'}[d.status] || d.status;
@@ -198,7 +198,7 @@ async function deleteSSDeclaration(id, period) {
 function showSSImportModal() {
   const defaultPeriod = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
   document.getElementById('ss-modal').style.display = 'flex';
-  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">📁 导入社保申报Excel</h2>'
+  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">导入社保申报Excel</h2>'
     + '<div style="margin-bottom:16px;padding:12px;background:#fef3c7;border-radius:6px;font-size:13px;color:#92400e">'
     + '支持"日常申报明细表"格式的Excel文件（.xlsx / .xls）</div>'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">费款所属期 <span style="color:red">*</span></label>'

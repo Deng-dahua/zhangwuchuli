@@ -1,3 +1,16 @@
+// 档案列表全局缓存（用于新增时计算下一个编码）
+let deptList = [], empList = [], custList = [], suppList = [];
+
+function _nextArchiveCode(prefix, list) {
+    const nums = list
+        .map(x => x.code)
+        .filter(c => c && c.startsWith(prefix))
+        .map(c => parseInt(c.substring(prefix.length)))
+        .filter(n => !isNaN(n));
+    const next = nums.length === 0 ? 1 : Math.max(...nums) + 1;
+    return prefix + String(next).padStart(3, '0');
+}
+
 // ==================== 会计科目 ====================
 async function renderAccounts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
@@ -415,11 +428,12 @@ async function renderDepartments(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/departments');
+    deptList = data;
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button>
-          <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">📁 导入文件</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">导入文件</button>
           <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -449,9 +463,10 @@ async function renderDepartments(container) {
 
 function showDeptForm(id, code, name) {
   const isEdit = !!id;
+  const nextCode = isEdit ? (code || '') : _nextArchiveCode('BM', deptList);
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}部门</h3>
-    <div class="form-field"><label>编码</label><input id="dept-code" value="${code||''}" readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"></div>
+    <div class="form-field"><label>编码</label><input id="dept-code" value="${nextCode}" readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"></div>
     <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="dept-name" value="${name||''}" placeholder="如：生产部"></div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveDept(${id||0})">保存</button>
@@ -523,11 +538,12 @@ async function renderEmployees(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/employees');
+    empList = data;
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
-          <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">📁 导入文件</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">导入文件</button>
           <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -584,10 +600,11 @@ async function batchDeleteEmp() {
 
 function showEmpForm(id, code, name, idCard) {
   const isEdit = !!id;
+  const nextCode = isEdit ? (code || '') : _nextArchiveCode('RY', empList);
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}人员</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>工号</label><input id="emp-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
+      <div class="form-field"><label>工号</label><input id="emp-code" value="${nextCode}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
       <div class="form-field"><label>身份证号</label><input id="emp-idcard" value="${idCard||''}" placeholder="18位身份证号"></div>
     </div>
@@ -637,11 +654,12 @@ async function renderCustomers(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/customers');
+    custList = data;
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
-          <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -711,10 +729,11 @@ async function batchDeleteCust() {
 
 function showCustForm(id, code, name, uscc) {
   const isEdit = !!id;
+  const nextCode = isEdit ? (code || '') : _nextArchiveCode('KH', custList);
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}客户</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>编码</label><input id="cust-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
+      <div class="form-field"><label>编码</label><input id="cust-code" value="${nextCode}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
     </div>
@@ -766,11 +785,12 @@ async function renderSuppliers(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   try {
     const data = await api('/api/suppliers');
+    suppList = data;
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
-          <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
+          <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -839,10 +859,11 @@ async function batchDeleteSupp() {
 
 function showSuppForm(id, code, name, uscc) {
   const isEdit = !!id;
+  const nextCode = isEdit ? (code || '') : _nextArchiveCode('GYS', suppList);
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}供应商</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>编码</label><input id="supp-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
+      <div class="form-field"><label>编码</label><input id="supp-code" value="${nextCode}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
     </div>

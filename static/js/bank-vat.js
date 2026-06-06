@@ -47,7 +47,7 @@ async function renderBankTransactions(container) {
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
-  html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">导入文件</button>';
   html += '<button class="btn btn-secondary" onclick="showBankRuleModal()">⚙️ 规则管理</button>';
   html += '<button class="btn btn-primary" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
@@ -362,7 +362,7 @@ async function renderInputVATDeductions(container) {
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
-  html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">📁 导入文件</button>';
+  html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">导入文件</button>';
   html += '<button class="btn btn-primary" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">⚡ 一键生成凭证</button>';
   html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
   html += '</div></div>';

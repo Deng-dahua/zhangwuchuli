@@ -18,7 +18,7 @@ async function renderHousingFund(container) {
         </div>
         <div class="toolbar-right" style="display:flex;gap:8px;">
           <button class="btn btn-primary" onclick="hfShowCreate()">+ 新增</button>
-          <button class="btn btn-outline" onclick="hfShowImport()">📁 导入</button>
+          <button class="btn btn-outline" onclick="hfShowImport()">导入</button>
           <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">⚡ 生成凭证</button>
           <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
         </div>

@@ -4104,6 +4104,27 @@ def _bs_year_begin(period: str):
     y = int(period.split("-")[0])
     return f"{y-1}-12"
 
+def _opening_balance_dict(company_id: int, db: Session):
+    """将会计科目的期初金额转为 _bs_net 可用的 balances 字典格式"""
+    accounts = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.is_active == True
+    ).all()
+    result = {}
+    for a in accounts:
+        ob = a.opening_balance or 0
+        if a.balance_direction == "借":
+            if ob >= 0:
+                result[a.code] = {"debit": ob, "credit": 0}
+            else:
+                result[a.code] = {"debit": 0, "credit": abs(ob)}
+        else:
+            if ob >= 0:
+                result[a.code] = {"debit": 0, "credit": ob}
+            else:
+                result[a.code] = {"debit": abs(ob), "credit": 0}
+    return result
+
 def _bs_net(balances, code_prefix, is_debit_nature=True):
     """资产类=借-贷，负债/权益类=贷-借"""
     total_dr = 0.0; total_cr = 0.0
@@ -4250,17 +4271,13 @@ def balance_sheet_report(
 ):
     """资产负债表（会企01号）：期末余额 + 年初余额"""
     end_balances = _compute_period_balances(company_id, None, period, db)
-    yb = _bs_year_begin(period)
-    begin_balances = _compute_period_balances(company_id, None, yb, db) if yb else {}
-    def _fill_bs(rows, bb):
-        for r in rows:
-            r["begin"] = bb.get(r["label"], 0.0) if isinstance(bb, dict) else 0.0
-        return rows
+    # 年初余额根据会计科目的期初金额确定
+    begin_balances = _opening_balance_dict(company_id, db)
     assets = _build_bs_side(end_balances, "assets")
     liab_eq = _build_bs_side(end_balances, "liab_eq")
     # 年初余额单独计算
-    assets_begin = _build_bs_side(begin_balances, "assets") if begin_balances else assets
-    liab_eq_begin = _build_bs_side(begin_balances, "liab_eq") if begin_balances else liab_eq
+    assets_begin = _build_bs_side(begin_balances, "assets")
+    liab_eq_begin = _build_bs_side(begin_balances, "liab_eq")
     begin_map_a = {r["label"]: r["end"] for r in assets_begin}
     begin_map_le = {r["label"]: r["end"] for r in liab_eq_begin}
     for r in assets:
