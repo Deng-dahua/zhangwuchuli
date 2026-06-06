@@ -76,14 +76,14 @@ function goDetailLedger(code) {
 async function renderDetailLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');
-  el.innerHTML = '<div class="card" style="margin-bottom:0">' +
-      '<div class="filter-bar" style="gap:8px;align-items:center;flex-wrap:wrap;">' +
+  el.innerHTML = '<div class="card card-fill">' +
+      '<div class="filter-bar" style="gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">' +
         '<select class="form-control" id="dl-account" style="width:240px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">' +
           '<option value="">-- 选择科目 --</option>' + accountOptions +
         '</select>' +
         '<div id="dl-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
-      '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px" id="dl-table"></div>' +
+      '<div class="table-wrap" style="flex:1;overflow-y:auto;padding-bottom:4px;min-height:0" id="dl-table"></div>' +
     '</div>';
   _buildStandardPeriodBar('dl-', { onQuery: loadDetailLedger, onClear: dlClearFilters });
 }
@@ -238,7 +238,6 @@ function _buildStandardPeriodBar(prefix, options) {
         '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
-    '<button class="btn btn-primary std-query-btn">🔍 查询</button>' +
     '<button class="std-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
 
   bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
@@ -250,9 +249,6 @@ function _buildStandardPeriodBar(prefix, options) {
       else _stepStandardMonth(prefix, side, delta);
     });
   });
-
-  var queryBtn = bar.querySelector('.std-query-btn');
-  if (queryBtn && options.onQuery) queryBtn.addEventListener('click', options.onQuery);
 
   var clearBtn = bar.querySelector('.std-clear-btn');
   if (clearBtn && options.onClear) clearBtn.addEventListener('click', options.onClear);
@@ -565,11 +561,11 @@ async function loadAccountBalance() {
 let _contactCache = {}; // 缓存往来列表
 
 function _contactPageHTML(title, apiPrefix) {
-  return '<div class="card" style="margin-bottom:0;display:flex;flex-direction:column">' +
-    '<div id="' + apiPrefix + '-period-bar" class="period-selector-bar" style="margin-bottom:12px"></div>' +
-    '<div style="display:flex;flex:1;gap:12px;overflow:hidden">' +
+  return '<div class="card card-fill">' +
+    '<div id="' + apiPrefix + '-period-bar" class="period-selector-bar" style="margin-bottom:12px;flex-shrink:0"></div>' +
+    '<div style="display:flex;flex:1;gap:12px;overflow:hidden;min-height:0">' +
       '<div id="' + apiPrefix + '-list" style="width:260px;min-width:200px;overflow-y:auto;border-right:1px solid var(--gray-200);padding-right:8px"></div>' +
-      '<div id="' + apiPrefix + '-table" style="flex:1;overflow:auto;padding-bottom:4px"></div>' +
+      '<div id="' + apiPrefix + '-table" style="flex:1;overflow-y:auto;padding-bottom:4px;min-height:0"></div>' +
     '</div>' +
   '</div>';
 }
@@ -607,7 +603,6 @@ function _buildContactPeriodBar(apiPrefix) {
         '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
-    '<button class="btn btn-primary contact-query-btn">🔍 查询</button>' +
     '<button class="contact-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
 
   // 为所有 stepper 按钮绑定点击事件
@@ -625,10 +620,6 @@ function _buildContactPeriodBar(apiPrefix) {
   bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
     sel.addEventListener('change', function() { _onContactPeriodChange(apiPrefix); });
   });
-
-  // 查询按钮
-  var queryBtn = bar.querySelector('.contact-query-btn');
-  if (queryBtn) queryBtn.addEventListener('click', function() { _onContactPeriodChange(apiPrefix); });
 
   // 清除按钮
   var clearBtn = bar.querySelector('.contact-clear-btn');
