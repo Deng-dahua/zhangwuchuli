@@ -629,6 +629,20 @@ def auto_create_customers(company_id: int = Query(...), db: Session = Depends(ge
             existing_cust_map[_normalize_customer_name(cust.name)] = cust
     insider_norms = idx['insiders'] | idx['shareholders']
 
+    # 清理：将已在人员档案/内部人的客户从客户档案中移除
+    removed_names = []
+    for norm, cust in list(existing_cust_map.items()):
+        if norm in insider_norms:
+            db.delete(cust)
+            removed_names.append(cust.name)
+    if removed_names:
+        db.flush()
+        infos.append(f"已从客户档案移除{len(removed_names)}条内部人员：{', '.join(removed_names)}")
+        # 从 existing_cust_map 中移除已删除的条目
+        for norm in list(existing_cust_map.keys()):
+            if norm in insider_norms:
+                del existing_cust_map[norm]
+
     sources = []
 
     # 1. 销项发票购方名称（主要来源）
@@ -841,6 +855,19 @@ def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(ge
     # 构建实体索引
     idx = _build_entity_index(db, company_id)
     shareholder_norms = idx['shareholders']
+    insider_norms = idx['insiders'] | idx['shareholders']
+
+    # 清理：将已在人员档案/内部人的供应商移除
+    removed_names = []
+    for supp in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        if supp.name:
+            norm = _normalize_customer_name(supp.name)
+            if norm in insider_norms:
+                db.delete(supp)
+                removed_names.append(supp.name)
+    if removed_names:
+        db.flush()
+        infos.append(f"已从供应商档案移除{len(removed_names)}条内部人员：{', '.join(removed_names)}")
 
     # 1. 取得发票销方名称集合
     pi_names = set()
