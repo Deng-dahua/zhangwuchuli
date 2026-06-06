@@ -345,8 +345,13 @@ document.querySelectorAll('.nav-item').forEach(el => {
 
 // ==================== API 工具（多公司版本） ====================
 async function api(method, url, body) {
-  // 支持两种调用方式：api(method, url, body) 或 api(url, options)
-  if (arguments.length === 2 && typeof method === 'string' && !['GET','POST','PUT','DELETE','PATCH'].includes(method)) {
+  // 支持三种调用方式：api(url) / api(url, options) / api(method, url, body)
+  if (arguments.length === 1) {
+    // api(url) → GET 请求
+    body = undefined;
+    url = method;
+    method = 'GET';
+  } else if (arguments.length === 2 && typeof method === 'string' && !['GET','POST','PUT','DELETE','PATCH'].includes(method)) {
     // 旧式调用 api(url, options)
     let options = url;
     url = method;
