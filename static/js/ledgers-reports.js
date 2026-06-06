@@ -239,6 +239,7 @@ function _buildStandardPeriodBar(prefix, options) {
         '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
+    '<button class="std-query-btn" style="padding:6px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px">查询</button>' +
     '<button class="std-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
 
   bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
@@ -261,6 +262,9 @@ function _buildStandardPeriodBar(prefix, options) {
       if (options.onQuery) options.onQuery();
     });
   });
+
+  var queryBtn = bar.querySelector('.std-query-btn');
+  if (queryBtn && options.onQuery) queryBtn.addEventListener('click', options.onQuery);
 
   var clearBtn = bar.querySelector('.std-clear-btn');
   if (clearBtn && options.onClear) clearBtn.addEventListener('click', options.onClear);
@@ -628,6 +632,7 @@ function _buildContactPeriodBar(apiPrefix) {
         '<button class="stepper-btn stepper-down" data-side="to" data-type="month" data-delta="-1" title="上一月">▼</button>' +
       '</div>' +
     '</div>' +
+    '<button class="contact-query-btn" style="padding:6px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px">查询</button>' +
     '<button class="contact-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
 
   // 为所有 stepper 按钮绑定点击事件
@@ -650,6 +655,10 @@ function _buildContactPeriodBar(apiPrefix) {
       _onContactPeriodChange(apiPrefix);
     });
   });
+
+  // 查询按钮
+  var queryBtn = bar.querySelector('.contact-query-btn');
+  if (queryBtn) queryBtn.addEventListener('click', function() { _onContactPeriodChange(apiPrefix); });
 
   // 清除按钮
   var clearBtn = bar.querySelector('.contact-clear-btn');
