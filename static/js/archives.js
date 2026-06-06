@@ -3,17 +3,14 @@ async function renderAccounts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card card-fill">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <button class="btn btn-primary" onclick="showAddAccount()">+ 新增科目</button>
-      </div>
       <div class="filter-bar">
         <select class="form-control" id="acc-cat" style="width:130px">
           <option value="">全部类别</option>
           <option>资产</option><option>负债</option><option>权益</option>
           <option>收入</option><option>费用</option><option>成本</option>
         </select>
-        <input class="form-control" id="acc-kw" placeholder="科目编码/名称" style="width:180px">
-        <button class="btn btn-primary" onclick="loadAccounts()">🔍 查询</button>
+        <input class="form-control" id="acc-kw" placeholder="科目编码/名称" style="width:180px" oninput="loadAccounts()">
+        <button class="btn btn-primary" onclick="showAddAccount()">＋ 新增科目</button>
       </div>
       <div class="table-wrap" id="acc-table" style="flex:1;overflow:auto">加载中...</div>
     </div>
@@ -76,7 +73,7 @@ function showAddAccount() {
   showModal(`
     <div class="modal-title">新增会计科目</div>
     <div class="form-grid">
-      <div class="form-group"><label>科目编码 *</label><input class="form-control" id="na-code" placeholder="如 6605"></div>
+      <div class="form-group"><label>科目编码 *</label><input class="form-control" id="na-code" readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"></div>
       <div class="form-group"><label>科目名称 *</label><input class="form-control" id="na-name" placeholder="如 研发费用"></div>
       <div class="form-group">
         <label>科目类别 *</label>
@@ -91,11 +88,17 @@ function showAddAccount() {
       </div>
       <div class="form-group">
         <label>级次</label>
-        <select class="form-control" id="na-level" onchange="onAccLevelChange()"><option value="1">一级</option><option value="2">二级</option></select>
+        <select class="form-control" id="na-level" onchange="onAccLevelChange()">
+          <option value="1">一级（4位）</option>
+          <option value="2">二级（2位）</option>
+          <option value="3">三级（3位）</option>
+          <option value="4">四级（3位）</option>
+          <option value="5">五级（3位）</option>
+        </select>
       </div>
       <div class="form-group">
         <label>上级科目</label>
-        <select class="form-control" id="na-parent"><option value="">无</option>${parentOptions}</select>
+        <select class="form-control" id="na-parent" onchange="computeNextAccCode()"><option value="">无</option>${parentOptions}</select>
       </div>
       <div class="form-group">
         <label>期初金额</label><input class="form-control" id="na-ob" type="number" step="0.01" value="0.00" placeholder="0.00">
@@ -106,12 +109,64 @@ function showAddAccount() {
       <button class="btn btn-primary" onclick="saveNewAccount()">保存</button>
     </div>
   `);
+  computeNextAccCode();
 }
 
 function onAccLevelChange() {
   const level = parseInt(document.getElementById('na-level').value);
   const parentEl = document.getElementById('na-parent');
-  if (parentEl) parentEl.disabled = (level === 1);
+  if (!parentEl) return;
+  parentEl.disabled = (level === 1);
+
+  // 根据级次更新上级科目选项
+  let filterLevel = 0;
+  if (level === 2) filterLevel = 1;
+  else if (level === 3) filterLevel = 2;
+  else if (level === 4) filterLevel = 3;
+  else if (level === 5) filterLevel = 4;
+
+  if (filterLevel > 0) {
+    const parents = allAccounts.filter(a => a.level === filterLevel);
+    parentEl.innerHTML = '<option value="">请选择上级科目</option>' +
+      parents.map(a => `<option value="${a.code}">${a.code} ${a.name}</option>`).join('');
+  } else {
+    parentEl.innerHTML = '<option value="">无</option>';
+  }
+
+  computeNextAccCode();
+}
+
+function computeNextAccCode() {
+  const level = parseInt(document.getElementById('na-level')?.value || '1');
+  const parentCode = (level === 1) ? null : document.getElementById('na-parent')?.value;
+  const codeEl = document.getElementById('na-code');
+  if (!codeEl) return;
+
+  if (level === 1) {
+    const l1 = allAccounts.filter(a => a.level === 1).map(a => parseInt(a.code));
+    const next = l1.length === 0 ? 1001 : Math.max(...l1) + 1;
+    codeEl.value = String(next).padStart(4, '0');
+  } else if (level === 2) {
+    if (!parentCode) { codeEl.value = ''; return; }
+    const children = allAccounts.filter(a => a.parent_code === parentCode && a.level === 2);
+    if (children.length === 0) {
+      codeEl.value = parentCode + '01';
+    } else {
+      const maxSuffix = Math.max(...children.map(a => parseInt(a.code.substring(parentCode.length))));
+      codeEl.value = parentCode + String(maxSuffix + 1).padStart(2, '0');
+    }
+  } else {
+    // L3/L4/L5: 上级编码 + 3位
+    if (!parentCode) { codeEl.value = ''; return; }
+    const suffixLen = 3;
+    const children = allAccounts.filter(a => a.parent_code === parentCode);
+    if (children.length === 0) {
+      codeEl.value = parentCode + '0'.repeat(suffixLen - 1) + '1';
+    } else {
+      const maxSuffix = Math.max(...children.map(a => parseInt(a.code.substring(parentCode.length))));
+      codeEl.value = parentCode + String(maxSuffix + 1).padStart(suffixLen, '0');
+    }
+  }
 }
 
 function showEditAccount(id, code, name, category, balance_direction, level, parent_code, opening_balance) {
@@ -140,7 +195,13 @@ function showEditAccount(id, code, name, category, balance_direction, level, par
       </div>
       <div class="form-group">
         <label>级次</label>
-        <select class="form-control" id="na-level" onchange="onAccLevelChange()"><option value="1" ${level==1?'selected':''}>一级</option><option value="2" ${level==2?'selected':''}>二级</option></select>
+        <select class="form-control" id="na-level" onchange="onAccLevelChange()">
+          <option value="1" ${level==1?'selected':''}>一级（4位）</option>
+          <option value="2" ${level==2?'selected':''}>二级（2位）</option>
+          <option value="3" ${level==3?'selected':''}>三级（3位）</option>
+          <option value="4" ${level==4?'selected':''}>四级（3位）</option>
+          <option value="5" ${level==5?'selected':''}>五级（3位）</option>
+        </select>
       </div>
       <div class="form-group">
         <label>上级科目</label>
@@ -359,7 +420,7 @@ async function renderDepartments(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">📁 导入文件</button>
-          <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">🗑 批量删除</button>
+          <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
@@ -390,7 +451,7 @@ function showDeptForm(id, code, name) {
   const isEdit = !!id;
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}部门</h3>
-    <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="dept-code" value="${code||''}" placeholder="如：SC"></div>
+    <div class="form-field"><label>编码</label><input id="dept-code" value="${code||''}" readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"></div>
     <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="dept-name" value="${name||''}" placeholder="如：生产部"></div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveDept(${id||0})">保存</button>
@@ -404,7 +465,14 @@ async function saveDept(id) {
     code: document.getElementById('dept-code').value.trim(),
     name: document.getElementById('dept-name').value.trim()
   };
-  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  if (!body.name) { toast('请填写部门名称', 'error'); return; }
+  if (!id && !body.code) body.code = '';
+  try {
+    // 去重检查
+    const list = await api('/api/departments');
+    const dup = list.find(d => d.name === body.name && d.id !== id);
+    if (dup) { toast('部门名称"' + body.name + '"已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+  } catch (e) { /* 查重失败不影响保存 */ }
   try {
     if (id) {
       await api(`/api/departments/${id}`, { method: 'PUT', body: JSON.stringify(body) });
@@ -435,7 +503,7 @@ function updateDeptBatchBtn() {
   const cbs = document.querySelectorAll('.dept-cb:checked');
   const btn = document.getElementById('deptBatchDelBtn');
   if (!btn) return;
-  btn.textContent = cbs.length > 0 ? '🗑 批量删除(' + cbs.length + ')' : '🗑 批量删除';
+  btn.textContent = cbs.length > 0 ? '批量删除（' + cbs.length + '）' : '批量删除';
 }
 
 async function batchDeleteDepts() {
@@ -460,7 +528,7 @@ async function renderEmployees(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">📁 导入文件</button>
-          <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">🗑 批量删除</button>
+          <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
@@ -498,7 +566,7 @@ function updateEmpBatchBtn() {
   const count = document.querySelectorAll('.emp-check:checked').length;
   const btn = document.getElementById('btn-batch-del-emp');
   if (btn) {
-    btn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    btn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     btn.disabled = count === 0;
   }
 }
@@ -519,7 +587,7 @@ function showEmpForm(id, code, name, idCard) {
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}人员</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>工号 <span style="color:red">*</span></label><input id="emp-code" value="${code||''}"></div>
+      <div class="form-field"><label>工号</label><input id="emp-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>姓名 <span style="color:red">*</span></label><input id="emp-name" value="${name||''}"></div>
       <div class="form-field"><label>身份证号</label><input id="emp-idcard" value="${idCard||''}" placeholder="18位身份证号"></div>
     </div>
@@ -536,7 +604,13 @@ async function saveEmp(id) {
     name: document.getElementById('emp-name').value.trim(),
     id_card: document.getElementById('emp-idcard')?.value.trim() || null
   };
-  if (!body.code || !body.name) { toast('请填写工号和姓名', 'error'); return; }
+  if (!body.name) { toast('请填写人员姓名', 'error'); return; }
+  if (!id && !body.code) body.code = '';
+  try {
+    const list = await api('/api/employees');
+    const dup = list.find(e => e.name === body.name && e.id !== id);
+    if (dup) { toast('人员"' + body.name + '"已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+  } catch (e) {}
   try {
     if (id) {
       await api(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(body) });
@@ -568,7 +642,7 @@ async function renderCustomers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
-          <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">🗑 批量删除</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
@@ -615,7 +689,7 @@ function updateBatchDelCustBtn() {
   const enabledBoxes = document.querySelectorAll('.cust-check:not(:disabled)');
   const checkedEnabled = document.querySelectorAll('.cust-check:not(:disabled):checked');
   const checked = checkedEnabled.length;
-  btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
+  btn.textContent = checked > 0 ? `批量删除（${checked}）` : '批量删除';
   btn.disabled = checked === 0;
   // 同步全选框状态
   const selectAll = document.getElementById('custSelectAll');
@@ -640,7 +714,7 @@ function showCustForm(id, code, name, uscc) {
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}客户</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="cust-code" value="${code||''}" placeholder="如：KH001"></div>
+      <div class="form-field"><label>编码</label><input id="cust-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
     </div>
@@ -657,7 +731,13 @@ async function saveCust(id) {
     name: document.getElementById('cust-name').value.trim(),
     uscc: document.getElementById('cust-uscc')?.value.trim() || null
   };
-  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  if (!body.name) { toast('请填写客户名称', 'error'); return; }
+  if (!id && !body.code) body.code = '';
+  try {
+    const list = await api('/api/customers');
+    const dup = list.find(c => c.name === body.name && c.id !== id);
+    if (dup) { toast('客户"' + body.name + '"已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+  } catch (e) {}
   try {
     if (id) {
       await api(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify(body) });
@@ -689,7 +769,7 @@ async function renderSuppliers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
-          <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">🗑 批量删除</button>
+          <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table>
@@ -736,7 +816,7 @@ function updateBatchDelSuppBtn() {
   const enabledBoxes = document.querySelectorAll('.supp-check:not(:disabled)');
   const checkedEnabled = document.querySelectorAll('.supp-check:not(:disabled):checked');
   const checked = checkedEnabled.length;
-  btn.textContent = checked > 0 ? `🗑 批量删除（${checked}）` : '🗑 批量删除';
+  btn.textContent = checked > 0 ? `批量删除（${checked}）` : '批量删除';
   btn.disabled = checked === 0;
   const selectAll = document.getElementById('suppSelectAll');
   if (selectAll) {
@@ -760,7 +840,7 @@ function showSuppForm(id, code, name, uscc) {
   showModal(`
     <h3>${isEdit ? '编辑' : '新增'}供应商</h3>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-field"><label>编码 <span style="color:red">*</span></label><input id="supp-code" value="${code||''}" placeholder="如：GYS001"></div>
+      <div class="form-field"><label>编码</label><input id="supp-code" value="${code||''}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
       <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
     </div>
@@ -777,7 +857,13 @@ async function saveSupp(id) {
     name: document.getElementById('supp-name').value.trim(),
     uscc: document.getElementById('supp-uscc')?.value.trim() || null
   };
-  if (!body.code || !body.name) { toast('请填写编码和名称', 'error'); return; }
+  if (!body.name) { toast('请填写供应商名称', 'error'); return; }
+  if (!id && !body.code) body.code = '';
+  try {
+    const list = await api('/api/suppliers');
+    const dup = list.find(s => s.name === body.name && s.id !== id);
+    if (dup) { toast('供应商"' + body.name + '"已存在（' + dup.code + '），请勿重复添加', 'warn'); return; }
+  } catch (e) {}
   try {
     if (id) {
       await api(`/api/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(body) });

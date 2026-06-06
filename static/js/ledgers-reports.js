@@ -342,11 +342,11 @@ async function renderProfitLoss(container) {
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
         '<div id="pl-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
-        '<button class="btn btn-primary" onclick="loadProfitLoss()">生成报表</button>' +
       '</div>' +
       '<div id="pl-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
   _buildStandardPeriodBar('pl-', { onQuery: loadProfitLoss, onClear: () => clearFilters('pl') });
+  loadProfitLoss();
 }
 
 function plFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
@@ -380,11 +380,11 @@ async function renderBalanceSheet(container) {
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
         '<div id="bs-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
-        '<button class="btn btn-primary" onclick="loadBalanceSheet()">生成报表</button>' +
       '</div>' +
       '<div id="bs-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
   _buildStandardPeriodBar('bs-', { onQuery: loadBalanceSheet, onClear: () => clearFilters('bs') });
+  loadBalanceSheet();
 }
 
 function bsFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; return '¥' + fmt(Math.abs(v)); }
@@ -425,11 +425,11 @@ async function renderCashFlow(container) {
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
         '<div id="cf-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
-        '<button class="btn btn-primary" onclick="loadCashFlow()">生成报表</button>' +
       '</div>' +
       '<div id="cf-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
   _buildStandardPeriodBar('cf-', { onQuery: loadCashFlow, onClear: () => clearFilters('cf') });
+  loadCashFlow();
 }
 
 async function loadCashFlow() {
@@ -461,11 +461,11 @@ async function renderEquityChanges(container) {
     '<div class="card card-fill">' +
       '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
         '<div id="ec-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
-        '<button class="btn btn-primary" onclick="loadEquityChanges()">生成报表</button>' +
       '</div>' +
       '<div id="ec-table" style="flex:1;overflow:auto"></div>' +
     '</div>';
   _buildStandardPeriodBar('ec-', { onQuery: loadEquityChanges, onClear: () => clearFilters('ec') });
+  loadEquityChanges();
 }
 
 async function loadEquityChanges() {
@@ -499,12 +499,12 @@ async function renderAccountBalance(container) {
     <div class="card card-fill">
       <div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">
         <div id="tb-period-bar" style="display:flex;align-items:center;gap:4px"></div>
-        <button class="btn btn-primary" onclick="loadAccountBalance()">生成报表</button>
       </div>
       <div id="tb-table"></div>
     </div>
   `;
   _buildStandardPeriodBar('tb-', { onQuery: loadAccountBalance, onClear: () => clearFilters('tb') });
+  loadAccountBalance();
 }
 
 async function loadAccountBalance() {
@@ -524,7 +524,7 @@ async function loadAccountBalance() {
     const totalEndDebit = l1.reduce((s, r) => s + r.end_debit, 0);
     const totalEndCredit = l1.reduce((s, r) => s + r.end_credit, 0);
 
-    let html = `<div style="font-size:12px;color:var(--gray-500);margin-bottom:12px">报告期间：${to}</div>`;
+    let html = '';
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table>';
     html += '<thead><tr>';
     html += '<th>科目编码</th><th>科目名称</th><th style="text-align:center">方向</th>';
