@@ -670,6 +670,7 @@ def salary_stats(company_id: int = Query(...), period: Optional[str] = Query(Non
     records = q.all()
     total_income = sum(r.current_income or 0 for r in records)
     total_tax = sum(r.tax_to_pay or 0 for r in records)
+    total_tax_refund = sum(r.tax_refund or 0 for r in records)
     total_net = sum(r.net_salary or 0 for r in records)
     count = len(records)
 
@@ -678,6 +679,7 @@ def salary_stats(company_id: int = Query(...), period: Optional[str] = Query(Non
         "count": count,
         "total_income": round(total_income, 2),
         "total_tax": round(total_tax, 2),
+        "total_tax_refund": round(total_tax_refund, 2),
         "total_net": round(total_net, 2),
         "avg_income": round(total_income / count, 2) if count else 0,
     }

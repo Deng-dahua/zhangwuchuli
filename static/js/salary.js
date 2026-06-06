@@ -74,8 +74,12 @@ function buildSalaryPeriodBar() {
                 '<button class="stepper-btn stepper-down" data-type="month" data-delta="-1" title="上一月">▼</button>' +
             '</div>' +
         '</div>' +
+        '<button class="sal-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>' +
         '<button class="sal-query-btn" style="padding:6px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px">查询</button>' +
-        '<button class="sal-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+        '<button class="sal-add-btn" style="padding:6px 12px;border:1px solid #16a34a;border-radius:6px;background:#16a34a;color:#fff;cursor:pointer;font-size:13px">➕ 新增工资薪金</button>' +
+        '<button class="sal-import-btn" style="padding:6px 12px;border:1px solid #d97706;border-radius:6px;background:#d97706;color:#fff;cursor:pointer;font-size:13px">📁 导入文件</button>' +
+        '<button class="sal-tax-btn" style="padding:6px 12px;border:1px solid #6b7280;border-radius:6px;background:#6b7280;color:#fff;cursor:pointer;font-size:13px">🧮 计算个税</button>' +
+        '<button class="sal-batch-del-btn" style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;font-size:13px">批量删除</button>';
 
     // stepper 按钮
     bar.querySelectorAll('.stepper-btn').forEach(function(btn) {
@@ -92,15 +96,28 @@ function buildSalaryPeriodBar() {
         sel.addEventListener('change', loadSalaryData);
     });
 
-    // 查询/清除按钮
-    var queryBtn = bar.querySelector('.sal-query-btn');
-    if (queryBtn) queryBtn.addEventListener('click', loadSalaryData);
+    // 清除按钮
     var clearBtn = bar.querySelector('.sal-clear-btn');
     if (clearBtn) clearBtn.addEventListener('click', function() {
         document.getElementById('salary-y').value = '';
         document.getElementById('salary-m').value = '';
         loadSalaryData();
     });
+    // 查询按钮
+    var queryBtn = bar.querySelector('.sal-query-btn');
+    if (queryBtn) queryBtn.addEventListener('click', loadSalaryData);
+    // 新增按钮
+    var addBtn = bar.querySelector('.sal-add-btn');
+    if (addBtn) addBtn.addEventListener('click', showSalaryAddModal);
+    // 导入按钮
+    var importBtn = bar.querySelector('.sal-import-btn');
+    if (importBtn) importBtn.addEventListener('click', showSalaryImportModal);
+    // 计算个税按钮
+    var taxBtn = bar.querySelector('.sal-tax-btn');
+    if (taxBtn) taxBtn.addEventListener('click', computeSalaryTax);
+    // 批量删除按钮
+    var batchDelBtn = bar.querySelector('.sal-batch-del-btn');
+    if (batchDelBtn) batchDelBtn.addEventListener('click', batchDeleteSalary);
 
     // 默认期间
     _setSalPeriod(currentSalaryPeriod);
@@ -155,12 +172,7 @@ function renderSalaryPage(container) {
         <div class="page-header">
             <div></div>
             <div class="page-actions">
-                <div id="salary-period-bar" style="display:flex;align-items:center;gap:4px"></div>
-                <button class="btn btn-primary" onclick="loadSalaryData()">查询</button>
-                <button class="btn btn-success" onclick="showSalaryAddModal()">➕ 新增工资薪金</button>
-                <button class="btn btn-warning" onclick="showSalaryImportModal()">📁 导入文件</button>
-                <button class="btn btn-secondary" onclick="computeSalaryTax()">🧮 计算个税</button>
-                <button class="btn btn-danger" onclick="batchDeleteSalary()">批量删除</button>
+                <div id="salary-period-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
             </div>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;padding-bottom:4px">
@@ -274,7 +286,7 @@ function renderSalaryStats(stats) {
     el.innerHTML = `
         <div class="stat-card"><div class="stat-label">人数</div><div class="stat-value">${stats.count || 0}</div></div>
         <div class="stat-card"><div class="stat-label">本期收入合计</div><div class="stat-value">${(stats.total_income || 0).toFixed(2)}</div></div>
-        <div class="stat-card"><div class="stat-label">个税合计</div><div class="stat-value">${(stats.total_tax || 0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="stat-label">应补(退)税额合计</div><div class="stat-value">${(stats.total_tax_refund || 0).toFixed(2)}</div></div>
         <div class="stat-card"><div class="stat-label">实发工资合计</div><div class="stat-value">${(stats.total_net || 0).toFixed(2)}</div></div>
         <div class="stat-card"><div class="stat-label">人均收入</div><div class="stat-value">${(stats.avg_income || 0).toFixed(2)}</div></div>
     `;
@@ -506,9 +518,8 @@ function showSalaryImportModal() {
 
     modal.innerHTML = `
         <div class="modal" style="max-width:480px">
-            <div class="modal-header"><h3>导入工资薪金（税务模板）</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
+            <div class="modal-header"><h3>导入工资薪金</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body">
-                <p style="color:#6b7280;margin-bottom:16px;font-size:13px">支持税务局"综合所得工资薪金所得"Excel模板（.xls/.xlsx）</p>
                 <div class="form-row">
                     <label>年度</label>
                     <select id="sal-import-year" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:100px">${yearOpts}</select>
@@ -534,9 +545,9 @@ function showSalaryImportModal() {
                     <label>选择文件</label>
                     <div style="display:flex;align-items:center;gap:8px;flex:1">
                         <label style="padding:6px 14px;border:1px solid var(--gray-300);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:var(--gray-700);white-space:nowrap;transition:all .15s" onmouseover="this.style.borderColor='#2563eb';this.style.color='#2563eb'" onmouseout="this.style.borderColor='';this.style.color=''">📁 选择文件
-                            <input type="file" id="sal-import-file" accept=".xls,.xlsx" style="display:none" onchange="document.getElementById('sal-file-name').textContent=this.files[0]?this.files[0].name:'未选择文件'">
+                            <input type="file" id="sal-import-file" accept=".xls,.xlsx" style="display:none" onchange="document.getElementById('sal-file-name').textContent=this.files[0]?this.files[0].name:''">
                         </label>
-                        <span id="sal-file-name" style="color:#9ca3af;font-size:13px">未选择文件</span>
+                        <span id="sal-file-name" style="color:#9ca3af;font-size:13px"></span>
                     </div>
                 </div>
                 <div id="sal-import-progress" style="margin-top:12px;color:#3498db;display:none;font-size:13px">
@@ -545,7 +556,7 @@ function showSalaryImportModal() {
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('salary-import-modal')">取消</button>
-                <button class="btn btn-primary" onclick="importSalaryExcel()">开始导入</button>
+                <button class="btn btn-primary" onclick="importSalaryExcel()">确定</button>
             </div>
         </div>
     `;
