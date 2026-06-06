@@ -287,6 +287,7 @@ function _ensureContainer(page) {
 
 function navigateTo(page) {
   currentPage = page;
+  console.log('[navigateTo] 切换到：' + page);
   localStorage.setItem('lastPage', page);
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);

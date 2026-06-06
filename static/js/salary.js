@@ -6,6 +6,19 @@ let currentSalaryPeriod = '';
 let currentSalaryRecords = [];
 let currentEditingSalaryId = null;
 
+// 确认 salary.js 已加载（调试用）
+console.log('[salary.js] 已加载，当前时间：' + new Date().toLocaleTimeString());
+
+// 全局 JS 错误捕获——任何报错都直接显示到页面上
+window.addEventListener('error', function(e) {
+    const msg = '工资模块JS错误：' + (e.message || String(e)) + '（文件：' + (e.filename || '') + ':' + (e.lineno || '') + '）';
+    const el = document.getElementById('page-salary') || document.getElementById('content-area');
+    if (el) {
+        el.innerHTML = '<div style="padding:40px;color:#f44;font-size:14px">' + escapeHtml(msg) + '<br><br>请按 F12 打开控制台查看详细错误</div>';
+        el.style.display = 'block';
+    }
+});
+
 // ========== 页面渲染 ==========
 
 function showSalaryPage(container) {
