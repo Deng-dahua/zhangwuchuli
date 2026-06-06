@@ -164,6 +164,7 @@ class Supplier(Base):
     uscc = Column(String(50), comment="统一社会信用代码")
     is_active = Column(Boolean, default=True)
     remark = Column(String(200), comment="备注")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

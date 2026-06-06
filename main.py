@@ -926,7 +926,7 @@ def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(ge
             company_id=company_id,
             code=code,
             name=s['name'],
-            uscc=s['tax_no'] or '',
+            uscc=s['tax_no'] if s['tax_no'] and s['tax_no'].strip() else None,
             _fingerprint=norm,
             is_active=True,
         )
