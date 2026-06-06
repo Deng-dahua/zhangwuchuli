@@ -469,14 +469,6 @@ let _contactCache = {}; // 缓存往来列表
 
 function _contactPageHTML(title, apiPrefix) {
   return '<div class="card" style="margin-bottom:0;display:flex;flex-direction:column">' +
-    '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center">' +
-      '<b style="font-size:14px;min-width:90px">' + title + '</b>' +
-      '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML(apiPrefix + '-from', currentPeriod) +
-      '<span style="color:#9ca3af">至</span>' +
-      _periodSelectsHTML(apiPrefix + '-to', currentPeriod) + '<span style="font-size:13px;color:#6b7280">截止</span>' +
-      '<button class="btn btn-primary" onclick="_loadContactDetail(\'' + apiPrefix + '\')">🔍 查询</button>' +
-      '<button onclick="_clearContactDetail(\'' + apiPrefix + '\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>' +
-    '</div>' +
     '<div style="display:flex;flex:1;gap:12px;overflow:hidden;margin-top:12px">' +
       '<div id="' + apiPrefix + '-list" style="width:260px;min-width:200px;overflow-y:auto;border-right:1px solid var(--gray-200);padding-right:8px"></div>' +
       '<div id="' + apiPrefix + '-table" style="flex:1;overflow:auto;padding-bottom:4px"></div>' +
@@ -496,14 +488,8 @@ async function _loadContactList(apiPrefix) {
     }
     let html = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">往来项目（' + data.length + '）</div>';
     data.forEach(function(c, i) {
-      let netStr = c.net >= 0 ? ('¥' + fmt(Math.abs(c.net))) : ('<span style="color:var(--danger)">-¥' + fmt(Math.abs(c.net)) + '</span>');
       html += '<div class="contact-item" data-name="' + escapeHtml(c.name) + '" onclick="_onContactClick(\'' + apiPrefix + '\', \'' + escJs(c.name) + '\')" style="padding:10px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;border:1px solid transparent">' +
         '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(c.name) + '</div>' +
-        '<div style="font-size:11px;color:#6b7280;margin-top:4px;display:flex;justify-content:space-between">' +
-          '<span>借 ¥' + fmt(c.total_debit) + '</span>' +
-          '<span>贷 ¥' + fmt(c.total_credit) + '</span>' +
-          '<span style="font-weight:600">净 ' + netStr + '</span>' +
-        '</div>' +
       '</div>';
     });
     listEl.innerHTML = html;
@@ -539,10 +525,10 @@ async function _loadContactDetail(apiPrefix, name) {
     tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请从左侧选择一个往来项目</div>';
     return;
   }
-  let from = _readPeriod(apiPrefix + '-from');
-  let to = _readPeriod(apiPrefix + '-to');
+  let from = currentPeriod || '';
+  let to = currentPeriod || '';
   if (!from || !to) {
-    tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请选择起止期间</div>';
+    tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请先选择期间</div>';
     return;
   }
   tableEl.innerHTML = '<div style="color:#999;padding:20px;font-size:13px">加载中...</div>';
