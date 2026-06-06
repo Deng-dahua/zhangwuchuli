@@ -1,7 +1,5 @@
 // ==================== 序时账 ====================
 
-let jeFilter = { periodFrom: '', periodTo: '' };
-
 async function renderJournal(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div style="color:#999;padding:20px">加载中...</div>';
@@ -21,22 +19,14 @@ async function renderJournal(container) {
     html += '<div class="stat-card"><div class="stat-value" style="color:var(--warning)">' + stats.unreviewed_count + '</div><div class="stat-label">未复核</div></div>';
     html += '</div>';
 
-    // 工具栏
+    // 批量删除按钮
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px">';
-    html += '<span style="font-size:13px;color:#6b7280">起始</span>' + _periodSelectsHTML('je-from', jeFilter.periodFrom||'');
-    html += '<span style="color:#9ca3af">至</span>';
-    html += _periodSelectsHTML('je-to', jeFilter.periodTo||'') + '<span style="font-size:13px;color:#6b7280">截止</span>';
     html += '<button class="btn" style="color:var(--danger);border-color:var(--danger)" id="jeBatchDelBtn" onclick="batchDeleteJe()">🗑 批量删除</button>';
     html += '</div>';
     html += '</div>';
 
-    // 过滤
-    jeFilter.periodFrom = _readPeriod('je-from');
-    jeFilter.periodTo = _readPeriod('je-to');
     let items = data;
-    if (jeFilter.periodFrom) items = items.filter(i => i.period && i.period >= jeFilter.periodFrom);
-    if (jeFilter.periodTo) items = items.filter(i => i.period && i.period <= jeFilter.periodTo);
 
     // 表格区域：flex:1 撑满剩余空间，滚动条始终可见
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table><thead><tr>';
