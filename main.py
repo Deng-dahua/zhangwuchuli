@@ -42,6 +42,7 @@ from database import (
 
 from vat import router as vat_router
 from salary import router as salary_router
+from social_security import router as social_security_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0", lifespan=lifespan)
 app.include_router(vat_router)
 app.include_router(salary_router)
+app.include_router(social_security_router)
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")

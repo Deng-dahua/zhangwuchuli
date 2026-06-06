@@ -1105,6 +1105,16 @@ def migrate_schema(db):
             db.rollback()
             print(f"  [X] 进项抵扣→凭证自动生成失败: {e}")
 
+    # ── 15. 社保申报表──
+    if "social_security_declarations" not in inspector.get_table_names():
+        SocialSecurityDeclaration.__table__.create(bind=db.get_bind())
+        db.commit()
+        print("  [OK] 已创建 social_security_declarations 表")
+    if "social_security_details" not in inspector.get_table_names():
+        SocialSecurityDetail.__table__.create(bind=db.get_bind())
+        db.commit()
+        print("  [OK] 已创建 social_security_details 表")
+
 
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
@@ -2000,6 +2010,46 @@ class VATDeclaration(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     company = relationship("Company", backref="vat_declarations")
+
+
+# ========== 社保申报模型 ==========
+
+class SocialSecurityDeclaration(Base):
+    """社保申报主表"""
+    __tablename__ = "social_security_declarations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)  # YYYY-MM 费款所属期
+    status = Column(String(20), default="草稿")  # 草稿/已确认
+    note = Column(String(500))  # 备注
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", backref="social_security_declarations")
+    details = relationship("SocialSecurityDetail", back_populates="declaration", cascade="all, delete-orphan")
+
+
+class SocialSecurityDetail(Base):
+    """社保申报明细表"""
+    __tablename__ = "social_security_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    declaration_id = Column(Integer, ForeignKey("social_security_declarations.id"), nullable=False, index=True)
+    seq = Column(Integer, comment="序号")
+    employee_name = Column(String(50), comment="姓名")
+    id_number = Column(String(30), comment="证件号码")
+    period_start = Column(String(7), comment="费款所属期起")
+    period_end = Column(String(7), comment="费款所属期止")
+    total_amount = Column(Float, default=0.0, comment="应收金额")
+    personal_amount = Column(Float, default=0.0, comment="个人社保合计")
+    company_amount = Column(Float, default=0.0, comment="单位社保合计")
+    salary_base = Column(Float, default=0.0, comment="缴费工资")
+    category = Column(String(20), default="在职人员", comment="人员类别：在职人员/退休人员/家属统筹人员")
+    insurance_items = Column(Text, comment="JSON: 各项保险明细 [{name,rate,amount},...]")
+    created_at = Column(DateTime, default=datetime.now)
+
+    declaration = relationship("SocialSecurityDeclaration", back_populates="details")
 
 
 # 基础科目数据模板（中小制造业标准科目表）

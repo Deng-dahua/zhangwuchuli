@@ -50,7 +50,8 @@ const pages = {
   'input-vat-deductions': '进项抵扣',
   'bank-transactions': '银行流水',
   'vat-declaration': '增值税申报',
-  'salary': '工资薪金'
+  'salary': '工资薪金',
+  'social-security': '社保申报'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -332,6 +333,7 @@ function navigateTo(page) {
     case 'bank-transactions': renderBankTransactions(container); break;
     case 'vat-declaration': renderVATDeclaration(container); break;
     case 'salary': showSalaryPage(container); break;
+    case 'social-security': renderSocialSecurity(container); break;
   }
 }
 
