@@ -3327,7 +3327,10 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
     # 使用与批量生成相同的智能分类逻辑（跨实体匹配：股东/人员/客户/供应商）
-    cp_code, cp_name, match_type = _classify_bank_tx(db, company_id, tx)
+    result = _classify_bank_tx(db, company_id, tx)
+    if result is None:
+        raise HTTPException(400, "无法自动分类该银行流水，请完善银行流水规则后再生成凭证")
+    cp_code, cp_name, match_type = result
 
     if is_debit:
         # 付款：借 对方科目  贷 银行存款
@@ -5077,7 +5080,19 @@ def classify_bank_transactions(ids: List[int] = Body(...), company_id: int = Que
     # 预建跨实体索引
     entity_index = _build_entity_index(db, company_id)
     for tx in txs:
-        other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx, entity_index)
+        result = _classify_bank_tx(db, company_id, tx, entity_index)
+        if result is None:
+            results.append({
+                "tx_id": tx.id,
+                "summary": tx.summary or tx.counterparty_name or "银行流水",
+                "amount": (tx.debit_amount or 0) if (tx.debit_amount and tx.debit_amount > 0) else (tx.credit_amount or 0),
+                "is_debit": tx.debit_amount and tx.debit_amount > 0,
+                "debit_account": "", "debit_name": "",
+                "credit_account": "", "credit_name": "",
+                "match_type": "unclassified",
+            })
+            continue
+        other_code, other_name, match_type = result
         is_debit = tx.debit_amount and tx.debit_amount > 0
         amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
         # 确定借贷方向

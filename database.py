@@ -1671,38 +1671,8 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     if entity_type == 'supplier':
         return ("2202", "应付账款", "supplier")
 
-    # 7e. 未知实体 → 查序时账历史 + 发票模块辅助判断
-    if cp and cp.strip():
-        # 7e1. 查序时账历史：该往来项目最近使用的科目
-        past_entry = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.contact_project == cp,
-            JournalEntry.account_code.notin_(["1002", "1001"]),
-        ).order_by(JournalEntry.entry_date.desc()).first()
-        if past_entry:
-            return (past_entry.account_code, past_entry.account_name or past_entry.account_code, "journal_history")
-
-        # 7e2. 查销项发票购方（可能是新客户）
-        si = db.query(SalesInvoice).filter(
-            SalesInvoice.company_id == company_id,
-            SalesInvoice.buyer_name == cp
-        ).first()
-        if si:
-            return ("1122", "应收账款", "sales_invoice")
-
-        # 7e3. 查进项发票销方（可能是新供应商）
-        pi = db.query(PurchaseInvoice).filter(
-            PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.seller_name == cp
-        ).first()
-        if pi:
-            return ("2202", "应付账款", "purchase_invoice")
-
-    # 8. 默认兜底（未能匹配）
-    if is_debit:
-        return ("1221", "其他应收款", "other")
-    else:
-        return ("2241", "其他应付款", "other")
+    # 所有规则均未匹配 → 返回 None，由调用方决定如何处理
+    return None
 
 
 def _ensure_account(db, company_id, code, name, category, direction):
@@ -1793,7 +1763,11 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
             # 智能分类（传入预建索引）
-            other_code, other_name, match_type = _classify_bank_tx(db, company_id, tx, entity_index)
+            result = _classify_bank_tx(db, company_id, tx, entity_index)
+            if result is None:
+                skipped += 1
+                continue
+            other_code, other_name, match_type = result
 
             # 确保对方科目存在
             acct = db.query(Account).filter(Account.company_id == company_id, Account.code == other_code).first()
