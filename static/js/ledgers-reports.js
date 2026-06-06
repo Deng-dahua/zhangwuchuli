@@ -469,11 +469,104 @@ let _contactCache = {}; // 缓存往来列表
 
 function _contactPageHTML(title, apiPrefix) {
   return '<div class="card" style="margin-bottom:0;display:flex;flex-direction:column">' +
-    '<div style="display:flex;flex:1;gap:12px;overflow:hidden;margin-top:12px">' +
+    '<div id="' + apiPrefix + '-period-bar" class="period-selector-bar" style="margin-bottom:12px"></div>' +
+    '<div style="display:flex;flex:1;gap:12px;overflow:hidden">' +
       '<div id="' + apiPrefix + '-list" style="width:260px;min-width:200px;overflow-y:auto;border-right:1px solid var(--gray-200);padding-right:8px"></div>' +
       '<div id="' + apiPrefix + '-table" style="flex:1;overflow:auto;padding-bottom:4px"></div>' +
     '</div>' +
   '</div>';
+}
+
+function _buildContactPeriodBar(apiPrefix) {
+  let bar = document.getElementById(apiPrefix + '-period-bar');
+  if (!bar) return;
+  bar.innerHTML =
+    '<div class="period-stepper">' +
+      '<select id="' + apiPrefix + '-from-y" class="period-selector-year">' + _yearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="_stepContactYear(\'' + apiPrefix + '\',\'from\',1)" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="_stepContactYear(\'' + apiPrefix + '\',\'from\',-1)" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="' + apiPrefix + '-from-m" class="period-selector-month" onchange="_onContactPeriodChange(\'' + apiPrefix + '\')">' + _monthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'from\',1)" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'from\',-1)" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<span style="color:#9ca3af;font-size:13px;line-height:32px">至</span>' +
+    '<div class="period-stepper">' +
+      '<select id="' + apiPrefix + '-to-y" class="period-selector-year">' + _yearOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="_stepContactYear(\'' + apiPrefix + '\',\'to\',1)" title="下一年">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="_stepContactYear(\'' + apiPrefix + '\',\'to\',-1)" title="上一年">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="period-stepper">' +
+      '<select id="' + apiPrefix + '-to-m" class="period-selector-month" onchange="_onContactPeriodChange(\'' + apiPrefix + '\')">' + _monthOptions() + '</select>' +
+      '<div class="stepper-arrows">' +
+        '<button class="stepper-btn stepper-up" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'to\',1)" title="下一月">▲</button>' +
+        '<button class="stepper-btn stepper-down" onclick="_stepContactMonth(\'' + apiPrefix + '\',\'to\',-1)" title="上一月">▼</button>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn btn-primary" onclick="_onContactPeriodChange(\'' + apiPrefix + '\')">🔍 查询</button>' +
+    '<button onclick="_clearContactDetail(\'' + apiPrefix + '\')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>';
+  // 默认设置当前期间
+  _setContactPeriod(apiPrefix, 'from', currentPeriod);
+  _setContactPeriod(apiPrefix, 'to', currentPeriod);
+}
+
+function _yearOptions() {
+  let now = new Date(), y = now.getFullYear(), ops = '<option value="">年</option>';
+  for (let i = y - 5; i <= y + 5; i++) ops += '<option value="' + i + '">' + i + '年</option>';
+  return ops;
+}
+function _monthOptions() {
+  return '<option value="">月</option><option value="01">01月</option><option value="02">02月</option><option value="03">03月</option><option value="04">04月</option><option value="05">05月</option><option value="06">06月</option><option value="07">07月</option><option value="08">08月</option><option value="09">09月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>';
+}
+
+function _setContactPeriod(apiPrefix, side, period) {
+  if (!period) return;
+  let parts = period.split('-');
+  if (parts.length < 2) return;
+  let ySel = document.getElementById(apiPrefix + '-' + side + '-y');
+  let mSel = document.getElementById(apiPrefix + '-' + side + '-m');
+  if (ySel) ySel.value = parts[0];
+  if (mSel) mSel.value = parts[1];
+}
+
+function _getContactPeriod(apiPrefix, side) {
+  let y = document.getElementById(apiPrefix + '-' + side + '-y')?.value;
+  let m = document.getElementById(apiPrefix + '-' + side + '-m')?.value;
+  if (!y || !m) return '';
+  return y + '-' + m;
+}
+
+function _stepContactYear(apiPrefix, side, delta) {
+  let sel = document.getElementById(apiPrefix + '-' + side + '-y');
+  if (!sel || !sel.value) return;
+  sel.value = parseInt(sel.value) + delta;
+  _onContactPeriodChange(apiPrefix);
+}
+function _stepContactMonth(apiPrefix, side, delta) {
+  let ySel = document.getElementById(apiPrefix + '-' + side + '-y');
+  let mSel = document.getElementById(apiPrefix + '-' + side + '-m');
+  if (!ySel || !mSel || !mSel.value) return;
+  let y = parseInt(ySel.value) || new Date().getFullYear();
+  let m = parseInt(mSel.value) + delta;
+  if (m > 12) { m = 1; y++; }
+  else if (m < 1) { m = 12; y--; }
+  ySel.value = y;
+  mSel.value = String(m).padStart(2, '0');
+  _onContactPeriodChange(apiPrefix);
+}
+
+function _onContactPeriodChange(apiPrefix) {
+  let name = '';
+  let activeEl = document.querySelector('#' + apiPrefix + '-list .contact-item.active');
+  if (activeEl) name = activeEl.dataset.name;
+  if (name) _loadContactDetail(apiPrefix, name);
 }
 
 async function _loadContactList(apiPrefix) {
@@ -525,8 +618,8 @@ async function _loadContactDetail(apiPrefix, name) {
     tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请从左侧选择一个往来项目</div>';
     return;
   }
-  let from = currentPeriod || '';
-  let to = currentPeriod || '';
+  let from = _getContactPeriod(apiPrefix, 'from') || currentPeriod || '';
+  let to = _getContactPeriod(apiPrefix, 'to') || currentPeriod || '';
   if (!from || !to) {
     tableEl.innerHTML = '<div style="color:#9ca3af;padding:40px;text-align:center;font-size:13px">请先选择期间</div>';
     return;
@@ -608,6 +701,7 @@ function escJs(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 async function renderEmployeeLedger(container) {
   let el = container || document.getElementById('page-employee-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('人员明细账', 'employee');
+  _buildContactPeriodBar('employee');
   _loadContactList('employee');
 }
 
@@ -615,6 +709,7 @@ async function renderEmployeeLedger(container) {
 async function renderCustomerLedger(container) {
   let el = container || document.getElementById('page-customer-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('客户明细账', 'customer');
+  _buildContactPeriodBar('customer');
   _loadContactList('customer');
 }
 
@@ -622,6 +717,7 @@ async function renderCustomerLedger(container) {
 async function renderSupplierLedger(container) {
   let el = container || document.getElementById('page-supplier-ledger') || document.getElementById('content-area');
   el.innerHTML = _contactPageHTML('供应商明细账', 'supplier');
+  _buildContactPeriodBar('supplier');
   _loadContactList('supplier');
 }
 
