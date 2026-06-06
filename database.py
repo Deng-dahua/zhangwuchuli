@@ -550,6 +550,7 @@ class PurchaseInvoice(Base):
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -606,6 +607,7 @@ class BankTransaction(Base):
     raw_data = Column(Text, comment="原始数据JSON（旧）")
     journal_voucher_no = Column(String(30), comment="关联序时账凭证号")
     remark = Column(Text, comment="备注（旧）")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -657,6 +659,7 @@ class InputVATDeduction(Base):
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
     import_batch_id = Column(String(36), comment="导入批次ID，同一次导入共享")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -916,6 +919,7 @@ def migrate_schema(db):
             "invoice_risk_level": "ALTER TABLE purchase_invoices ADD COLUMN invoice_risk_level VARCHAR(10)",
             "issuer": "ALTER TABLE purchase_invoices ADD COLUMN issuer VARCHAR(30)",
             "invoice_category": "ALTER TABLE purchase_invoices ADD COLUMN invoice_category VARCHAR(20)",
+            "_fingerprint": "ALTER TABLE purchase_invoices ADD COLUMN _fingerprint VARCHAR(64)",
         }
         for col, sql in new_pi_cols.items():
             if col not in existing_cols:
@@ -934,6 +938,38 @@ def migrate_schema(db):
                 print("已迁移 purchase_invoices.invoice_type → invoice_category")
             except Exception as e:
                 db.rollback()
+
+    # ── 8.1 银行流水 _fingerprint 字段 ──
+    if "bank_transactions" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("bank_transactions")}
+        bt_new_cols = {
+            "_fingerprint": "ALTER TABLE bank_transactions ADD COLUMN _fingerprint VARCHAR(64)",
+        }
+        for col, sql in bt_new_cols.items():
+            if col not in existing_cols:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 bank_transactions 添加字段: {col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"bank_transactions 添加字段 {col} 失败（可能已存在）: {e}")
+
+    # ── 8.2 进项抵扣 _fingerprint 字段 ──
+    if "input_vat_deductions" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("input_vat_deductions")}
+        ivd_new_cols = {
+            "_fingerprint": "ALTER TABLE input_vat_deductions ADD COLUMN _fingerprint VARCHAR(64)",
+        }
+        for col, sql in ivd_new_cols.items():
+            if col not in existing_cols:
+                try:
+                    db.execute(TextClause(sql))
+                    db.commit()
+                    print(f"已为 input_vat_deductions 添加字段: {col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"input_vat_deductions 添加字段 {col} 失败（可能已存在）: {e}")
 
     # ── 9. 发票号码和开票日期改为可空 ──
     for table_name in ("sales_invoices", "purchase_invoices"):

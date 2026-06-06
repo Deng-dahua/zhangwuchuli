@@ -432,7 +432,6 @@ async function renderCustomers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">📁 导入文件</button>
-          <button class="btn btn-outline btn-sm" onclick="autoCreateCustomers()">📥 智能建档</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">🗑 批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -554,7 +553,6 @@ async function renderSuppliers(container) {
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
           <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">📁 导入文件</button>
-          <button class="btn btn-outline btn-sm" onclick="autoCreateSuppliers()">📥 智能建档</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">🗑 批量删除</button>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
@@ -661,44 +659,6 @@ async function deleteSupp(id) {
   try {
     await api(`/api/suppliers/${id}`, { method: 'DELETE' });
     toast('删除成功', 'success');
-    renderSuppliers();
-  } catch (e) { toast(e.message, 'error'); }
-}
-
-// ==================== 智能建档（新规则 2026-06-06） ====================
-
-async function autoCreateCustomers() {
-  if (!confirm(
-    '智能客户建档将：\n' +
-    '1. 从销项发票购方名称提取客户（只要开具发票有信息，就一定是客户）\n' +
-    '2. 已存在的客户自动跳过\n' +
-    '3. 自动清理误归档的内部人员\n\n' +
-    '确认执行？'
-  )) return;
-  try {
-    const res = await api('/api/customers/auto-create', { method: 'POST' });
-    toast(res.message, 'success');
-    if (res.infos && res.infos.length > 0) {
-      console.log('建档详情：', res.infos);
-    }
-    renderCustomers();
-  } catch (e) { toast(e.message, 'error'); }
-}
-
-async function autoCreateSuppliers() {
-  if (!confirm(
-    '智能供应商建档将：\n' +
-    '1. 从取得发票销方名称 + 银行流水付款方共同确定\n' +
-    '2. 自动排除股东（投资款/分红场景）\n' +
-    '3. 两个来源都有的为强信号供应商\n\n' +
-    '确认执行？'
-  )) return;
-  try {
-    const res = await api('/api/suppliers/auto-create', { method: 'POST' });
-    toast(res.message, 'success');
-    if (res.infos && res.infos.length > 0) {
-      console.log('建档详情：', res.infos);
-    }
     renderSuppliers();
   } catch (e) { toast(e.message, 'error'); }
 }
