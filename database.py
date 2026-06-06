@@ -1357,7 +1357,16 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     如果 total_tax 为 None，自动从数据库汇总（优先用 deduction_period，为空则用 invoice_date 年月）
     """
 
-    # 删除该期间已有的进项抵扣凭证
+    # 幂等检查：该期间已生成进项抵扣凭证且未被删除，跳过
+    _existing = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.source == "进项抵扣"
+    ).first()
+    if _existing:
+        return 0
+
+    # 删除该期间已有的进项抵扣凭证（兜底）
     db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period == period,
@@ -1902,6 +1911,16 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
 
     for tx in txs:
         try:
+            # 幂等检查：该流水已生成凭证，跳过（不重复生成）
+            _existing = db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.source == "银行流水",
+                JournalEntry.ref_id == tx.id
+            ).first()
+            if _existing:
+                skipped += 1
+                continue
+
             cp = tx.counterparty_name or tx.summary or "银行流水"
             summary_tag = f"银行流水-#{tx.id}-{cp}"
             period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
@@ -1934,7 +1953,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
-                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水",
+                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
                 entry2 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
@@ -1948,7 +1967,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag, account_code=other_code, account_name=other_name,
-                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水",
+                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
                 entry2 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
@@ -1962,7 +1981,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag, account_code="1002", account_name="银行存款",
-                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水",
+                    debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
                 entry2 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
@@ -2225,6 +2244,15 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     if not records:
         return {"generated": 0, "message": "无工资记录"}
 
+    # 幂等检查：任意一种工资凭证已存在且未删除，跳过整个生成
+    for _src in ["工资计提", "工资发放", "个税缴纳", "社保公积金缴纳"]:
+        if db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period == period,
+            JournalEntry.source == _src
+        ).first():
+            return {"generated": 0, "message": f"凭证已存在（{_src}），跳过"}
+
     # 确保科目存在
     _ensure_account(db, company_id, "660204", "工资", "费用", "借")
     _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
@@ -2251,21 +2279,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
 
     # 1. 计提工资凭证
     summary_tag = f"工资计提-{period}"
-    existing = db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.source == "工资计提",
-        JournalEntry.summary == summary_tag
-    ).first()
-    if existing:
-        old_voucher = existing.voucher_no
-        db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_no == old_voucher,
-            JournalEntry.source == "工资计提"
-        ).delete()
-        db.flush()
 
     max_no = db.query(JournalEntry.voucher_no).filter(
         JournalEntry.company_id == company_id,
@@ -2300,21 +2313,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 2. 发放工资凭证（实发）
     if total_net > 0:
         summary_tag2 = f"工资发放-{period}"
-        existing2 = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.source == "工资发放",
-            JournalEntry.summary == summary_tag2
-        ).first()
-        if existing2:
-            old_voucher2 = existing2.voucher_no
-            db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.period == period,
-                JournalEntry.voucher_no == old_voucher2,
-                JournalEntry.source == "工资发放"
-            ).delete()
-            db.flush()
 
         max_no2 = db.query(JournalEntry.voucher_no).filter(
             JournalEntry.company_id == company_id,
@@ -2348,21 +2346,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 3. 缴纳个税凭证
     if total_tax > 0:
         summary_tag3 = f"缴纳个税-{period}"
-        existing3 = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.source == "个税缴纳",
-            JournalEntry.summary == summary_tag3
-        ).first()
-        if existing3:
-            old_voucher3 = existing3.voucher_no
-            db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.period == period,
-                JournalEntry.voucher_no == old_voucher3,
-                JournalEntry.source == "个税缴纳"
-            ).delete()
-            db.flush()
 
         max_no3 = db.query(JournalEntry.voucher_no).filter(
             JournalEntry.company_id == company_id,
@@ -2397,21 +2380,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     total_deduct = total_personal_ss + total_personal_hf
     if total_deduct > 0:
         summary_tag4 = f"缴纳社保公积金个人部分-{period}"
-        existing4 = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.source == "社保公积金缴纳",
-            JournalEntry.summary == summary_tag4
-        ).first()
-        if existing4:
-            old_voucher4 = existing4.voucher_no
-            db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.period == period,
-                JournalEntry.voucher_no == old_voucher4,
-                JournalEntry.source == "社保公积金缴纳"
-            ).delete()
-            db.flush()
 
         max_no4 = db.query(JournalEntry.voucher_no).filter(
             JournalEntry.company_id == company_id,

@@ -749,6 +749,7 @@ def compute_salary_tax(
         r.tax_payable = round(cum_tax, 2)
         r.tax_to_pay = round(tax_this, 2)
         r.tax_already_withheld = round(tax_this, 2)
+        r.tax_refund = round(tax_this, 2)  # 应补(退)税额 = 本期应预扣税额
         r.cumulative_income = round(prev_cum_income + (r.current_income or 0), 2)
         r.cumulative_deduction = round(cum_deduction, 2)
         r.cumulative_special = round(cum_special, 2)
