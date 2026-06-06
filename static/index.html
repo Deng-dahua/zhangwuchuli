@@ -173,23 +173,17 @@
         <span class="label">账套：</span>
         <span id="company-name-display"></span>
       </div>
-      <div class="period-badge" onclick="document.getElementById('period-picker').style.display=document.getElementById('period-picker').style.display==='none'?'block':'none'">
-        📅 <span id="current-period-label" class="period-label-indent"></span>
+      <div class="period-selector-bar">
+        <select id="period-year" class="period-selector-year" onchange="onPeriodSelectChange()"><option value="">年</option></select>
+        <select id="period-month" class="period-selector-month" onchange="onPeriodSelectChange()">
+          <option value="">月</option>
+          <option value="01">01月</option><option value="02">02月</option><option value="03">03月</option>
+          <option value="04">04月</option><option value="05">05月</option><option value="06">06月</option>
+          <option value="07">07月</option><option value="08">08月</option><option value="09">09月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
       </div>
       <button class="btn btn-exit-company" onclick="exitCompany()" title="退出当前账套，返回公司选择">🚪 退出本账套</button>
-    </div>
-  </div>
-  <div id="period-picker" class="period-picker-popup">
-    <div class="period-picker-inner">
-      <select id="period-year" class="period-select"><option value="">年</option></select>
-      <select id="period-month" class="period-select">
-        <option value="">月</option>
-        <option value="01">01</option><option value="02">02</option><option value="03">03</option>
-        <option value="04">04</option><option value="05">05</option><option value="06">06</option>
-        <option value="07">07</option><option value="08">08</option><option value="09">09</option>
-        <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-      </select>
-      <button class="btn btn-sm btn-primary period-confirm-btn" onclick="onGlobalPeriodConfirm()">确定</button>
     </div>
   </div>
   <div class="content-area" id="content-area">

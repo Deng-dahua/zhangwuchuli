@@ -211,16 +211,14 @@ async function handleCompanyRegister(e) {
 
 
 async function loadCurrentPeriod() {
-  // 仅填充年份下拉框
   const yearSel = document.getElementById('period-year');
   if (!yearSel) return;
   let ops = '<option value="">年</option>';
   let now = new Date();
   let curY = now.getFullYear();
-  for (let y = curY - 5; y <= curY + 5; y++) ops += `<option value="${y}">${y}</option>`;
+  for (let y = curY - 5; y <= curY + 5; y++) ops += `<option value="${y}">${y}年</option>`;
   yearSel.innerHTML = ops;
 
-  // 尝试恢复上次选择的期间
   const saved = localStorage.getItem('currentPeriod');
   if (saved && /^\d{4}-\d{2}$/.test(saved)) {
     const [y, m] = saved.split('-');
@@ -228,7 +226,6 @@ async function loadCurrentPeriod() {
     const monthSel = document.getElementById('period-month');
     if (monthSel) monthSel.value = m;
     currentPeriod = saved;
-    updatePeriodLabel();
   }
 }
 
@@ -239,19 +236,14 @@ function periodToDateRange(period) {
   return { from: period + '-01', to: period + '-' + String(lastDay).padStart(2, '0') };
 }
 
-function updatePeriodLabel() {
-  const label = document.getElementById('current-period-label');
-  if (label) label.textContent = currentPeriod ? '当前：' + currentPeriod : '';
-}
-
-function onGlobalPeriodConfirm() {
+function onPeriodSelectChange() {
   const y = document.getElementById('period-year')?.value;
   const m = document.getElementById('period-month')?.value;
-  if (!y || !m) { toast('请选择年和月', 'warning'); return; }
-  currentPeriod = y + '-' + m;
+  if (!y || !m) return;
+  const newPeriod = y + '-' + m;
+  if (newPeriod === currentPeriod) return;
+  currentPeriod = newPeriod;
   localStorage.setItem('currentPeriod', currentPeriod);
-  updatePeriodLabel();
-  toast('已切换到 ' + currentPeriod, 'success');
   // 同步所有已渲染页面的期间筛选框到新期间
   ['gl-from','gl-to','dl-from','dl-to','pl-from','pl-to','bs-from','bs-to','cf-from','cf-to','ec-from','tb-from','tb-to','je-from','je-to'].forEach(function(prefix) {
     let ey = document.getElementById(prefix + '-y');
