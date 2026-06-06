@@ -487,4 +487,27 @@
     .pag-btn:hover:not([disabled]) { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
     .pag-btn[disabled] { opacity: 0.4; cursor: default; }
     .pag-info { font-size: 12px; color: var(--gray-500); padding: 0 8px; }
+
+    /* ====== 工资薪金表单 - 大方简约风格 ====== */
+    .salary-form .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+    .salary-form .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 16px; }
+    .salary-form .form-row { display: flex; align-items: center; gap: 8px; }
+    .salary-form .form-row label { width: 100px; text-align: right; font-size: 12px; color: var(--gray-600); font-weight: 500; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .salary-form .form-row input,
+    .salary-form .form-row select { flex: 1; padding: 7px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 13px; color: var(--gray-900); background: #fff; outline: none; transition: all 0.15s; min-width: 0; }
+    .salary-form .form-row input:focus,
+    .salary-form .form-row select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.08); background: #fff; }
+    .salary-form .form-row input[readonly] { background: #f9fafb; color: var(--gray-600); }
+    .salary-form .section-title { margin: 22px 0 12px; padding-left: 10px; border-left: 3px solid var(--primary); font-size: 13px; font-weight: 600; color: var(--gray-800); letter-spacing: 0.3px; }
+    .salary-form .section-title:first-child { margin-top: 0; }
+
+    /* 文件上传区域 */
+    .file-upload-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 28px; border: 2px dashed var(--gray-300); border-radius: 10px; background: #fafbfc; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .file-upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
+    .file-upload-zone .upload-icon { font-size: 28px; color: var(--gray-400); }
+    .file-upload-zone:hover .upload-icon { color: var(--primary); }
+    .file-upload-zone .upload-text { font-size: 13px; color: var(--gray-600); }
+    .file-upload-zone .upload-hint { font-size: 11px; color: var(--gray-400); }
+    .file-upload-zone.has-file { border-color: var(--success); background: #f0fdf4; }
+    .file-upload-zone.has-file .upload-icon { color: var(--success); }
   

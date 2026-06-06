@@ -377,25 +377,25 @@ function renderSalaryModal(r) {
     modal.innerHTML = `
         <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
             <div class="modal-header"><h3>${title}</h3><button class="modal-close" onclick="closeModal('salary-modal')">&times;</button></div>
-            <div class="modal-body">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="modal-body salary-form">
+                <div class="form-grid-2">
                     <div class="form-row"><label>期间</label><input type="text" id="sal-modal-period" value="${r.period || currentSalaryPeriod}" placeholder="2025-10" required></div>
-                    <div class="form-row"><label>姓名 <span style="color:red">*</span></label><input type="text" id="sal-modal-name" value="${escapeHtml(r.employee_name || '')}" required></div>
+                    <div class="form-row"><label>姓名 <span style="color:#ef4444">*</span></label><input type="text" id="sal-modal-name" value="${escapeHtml(r.employee_name || '')}" required></div>
                     <div class="form-row"><label>证件类型</label><input type="text" id="sal-modal-id-type" value="${escapeHtml(r.id_type || '居民身份证')}"></div>
                     <div class="form-row"><label>证件号码</label><input type="text" id="sal-modal-id-number" value="${escapeHtml(r.id_number || '')}"></div>
                     <div class="form-row"><label>本期收入</label><input type="number" step="0.01" id="sal-modal-income" value="${r.current_income || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>基本减除费用</label><input type="number" step="0.01" id="sal-modal-basic-deduction" value="${r.basic_deduction || 5000}" onchange="calcSalaryNet()"></div>
                 </div>
-                <h4 style="margin:16px 0 10px;color:#555;font-size:14px;border-bottom:1px solid #e5e7eb;padding-bottom:6px">专项扣除</h4>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div class="section-title">专项扣除</div>
+                <div class="form-grid-3">
                     <div class="form-row"><label>基本养老保险</label><input type="number" step="0.01" id="sal-modal-pension" value="${r.pension_insurance || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>基本医疗保险</label><input type="number" step="0.01" id="sal-modal-medical" value="${r.medical_insurance || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>失业保险</label><input type="number" step="0.01" id="sal-modal-unemployment" value="${r.unemployment_insurance || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>住房公积金</label><input type="number" step="0.01" id="sal-modal-housing" value="${r.housing_fund || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>企业年金</label><input type="number" step="0.01" id="sal-modal-annuity" value="${r.enterprise_annuity || 0}" onchange="calcSalaryNet()"></div>
                 </div>
-                <h4 style="margin:16px 0 10px;color:#555;font-size:14px;border-bottom:1px solid #e5e7eb;padding-bottom:6px">专项附加扣除</h4>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div class="section-title">专项附加扣除</div>
+                <div class="form-grid-3">
                     <div class="form-row"><label>子女教育</label><input type="number" step="0.01" id="sal-modal-child" value="${r.child_education || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>继续教育</label><input type="number" step="0.01" id="sal-modal-continuing" value="${r.continuing_education || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>住房贷款利息</label><input type="number" step="0.01" id="sal-modal-loan" value="${r.housing_loan_interest || 0}" onchange="calcSalaryNet()"></div>
@@ -404,10 +404,10 @@ function renderSalaryModal(r) {
                     <div class="form-row"><label>3岁以下婴幼儿照护</label><input type="number" step="0.01" id="sal-modal-infant" value="${r.infant_care || 0}" onchange="calcSalaryNet()"></div>
                     <div class="form-row"><label>大病医疗</label><input type="number" step="0.01" id="sal-modal-major" value="${r.major_medical || 0}" onchange="calcSalaryNet()"></div>
                 </div>
-                <h4 style="margin:16px 0 10px;color:#555;font-size:14px;border-bottom:1px solid #e5e7eb;padding-bottom:6px">税额</h4>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="section-title">税额</div>
+                <div class="form-grid-2">
                     <div class="form-row"><label>本期应预扣税额</label><input type="number" step="0.01" id="sal-modal-tax-to-pay" value="${r.tax_to_pay || 0}"></div>
-                    <div class="form-row"><label>实发工资（自动算）</label><input type="number" step="0.01" id="sal-modal-net" value="${r.net_salary || 0}" readonly style="background:#f5f5f5"></div>
+                    <div class="form-row"><label>实发工资（自动算）</label><input type="number" step="0.01" id="sal-modal-net" value="${r.net_salary || 0}" readonly></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -515,36 +515,38 @@ function showSalaryImportModal() {
     modal.innerHTML = `
         <div class="modal" style="max-width:480px">
             <div class="modal-header"><h3>导入工资薪金</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
-            <div class="modal-body">
-                <div class="form-row">
-                    <label>年度</label>
-                    <select id="sal-import-year" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:100px">${yearOpts}</select>
-                </div>
-                <div class="form-row">
-                    <label>月份</label>
-                    <select id="sal-import-month" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;min-width:100px">
-                        <option value="01"${defMonth==='01'?' selected':''}>01月</option>
-                        <option value="02"${defMonth==='02'?' selected':''}>02月</option>
-                        <option value="03"${defMonth==='03'?' selected':''}>03月</option>
-                        <option value="04"${defMonth==='04'?' selected':''}>04月</option>
-                        <option value="05"${defMonth==='05'?' selected':''}>05月</option>
-                        <option value="06"${defMonth==='06'?' selected':''}>06月</option>
-                        <option value="07"${defMonth==='07'?' selected':''}>07月</option>
-                        <option value="08"${defMonth==='08'?' selected':''}>08月</option>
-                        <option value="09"${defMonth==='09'?' selected':''}>09月</option>
-                        <option value="10"${defMonth==='10'?' selected':''}>10月</option>
-                        <option value="11"${defMonth==='11'?' selected':''}>11月</option>
-                        <option value="12"${defMonth==='12'?' selected':''}>12月</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <label>选择文件</label>
-                    <div style="display:flex;align-items:center;gap:8px;flex:1">
-                        <label style="padding:6px 14px;border:1px solid var(--gray-300);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:var(--gray-700);white-space:nowrap;transition:all .15s" onmouseover="this.style.borderColor='#2563eb';this.style.color='#2563eb'" onmouseout="this.style.borderColor='';this.style.color=''">选择文件
-                            <input type="file" id="sal-import-file" accept=".xls,.xlsx" style="display:none" onchange="document.getElementById('sal-file-name').textContent=this.files[0]?this.files[0].name:''">
-                        </label>
-                        <span id="sal-file-name" style="color:#9ca3af;font-size:13px"></span>
+            <div class="modal-body salary-form">
+                <div class="form-grid-2">
+                    <div class="form-row">
+                        <label>年度</label>
+                        <select id="sal-import-year">${yearOpts}</select>
                     </div>
+                    <div class="form-row">
+                        <label>月份</label>
+                        <select id="sal-import-month">
+                            <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                            <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                            <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                            <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                            <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                            <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                            <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                            <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                            <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                            <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                            <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                            <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row" style="margin-top:14px;flex-direction:column;align-items:stretch;gap:6px">
+                    <label style="width:auto;text-align:left">选择文件</label>
+                    <div class="file-upload-zone" id="sal-upload-zone" onclick="document.getElementById('sal-import-file').click()">
+                        <div class="upload-icon">&#128206;</div>
+                        <div class="upload-text" id="sal-upload-text">点击或拖拽上传 Excel 文件</div>
+                        <div class="upload-hint">支持 .xls、.xlsx 格式</div>
+                    </div>
+                    <input type="file" id="sal-import-file" accept=".xls,.xlsx" style="display:none" onchange="handleSalaryFileSelected(this)">
                 </div>
                 <div id="sal-import-progress" style="margin-top:12px;color:#3498db;display:none;font-size:13px">
                     导入中，请稍候...
@@ -558,6 +560,38 @@ function showSalaryImportModal() {
     `;
     document.body.appendChild(modal);
     modal.style.display = 'flex';
+
+    // 拖拽上传
+    const zone = document.getElementById('sal-upload-zone');
+    if (zone) {
+        zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; zone.style.background = '#eff6ff'; });
+        zone.addEventListener('dragleave', function(e) { e.preventDefault(); zone.style.borderColor = ''; zone.style.background = ''; });
+        zone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            zone.style.borderColor = ''; zone.style.background = '';
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                const input = document.getElementById('sal-import-file');
+                const dt = new DataTransfer();
+                dt.items.add(files[0]);
+                input.files = dt.files;
+                handleSalaryFileSelected(input);
+            }
+        });
+    }
+}
+
+function handleSalaryFileSelected(input) {
+    const zone = document.getElementById('sal-upload-zone');
+    const text = document.getElementById('sal-upload-text');
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (zone) zone.classList.add('has-file');
+        if (text) text.textContent = file.name;
+    } else {
+        if (zone) zone.classList.remove('has-file');
+        if (text) text.textContent = '点击或拖拽上传 Excel 文件';
+    }
 }
 
 function importSalaryExcel() {
