@@ -25,9 +25,10 @@ function showSalaryPage(container) {
 
 function renderSalaryPage(container) {
     const app = container || document.getElementById('page-salary') || document.getElementById('content-area');
+    app.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0';
     app.innerHTML = `
         <div class="page-header">
-            <h2>Ⓜ️ 工资薪金所得</h2>
+            <h2>工资薪金所得</h2>
             <div class="page-actions">
                 <input type="text" id="salary-period-input" value="${currentSalaryPeriod}" placeholder="期间 如 2025-10" style="width:140px">
                 <button class="btn btn-primary" onclick="loadSalaryData()">📅 查询</button>
@@ -39,7 +40,7 @@ function renderSalaryPage(container) {
             </div>
         </div>
         <div id="salary-stats" class="stats-cards"></div>
-        <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px">
+        <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;padding-bottom:4px">
             <table class="data-table" id="salary-table">
                 <thead>
                     <tr>
