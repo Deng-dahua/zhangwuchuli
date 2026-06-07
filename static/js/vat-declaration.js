@@ -16,6 +16,18 @@ const VAT_PAGES = [
   { id: 'reduction', label: '减免税申报明细表' },
 ];
 
+// 在已有申报表列表中前后导航（按上下箭头）
+function navigateVATDeclaration(delta) {
+  if (!vatDeclarations || vatDeclarations.length === 0) return;
+  let idx = vatDeclarations.findIndex(d => d.id === vatSelectedId);
+  if (idx < 0) idx = 0;
+  idx = Math.max(0, Math.min(vatDeclarations.length - 1, idx + delta));
+  const nextId = vatDeclarations[idx].id;
+  if (nextId !== vatSelectedId) {
+    openVATDetailInline(nextId);
+  }
+}
+
 // ==================== 主渲染（列表页） ====================
 async function renderVATDeclaration(container) {
   vatInlineDisplayId = null;
@@ -207,15 +219,27 @@ function renderVATTemplateViewInline(data) {
   const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
   const _periodYear = escapeHtml((data.period || '').split('-')[0] || '');
   const _periodMonth = escapeHtml((data.period || '').split('-')[1] || '');
+
+  // 构建与顶栏样式完全一致的 period-selector-bar（含 stepper arrows）
   let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
     + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
-    + '<div class="period-selector-bar" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:3px 6px">'
-    + '<div class="period-stepper" style="display:flex;align-items:center">'
-    + '<span style="padding:4px 6px;border-right:1px solid var(--gray-200);font-size:13px;color:var(--gray-800);min-width:70px;text-align:center;display:block">' + _periodYear + '年</span>'
-    + '</div>'
-    + '<div class="period-stepper" style="display:flex;align-items:center">'
-    + '<span style="padding:4px 6px;font-size:13px;color:var(--gray-800);min-width:50px;text-align:center;display:block">' + _periodMonth + '月</span>'
-    + '</div></div></div>';
+    + '<div class="period-selector-bar">'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-year" class="period-selector-year" disabled>'
+    + '<option value="' + _periodYear + '" selected>' + _periodYear + '年</option>'
+    + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="navigateVATDeclaration(1)" title="下一年">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="navigateVATDeclaration(-1)" title="上一年">▼</button>'
+    + '</div></div>'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-month" class="period-selector-month" disabled>'
+    + '<option value="' + _periodMonth + '" selected>' + _periodMonth + '月</option>'
+    + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="navigateVATDeclaration(1)" title="下一月">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="navigateVATDeclaration(-1)" title="上一月">▼</button>'
+    + '</div></div></div></div>';
 
   // 页签
   html += '<div style="display:flex;gap:0;border-bottom:1px solid #e5e7eb;margin:12px 0 0 0;overflow-x:auto;background:#fff;border-radius:8px 8px 0 0">';
