@@ -534,7 +534,7 @@ function renderMainForm(data) {
   // ========== 7列表格主表（第1列为纵向分类标签） ==========
   h += '<table class="vat-form-table" style="font-size:11px">';
   h += '<colgroup>';
-  h += '<col style="width:8%"><col style="width:21%"><col style="width:5%"><col style="width:16.5%"><col style="width:16.5%"><col style="width:16.5%"><col style="width:16.5%">';
+  h += '<col><col><col><col><col><col><col>';
   h += '</colgroup>';
   h += '<thead>';
   h += '<tr style="background:#d9e2f3">';
@@ -1006,7 +1006,7 @@ function renderSchedule2(data) {
 
     // 一、申报抵扣的进项税额
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
     + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
@@ -1028,7 +1028,7 @@ function renderSchedule2(data) {
 
     // 二、进项税额转出额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:44%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
     + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
@@ -1046,7 +1046,7 @@ function renderSchedule2(data) {
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
@@ -1063,7 +1063,7 @@ function renderSchedule2(data) {
 
     // 四、其他
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
     + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
@@ -1102,7 +1102,7 @@ function renderSchedule3(data) {
   let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（三）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（服务、不动产和无形资产扣除项目明细）</div>'
     + '<table class="vat-form-table">'
-    + '<colgroup><col style="width:20%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
+    + '<colgroup><col><col><col><col><col><col><col><col></colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3"><th rowspan="3" colspan="2">项目及栏次</th>'
     + '<th rowspan="2">本期服务、不动产和无形资产<br>价税合计额（免税销售额）</th>'
@@ -1133,7 +1133,7 @@ function renderSchedule4(data) {
 
     // 一、税额抵减情况
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、税额抵减情况</div>'
-    + '<table class="vat-form-table" style="table-layout:fixed;width:100%"><colgroup><col style="width:5%"><col style="width:20%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"></colgroup>'
+    + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">1</td><td style="white-space:nowrap">增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
@@ -1145,7 +1145,7 @@ function renderSchedule4(data) {
 
     // 二、加计抵减情况
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、加计抵减情况</div>'
-    + '<table class="vat-form-table" style="table-layout:fixed;width:100%"><colgroup><col style="width:5%"><col style="width:20%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"></colgroup>'
+    + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:10px">6=4-5</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">6</td><td>一般项目加计抵减额计算</td>' + td(c.item1_begin) + td(c.item1_occur) + td(c.item1_adjust) + td(c.item1_can_deduct) + td(c.item1_actual_deduct) + td(c.item1_end) + '</tr>'
@@ -1193,10 +1193,10 @@ function renderSchedule5(data) {
   html += '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:8px">（附加税费情况表）</div>';
 
   // ===== 上部：小微企业六税两费减免政策信息 =====
-  html += '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%;margin-bottom:0;border-bottom:none">';
+  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
   html += '<colgroup>';
-  html += '<col style="width:37.5%"><col style="width:6.25%"><col style="width:12.5%"><col style="width:6.25%"><col style="width:6.25%">';
-  html += '<col style="width:12.5%"><col style="width:6.25%"><col style="width:6.25%"><col style="width:6.25%">';
+  html += '<col><col><col><col><col>';
+  html += '<col><col><col><col>';
   html += '</colgroup>';
   html += '<tr>';
   html += '<td colspan="3" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费"减免政策</td>';
@@ -1209,15 +1209,15 @@ function renderSchedule5(data) {
   html += '</tr></table>';
 
   // ===== 主表格（16列） =====
-  html += '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%;margin-bottom:0;border-bottom:none">';
+  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
   html += '<colgroup>';
-  html += '<col style="width:12%"><col style="width:3%">';
-  html += '<col style="width:6%"><col style="width:6%"><col style="width:6%">';
-  html += '<col style="width:10%"><col style="width:6%">';
-  html += '<col style="width:6%"><col style="width:6%">';
-  html += '<col style="width:6%"><col style="width:6%">';
-  html += '<col style="width:6%"><col style="width:6%">';
-  html += '<col style="width:8%"><col style="width:8%">';
+  html += '<col><col>';
+  html += '<col><col><col>';
+  html += '<col><col>';
+  html += '<col><col>';
+  html += '<col><col>';
+  html += '<col><col>';
+  html += '<col><col>';
   html += '</colgroup>';
 
   // === Header Row 1 ===
@@ -1273,9 +1273,9 @@ function renderSchedule5(data) {
   html += '</tbody></table>';
 
   // ===== 底部：产教融合抵免政策 (rows 12-14) =====
-  html += '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%;margin-bottom:0;border-bottom:none">';
+  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
   html += '<colgroup>';
-  html += '<col style="width:39%"><col style="width:8%"><col style="width:35%"><col style="width:18%">';
+  html += '<col><col><col><col>';
   html += '</colgroup>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
@@ -1291,9 +1291,9 @@ function renderSchedule5(data) {
   html += '</tr></table>';
 
   // ===== 底部：留抵退税额使用情况 (rows 15-17) =====
-  html += '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%">';
+  html += '<table class="vat-form-table" style="font-size:10px;">';
   html += '<colgroup>';
-  html += '<col style="width:47%"><col style="width:35%"><col style="width:18%">';
+  html += '<col><col><col>';
   html += '</colgroup>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
@@ -1319,7 +1319,7 @@ function renderReductionForm(data) {
 
   // 一、减税项目
   html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、减税项目</div>';
-  html += '<table class="vat-form-table"><colgroup><col style="width:30%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"></colgroup>'
+  html += '<table class="vat-form-table"><colgroup><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">减税性质代码及名称</th><th rowspan="2">栏次</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead>';
 
@@ -1338,7 +1338,7 @@ function renderReductionForm(data) {
 
   // 二、免税项目
   html += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、免税项目</div>';
-  html += '<table class="vat-form-table"><colgroup><col style="width:30%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"></colgroup>'
+  html += '<table class="vat-form-table"><colgroup><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">免税性质代码及名称</th><th rowspan="2">栏次</th><th>免征增值税<br>项目销售额</th><th>免税销售额扣除项目<br>本期实际扣除金额</th><th>扣除后免税销售额</th><th>免税销售额<br>对应的进项税额</th><th>免税额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1-2</th><th style="text-align:center">4</th><th style="text-align:center">5</th></tr></thead><tbody>';
 
