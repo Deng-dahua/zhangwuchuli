@@ -516,7 +516,7 @@ function showSalaryImportModal() {
         <div class="modal" style="max-width:480px">
             <div class="modal-header"><h3>导入工资薪金</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body salary-form">
-                <div class="form-grid-2">
+                <div class="form-grid-2" style="margin-top: 16px;">
                     <div class="form-row">
                         <label>年度</label>
                         <select id="sal-import-year">${yearOpts}</select>
@@ -539,7 +539,7 @@ function showSalaryImportModal() {
                         </select>
                     </div>
                 </div>
-                <div class="form-row" style="margin-top:14px;flex-direction:column;align-items:stretch;gap:6px">
+                <div class="form-row" style="margin-top:24px;flex-direction:column;align-items:stretch;gap:6px">
                     <label style="width:auto;text-align:left">选择文件</label>
                     <div class="file-upload-zone" id="sal-upload-zone" onclick="document.getElementById('sal-import-file').click()">
                         <div class="upload-icon">&#128206;</div>
