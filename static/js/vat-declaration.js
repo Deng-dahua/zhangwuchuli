@@ -1301,41 +1301,41 @@ function renderSchedule5(data) {
            null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true);
   html += '</tbody>';
 
-  // === 第12-14行：产教融合抵免政策（模板：A:E=政策名 F:G=□是□否 H:M=项目名 N=编号 O:P=空） ===
+  // === 第12-14行：产教融合抵免政策（模板：A:E=政策 F:G=□是□否 H:M=项目 N=编号 O=金额 P=金额） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="5" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
   html += '<td colspan="2" rowspan="3">□是<br>□否</td>';
   html += '<td colspan="6">当期新增投资额</td>';
   html += '<td style="text-align:center">5</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">上期留抵可抵免金额</td>';
   html += '<td style="text-align:center">6</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">结转下期可抵免金额</td>';
   html += '<td style="text-align:center">7</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
 
-  // === 第15-17行：留抵退税额使用情况（模板：A:G=政策名 H:M=项目名 N=编号 O:P=空） ===
+  // === 第15-17行：留抵退税额使用情况（模板：A:G=政策 H:M=项目 N=编号 O=金额 P=金额） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
   html += '<td colspan="6">当期新增可用于扣除的留抵退税额</td>';
   html += '<td style="text-align:center">8</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">上期结存可用于扣除的留抵退税额</td>';
   html += '<td style="text-align:center">9</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">结转下期可用于扣除的留抵退税额</td>';
   html += '<td style="text-align:center">10</td>';
-  html += '<td colspan="2" style="border:none;background:white"></td>';
+  html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
 
   html += '</table></div>';
