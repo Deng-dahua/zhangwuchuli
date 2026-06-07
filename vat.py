@@ -656,13 +656,22 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     cert_count, cert_amount, cert_tax = _ded_sum(special_list)
 
-    # 非专票（普票/电子票等）→ row4 其他扣税凭证
+    # 非专票（普票/电子票等）→ 旅客运输 / 其他分类
     non_special_list = [d for d in form2_deductions if not _is_special_invoice(d)]
-    other_count, other_amount, other_tax = _ded_sum(non_special_list)
-    # 当期申报抵扣进项税额合计 = 专票 + 其他
-    total_ded_count = cert_count + other_count
-    total_ded_amount = round(cert_amount + other_amount, 2)
-    total_ded_tax = round(cert_tax + other_tax, 2)
+    # - 铁路电子客票/航空电子客票/公路水路客票 → row10 旅客运输服务
+    # - 其他非专票 → row4 其他扣税凭证
+    def _is_travel_invoice(d):
+        cat = (d.invoice_category or "") or (d.invoice_category_label or "")
+        return any(kw in cat for kw in ["铁路", "航空", "公路", "水路", "旅客", "客票", "运输服务", "通行费"])
+    travel_list = [d for d in non_special_list if _is_travel_invoice(d)]
+    other_list  = [d for d in non_special_list if not _is_travel_invoice(d)]
+
+    travel_count, travel_amount, travel_tax = _ded_sum(travel_list)
+    other_count, other_amount, other_tax = _ded_sum(other_list)
+    # 当期申报抵扣进项税额合计 = 专票 + 其他扣税凭证 + 旅客运输 + 外贸
+    total_ded_count = cert_count + other_count + travel_count
+    total_ded_amount = round(cert_amount + other_amount + travel_amount, 2)
+    total_ded_tax = round(cert_tax + other_tax + travel_tax, 2)
 
     form_input = {
         "period": period,
@@ -674,8 +683,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row2_certified_curr_amount": round(cert_amount, 2),
         "row2_certified_curr_tax": round(cert_tax, 2),
         "row3_certified_prior_count": 0, "row3_certified_prior_amount": 0.0, "row3_certified_prior_tax": 0.0,
-        # 其他扣税凭证（普通发票/电子发票等非专票）
-        "row4_other_count": other_count, "row4_other_amount": round(other_amount, 2), "row4_other_tax": round(other_tax, 2),
+        # 其他扣税凭证（所有非专票合计 = 旅客运输 + 其他，用于 row12 合计公式 12=1+4+11）
+        "row4_other_count": travel_count + other_count, "row4_other_amount": round(travel_amount + other_amount, 2), "row4_other_tax": round(travel_tax + other_tax, 2),
         "row5_customs_count": 0, "row5_customs_amount": 0.0, "row5_customs_tax": 0.0,
         "row6_agri_count": 0, "row6_agri_amount": 0.0, "row6_agri_tax": 0.0,
         "row7_wht_count": 0, "row7_wht_tax": 0.0,
@@ -683,7 +692,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row8b_other_count": 0, "row8b_other_amount": 0.0, "row8b_other_tax": 0.0,
         # 不动产/旅客/外贸
         "row9_real_estate_count": 0, "row9_real_estate_amount": 0.0, "row9_real_estate_tax": 0.0,
-        "row10_travel_count": 0, "row10_travel_amount": 0.0, "row10_travel_tax": 0.0,
+        "row10_travel_count": travel_count, "row10_travel_amount": round(travel_amount, 2), "row10_travel_tax": round(travel_tax, 2),
         "row11_foreign_trade_count": 0, "row11_foreign_trade_tax": 0.0,
         # 二、进项税额转出额
         "row13_transfer_out_total": 0.0,
