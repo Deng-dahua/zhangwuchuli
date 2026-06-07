@@ -375,7 +375,7 @@ function renderSalaryModal(r) {
     modal.className = 'modal-overlay';
     modal.id = 'salary-modal';
     modal.innerHTML = `
-        <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+        <div class="modal" style="max-width:960px;max-height:90vh;overflow-y:auto">
             <div class="modal-header"><h3>${title}</h3><button class="modal-close" onclick="closeModal('salary-modal')">&times;</button></div>
             <div class="modal-body salary-form">
                 <div class="form-grid-2">
