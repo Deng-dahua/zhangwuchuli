@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 from datetime import datetime
 import calendar
 import json
@@ -342,9 +342,16 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         if e.account_code and "2221" in e.account_code and "进项" in (e.account_name or "")
     )
     # 进项抵扣表：按抵扣所属期取数，仅正常发票
+    # 抵扣所属期为空时，fallback 到开票日期（invoice_date）的年月
     input_deductions = db.query(InputVATDeduction).filter(
         InputVATDeduction.company_id == company_id,
-        InputVATDeduction.deduction_period == period,
+        or_(
+            InputVATDeduction.deduction_period == period,
+            and_(InputVATDeduction.deduction_period == None,
+                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
+            and_(InputVATDeduction.deduction_period == "",
+                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
+        ),
         InputVATDeduction.invoice_status == "正常",
     ).all()
     input_tax = sum(d.deductible_tax_amount or 0 for d in input_deductions)
@@ -626,9 +633,16 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # ====== 附列资料（二）：本期进项税额明细 ======
     # 数据源：进项抵扣表 InputVATDeduction，按「抵扣所属期」取数
     # 这才是增值税申报附表二的正确取数规则，不是按开票日期从PurchaseInvoice取
+    # 抵扣所属期为空时，fallback 到开票日期（invoice_date）的年月
     form2_deductions = db.query(InputVATDeduction).filter(
         InputVATDeduction.company_id == company_id,
-        InputVATDeduction.deduction_period == period,
+        or_(
+            InputVATDeduction.deduction_period == period,
+            and_(InputVATDeduction.deduction_period == None,
+                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
+            and_(InputVATDeduction.deduction_period == "",
+                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
+        ),
         InputVATDeduction.invoice_status == "正常",
     ).all()
 
