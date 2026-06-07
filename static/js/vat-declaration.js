@@ -22,6 +22,7 @@ async function renderVATDeclaration(container) {
     + '<div class="toolbar"><div class="toolbar-left"><button class="btn btn-primary" onclick="showVATCreateModal()">＋ 新建申报</button></div>'
     + '<div class="toolbar-right"><input type="month" class="form-control" id="vat-filter-period" value="' + vatFilterPeriod + '" onchange="vatFilterPeriod=this.value;renderVATDeclaration()" style="width:160px"></div></div>'
     + '<div id="vat-list-table"></div>'
+    + '<div id="vat-forms-inline" style="display:none;margin-top:20px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px"></div>'
     + '<div id="vat-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeVATModal()"><div class="modal modal-lg" id="vat-modal-inner"></div></div>';
   await loadVATDeclarationList();
 }
@@ -35,6 +36,19 @@ async function loadVATDeclarationList() {
   } catch (e) { vatDeclarations = []; handleError(e, '加载申报表'); }
   renderVATStats();
   renderVATTable();
+  // 自动展示第一条申报数据
+  if (vatDeclarations.length > 0) {
+    const first = vatDeclarations[0];
+    vatSelectedId = first.id;
+    vatActivePage = 'main';
+    try {
+      const data = await api('/api/vat/declarations/' + first.id);
+      renderVATTemplateViewInline(data);
+    } catch (e) { /* 静默失败，用户可手动点击 */ }
+  } else {
+    const inlineEl = document.getElementById('vat-forms-inline');
+    if (inlineEl) inlineEl.style.display = 'none';
+  }
 }
 
 function renderVATStats() {
@@ -62,7 +76,7 @@ function renderVATTable() {
           + '<td>' + (d.micro_enterprise ? '✅ 是' : '否') + '</td><td>' + (d.six_tax_reduction ? '✅ 是' : '否') + '</td>'
           + '<td>' + badge + '</td><td class="num" style="font-weight:600;color:' + (taxPayable > 0 ? '#d97706' : '#6b7280') + '">' + fmt(taxPayable) + '</td>'
           + '<td>' + (d.fill_date || '-') + '</td><td>' + (d.submitted_at ? new Date(d.submitted_at).toLocaleDateString('zh-CN') : '-') + '</td>'
-          + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openVATDetail(' + d.id + ')">📋 查看附表</button> '
+          + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openVATDetailInline(' + d.id + ')">📋 查看附表</button> '
           + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + d.id + ',\'' + escJs(d.period) + '\')">🗑</button></td></tr>';
       } catch (e) { /* skip */ }
     });
@@ -108,7 +122,7 @@ async function createVATDeclaration() {
     });
     closeVATModal();
     await loadVATDeclarationList();
-    openVATDetail(resp.id);
+    openVATDetailInline(resp.id);
   } catch (e) { handleError(e, '创建申报表'); }
 }
 
@@ -174,6 +188,82 @@ function switchVATPage(pageId) {
   }
 }
 
+// ==================== 内联展示（页面直接显示） ====================
+async function openVATDetailInline(id) {
+  vatSelectedId = id;
+  vatActivePage = 'main';
+  try {
+    const data = await api('/api/vat/declarations/' + id);
+    renderVATTemplateViewInline(data);
+  } catch (e) {
+    toast('加载申报表失败: ' + (e.message || e), 'error');
+  }
+}
+
+function renderVATTemplateViewInline(data) {
+  const container = document.getElementById('vat-forms-inline');
+  if (!container) return;
+  container.style.display = 'block';
+
+  const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
+  const statusLabel = {'草稿':'草稿','已申报':'已申报','已缴税':'已缴税'}[data.status] || data.status;
+
+  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
+    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escapeHtml(data.period) + '</span></h2>'
+    + '<div style="display:flex;gap:8px;align-items:center">'
+    + '<span class="badge badge-info">' + statusLabel + '</span>'
+    + '<button class="btn btn-sm btn-outline" onclick="editVATDeclaration(' + data.id + ')">✏️ 编辑</button>'
+    + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + data.id + ',\'' + escJs(data.period) + '\')">🗑 删除</button>'
+    + '<button class="btn btn-sm btn-outline" onclick="closeVATInline()">✕ 收起</button></div></div>';
+
+  // 页签
+  html += '<div style="display:flex;gap:0;border-bottom:1px solid #e5e7eb;margin:12px 0 0 0;overflow-x:auto;background:#fff;border-radius:8px 8px 0 0">';
+  VAT_PAGES.forEach(p => {
+    html += '<div style="padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:3px solid ' + (vatActivePage === p.id ? '#1a56db' : 'transparent')
+      + ';color:' + (vatActivePage === p.id ? '#1a56db' : '#6b7280') + ';font-weight:' + (vatActivePage === p.id ? '600' : '400')
+      + ';white-space:nowrap;transition:all 0.15s" onclick="switchVATPageInline(\'' + p.id + '\',' + data.id + ')">' + p.label + '</div>';
+  });
+  html += '</div>';
+
+  // 渲染当前页
+  let formHtml = '';
+  try {
+    switch (vatActivePage) {
+      case 'main': formHtml = renderMainForm(data); break;
+      case 'schedule1': formHtml = renderSchedule1(data); break;
+      case 'schedule2': formHtml = renderSchedule2(data); break;
+      case 'schedule3': formHtml = renderSchedule3(data); break;
+      case 'schedule4': formHtml = renderSchedule4(data); break;
+      case 'schedule5': formHtml = renderSchedule5(data); break;
+      case 'reduction': formHtml = renderReductionForm(data); break;
+    }
+  } catch (e) { formHtml = '<div style="padding:20px;color:#ef4444">渲染错误: ' + e.message + '</div>'; }
+  container.innerHTML = html + '<div style="overflow-x:auto;padding:12px 0">' + formHtml + '</div>';
+
+  // 滚动到报表区域
+  container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchVATPageInline(pageId, id) {
+  vatActivePage = pageId;
+  const data = vatDeclarations.find(d => d.id === id);
+  if (data) {
+    data.form_main = data.form_main || '{}';
+    data.form_sales = data.form_sales || '{}';
+    data.form_input = data.form_input || '{}';
+    data.form_deduction = data.form_deduction || '{}';
+    data.form_credit = data.form_credit || '{}';
+    data.form_surcharge = data.form_surcharge || '{}';
+    data.form_reduction = data.form_reduction || '{}';
+    renderVATTemplateViewInline(data);
+  }
+}
+
+function closeVATInline() {
+  const container = document.getElementById('vat-forms-inline');
+  if (container) container.style.display = 'none';
+}
+
 // ==================== 编辑弹窗 ====================
 function editVATDeclaration(id) {
   const d = vatDeclarations.find(x => x.id === id);
@@ -205,7 +295,7 @@ async function updateVATDeclaration(id) {
     });
     closeVATModal();
     await loadVATDeclarationList();
-    openVATDetail(id);
+    openVATDetailInline(id);
   } catch (e) { handleError(e, '更新申报表'); }
 }
 
@@ -215,6 +305,7 @@ async function deleteVATDeclaration(id, period) {
     await api('/api/vat/declarations/' + id, { method: 'DELETE' });
     await loadVATDeclarationList();
     closeVATModal();
+    closeVATInline();
   } catch (e) { handleError(e, '删除申报表'); }
 }
 
