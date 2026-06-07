@@ -17,37 +17,46 @@ const VAT_PAGES = [
 ];
 
 async function stepVATPeriod(type, delta) {
-  const current = vatDeclarations.find(d => d.id === vatSelectedId);
-  if (!current) { showToast('请先选择申报表', 'info'); return; }
-  let [y, m] = (current.period || '').split('-').map(Number);
-  if (!y || !m) return;
-
-  if (type === 'year') {
-    y += delta;
-  } else {
-    m += delta;
-    if (m > 12) { m = 1; y++; }
-    if (m < 1) { m = 12; y--; }
-  }
-  const targetPeriod = y + '-' + String(m).padStart(2, '0');
-  const targetYear = String(y);
-  const targetMonth = String(m).padStart(2, '0');
-
-  // 无论有没有申报表，先更新显示的年/月（数字必须跳动）
+  // 获取当前显示的年月（优先从页面 select 控件读，其次从缓存的 declaration）
   const ySel = document.getElementById('vat-detail-year');
   const mSel = document.getElementById('vat-detail-month');
-  if (ySel) {
-    // 若目标年份不在下拉选项中，临时追加
-    if (!ySel.querySelector('option[value="' + targetYear + '"]')) {
-      ySel.appendChild(new Option(targetYear + '年', targetYear));
-    }
-    ySel.value = targetYear;
+  let currentYear, currentMonth;
+
+  if (ySel && mSel && ySel.value && mSel.value) {
+    currentYear = parseInt(ySel.value);
+    currentMonth = parseInt(mSel.value);
+  } else {
+    const current = vatDeclarations.find(d => d.id === vatSelectedId);
+    if (!current) { showToast('请先选择申报表', 'info'); return; }
+    [currentYear, currentMonth] = (current.period || '').split('-').map(Number);
+    if (!currentYear || !currentMonth) return;
   }
-  if (mSel) {
-    if (!mSel.querySelector('option[value="' + targetMonth + '"]')) {
-      mSel.appendChild(new Option(targetMonth + '月', targetMonth));
+
+  if (type === 'year') {
+    currentYear += delta;
+  } else {
+    currentMonth += delta;
+    if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+    if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+  }
+  const targetYear = String(currentYear);
+  const targetMonth = String(currentMonth).padStart(2, '0');
+  const targetPeriod = targetYear + '-' + targetMonth;
+
+  // 无论有没有申报表，先更新显示的年/月（数字必须跳动）
+  const ySel2 = document.getElementById('vat-detail-year');
+  const mSel2 = document.getElementById('vat-detail-month');
+  if (ySel2) {
+    if (!ySel2.querySelector('option[value="' + targetYear + '"]')) {
+      ySel2.appendChild(new Option(targetYear + '年', targetYear));
     }
-    mSel.value = targetMonth;
+    ySel2.value = targetYear;
+  }
+  if (mSel2) {
+    if (!mSel2.querySelector('option[value="' + targetMonth + '"]')) {
+      mSel2.appendChild(new Option(targetMonth + '月', targetMonth));
+    }
+    mSel2.value = targetMonth;
   }
 
   // 先在本页缓存里查找
@@ -68,8 +77,8 @@ async function stepVATPeriod(type, delta) {
     }
   } catch (e) { /* ignore */ }
 
-  // 至此确认无申报表，数字已跳，只弹提示
-  showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
+  // 至此确认无申报表，数字已跳，渲染空状态提示（避免残留旧数据）
+  renderVATPeriodEmpty(targetPeriod);
 }
 
 // 用户直接在下拉框选择年期/月份时触发
@@ -82,8 +91,59 @@ function onVATDetailPeriodChange() {
   if (found) {
     openVATDetailInline(found.id);
   } else {
-    showToast('该期间（' + period + '）暂无申报表', 'info');
+    // 无申报表时渲染空状态，避免残留旧数据
+    renderVATPeriodEmpty(period);
   }
+}
+
+// 渲染"该期间暂无申报表"的空状态，保留期间选择器
+function renderVATPeriodEmpty(period) {
+  const container = document.getElementById('vat-forms-inline');
+  if (!container) return;
+  const [y, m] = period.split('-');
+  const _periodYear = y || '';
+  const _periodMonth = m || '';
+  const currentYear = new Date().getFullYear();
+  const yearSet = new Set();
+  (vatDeclarations || []).forEach(d => {
+    const [yy] = (d.period || '').split('-');
+    if (yy) yearSet.add(yy);
+  });
+  for (let yy = currentYear - 3; yy <= currentYear + 3; yy++) yearSet.add(String(yy));
+  const years = [...yearSet].sort();
+  let yearOpts = '';
+  years.forEach(yy => {
+    yearOpts += '<option value="' + yy + '" ' + (yy === _periodYear ? 'selected>' : '>') + yy + '年</option>';
+  });
+  let monthOpts = '';
+  for (let mo = 1; mo <= 12; mo++) {
+    const mv = String(mo).padStart(2, '0');
+    monthOpts += '<option value="' + mv + '" ' + (mv === _periodMonth ? 'selected>' : '>') + mv + '月</option>';
+  }
+  container.style.display = 'block';
+  container.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
+    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
+    + '<div class="period-selector-bar">'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'
+    + yearOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'year\',1)" title="下一年">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'year\',-1)" title="上一年">▼</button>'
+    + '</div></div>'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-month" class="period-selector-month" onchange="onVATDetailPeriodChange()">'
+    + monthOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
+    + '</div></div></div></div>'
+    + '<div style="text-align:center;padding:40px 20px;color:#6b7280">'
+    + '<div style="font-size:48px;margin-bottom:12px">📭</div>'
+    + '<div style="font-size:15px;font-weight:600;margin-bottom:4px">该期间（' + period + '）暂无申报表</div>'
+    + '<div style="font-size:13px;margin-bottom:16px">请点击下方按钮创建，或选择其他期间查看</div>'
+    + '<button class="btn btn-primary" onclick="showVATCreateModal()" style="font-size:13px">+ 创建「' + period + '」申报表</button>'
+    + '</div>';
 }
 
 // ==================== 主渲染（列表页） ====================
@@ -278,15 +338,15 @@ function renderVATTemplateViewInline(data) {
 
   const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
 
-  // 从 vatDeclarations 提取所有不重复年份和对应月份
-  const yearMonthMap = {};
+  // 年份：从已有数据取范围，并确保包含当前年 ± 3 年
+  const currentYear = new Date().getFullYear();
+  const yearSet = new Set();
   (vatDeclarations || []).forEach(d => {
-    const [y, m] = (d.period || '').split('-');
-    if (!y || !m) return;
-    if (!yearMonthMap[y]) yearMonthMap[y] = new Set();
-    yearMonthMap[y].add(m);
+    const [y] = (d.period || '').split('-');
+    if (y) yearSet.add(y);
   });
-  const years = Object.keys(yearMonthMap).sort();
+  for (let y = currentYear - 3; y <= currentYear + 3; y++) yearSet.add(String(y));
+  const years = [...yearSet].sort();
   const _periodYear = escapeHtml((data.period || '').split('-')[0] || '');
   const _periodMonth = escapeHtml((data.period || '').split('-')[1] || '');
 
@@ -295,14 +355,12 @@ function renderVATTemplateViewInline(data) {
   years.forEach(y => {
     yearOpts += '<option value="' + y + '" ' + (y === _periodYear ? 'selected>' : '>') + y + '年</option>';
   });
-  // 生成当前年份对应的月份选项
+  // 月份：始终显示全部 1-12 月
   let monthOpts = '';
-  const monthsForYear = yearMonthMap[_periodYear] || new Set();
-  // 若该年份无任何申报表（理论上不会），兜底显示1-12月
-  const allMonths = monthsForYear.size > 0 ? [...monthsForYear].sort() : Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
-  allMonths.forEach(m => {
-    monthOpts += '<option value="' + m + '" ' + (m === _periodMonth ? 'selected>' : '>') + m + '月</option>';
-  });
+  for (let m = 1; m <= 12; m++) {
+    const mv = String(m).padStart(2, '0');
+    monthOpts += '<option value="' + mv + '" ' + (mv === _periodMonth ? 'selected>' : '>') + mv + '月</option>';
+  }
 
   // 构建与顶栏样式完全一致的 period-selector-bar（含 stepper arrows）
   let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
@@ -721,122 +779,174 @@ function renderSchedule1(data) {
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
   function tdDash() { return '<td class="num" style="color:#d1d5db">——</td>'; }
+  // 价税合计 = 合计销售额 + 合计税额
+  function tdP(totalSales, totalTax) {
+    const v = (parseFloat(totalSales || 0)) + (parseFloat(totalTax || 0));
+    return (v === 0) ? tdDash() : ('<td class="num">' + _fm0(v) + '</td>');
+  }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（一）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<table class="vat-form-table" style="font-size:10px">'
     + '<colgroup>'
-    + '<col style="width:22%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
-    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
-    + '<col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:8%"><col style="width:6%"></col>'
+    + '<col style="width:20%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%">'
+    + '<col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%">'
+    + '<col style="width:5%"><col style="width:5%"><col style="width:5%">'
+    + '<col style="width:5%"><col style="width:5.5%"><col style="width:5.5%"></col>'
     + '</colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3"><th rowspan="3">项目及栏次</th>'
-    + '<th colspan="2">开具增值税专用发票</th><th colspan="2">开具其他发票</th>'
-    + '<th colspan="2">未开具发票</th><th colspan="2">纳税检查调整</th>'
+    + '<th colspan="2">开具增值税<br>专用发票</th><th colspan="2">开具其他<br>发票</th>'
+    + '<th colspan="2">未开具发票</th><th colspan="2">纳税检查<br>调整</th>'
     + '<th colspan="2">合计</th>'
-    + '<th rowspan="3">服务、不动产和无形资产<br>扣除项目<br>本期实际扣除金额</th>'
+    + '<th rowspan="3">价税<br>合计</th>'
+    + '<th rowspan="3">服务、不动产和<br>无形资产扣除项目<br>本期实际扣除金额</th>'
     + '<th colspan="2" rowspan="2">扣除后</th></tr>'
     + '<tr style="background:#d9e2f3">'
-    + '<th>销售额</th><th>销项(应纳)税额</th><th>销售额</th><th>销项(应纳)税额</th>'
-    + '<th>销售额</th><th>销项(应纳)税额</th><th>销售额</th><th>销项(应纳)税额</th>'
-    + '<th>销售额</th><th>销项(应纳)税额</th></tr>'
+    + '<th>销售额</th><th>销项(应纳)<br>税额</th><th>销售额</th><th>销项(应纳)<br>税额</th>'
+    + '<th>销售额</th><th>销项(应纳)<br>税额</th><th>销售额</th><th>销项(应纳)<br>税额</th>'
+    + '<th>销售额</th><th>销项(应纳)<br>税额</th></tr>'
     + '<tr style="background:#d9e2f3">'
     + '<th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th>'
     + '<th>9=1+3+5+7</th><th>10=2+4+6+8</th>'
+    + '<th>11=9+10</th>'
     + '<th>13=11-12</th><th>14=13÷(100%+税率或征收率)×税率或征收率</th></tr>'
     + '</thead>'
     + '<tbody>'
 
     // 一、一般计税方法计税
-    + '<tr style="background:#f0f4fa"><td colspan="14" style="font-weight:600;padding:4px 8px;font-size:11px">一、一般计税方法计税</td></tr>'
-    + '<tr style="background:#f5f7fa"><td colspan="14" style="font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
+    + '<tr style="background:#f0f4fa"><td colspan="15" style="font-weight:600;padding:4px 8px;font-size:11px">一、一般计税方法计税</td></tr>'
+    + '<tr style="background:#f5f7fa"><td colspan="15" style="font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
     + '<tr><td>13%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">1</span></td>'
     + td(s.row1_13_special_sales) + td(s.row1_13_special_tax) + td(s.row1_13_other_sales) + td(s.row1_13_other_tax)
     + td(s.row1_13_no_invoice_sales) + td(s.row1_13_no_invoice_tax) + td(s.row1_13_check_sales) + td(s.row1_13_check_tax)
-    + td(s.row1_13_total_sales) + td(s.row1_13_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row1_13_total_sales) + td(s.row1_13_total_tax)
+    + tdP(s.row1_13_total_sales, s.row1_13_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>13%税率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">2</span></td>'
     + td(s.row2_13_service_special_sales) + td(s.row2_13_service_special_tax)
     + td(s.row2_13_service_other_sales) + td(s.row2_13_service_other_tax)
     + td(s.row2_13_service_no_invoice_sales) + td(s.row2_13_service_no_invoice_tax)
     + td(s.row2_13_service_check_sales) + td(s.row2_13_service_check_tax)
-    + td(s.row2_13_service_total_sales) + td(s.row2_13_service_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row2_13_service_total_sales) + td(s.row2_13_service_total_tax)
+    + tdP(s.row2_13_service_total_sales, s.row2_13_service_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>9%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">3</span></td>'
     + td(s.row3_9_special_sales) + td(s.row3_9_special_tax) + td(s.row3_9_other_sales) + td(s.row3_9_other_tax)
     + td(s.row3_9_no_invoice_sales) + td(s.row3_9_no_invoice_tax) + td(s.row3_9_check_sales) + td(s.row3_9_check_tax)
-    + td(s.row3_9_total_sales) + td(s.row3_9_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row3_9_total_sales) + td(s.row3_9_total_tax)
+    + tdP(s.row3_9_total_sales, s.row3_9_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>9%税率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">4</span></td>'
     + td(s.row4_9_service_sales) + td(s.row4_9_service_tax)
     + td(s.row4_9_service_other_sales) + td(s.row4_9_service_other_tax)
     + td(s.row4_9_service_no_invoice_sales) + td(s.row4_9_service_no_invoice_tax)
     + td(s.row4_9_service_check_sales) + td(s.row4_9_service_check_tax)
-    + td(s.row4_9_service_total_sales) + td(s.row4_9_service_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row4_9_service_total_sales) + td(s.row4_9_service_total_tax)
+    + tdP(s.row4_9_service_total_sales, s.row4_9_service_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>6%税率　<span style="font-size:9px;color:#6b7280">5</span></td>'
     + td(s.row5_6_special_sales) + td(s.row5_6_special_tax) + td(s.row5_6_other_sales) + td(s.row5_6_other_tax)
     + td(s.row5_6_no_invoice_sales) + td(s.row5_6_no_invoice_tax) + td(s.row5_6_check_sales) + td(s.row5_6_check_tax)
-    + td(s.row5_6_total_sales) + td(s.row5_6_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row5_6_total_sales) + td(s.row5_6_total_tax)
+    + tdP(s.row5_6_total_sales, s.row5_6_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // 即征即退项目
-    + '<tr style="background:#f5f7fa"><td colspan="14" style="font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
+    + '<tr style="background:#f5f7fa"><td colspan="15" style="font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
     + '<tr><td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">6</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">7</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // 二、简易计税方法计税
-    + '<tr style="background:#f0f4fa"><td colspan="14" style="font-weight:600;padding:4px 8px;font-size:11px">二、简易计税方法计税</td></tr>'
-    + '<tr style="background:#f5f7fa"><td colspan="14" style="font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
+    + '<tr style="background:#f0f4fa"><td colspan="15" style="font-weight:600;padding:4px 8px;font-size:11px">二、简易计税方法计税</td></tr>'
+    + '<tr style="background:#f5f7fa"><td colspan="15" style="font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
     + '<tr><td>6%征收率　<span style="font-size:9px;color:#6b7280">8</span></td>'
     + td(s.row8_6_collect_sales) + td(s.row8_6_collect_tax) + td(s.row8_6_collect_other_sales) + td(s.row8_6_collect_other_tax)
     + td(s.row8_6_collect_no_invoice_sales) + td(s.row8_6_collect_no_invoice_tax)
     + td(s.row8_6_collect_check_sales) + td(s.row8_6_collect_check_tax)
-    + td(s.row8_6_collect_total_sales) + td(s.row8_6_collect_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row8_6_collect_total_sales) + td(s.row8_6_collect_total_tax)
+    + tdP(s.row8_6_collect_total_sales, s.row8_6_collect_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>5%征收率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">9a</span></td>'
     + td(s.row9a_5_goods_sales) + td(s.row9a_5_goods_tax) + td(s.row9a_5_goods_other_sales) + td(s.row9a_5_goods_other_tax)
     + td(s.row9a_5_goods_no_invoice_sales) + td(s.row9a_5_goods_no_invoice_tax)
     + td(s.row9a_5_goods_check_sales) + td(s.row9a_5_goods_check_tax)
-    + td(s.row9a_5_goods_total_sales) + td(s.row9a_5_goods_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row9a_5_goods_total_sales) + td(s.row9a_5_goods_total_tax)
+    + tdP(s.row9a_5_goods_total_sales, s.row9a_5_goods_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>5%征收率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">9b</span></td>'
     + td(s.row9b_5_service_sales) + td(s.row9b_5_service_tax) + td(s.row9b_5_service_other_sales) + td(s.row9b_5_service_other_tax)
     + td(s.row9b_5_service_no_invoice_sales) + td(s.row9b_5_service_no_invoice_tax)
     + td(s.row9b_5_service_check_sales) + td(s.row9b_5_service_check_tax)
-    + td(s.row9b_5_service_total_sales) + td(s.row9b_5_service_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row9b_5_service_total_sales) + td(s.row9b_5_service_total_tax)
+    + tdP(s.row9b_5_service_total_sales, s.row9b_5_service_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>4%征收率　<span style="font-size:9px;color:#6b7280">10</span></td>'
     + td(s.row10_4_collect_sales) + td(s.row10_4_collect_tax) + td(s.row10_4_collect_other_sales) + td(s.row10_4_collect_other_tax)
     + td(s.row10_4_collect_no_invoice_sales) + td(s.row10_4_collect_no_invoice_tax)
     + td(s.row10_4_collect_check_sales) + td(s.row10_4_collect_check_tax)
-    + td(s.row10_4_collect_total_sales) + td(s.row10_4_collect_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row10_4_collect_total_sales) + td(s.row10_4_collect_total_tax)
+    + tdP(s.row10_4_collect_total_sales, s.row10_4_collect_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>3%征收率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">11</span></td>'
     + td(s.row11_3_goods_sales) + td(s.row11_3_goods_tax) + td(s.row11_3_goods_other_sales) + td(s.row11_3_goods_other_tax)
     + td(s.row11_3_goods_no_invoice_sales) + td(s.row11_3_goods_no_invoice_tax)
     + td(s.row11_3_goods_check_sales) + td(s.row11_3_goods_check_tax)
-    + td(s.row11_3_goods_total_sales) + td(s.row11_3_goods_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row11_3_goods_total_sales) + td(s.row11_3_goods_total_tax)
+    + tdP(s.row11_3_goods_total_sales, s.row11_3_goods_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>3%征收率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">12</span></td>'
     + td(s.row12_3_service_sales) + td(s.row12_3_service_tax) + td(s.row12_3_service_other_sales) + td(s.row12_3_service_other_tax)
     + td(s.row12_3_service_no_invoice_sales) + td(s.row12_3_service_no_invoice_tax)
     + td(s.row12_3_service_check_sales) + td(s.row12_3_service_check_tax)
-    + td(s.row12_3_service_total_sales) + td(s.row12_3_service_total_tax) + tdDash() + tdDash() + tdDash() + '</tr>'
+    + td(s.row12_3_service_total_sales) + td(s.row12_3_service_total_tax)
+    + tdP(s.row12_3_service_total_sales, s.row12_3_service_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
+    // 预征率（PDF 模板新增）
+    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13a</span></td>'
+    + td(s.row13a_rate_sales) + td(s.row13a_rate_tax) + td(s.row13a_rate_other_sales) + td(s.row13a_rate_other_tax)
+    + td(s.row13a_rate_no_invoice_sales) + td(s.row13a_rate_no_invoice_tax)
+    + td(s.row13a_rate_check_sales) + td(s.row13a_rate_check_tax)
+    + td(s.row13a_rate_total_sales) + td(s.row13a_rate_total_tax)
+    + tdP(s.row13a_rate_total_sales, s.row13a_rate_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
+    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13b</span></td>'
+    + td(s.row13b_rate_sales) + td(s.row13b_rate_tax) + td(s.row13b_rate_other_sales) + td(s.row13b_rate_other_tax)
+    + td(s.row13b_rate_no_invoice_sales) + td(s.row13b_rate_no_invoice_tax)
+    + td(s.row13b_rate_check_sales) + td(s.row13b_rate_check_tax)
+    + td(s.row13b_rate_total_sales) + td(s.row13b_rate_total_tax)
+    + tdP(s.row13b_rate_total_sales, s.row13b_rate_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
+    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13c</span></td>'
+    + td(s.row13c_rate_sales) + td(s.row13c_rate_tax) + td(s.row13c_rate_other_sales) + td(s.row13c_rate_other_tax)
+    + td(s.row13c_rate_no_invoice_sales) + td(s.row13c_rate_no_invoice_tax)
+    + td(s.row13c_rate_check_sales) + td(s.row13c_rate_check_tax)
+    + td(s.row13c_rate_total_sales) + td(s.row13c_rate_total_tax)
+    + tdP(s.row13c_rate_total_sales, s.row13c_rate_total_tax)
+    + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // 即征即退项目（简易）
-    + '<tr style="background:#f5f7fa"><td colspan="14" style="font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
+    + '<tr style="background:#f5f7fa"><td colspan="15" style="font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
     + '<tr><td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">14</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">15</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // 三、免抵退税
-    + '<tr style="background:#f0f4fa"><td colspan="14" style="font-weight:600;padding:4px 8px;font-size:11px">三、免抵退税</td></tr>'
+    + '<tr style="background:#f0f4fa"><td colspan="15" style="font-weight:600;padding:4px 8px;font-size:11px">三、免抵退税</td></tr>'
     + '<tr><td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // 四、免税
-    + '<tr style="background:#f0f4fa"><td colspan="14" style="font-weight:600;padding:4px 8px;font-size:11px">四、免税</td></tr>'
+    + '<tr style="background:#f0f4fa"><td colspan="15" style="font-weight:600;padding:4px 8px;font-size:11px">四、免税</td></tr>'
     + '<tr><td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
-    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
+    + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     + '</tbody></table>';
 }
@@ -929,8 +1039,8 @@ function renderSchedule3(data) {
     + '<colgroup><col style="width:28%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3"><th rowspan="2">项目及栏次</th>'
-    + '<th rowspan="2">本期服务、不动产和无形资产价税合计额（免税销售额）</th>'
-    + '<th colspan="4">服务、不动产和无形资产扣除项目</th></tr>'
+    + '<th rowspan="2">本期服务、不动产和无形资产<br>价税合计额（免税销售额）</th>'
+    + '<th colspan="4">服务、不动产和<br>无形资产扣除项目</th></tr>'
     + '<tr style="background:#d9e2f3"><th>期初余额</th><th>本期发生额</th><th>本期应扣除金额</th><th>本期实际扣除金额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5(5≤1且5≤4)</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
     + '</thead>'
@@ -1009,17 +1119,17 @@ function renderSchedule5(data) {
     + '<tr style="background:#d9e2f3">'
     + '<th rowspan="2">税（费）种</th>'
     + '<th colspan="3">计税（费）依据</th>'
-    + '<th rowspan="2">税（费）率（%）</th><th rowspan="2">本期应纳税（费）额</th>'
-    + '<th colspan="2">本期减免税（费）额</th>'
-    + '<th colspan="2">小微企业"六税两费"减免政策</th>'
-    + '<th colspan="3">试点建设培育产教融合型企业</th>'
-    + '<th rowspan="2">本期已缴税（费）额</th><th rowspan="2">本期应补（退）税（费）额</th>'
+    + '<th rowspan="2">税（费）率（%）</th><th rowspan="2">本期应纳税<br>（费）额</th>'
+    + '<th colspan="2">本期减免税<br>（费）额</th>'
+    + '<th colspan="2">小微企业<br>"六税两费"<br>减免政策</th>'
+    + '<th colspan="3">试点建设培育<br>产教融合型企业</th>'
+    + '<th rowspan="2">本期已缴税<br>（费）额</th><th rowspan="2">本期应补（退）<br>税（费）额</th>'
     + '</tr>'
     + '<tr style="background:#d9e2f3">'
-    + '<th>增值税税额</th><th>增值税免抵税额</th><th>留抵退税本期扣除额</th>'
-    + '<th>减免性质代码</th><th>减免税（费）额</th>'
-    + '<th>减征比例（%）</th><th>减征额</th>'
-    + '<th>减免性质代码</th><th>本期抵免金额</th>'
+    + '<th>增值税<br>税额</th><th>增值税<br>免抵税额</th><th>留抵退税<br>本期扣除额</th>'
+    + '<th>减免性质<br>代码</th><th>减免税<br>（费）额</th>'
+    + '<th>减征比例<br>（%）</th><th>减征额</th>'
+    + '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>'
     + '</tr>'
     + '<tr style="background:#e8edf5"><th colspan="2">栏次</th>'
     + '<th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th>'
@@ -1073,7 +1183,7 @@ function renderReductionForm(data) {
   // 一、减税项目
   html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、减税项目</div>';
   html += '<table class="vat-form-table"><colgroup><col style="width:40%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:14%"></colgroup>'
-    + '<thead><tr style="background:#d9e2f3"><th>减税性质代码及名称</th><th>栏次</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
+    + '<thead><tr style="background:#d9e2f3"><th>减税性质<br>代码及名称</th><th>栏次</th><th>期初余额</th><th>本期发生额</th><th>本期应<br>抵减税额</th><th>本期实际<br>抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th></th><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead>';
 
   const taxReductionItems = (r.tax_reduction_items || r.reduction_items || []);
@@ -1092,17 +1202,17 @@ function renderReductionForm(data) {
   // 二、免税项目
   html += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、免税项目</div>';
   html += '<table class="vat-form-table"><colgroup><col style="width:30%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"></colgroup>'
-    + '<thead><tr style="background:#d9e2f3"><th>免税性质代码及名称</th><th>栏次</th><th>免征增值税项目销售额</th><th>免税销售额扣除项目本期实际扣除金额</th><th>扣除后免税销售额</th><th>免税销售额对应的进项税额</th><th>免税额</th></tr>'
+    + '<thead><tr style="background:#d9e2f3"><th>免税性质<br>代码及名称</th><th>栏次</th><th>免征增值税<br>项目销售额</th><th>免税销售额<br>扣除项目<br>本期实际扣除金额</th><th>扣除后<br>免税销售额</th><th>免税销售额<br>对应的进项税额</th><th>免税额</th></tr>'
     + '<tr style="background:#e8edf5"><th></th><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1-2</th><th style="text-align:center">4</th><th style="text-align:center">5</th></tr></thead><tbody>';
 
   const exemptItems = r.exempt_items || [];
   if (exemptItems.length === 0) {
-    html += '<tr><td>合　计</td><td style="text-align:center">7</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
-      + '<tr><td>出口免税</td><td style="text-align:center">8</td>' + td(r.exempt_8_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
-      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">9</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
+    html += '<tr><td>合　计</td><td style="text-align:center">1</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
+      + '<tr><td>出口免税</td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
+      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
   } else {
     exemptItems.forEach((item, i) => {
-      html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 7) + '</td>'
+      html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 1) + '</td>'
         + td(item.exempt_sales) + td(item.deduction_amount) + td(item.after_deduction) + td(item.input_tax) + td(item.exempt_amount) + '</tr>';
     });
   }
