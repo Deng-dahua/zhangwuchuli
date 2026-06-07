@@ -993,8 +993,6 @@ function renderSchedule1(data) {
 }
 
 // ==================== 附表二：进项税额明细 ====================
-
-// ==================== 附表二：进项税额明细 ====================
 function renderSchedule2(data) {
   const inp = (typeof data.form_input === 'string') ? JSON.parse(data.form_input) : (data.form_input || {});
 
