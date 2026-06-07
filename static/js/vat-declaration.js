@@ -1344,8 +1344,8 @@ function renderSchedule5(data) {
   // === 小微企业六税两费减免政策信息（模板Row 3-4，在表头上方） ===
   var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
   var microNo  = (data.micro_enterprise && data.six_tax_reduction) ? '□' : '☑';
-  var主体小型 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
-  var主体个体 = (data.micro_enterprise && data.six_tax_reduction) ? '□' : '☑';
+  var 主体小型 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
+  var 主体个体 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
   var 减免起 = (data.reduction_start || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_start ? '日' : '');
   var 减免止 = (data.reduction_end || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_end ? '日' : '');
   // 简化显示：YYYY-MM-DD → YYYY年MM月DD日
