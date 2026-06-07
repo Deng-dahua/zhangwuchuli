@@ -376,12 +376,25 @@ async function renderInputVATDeductions(container) {
   if (list.length === 0) {
     html += '<tr><td colspan="22" style="text-align:center;color:#9ca3af;padding:40px">暂无认证记录</td></tr>';
   } else {
+    // 按 import_batch_id 分组
+    const ivdGroups = [];
+    let ivdCur = null;
     list.forEach(it => {
+      const ivdKey = it.import_batch_id || ('_' + it.id);
+      if (!ivdCur || ivdCur.key !== ivdKey) {
+        ivdCur = { key: ivdKey, items: [] };
+        ivdGroups.push(ivdCur);
+      }
+      ivdCur.items.push(it);
+    });
+    ivdGroups.forEach(g => {
+      const ivdAllIds = g.items.map(x => x.id).join(',');
+      g.items.forEach((it, idx) => {
       const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
       const jv2 = it.journal_voucher_no || '';
       html += '<tr>';
-      // 每行独立复选框（不再 rowspan 合并）
-      html += '<td style="text-align:center"><input type="checkbox" class="ivd-check" data-id="' + it.id + '" onchange="updateIVDBatchBtn()" ' + (jv2 ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
+      // 每组只显示一个复选框，垂直居中
+      html += '<td style="text-align:center;vertical-align:middle">' + (idx === 0 ? '<input type="checkbox" class="ivd-check" data-id="' + it.id + '" data-all-ids="' + ivdAllIds + '" onchange="updateIVDBatchBtn()" ' + (jv2 ? 'disabled title="已生成凭证，不可操作"' : '') + '>' : '') + '</td>';
       html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';
       html += '<td>' + (it.domestic_sale_cert_no || '-') + '</td>';
@@ -414,6 +427,7 @@ async function renderInputVATDeductions(container) {
       }
       html += '</td>';
       html += '</tr>';
+      });
     });
   }
   html += '</tbody></table></div>';
@@ -459,7 +473,15 @@ async function batchDeleteIVD() {
   const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) return;
   const ids = [];
-  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  checked.forEach(cb => {
+    // 如果有 data-all-ids，则拆分并添加所有 ID
+    if (cb.dataset.allIds) {
+      cb.dataset.allIds.split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    } else {
+      const n = parseInt(cb.dataset.id);
+      if (n) ids.push(n);
+    }
+  });
   if (!confirm('确认删除选中的 ' + ids.length + ' 条认证记录？此操作不可恢复。')) return;
   try {
     const result = await api('/api/input-vat-deductions/batch-delete', {
@@ -477,7 +499,11 @@ async function batchCertifyIVD() {
   if (checked.length === 0) return;
   const ids = [];
   checked.forEach(cb => {
-    String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    if (cb.dataset.allIds) {
+      cb.dataset.allIds.split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    } else {
+      String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    }
   });
   if (!confirm('确认认证选中的 ' + ids.length + ' 条记录？认证后将标记为STATUS.CHECKED并设置勾选时间。')) return;
   try {
@@ -701,7 +727,14 @@ async function batchGenerateIVDVouchers() {
   const checked = document.querySelectorAll('.ivd-check:not(:disabled):checked');
   if (checked.length === 0) { toast('请先勾选需要生成凭证的记录', 'warn'); return; }
   const ids = [];
-  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  checked.forEach(cb => {
+    if (cb.dataset.allIds) {
+      cb.dataset.allIds.split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    } else {
+      const n = parseInt(cb.dataset.id);
+      if (n) ids.push(n);
+    }
+  });
   const btn = document.getElementById('ivdBatchGenBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
   try {

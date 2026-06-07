@@ -78,12 +78,25 @@ async function renderSalesInvoices(container) {
     if (items.length === 0) {
       html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无开具发票记录</td></tr>';
     } else {
+      // 按发票三号分组
+      const siGroups = [];
+      let siCur = null;
       items.forEach(i => {
+        const siKey = (i.invoice_code||'') + '|' + (i.invoice_no||'') + '|' + (i.digital_invoice_no||'');
+        if (!siCur || siCur.key !== siKey) {
+          siCur = { key: siKey, items: [] };
+          siGroups.push(siCur);
+        }
+        siCur.items.push(i);
+      });
+      siGroups.forEach(g => {
+        const siAllIds = g.items.map(i => i.id).join(',');
+        g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : i.status === STATUS.RED ? 'badge-red' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         const jv = i.journal_voucher_no;
         html += '<tr>';
-        html += '<td><input type="checkbox" class="si-check" data-id="' + i.id + '" onchange="updateSiBatchBtn()" ' + (jv ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
+        html += '<td style="text-align:center;vertical-align:middle">' + (idx === 0 ? '<input type="checkbox" class="si-check" data-id="' + i.id + '" data-all-ids="' + siAllIds + '" onchange="updateSiBatchBtn()" ' + (jv ? 'disabled title="已生成凭证，不可操作"' : '') + '>' : '') + '</td>';
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showSalesDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
@@ -122,7 +135,7 @@ async function renderSalesInvoices(container) {
         }
         html += '</td></tr>';
       });
-    }
+    });
     html += '</tbody></table></div>';
     el.innerHTML = html;
   } catch (e) {
@@ -523,7 +536,20 @@ async function renderPurchaseInvoices(container) {
     if (items.length === 0) {
       html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
+      // 按发票三号分组
+      const siGroups = [];
+      let siCur = null;
       items.forEach(i => {
+        const siKey = (i.invoice_code||'') + '|' + (i.invoice_no||'') + '|' + (i.digital_invoice_no||'');
+        if (!siCur || siCur.key !== siKey) {
+          siCur = { key: siKey, items: [] };
+          siGroups.push(siCur);
+        }
+        siCur.items.push(i);
+      });
+      siGroups.forEach(g => {
+        const siAllIds = g.items.map(i => i.id).join(',');
+        g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         const pjv = i.journal_voucher_no || '';

@@ -120,7 +120,7 @@ function renderJeTable(data) {
     g.entries.forEach((r, idx) => {
       var showContact = isContactAccount(r.account_code);
       html += '<tr>';
-      html += '<td style="text-align:center"><input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()"></td>';
+      html += '<td style="text-align:center;vertical-align:middle">' + (idx === 0 ? '<input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()">' : '') + '</td>';
       html += '<td>' + r.period + '</td>';
       html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';

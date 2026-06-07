@@ -644,11 +644,11 @@ function renderVATToolbar(yearOpts, monthOpts) {
     + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
     + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div>'
-    + '<button style="' + btnStyle + '" onclick="onVATDetailPeriodChange()" title="按所选期间查询">🔍 查询</button>'
-    + '<button style="' + btnStyle + '" onclick="vatClearFilter()" title="清除筛选条件">✖ 清除</button>'
-    + '<button style="' + btnStyle + '" onclick="vatImportFile()" title="导入增值税申报数据">📥 导入文件</button>'
-    + '<button style="' + btnStyle + '" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">📝 生成凭证</button>'
-    + '<button style="' + dangerBtnStyle + '" onclick="vatDeleteCurrent()" title="删除当前申报表">🗑 删除报表</button>'
+    + '<button style="' + btnStyle + '" onclick="onVATDetailPeriodChange()" title="按所选期间查询">查询</button>'
+    + '<button style="' + btnStyle + '" onclick="vatClearFilter()" title="清除筛选条件">清除</button>'
+    + '<button style="' + btnStyle + '" onclick="vatImportFile()" title="导入增值税申报数据">导入文件</button>'
+    + '<button style="' + btnStyle + '" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">生成凭证</button>'
+    + '<button style="' + dangerBtnStyle + '" onclick="vatDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
 

@@ -2,18 +2,15 @@
 async function renderContracts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<button class="btn btn-primary" onclick="showContractForm()">新增合同</button>' +
-    '</div>' +
     '<div class="filter-bar">' +
-      '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key==\'Enter\')loadContracts()">' +
+      '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key=='Enter')loadContracts()">' +
       '<button class="btn btn-primary" onclick="loadContracts()">搜索</button>' +
+      '<button class="btn btn-primary" onclick="showContractForm()" style="margin-left:8px">新增合同</button>' +
     '</div>' +
-    '<div class="table-wrap" id="contract-table">\u52a0\u8f7d\u4e2d...</div>' +
+    '<div class="table-wrap" id="contract-table">加载中...</div>' +
   '</div>';
   await loadContracts();
 }
-
 async function loadContracts() {
   let kw = document.getElementById('contractKeyword')?.value || '';
   let url = '/api/contracts';
@@ -284,7 +281,7 @@ async function renderPayments(container) {
           '<option value="' + STATUS.REJECTED + '">' + STATUS.REJECTED + '</option>' +
         '</select>' +
         '<input class="form-control" id="payment-keyword-filter" placeholder="搜索单号/人员/供应商/用途..." style="width:240px">' +
-        '<button class="btn btn-primary" onclick="loadPayments()">🔍 查询</button>' +
+        '<button class="btn btn-primary" onclick="loadPayments()">查询</button>' +
       '</div>' +
 
       // Table

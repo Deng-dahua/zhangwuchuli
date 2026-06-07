@@ -148,7 +148,7 @@ async function renderIntangibleAssets(container) {
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="display:flex;gap:8px">' +
         '<button class="btn btn-success" onclick="amortizeAll()">摊销本月</button>' +
-        '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">新增无形资产</button>' +
+        '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">新增资产</button>' +
       '</div>' +
     '</div>' +
     '<div class="table-wrap" id="ia-table">\u52a0\u8f7d\u4e2d...</div>' +
