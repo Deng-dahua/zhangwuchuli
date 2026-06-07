@@ -52,8 +52,8 @@
       background: var(--primary-light); color: var(--primary); border-radius: 6px;
       padding: 4px 12px; font-size: 13px; font-weight: 500; cursor: pointer;
     }
-    .content-area { flex: 1; padding: 24px; width: 100%; max-width: none; display: flex; flex-direction: column; overflow: hidden; }
-    #content-area > [id^="page-"] { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+    .content-area { flex: 1; padding: 24px; width: 100%; max-width: none; display: flex; flex-direction: column; overflow-y: auto; overflow-x: auto; }
+    #content-area > [id^="page-"] { display: flex; flex-direction: column; flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; }
 
     /* 卡片 */
     .card { background: #fff; border-radius: 10px; border: 1px solid var(--gray-200); padding: 20px; margin-bottom: 16px; width: 100%; }
