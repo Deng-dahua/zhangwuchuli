@@ -785,14 +785,15 @@ function renderSchedule1(data) {
     + '<colgroup>'
     + '<col style="width:4%">'   // 大类列
     + '<col style="width:5%">'   // 子类列
-    + '<col style="width:12%">'  // 项目及栏次
+    + '<col style="width:9%">'   // 项目名称
+    + '<col style="width:4%">'   // 栏次
     + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
     + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
     + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
     + '<col style="width:5.5%"><col style="width:5.5%"></col>'
     + '</colgroup>'
     + '<thead>'
-    + '<tr style="background:#d9e2f3"><th colspan="3" rowspan="3" style="padding:4px 6px">项目及栏次</th>'
+    + '<tr style="background:#d9e2f3"><th colspan="2" rowspan="3" style="padding:4px 6px">项目及栏次</th>'
     + '<th colspan="2">开具增值税<br>专用发票</th><th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th><th colspan="2">纳税检查<br>调整</th>'
     + '<th colspan="3">合计</th>'
@@ -813,13 +814,13 @@ function renderSchedule1(data) {
     // ==================== 一、一般计税方法计税（大类rowspan=7） ====================
     + '<tr><td rowspan="7" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税方法计税</td>'
     + '<td rowspan="5" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
-    + '<td>13%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">1</span></td>'
+    + '<td></td><td style="text-align:center">1</td>'
     + td(s.row1_13_special_sales) + td(s.row1_13_special_tax) + td(s.row1_13_other_sales) + td(s.row1_13_other_tax)
     + td(s.row1_13_no_invoice_sales) + td(s.row1_13_no_invoice_tax) + td(s.row1_13_check_sales) + td(s.row1_13_check_tax)
     + td(s.row1_13_total_sales) + td(s.row1_13_total_tax)
     + tdP(s.row1_13_total_sales, s.row1_13_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>13%税率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">2</span></td>'
+    + '<tr><td></td><td style="text-align:center">2</td>'
     + td(s.row2_13_service_special_sales) + td(s.row2_13_service_special_tax)
     + td(s.row2_13_service_other_sales) + td(s.row2_13_service_other_tax)
     + td(s.row2_13_service_no_invoice_sales) + td(s.row2_13_service_no_invoice_tax)
@@ -827,13 +828,13 @@ function renderSchedule1(data) {
     + td(s.row2_13_service_total_sales) + td(s.row2_13_service_total_tax)
     + tdP(s.row2_13_service_total_sales, s.row2_13_service_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>9%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">3</span></td>'
+    + '<tr><td></td><td style="text-align:center">3</td>'
     + td(s.row3_9_special_sales) + td(s.row3_9_special_tax) + td(s.row3_9_other_sales) + td(s.row3_9_other_tax)
     + td(s.row3_9_no_invoice_sales) + td(s.row3_9_no_invoice_tax) + td(s.row3_9_check_sales) + td(s.row3_9_check_tax)
     + td(s.row3_9_total_sales) + td(s.row3_9_total_tax)
     + tdP(s.row3_9_total_sales, s.row3_9_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>9%税率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">4</span></td>'
+    + '<tr><td></td><td style="text-align:center">4</td>'
     + td(s.row4_9_service_sales) + td(s.row4_9_service_tax)
     + td(s.row4_9_service_other_sales) + td(s.row4_9_service_other_tax)
     + td(s.row4_9_service_no_invoice_sales) + td(s.row4_9_service_no_invoice_tax)
@@ -841,57 +842,57 @@ function renderSchedule1(data) {
     + td(s.row4_9_service_total_sales) + td(s.row4_9_service_total_tax)
     + tdP(s.row4_9_service_total_sales, s.row4_9_service_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>6%税率　<span style="font-size:9px;color:#6b7280">5</span></td>'
+    + '<tr><td></td><td style="text-align:center">5</td>'
     + td(s.row5_6_special_sales) + td(s.row5_6_special_tax) + td(s.row5_6_other_sales) + td(s.row5_6_other_tax)
     + td(s.row5_6_no_invoice_sales) + td(s.row5_6_no_invoice_tax) + td(s.row5_6_check_sales) + td(s.row5_6_check_tax)
     + td(s.row5_6_total_sales) + td(s.row5_6_total_tax)
     + tdP(s.row5_6_total_sales, s.row5_6_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">其中：即征即退项目</td>'
-    + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">6</span></td>'
+    + '<td></td><td style="text-align:center">6</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">7</span></td>'
+    + '<tr><td></td><td style="text-align:center">7</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 二、简易计税方法计税（大类rowspan=11） ====================
     + '<tr><td rowspan="11" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税方法计税</td>'
     + '<td rowspan="9" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
-    + '<td>6%征收率　<span style="font-size:9px;color:#6b7280">8</span></td>'
+    + '<td></td><td style="text-align:center">8</td>'
     + td(s.row8_6_collect_sales) + td(s.row8_6_collect_tax) + td(s.row8_6_collect_other_sales) + td(s.row8_6_collect_other_tax)
     + td(s.row8_6_collect_no_invoice_sales) + td(s.row8_6_collect_no_invoice_tax)
     + td(s.row8_6_collect_check_sales) + td(s.row8_6_collect_check_tax)
     + td(s.row8_6_collect_total_sales) + td(s.row8_6_collect_total_tax)
     + tdP(s.row8_6_collect_total_sales, s.row8_6_collect_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>5%征收率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">9a</span></td>'
+    + '<tr><td></td><td style="text-align:center">9a</td>'
     + td(s.row9a_5_goods_sales) + td(s.row9a_5_goods_tax) + td(s.row9a_5_goods_other_sales) + td(s.row9a_5_goods_other_tax)
     + td(s.row9a_5_goods_no_invoice_sales) + td(s.row9a_5_goods_no_invoice_tax)
     + td(s.row9a_5_goods_check_sales) + td(s.row9a_5_goods_check_tax)
     + td(s.row9a_5_goods_total_sales) + td(s.row9a_5_goods_total_tax)
     + tdP(s.row9a_5_goods_total_sales, s.row9a_5_goods_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>5%征收率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">9b</span></td>'
+    + '<tr><td></td><td style="text-align:center">9b</td>'
     + td(s.row9b_5_service_sales) + td(s.row9b_5_service_tax) + td(s.row9b_5_service_other_sales) + td(s.row9b_5_service_other_tax)
     + td(s.row9b_5_service_no_invoice_sales) + td(s.row9b_5_service_no_invoice_tax)
     + td(s.row9b_5_service_check_sales) + td(s.row9b_5_service_check_tax)
     + td(s.row9b_5_service_total_sales) + td(s.row9b_5_service_total_tax)
     + tdP(s.row9b_5_service_total_sales, s.row9b_5_service_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>4%征收率　<span style="font-size:9px;color:#6b7280">10</span></td>'
+    + '<tr><td></td><td style="text-align:center">10</td>'
     + td(s.row10_4_collect_sales) + td(s.row10_4_collect_tax) + td(s.row10_4_collect_other_sales) + td(s.row10_4_collect_other_tax)
     + td(s.row10_4_collect_no_invoice_sales) + td(s.row10_4_collect_no_invoice_tax)
     + td(s.row10_4_collect_check_sales) + td(s.row10_4_collect_check_tax)
     + td(s.row10_4_collect_total_sales) + td(s.row10_4_collect_total_tax)
     + tdP(s.row10_4_collect_total_sales, s.row10_4_collect_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>3%征收率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">11</span></td>'
+    + '<tr><td></td><td style="text-align:center">11</td>'
     + td(s.row11_3_goods_sales) + td(s.row11_3_goods_tax) + td(s.row11_3_goods_other_sales) + td(s.row11_3_goods_other_tax)
     + td(s.row11_3_goods_no_invoice_sales) + td(s.row11_3_goods_no_invoice_tax)
     + td(s.row11_3_goods_check_sales) + td(s.row11_3_goods_check_tax)
     + td(s.row11_3_goods_total_sales) + td(s.row11_3_goods_total_tax)
     + tdP(s.row11_3_goods_total_sales, s.row11_3_goods_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>3%征收率的服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">12</span></td>'
+    + '<tr><td></td><td style="text-align:center">12</td>'
     + td(s.row12_3_service_sales) + td(s.row12_3_service_tax) + td(s.row12_3_service_other_sales) + td(s.row12_3_service_other_tax)
     + td(s.row12_3_service_no_invoice_sales) + td(s.row12_3_service_no_invoice_tax)
     + td(s.row12_3_service_check_sales) + td(s.row12_3_service_check_tax)
@@ -899,21 +900,21 @@ function renderSchedule1(data) {
     + tdP(s.row12_3_service_total_sales, s.row12_3_service_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
     // 预征率
-    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13a</span></td>'
+    + '<tr><td></td><td style="text-align:center">13a</td>'
     + td(s.row13a_rate_sales) + td(s.row13a_rate_tax) + td(s.row13a_rate_other_sales) + td(s.row13a_rate_other_tax)
     + td(s.row13a_rate_no_invoice_sales) + td(s.row13a_rate_no_invoice_tax)
     + td(s.row13a_rate_check_sales) + td(s.row13a_rate_check_tax)
     + td(s.row13a_rate_total_sales) + td(s.row13a_rate_total_tax)
     + tdP(s.row13a_rate_total_sales, s.row13a_rate_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13b</span></td>'
+    + '<tr><td></td><td style="text-align:center">13b</td>'
     + td(s.row13b_rate_sales) + td(s.row13b_rate_tax) + td(s.row13b_rate_other_sales) + td(s.row13b_rate_other_tax)
     + td(s.row13b_rate_no_invoice_sales) + td(s.row13b_rate_no_invoice_tax)
     + td(s.row13b_rate_check_sales) + td(s.row13b_rate_check_tax)
     + td(s.row13b_rate_total_sales) + td(s.row13b_rate_total_tax)
     + tdP(s.row13b_rate_total_sales, s.row13b_rate_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>预征率　<span style="font-size:9px;color:#6b7280">13c</span></td>'
+    + '<tr><td></td><td style="text-align:center">13c</td>'
     + td(s.row13c_rate_sales) + td(s.row13c_rate_tax) + td(s.row13c_rate_other_sales) + td(s.row13c_rate_other_tax)
     + td(s.row13c_rate_no_invoice_sales) + td(s.row13c_rate_no_invoice_tax)
     + td(s.row13c_rate_check_sales) + td(s.row13c_rate_check_tax)
@@ -921,23 +922,23 @@ function renderSchedule1(data) {
     + tdP(s.row13c_rate_total_sales, s.row13c_rate_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">其中：即征即退项目</td>'
-    + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">14</span></td>'
+    + '<td></td><td style="text-align:center">14</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">15</span></td>'
+    + '<tr><td></td><td style="text-align:center">15</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 三、免抵退税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免抵退税</td>'
-    + '<td colspan="2">货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
+    + '</td><td style="text-align:center">16</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td colspan="2">服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
+    + '<tr></td><td style="text-align:center">17</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 四、免税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免税</td>'
-    + '<td colspan="2">货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
+    + '</td><td style="text-align:center">18</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td colspan="2">服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
+    + '<tr></td><td style="text-align:center">19</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     + '</tbody></table>';
@@ -1038,22 +1039,22 @@ function renderSchedule3(data) {
     + '<tr style="background:#e8edf5"><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5(5≤1且5≤4)</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
     + '</thead>'
     + '<tbody>'
-    + '<tr><td>13%税率的项目　<span style="font-size:9px;color:#6b7280">1</span></td>'
+    + '<tr><td></td><td style="text-align:center">1</td>'
     + td(d.row1_13_price_tax) + td(d.row1_13_begin) + td(d.row1_13_occur) + td(d.row1_13_should) + td(d.row1_13_actual) + td(d.row1_13_end) + '</tr>'
-    + '<tr><td>9%税率的项目　<span style="font-size:9px;color:#6b7280">2</span></td>'
+    + '<tr><td></td><td style="text-align:center">2</td>'
     + td(d.row2_9_price_tax) + td(d.row2_9_begin) + td(d.row2_9_occur) + td(d.row2_9_should) + td(d.row2_9_actual) + td(d.row2_9_end) + '</tr>'
-    + '<tr><td>6%税率的项目（不含金融商品转让）　<span style="font-size:9px;color:#6b7280">3</span></td>'
+    + '<tr><td></td><td style="text-align:center">3</td>'
     + td(d.row3_6_price_tax) + td(d.row3_6_begin) + td(d.row3_6_occur) + td(d.row3_6_should) + td(d.row3_6_actual) + td(d.row3_6_end) + '</tr>'
-    + '<tr><td>6%税率的金融商品转让项目　<span style="font-size:9px;color:#6b7280">4</span></td>'
+    + '<tr><td></td><td style="text-align:center">4</td>'
     + td(d.row4_6_fin_price_tax) + td(d.row4_6_fin_begin) + td(d.row4_6_fin_occur) + td(d.row4_6_fin_should) + td(d.row4_6_fin_actual) + td(d.row4_6_fin_end) + '</tr>'
-    + '<tr><td>5%征收率的项目　<span style="font-size:9px;color:#6b7280">5</span></td>'
+    + '<tr><td></td><td style="text-align:center">5</td>'
     + td(d.row5_5_price_tax) + td(d.row5_5_begin) + td(d.row5_5_occur) + td(d.row5_5_should) + td(d.row5_5_actual) + td(d.row5_5_end) + '</tr>'
-    + '<tr><td>3%征收率的项目　<span style="font-size:9px;color:#6b7280">6</span></td>'
+    + '<tr><td></td><td style="text-align:center">6</td>'
     + td(d.row6_3_price_tax) + td(d.row6_3_begin) + td(d.row6_3_occur) + td(d.row6_3_should) + td(d.row6_3_actual) + td(d.row6_3_end) + '</tr>'
-    + '<tr><td>免抵退税的项目　<span style="font-size:9px;color:#6b7280">7</span></td>'
+    + '<tr><td></td><td style="text-align:center">7</td>'
     + td(d.row7_exempt_credit_price_tax) + td(d.row7_exempt_credit_begin) + td(d.row7_exempt_credit_occur)
     + td(d.row7_exempt_credit_should) + td(d.row7_exempt_credit_actual) + td(d.row7_exempt_credit_end) + '</tr>'
-    + '<tr><td>免税的项目　<span style="font-size:9px;color:#6b7280">8</span></td>'
+    + '<tr><td></td><td style="text-align:center">8</td>'
     + td(d.row8_exempt_price_tax) + td(d.row8_exempt_begin) + td(d.row8_exempt_occur) + td(d.row8_exempt_should) + td(d.row8_exempt_actual) + td(d.row8_exempt_end) + '</tr>'
     + '</tbody></table>';
 }
