@@ -643,7 +643,43 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "total_sales": round(sales_total, 2),
         "total_output_tax": round(output_tax, 2),
     }
+    # 附表一：计算所有税率行的合计
+    # 第13行 合计 = 第1行+第2行+第3行+第4行+第5行+第6行+第7行+第8行+第9行+第10行+第11行+第12行
+    s13_special_sales = round(
+        form_sales.get("row1_13_special_sales", 0) + form_sales.get("row2_13_service_special_sales", 0) +
+        form_sales.get("row3_9_special_sales", 0) + form_sales.get("row4_9_service_special_sales", 0) +
+        form_sales.get("row5_6_special_sales", 0) + form_sales.get("row8_6_collect_special_sales", 0) +
+        form_sales.get("row9a_5_goods_special_sales", 0) + form_sales.get("row9b_5_service_special_sales", 0) +
+        form_sales.get("row10_4_collect_special_sales", 0) + form_sales.get("row11_3_goods_special_sales", 0) +
+        form_sales.get("row12_3_service_special_sales", 0), 2)
+    s13_special_tax = round(
+        form_sales.get("row1_13_special_tax", 0) + form_sales.get("row2_13_service_special_tax", 0) +
+        form_sales.get("row3_9_special_tax", 0) + form_sales.get("row4_9_service_special_tax", 0) +
+        form_sales.get("row5_6_special_tax", 0) + form_sales.get("row8_6_collect_special_tax", 0) +
+        form_sales.get("row9a_5_goods_special_tax", 0) + form_sales.get("row9b_5_service_special_tax", 0) +
+        form_sales.get("row10_4_collect_special_tax", 0) + form_sales.get("row11_3_goods_special_tax", 0) +
+        form_sales.get("row12_3_service_special_tax", 0), 2)
+    # 第14行 服务、不动产和无形资产
+    s14_special_sales = round(
+        form_sales.get("row2_13_service_special_sales", 0) + form_sales.get("row4_9_service_special_sales", 0) +
+        form_sales.get("row5_6_special_sales", 0), 2)
+    s14_special_tax = round(
+        form_sales.get("row2_13_service_special_tax", 0) + form_sales.get("row4_9_service_special_tax", 0) +
+        form_sales.get("row5_6_special_tax", 0), 2)
+    form_sales["row13_total_special_sales"] = s13_special_sales
+    form_sales["row13_total_special_tax"] = s13_special_tax
+    form_sales["row14_service_special_sales"] = s14_special_sales
+    form_sales["row14_service_special_tax"] = s14_special_tax
+    # 合计
+    form_sales["total_sales"] = s13_special_sales
+    form_sales["total_output_tax"] = s13_special_tax
+
     vd.form_sales = json.dumps(form_sales, ensure_ascii=False)
+
+    # 主表第1栏「按适用税率计税销售额」= 附表一第13行第1列（所有征税项目合计销售额）
+    # 覆盖上面临时计算的 sales_total
+    sales_total = s13_special_sales
+    output_tax = s13_special_tax  # 销项税额也用附表一合计口径
 
     # ====== 附列资料（二）：本期进项税额明细 ======
     # 数据源：进项抵扣表 InputVATDeduction，按「抵扣所属期」取数
@@ -742,6 +778,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     vd.form_input = json.dumps(form_input, ensure_ascii=False)
 
     # ====== 附列资料（三）：服务、不动产和无形资产扣除项目明细 ======
+    # 本表仅在发生服务/不动产/无形资产扣除项目时填写。
+    # 系统当前不跟踪扣除项目明细，默认全部填0，由用户手动填写扣除数据。
     form_deduction = {
         "period": period,
         # 各项目：价税合计额/期初余额/本期发生额/本期应扣除金额/本期实际扣除金额/期末余额
@@ -755,7 +793,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row2_9_price_tax": 0.0, "row2_9_begin": 0.0, "row2_9_occur": 0.0,
         "row2_9_should": 0.0, "row2_9_actual": 0.0, "row2_9_end": 0.0,
         # 6%税率项目（不含金融商品转让）
-        "row3_6_price_tax": round(sales_total_inclusive, 2), "row3_6_begin": 0.0, "row3_6_occur": 0.0,
+        "row3_6_price_tax": 0.0, "row3_6_begin": 0.0, "row3_6_occur": 0.0,
         "row3_6_should": 0.0, "row3_6_actual": 0.0, "row3_6_end": 0.0,
         # 6%税率的金融商品转让项目
         "row4_6_fin_price_tax": 0.0, "row4_6_fin_begin": 0.0, "row4_6_fin_occur": 0.0,
@@ -773,12 +811,12 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row8_exempt_price_tax": 0.0, "row8_exempt_begin": 0.0, "row8_exempt_occur": 0.0,
         "row8_exempt_should": 0.0, "row8_exempt_actual": 0.0, "row8_exempt_end": 0.0,
         # 合计
-        "row_total_price_tax": round(sales_total_inclusive, 2), "row_total_begin": 0.0,
+        "row_total_price_tax": 0.0, "row_total_begin": 0.0,
         "row_total_occur": 0.0, "row_total_should": 0.0, "row_total_actual": 0.0, "row_total_end": 0.0,
         # 兼容旧字段
-        "row1_total_price_tax": round(sales_total_inclusive, 2),
+        "row1_total_price_tax": 0.0,
         "row1_deduction": 0.0,
-        "row1_after_deduction": round(sales_total_inclusive, 2),
+        "row1_after_deduction": 0.0,
     }
     vd.form_deduction = json.dumps(form_deduction, ensure_ascii=False)
 
@@ -895,3 +933,36 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "reduction_items": [],
     }
     vd.form_reduction = json.dumps(form_reduction, ensure_ascii=False)
+
+    # ====== 主表覆盖更新：用附表汇总数据替换主表关键栏次 ======
+    # 主表应在附表后计算，但当前代码结构是先算主表。此处用附表数据覆盖主表。
+    # 解析已计算的主表
+    main = json.loads(vd.form_main) if isinstance(vd.form_main, str) else vd.form_main
+    # 附表一第13行第1列 = 主表第1栏
+    s1 = json.loads(vd.form_sales) if isinstance(vd.form_sales, str) else (vd.form_sales or {})
+    main["row1_sales"] = s1.get("row13_total_special_sales", main.get("row1_sales", 0))
+    main["row11_output_tax"] = s1.get("row13_total_special_tax", main.get("row11_output_tax", 0))
+    # 附表二第12栏第3列 = 主表第12栏
+    s2 = json.loads(vd.form_input) if isinstance(vd.form_input, str) else (vd.form_input or {})
+    main["row12_input_tax"] = s2.get("total_deductible", main.get("row12_input_tax", 0))
+    # 重新计算主表第17-24栏
+    input_tax = main["row12_input_tax"]
+    output_tax = main["row11_output_tax"]
+    prior_credit = main.get("row13_prior_credit", 0)
+    input_transfer_out = main.get("row14_input_transfer_out", 0)
+    exempt_refund = main.get("row15_exempt_refund", 0)
+    tax_check = main.get("row16_actual_deduct_by_item", 0)
+    total_deduct = round(input_tax + prior_credit - input_transfer_out - exempt_refund + tax_check, 2)
+    actual_deduct = min(total_deduct, output_tax)
+    actual_reduction = main.get("row18_actual_deduct", 0)  # 实际抵减额（加计抵减）
+    tax_payable = max(0, round(output_tax - actual_deduct - actual_reduction, 2))
+    end_credit = round(total_deduct - actual_deduct, 2)
+    simple_tax = main.get("row21_simple_tax", 0)
+    reduction = main.get("row23_reduction", 0)
+    tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
+    main["row17_total_deductible"] = total_deduct
+    main["row18_actual_deduct"] = round(actual_deduct, 2)
+    main["row19_tax_payable"] = round(tax_payable, 2)
+    main["row20_end_credit"] = round(end_credit, 2)
+    main["row24_tax_payable_total"] = tax_payable_total
+    vd.form_main = json.dumps(main, ensure_ascii=False)
