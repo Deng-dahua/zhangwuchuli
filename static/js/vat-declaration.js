@@ -814,15 +814,17 @@ function renderSchedule1(data) {
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<table class="vat-form-table" style="font-size:10px">'
     + '<colgroup>'
-    + '<col style="width:7%">'  // 分类列
-    + '<col style="width:15%">'  // 项目及栏次
-    + '<col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%">'
-    + '<col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%">'
-    + '<col style="width:5%"><col style="width:5%"><col style="width:5%">'
-    + '<col style="width:5%"><col style="width:5%"><col style="width:4.5%"><col style="width:4.5%"></col>'
+    + '<col style="width:4%">'   // 大类列
+    + '<col style="width:5%">'   // 子类列
+    + '<col style="width:12%">'  // 项目及栏次
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"></col>'
     + '</colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3"><th rowspan="3" style="padding:3px 2px"></th>'
+    + '<th rowspan="3" style="padding:3px 2px"></th>'
     + '<th rowspan="3">项目及栏次</th>'
     + '<th colspan="2">开具增值税<br>专用发票</th><th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th><th colspan="2">纳税检查<br>调整</th>'
@@ -842,11 +844,10 @@ function renderSchedule1(data) {
     + '</thead>'
     + '<tbody>'
 
-    // ==================== 一、一般计税方法计税（rowspan=9） ====================
-    + '<tr><td rowspan="10" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税</td>'
-    + '<td colspan="14" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">一、一般计税方法计税</td></tr>'
-    + '<tr><td colspan="14" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
-    + '<tr><td>13%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">1</span></td>'
+    // ==================== 一、一般计税方法计税（大类rowspan=7） ====================
+    + '<tr><td rowspan="7" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税</td>'
+    + '<td rowspan="5" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
+    + '<td>13%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">1</span></td>'
     + td(s.row1_13_special_sales) + td(s.row1_13_special_tax) + td(s.row1_13_other_sales) + td(s.row1_13_other_tax)
     + td(s.row1_13_no_invoice_sales) + td(s.row1_13_no_invoice_tax) + td(s.row1_13_check_sales) + td(s.row1_13_check_tax)
     + td(s.row1_13_total_sales) + td(s.row1_13_total_tax)
@@ -880,18 +881,16 @@ function renderSchedule1(data) {
     + td(s.row5_6_total_sales) + td(s.row5_6_total_tax)
     + tdP(s.row5_6_total_sales, s.row5_6_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    // 即征即退项目
-    + '<tr><td colspan="14" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
-    + '<tr><td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">6</span></td>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">即征即退</td>'
+    + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">6</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">7</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
-    // ==================== 二、简易计税方法计税（rowspan=13） ====================
-    + '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税</td>'
-    + '<td colspan="14" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">二、简易计税方法计税</td></tr>'
-    + '<tr><td colspan="14" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
-    + '<tr><td>6%征收率　<span style="font-size:9px;color:#6b7280">8</span></td>'
+    // ==================== 二、简易计税方法计税（大类rowspan=11） ====================
+    + '<tr><td rowspan="11" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税</td>'
+    + '<td rowspan="9" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
+    + '<td>6%征收率　<span style="font-size:9px;color:#6b7280">8</span></td>'
     + td(s.row8_6_collect_sales) + td(s.row8_6_collect_tax) + td(s.row8_6_collect_other_sales) + td(s.row8_6_collect_other_tax)
     + td(s.row8_6_collect_no_invoice_sales) + td(s.row8_6_collect_no_invoice_tax)
     + td(s.row8_6_collect_check_sales) + td(s.row8_6_collect_check_tax)
@@ -955,27 +954,28 @@ function renderSchedule1(data) {
     + td(s.row13c_rate_total_sales) + td(s.row13c_rate_total_tax)
     + tdP(s.row13c_rate_total_sales, s.row13c_rate_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    // 即征即退项目（简易）
-    + '<tr><td colspan="14" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">其中：即征即退项目</td></tr>'
-    + '<tr><td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">14</span></td>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">即征即退</td>'
+    + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">14</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">15</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
-    // ==================== 三、免抵退税（rowspan=2） ====================
+    // ==================== 三、免抵退税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免抵退税</td>'
-    + '<td colspan="14" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">三、免抵退税</td></tr>'
-    + '<tr><td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
+    + '<td></td>'
+    + '<td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
+    + '<tr><td></td>'
+    + '<td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
-    // ==================== 四、免税（rowspan=2） ====================
+    // ==================== 四、免税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免税</td>'
-    + '<td colspan="14" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">四、免税</td></tr>'
-    + '<tr><td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
+    + '<td></td>'
+    + '<td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
+    + '<tr><td></td>'
+    + '<td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     + '</tbody></table>';
