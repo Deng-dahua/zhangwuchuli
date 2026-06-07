@@ -516,27 +516,36 @@ function showSalaryImportModal() {
         <div class="modal" style="max-width:480px">
             <div class="modal-header"><h3>导入工资薪金</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body salary-form">
-                <div class="form-grid-2" style="margin-top: 16px;">
-                    <div class="form-row">
-                        <label>年度</label>
-                        <select id="sal-import-year">${yearOpts}</select>
-                    </div>
-                    <div class="form-row">
-                        <label>月份</label>
-                        <select id="sal-import-month">
-                            <option value="01"${defMonth==='01'?' selected':''}>01月</option>
-                            <option value="02"${defMonth==='02'?' selected':''}>02月</option>
-                            <option value="03"${defMonth==='03'?' selected':''}>03月</option>
-                            <option value="04"${defMonth==='04'?' selected':''}>04月</option>
-                            <option value="05"${defMonth==='05'?' selected':''}>05月</option>
-                            <option value="06"${defMonth==='06'?' selected':''}>06月</option>
-                            <option value="07"${defMonth==='07'?' selected':''}>07月</option>
-                            <option value="08"${defMonth==='08'?' selected':''}>08月</option>
-                            <option value="09"${defMonth==='09'?' selected':''}>09月</option>
-                            <option value="10"${defMonth==='10'?' selected':''}>10月</option>
-                            <option value="11"${defMonth==='11'?' selected':''}>11月</option>
-                            <option value="12"${defMonth==='12'?' selected':''}>12月</option>
-                        </select>
+                <div style="margin-top:16px">
+                    <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:6px">所属期间</label>
+                    <div class="period-selector-bar">
+                        <div class="period-stepper">
+                            <select id="sal-import-year" class="period-selector-year">${yearOpts}</select>
+                            <div class="stepper-arrows">
+                                <button class="stepper-btn stepper-up" type="button" onclick="stepSalImportYear(1)">▲</button>
+                                <button class="stepper-btn stepper-down" type="button" onclick="stepSalImportYear(-1)">▼</button>
+                            </div>
+                        </div>
+                        <div class="period-stepper">
+                            <select id="sal-import-month" class="period-selector-month">
+                                <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                                <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                                <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                                <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                                <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                                <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                                <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                                <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                                <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                                <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                                <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                                <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+                            </select>
+                            <div class="stepper-arrows">
+                                <button class="stepper-btn stepper-up" type="button" onclick="stepSalImportMonth(1)">▲</button>
+                                <button class="stepper-btn stepper-down" type="button" onclick="stepSalImportMonth(-1)">▼</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="form-row" style="margin-top:24px;flex-direction:column;align-items:stretch;gap:6px">
@@ -661,4 +670,30 @@ function toggleSelectAll(type) {
 }
 
 // escHtml/closeModal 统一用 core.js 的 escapeHtml(), 不再重复定义
+
+// ========== 导入弹窗年度/月份步进 ==========
+function stepSalImportYear(delta) {
+    const sel = document.getElementById('sal-import-year');
+    if (!sel) return;
+    const opts = Array.from(sel.options).map(o => parseInt(o.value));
+    const cur = parseInt(sel.value);
+    const idx = opts.indexOf(cur);
+    const next = idx + delta;
+    if (next >= 0 && next < opts.length) sel.value = opts[next];
+}
+
+function stepSalImportMonth(delta) {
+    const yearSel = document.getElementById('sal-import-year');
+    const monSel = document.getElementById('sal-import-month');
+    if (!monSel) return;
+    let y = parseInt(yearSel.value);
+    let m = parseInt(monSel.value) + delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    // 确保年度在下拉范围内
+    const yearOpts = Array.from(yearSel.options).map(o => parseInt(o.value));
+    if (!yearOpts.includes(y)) return;
+    yearSel.value = y;
+    monSel.value = String(m).padStart(2, '0');
+}
 
