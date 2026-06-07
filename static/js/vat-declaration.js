@@ -154,7 +154,10 @@ async function loadVATDeclarationList() {
   // 自动展示选中或第一条申报数据
   const inlineEl = document.getElementById('vat-forms-inline');
   if (vatDeclarations.length === 0) {
-    if (inlineEl) inlineEl.style.display = 'none';
+    // 有筛选条件时显示该期间的空状态；否则显示当前月份空状态
+    const now = new Date();
+    const defaultPeriod = vatFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    renderVATPeriodEmpty(defaultPeriod);
     return;
   }
   // 如果之前有选中的 ID，优先展示它；否则展示第一条
