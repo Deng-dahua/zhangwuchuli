@@ -965,7 +965,7 @@ function renderSchedule2(data) {
 
     // 一、申报抵扣的进项税额
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:60%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
     + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
@@ -987,7 +987,7 @@ function renderSchedule2(data) {
 
     // 二、进项税额转出额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:70%"><col style="width:10%"><col style="width:20%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:60%"><col style="width:10%"><col style="width:30%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
     + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
@@ -1005,7 +1005,7 @@ function renderSchedule2(data) {
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:60%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
@@ -1022,7 +1022,7 @@ function renderSchedule2(data) {
 
     // 四、其他
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:60%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
     + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
@@ -1035,36 +1035,51 @@ function renderSchedule3(data) {
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
 
-  return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（三）</div>'
+  // 项目名称列表（按行）
+  const projects = [
+    '13%税率的项目',
+    '9%税率的项目',
+    '6%税率的项目',
+    '6%征收率的项目',
+    '5%征收率的项目',
+    '3%征收率的项目',
+    '免抵退税的项目',
+    '免税的项目',
+  ];
+
+  const rows = [
+    { price_tax: d.row1_13_price_tax, begin: d.row1_13_begin, occur: d.row1_13_occur, should: d.row1_13_should, actual: d.row1_13_actual, end: d.row1_13_end },
+    { price_tax: d.row2_9_price_tax, begin: d.row2_9_begin, occur: d.row2_9_occur, should: d.row2_9_should, actual: d.row2_9_actual, end: d.row2_9_end },
+    { price_tax: d.row3_6_price_tax, begin: d.row3_6_begin, occur: d.row3_6_occur, should: d.row3_6_should, actual: d.row3_6_actual, end: d.row3_6_end },
+    { price_tax: d.row4_6_fin_price_tax, begin: d.row4_6_fin_begin, occur: d.row4_6_fin_occur, should: d.row4_6_fin_should, actual: d.row4_6_fin_actual, end: d.row4_6_fin_end },
+    { price_tax: d.row5_5_price_tax, begin: d.row5_5_begin, occur: d.row5_5_occur, should: d.row5_5_should, actual: d.row5_5_actual, end: d.row5_5_end },
+    { price_tax: d.row6_3_price_tax, begin: d.row6_3_begin, occur: d.row6_3_occur, should: d.row6_3_should, actual: d.row6_3_actual, end: d.row6_3_end },
+    { price_tax: d.row7_exempt_credit_price_tax, begin: d.row7_exempt_credit_begin, occur: d.row7_exempt_credit_occur, should: d.row7_exempt_credit_should, actual: d.row7_exempt_credit_actual, end: d.row7_exempt_credit_end },
+    { price_tax: d.row8_exempt_price_tax, begin: d.row8_exempt_begin, occur: d.row8_exempt_occur, should: d.row8_exempt_should, actual: d.row8_exempt_actual, end: d.row8_exempt_end },
+  ];
+
+  let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（三）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（服务、不动产和无形资产扣除项目明细）</div>'
     + '<table class="vat-form-table">'
     + '<colgroup><col style="width:28%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3"><th rowspan="2">项目及栏次</th>'
     + '<th rowspan="2">本期服务、不动产和无形资产<br>价税合计额（免税销售额）</th>'
-    + '<th colspan="4">服务、不动产和<br>无形资产扣除项目</th></tr>'
+    + '<th colspan="5">服务、不动产和<br>无形资产扣除项目</th></tr>'
     + '<tr style="background:#d9e2f3"><th>期初余额</th><th>本期发生额</th><th>本期应扣除金额</th><th>本期实际扣除金额</th><th>期末余额</th></tr>'
-    + '<tr style="background:#e8edf5"><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5(5≤1且5≤4)</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
+    + '<tr style="background:#e8edf5"><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5（5≤1且5≤4）</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
     + '</thead>'
-    + '<tbody>'
-    + '<tr><td></td><td style="text-align:center">1</td>'
-    + td(d.row1_13_price_tax) + td(d.row1_13_begin) + td(d.row1_13_occur) + td(d.row1_13_should) + td(d.row1_13_actual) + td(d.row1_13_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">2</td>'
-    + td(d.row2_9_price_tax) + td(d.row2_9_begin) + td(d.row2_9_occur) + td(d.row2_9_should) + td(d.row2_9_actual) + td(d.row2_9_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">3</td>'
-    + td(d.row3_6_price_tax) + td(d.row3_6_begin) + td(d.row3_6_occur) + td(d.row3_6_should) + td(d.row3_6_actual) + td(d.row3_6_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">4</td>'
-    + td(d.row4_6_fin_price_tax) + td(d.row4_6_fin_begin) + td(d.row4_6_fin_occur) + td(d.row4_6_fin_should) + td(d.row4_6_fin_actual) + td(d.row4_6_fin_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">5</td>'
-    + td(d.row5_5_price_tax) + td(d.row5_5_begin) + td(d.row5_5_occur) + td(d.row5_5_should) + td(d.row5_5_actual) + td(d.row5_5_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">6</td>'
-    + td(d.row6_3_price_tax) + td(d.row6_3_begin) + td(d.row6_3_occur) + td(d.row6_3_should) + td(d.row6_3_actual) + td(d.row6_3_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">7</td>'
-    + td(d.row7_exempt_credit_price_tax) + td(d.row7_exempt_credit_begin) + td(d.row7_exempt_credit_occur)
-    + td(d.row7_exempt_credit_should) + td(d.row7_exempt_credit_actual) + td(d.row7_exempt_credit_end) + '</tr>'
-    + '<tr><td></td><td style="text-align:center">8</td>'
-    + td(d.row8_exempt_price_tax) + td(d.row8_exempt_begin) + td(d.row8_exempt_occur) + td(d.row8_exempt_should) + td(d.row8_exempt_actual) + td(d.row8_exempt_end) + '</tr>'
-    + '</tbody></table>';
+    + '<tbody>';
+
+  for (let i = 0; i < projects.length; i++) {
+    const r = rows[i];
+    html += '<tr><td>' + projects[i] + '</td>'
+      + td(r.price_tax) + td(r.begin) + td(r.occur) + td(r.should) + td(r.actual) + td(r.end)
+      + '</tr>';
+  }
+
+  html += '</tbody></table>';
+  return html;
 }
 
 // ==================== 附表四：税额抵减情况表 ====================
@@ -1078,8 +1093,8 @@ function renderSchedule4(data) {
     // 一、税额抵减情况
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、税额抵减情况</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:5%"><col style="width:35%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
-    + '<thead><tr style="background:#d9e2f3"><th>序号</th><th>抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
-    + '<tr style="background:#e8edf5"><th colspan="2" style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
+    + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
+    + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">1</td><td>增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
     + '<tr><td style="text-align:center">2</td><td>分支机构预征缴纳税款</td>' + td(c.branch_begin) + td(c.branch_occur) + td(c.branch_should) + td(c.branch_actual) + td(c.branch_end) + '</tr>'
     + '<tr><td style="text-align:center">3</td><td>建筑服务预征缴纳税款</td>' + td(c.construction_begin) + td(c.construction_occur) + td(c.construction_should) + td(c.construction_actual) + td(c.construction_end) + '</tr>'
@@ -1090,8 +1105,8 @@ function renderSchedule4(data) {
     // 二、加计抵减情况
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、加计抵减情况</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:5%"><col style="width:25%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:14%"><col style="width:14%"></colgroup>'
-    + '<thead><tr style="background:#d9e2f3"><th>序号</th><th>加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
-    + '<tr style="background:#e8edf5"><th colspan="2" style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:9px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:9px">6=4-5</th></tr></thead><tbody>'
+    + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
+    + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:10px">6=4-5</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">6</td><td>一般项目加计抵减额计算</td>' + td(c.item1_begin) + td(c.item1_occur) + td(c.item1_adjust) + td(c.item1_can_deduct) + td(c.item1_actual_deduct) + td(c.item1_end) + '</tr>'
     + '<tr><td style="text-align:center">7</td><td>即征即退项目加计抵减额计算</td>' + td(c.item2_begin) + td(c.item2_occur) + td(c.item2_adjust) + td(c.item2_can_deduct) + td(c.item2_actual_deduct) + td(c.item2_end) + '</tr>'
     + '<tr style="background:#f0fdf4;font-weight:700"><td style="text-align:center">8</td><td>合计</td>'
