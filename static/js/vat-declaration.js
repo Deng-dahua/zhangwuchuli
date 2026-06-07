@@ -21,9 +21,6 @@ async function renderVATDeclaration(container) {
   vatInlineDisplayId = null;
   const el = container || document.getElementById('page-vat-declaration') || document.getElementById('content-area');
   el.innerHTML = '<div id="vat-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
-    + '<div class="toolbar"><div class="toolbar-left"><button class="btn btn-primary" onclick="showVATCreateModal()">＋ 新建申报</button></div>'
-    + '<div class="toolbar-right"><input type="month" class="form-control" id="vat-filter-period" value="' + vatFilterPeriod + '" onchange="vatFilterPeriod=this.value;renderVATDeclaration()" style="width:160px"></div></div>'
-    + '<div id="vat-list-table"></div>'
     + '<div id="vat-forms-inline" style="display:none;margin-top:20px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px"></div>'
     + '<div id="vat-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeVATModal()"><div class="modal modal-lg" id="vat-modal-inner"></div></div>';
   await loadVATDeclarationList();
@@ -37,7 +34,6 @@ async function loadVATDeclarationList() {
     vatDeclarations = await api(url);
   } catch (e) { vatDeclarations = []; handleError(e, '加载申报表'); }
   renderVATStats();
-  renderVATTable();
   // 自动展示选中或第一条申报数据
   const inlineEl = document.getElementById('vat-forms-inline');
   if (vatDeclarations.length === 0) {
@@ -60,7 +56,6 @@ async function loadVATDeclarationList() {
     if (inlineEl) inlineEl.style.display = 'none';
   }
   renderVATStats(); // 详情加载后重新渲染统计卡（金额已更新）
-  highlightVATRow(vatSelectedId);
 }
 
 function renderVATStats() {
@@ -82,29 +77,6 @@ function renderVATStats() {
     + '<div class="stat-card"><div class="stat-label">最新申报期间</div><div class="stat-value">' + (total > 0 ? vatDeclarations[0].period : '-') + '</div><div class="stat-sub">按时间倒序</div></div>'
     + '<div class="stat-card"><div class="stat-label">草稿</div><div class="stat-value" style="color:#f59e0b">' + draft + '</div><div class="stat-sub">待完成</div></div>'
     + '<div class="stat-card"><div class="stat-label">已缴税</div><div class="stat-value" style="color:#10b981">' + paid + '</div><div class="stat-sub">已完成</div></div>';
-}
-
-function renderVATTable() {
-  const el = document.getElementById('vat-list-table'); if (!el) return;
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>税款所属期</th><th>纳税人名称</th><th>小规模纳税人</th><th>六税两费减征</th><th>状态</th><th>应纳税额</th><th>填报日期</th><th>申报日期</th><th>操作</th></tr></thead><tbody>';
-  if (vatDeclarations.length === 0) {
-    html += '<tr><td colspan="9" style="text-align:center;padding:40px;color:#9ca3af">暂无申报表，点击「＋ 新建申报」创建</td></tr>';
-  } else {
-    vatDeclarations.forEach(d => {
-      try {
-        const main = typeof d.form_main === 'string' ? JSON.parse(d.form_main) : (d.form_main || {});
-        const taxPayable = main.row19_tax_payable || 0;
-        const badge = {'草稿':'<span class="badge badge-draft">草稿</span>','已申报':'<span class="badge badge-audited">已申报</span>','已缴税':'<span class="badge badge-posted">已缴税</span>'}[d.status] || d.status;
-        html += '<tr data-vat-id="' + d.id + '"><td><strong>' + escapeHtml(d.period) + '</strong></td><td>' + escapeHtml(d.taxpayer_name || '') + '</td>'
-          + '<td>' + (d.micro_enterprise ? '✅ 是' : '否') + '</td><td>' + (d.six_tax_reduction ? '✅ 是' : '否') + '</td>'
-          + '<td>' + badge + '</td><td class="num" style="font-weight:600;color:' + (taxPayable > 0 ? '#d97706' : '#6b7280') + '">' + fmt(taxPayable) + '</td>'
-          + '<td>' + (d.fill_date || '-') + '</td><td>' + (d.submitted_at ? new Date(d.submitted_at).toLocaleDateString('zh-CN') : '-') + '</td>'
-          + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openVATDetailInline(' + d.id + ')">📋 查看附表</button> '
-          + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + d.id + ',\'' + escJs(d.period) + '\')">🗑</button></td></tr>';
-      } catch (e) { /* skip */ }
-    });
-  }
-  html += '</tbody></table></div>'; el.innerHTML = html;
 }
 
 // ==================== 新建/编辑 ====================
@@ -221,21 +193,9 @@ async function openVATDetailInline(id) {
     const idx = vatDeclarations.findIndex(d => d.id === id);
     if (idx >= 0) vatDeclarations[idx] = data;
     renderVATTemplateViewInline(data);
-    highlightVATRow(id);
     renderVATStats(); // 金额可能变化，重新渲染统计卡
   } catch (e) {
     toast('加载申报表失败: ' + (e.message || e), 'error');
-  }
-}
-
-function highlightVATRow(id) {
-  // 清除所有高亮
-  const allRows = document.querySelectorAll('#vat-list-table tr[data-vat-id]');
-  allRows.forEach(r => r.style.background = '');
-  // 高亮当前行
-  if (id) {
-    const row = document.querySelector('#vat-list-table tr[data-vat-id="' + id + '"]');
-    if (row) row.style.background = '#eef2ff';
   }
 }
 
