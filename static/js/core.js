@@ -281,7 +281,13 @@ function globalPeriodConfirm() {
   currentPeriod = newPeriod;
   localStorage.setItem('currentPeriod', currentPeriod);
 
-  // ===== 1. 序时账/总账/明细账/报表 (from-to) =====
+  // ===== 状态变量（影响 re-render/下次渲染时的默认值）必须在 navigateTo 之前设置 =====
+  try { currentSalaryPeriod = newPeriod; } catch(e) {}
+  try { vatFilterPeriod = newPeriod; vatSelectedId = null; vatCurrentData = null; } catch(e) {}
+  try { ssFilterPeriod = newPeriod; } catch(e) {}
+
+  // ===== DOM 直接同步（已渲染但当前未激活的页面，下次切换过去时生效） =====
+  // 1. 序时账/总账/明细账/报表 (from-to)
   ['gl','dl','pl','bs','cf','ec','tb','je'].forEach(function(prefix) {
     ['from','to'].forEach(function(side) {
       let ey = document.getElementById(prefix + '-' + side + '-y');
@@ -289,15 +295,9 @@ function globalPeriodConfirm() {
       if (ey) ey.value = y;
       if (em) em.value = m;
     });
-    // 单期选择器（仅from无to）
-    let ey = document.getElementById(prefix + '-from-y');
-    let em = document.getElementById(prefix + '-from-m');
-    if (!ey) { ey = document.getElementById(prefix + '-y'); em = document.getElementById(prefix + '-m'); }
-    if (ey) ey.value = y;
-    if (em) em.value = m;
   });
 
-  // ===== 2. 往来明细账（人员/客户/供应商） =====
+  // 2. 往来明细账（人员/客户/供应商）
   ['employee','customer','supplier'].forEach(function(type) {
     ['from','to'].forEach(function(side) {
       let ey = document.getElementById(type + '-' + side + '-y');
@@ -307,40 +307,28 @@ function globalPeriodConfirm() {
     });
   });
 
-  // ===== 3. 工资薪金 =====
-  try { currentSalaryPeriod = newPeriod; } catch(e) {}
+  // 3. 工资薪金 DOM
   let sy = document.getElementById('salary-y');
   let sm = document.getElementById('salary-m');
   if (sy) sy.value = y;
   if (sm) sm.value = m;
 
-  // ===== 4. 住房公积金 =====
+  // 4. 住房公积金 DOM
   let hy = document.getElementById('hf-year');
   let hm = document.getElementById('hf-month');
   if (hy) hy.value = y;
   if (hm) hm.value = m;
-  let hiy = document.getElementById('hf-import-year');
-  let him = document.getElementById('hf-import-month');
-  if (hiy) hiy.value = y;
-  if (him) him.value = m;
 
-  // ===== 5. 增值税申报 =====
-  let vy = document.getElementById('vat-detail-year');
-  let vm = document.getElementById('vat-detail-month');
-  if (vy) vy.value = y;
-  if (vm) vm.value = m;
-
-  // ===== 6. 社会保险费 =====
+  // 5. 社会保险费 DOM
   let ssPeriod = document.getElementById('ss-filter-period');
   if (ssPeriod) ssPeriod.value = newPeriod;
-  try { ssFilterPeriod = newPeriod; } catch(e) {}
 
-  // ===== 7. 发票/抵扣筛选器 =====
+  // 6. 发票/抵扣筛选器
   try { siFilter.dateFrom = ''; siFilter.dateTo = ''; } catch(e) {}
   try { piFilter.dateFrom = ''; piFilter.dateTo = ''; } catch(e) {}
   try { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; } catch(e) {}
 
-  // ===== 刷新当前页面 =====
+  // ===== 刷新当前页面（re-render 会读状态变量决定默认期间） =====
   navigateTo(currentPage);
   toast('已同步所有模块到 ' + newPeriod, 'success');
 }
