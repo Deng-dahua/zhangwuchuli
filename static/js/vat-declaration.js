@@ -127,7 +127,7 @@ function renderVATPeriodEmpty(period) {
     + '<div style="font-size:48px;margin-bottom:12px">📭</div>'
     + '<div style="font-size:15px;font-weight:600;margin-bottom:4px">该期间（' + period + '）暂无申报表</div>'
     + '<div style="font-size:13px;margin-bottom:16px">请点击下方按钮创建，或选择其他期间查看</div>'
-    + '<button class="btn btn-primary" onclick="showVATCreateModal()" style="font-size:13px">+ 创建「' + period + '」申报表</button>'
+    + '<button class="btn btn-primary" onclick="showVATCreateModal(\'' + period + '\')" style="font-size:13px">+ 创建「' + period + '」申报表</button>'
     + '</div>';
 }
 
@@ -213,9 +213,10 @@ function renderVATStats() {
 }
 
 // ==================== 新建/编辑 ====================
-function showVATCreateModal() {
+function showVATCreateModal(period) {
   const now = new Date();
-  const defaultPeriod = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  // 优先使用传入的期间，其次用全局过滤期间，最后取当前日期
+  const defaultPeriod = period || vatFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
   document.getElementById('vat-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">＋ 新建增值税申报表</h2>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">税款所属期 <span style="color:red">*</span></label>'
