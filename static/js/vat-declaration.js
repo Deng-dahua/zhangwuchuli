@@ -1092,11 +1092,11 @@ function renderSchedule4(data) {
     + '<table class="vat-form-table"><colgroup><col style="width:5%"><col style="width:15%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
-    + '<tr><td style="text-align:center">1</td><td>增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
-    + '<tr><td style="text-align:center">2</td><td>分支机构预征缴纳税款</td>' + td(c.branch_begin) + td(c.branch_occur) + td(c.branch_should) + td(c.branch_actual) + td(c.branch_end) + '</tr>'
-    + '<tr><td style="text-align:center">3</td><td>建筑服务预征缴纳税款</td>' + td(c.construction_begin) + td(c.construction_occur) + td(c.construction_should) + td(c.construction_actual) + td(c.construction_end) + '</tr>'
-    + '<tr><td style="text-align:center">4</td><td>销售不动产预征缴纳税款</td>' + td(c.real_estate_begin) + td(c.real_estate_occur) + td(c.real_estate_should) + td(c.real_estate_actual) + td(c.real_estate_end) + '</tr>'
-    + '<tr><td style="text-align:center">5</td><td>出租不动产预征缴纳税款</td>' + td(c.rental_begin) + td(c.rental_occur) + td(c.rental_should) + td(c.rental_actual) + td(c.rental_end) + '</tr>'
+    + '<tr><td style="text-align:center">1</td><td style="white-space:nowrap">增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
+    + '<tr><td style="text-align:center">2</td><td style="white-space:nowrap">分支机构预征缴纳税款</td>' + td(c.branch_begin) + td(c.branch_occur) + td(c.branch_should) + td(c.branch_actual) + td(c.branch_end) + '</tr>'
+    + '<tr><td style="text-align:center">3</td><td style="white-space:nowrap">建筑服务预征缴纳税款</td>' + td(c.construction_begin) + td(c.construction_occur) + td(c.construction_should) + td(c.construction_actual) + td(c.construction_end) + '</tr>'
+    + '<tr><td style="text-align:center">4</td><td style="white-space:nowrap">销售不动产预征缴纳税款</td>' + td(c.real_estate_begin) + td(c.real_estate_occur) + td(c.real_estate_should) + td(c.real_estate_actual) + td(c.real_estate_end) + '</tr>'
+    + '<tr><td style="text-align:center">5</td><td style="white-space:nowrap">出租不动产预征缴纳税款</td>' + td(c.rental_begin) + td(c.rental_occur) + td(c.rental_should) + td(c.rental_actual) + td(c.rental_end) + '</tr>'
     + '</tbody></table>'
 
     // 二、加计抵减情况
