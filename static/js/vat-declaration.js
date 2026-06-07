@@ -205,14 +205,17 @@ function renderVATTemplateViewInline(data) {
   container.style.display = 'block';
 
   const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
-  const statusLabel = {'草稿':'草稿','已申报':'已申报','已缴税':'已缴税'}[data.status] || data.status;
-
+  const _periodYear = escapeHtml((data.period || '').split('-')[0] || '');
+  const _periodMonth = escapeHtml((data.period || '').split('-')[1] || '');
   let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
-    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escapeHtml(data.period) + '</span></h2>'
-    + '<div style="display:flex;gap:8px;align-items:center">'
-    + '<span class="badge badge-info">' + statusLabel + '</span>'
-    + '<button class="btn btn-sm btn-outline" onclick="editVATDeclaration(' + data.id + ')">✏️ 编辑</button>'
-    + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + data.id + ',\'' + escJs(data.period) + '\')">🗑 删除</button></div></div>';
+    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
+    + '<div class="period-selector-bar" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:3px 6px">'
+    + '<div class="period-stepper" style="display:flex;align-items:center">'
+    + '<span style="padding:4px 6px;border-right:1px solid var(--gray-200);font-size:13px;color:var(--gray-800);min-width:70px;text-align:center;display:block">' + _periodYear + '年</span>'
+    + '</div>'
+    + '<div class="period-stepper" style="display:flex;align-items:center">'
+    + '<span style="padding:4px 6px;font-size:13px;color:var(--gray-800);min-width:50px;text-align:center;display:block">' + _periodMonth + '月</span>'
+    + '</div></div></div>';
 
   // 页签
   html += '<div style="display:flex;gap:0;border-bottom:1px solid #e5e7eb;margin:12px 0 0 0;overflow-x:auto;background:#fff;border-radius:8px 8px 0 0">';
