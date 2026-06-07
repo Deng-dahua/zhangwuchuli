@@ -1198,7 +1198,7 @@ function renderSchedule4(data) {
     + '</tbody></table>';
 }
 
-// ==================== 附表五：附加税费情况表（基于模板 009-1-1.xls 重做） ====================
+// ==================== 附表五：附加税费情况表（16列统一大表格，按Excel模板列对齐） ====================
 function renderSchedule5(data) {
   const scf = (typeof data.form_surcharge === 'string') ? JSON.parse(data.form_surcharge) : (data.form_surcharge || {});
   function td(v) { return '<td class="num">' + _fmt(v) + '</td>'; }
@@ -1206,63 +1206,43 @@ function renderSchedule5(data) {
   function tdDash() { return '<td class="num">——</td>'; }
   function tdTxt(v) { return '<td>' + (v || '') + '</td>'; }
   function tdPct(v) { return '<td class="num">' + ((v||0)*100).toFixed(0) + '%</td>'; }
-  var hdrBg = 'background:#d9e2f3';
-
-  // 辅助：生成一行数据（3种税费 + 合计）
-  function surRow(name, seq, base, exempt, refund, rate, tax,
-                  redCode, redAmt, sixRate, sixAmt, pilotCode, pilotAmt, paid, final, isTotal) {
-    if (isTotal) {
-      return '<tr style="background:#f0fdf4;font-weight:700"><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
-        + tdDash() + tdDash() + tdDash() + tdDash()
-        + td(tax) + tdDash() + td0(redAmt)
-        + tdDash() + td0(sixAmt)
-        + tdDash() + td0(pilotAmt) + td0(paid) + td(final) + '</tr>';
-    }
-    return '<tr><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
-      + td(base) + td0(exempt) + td0(refund)
-      + tdPct(rate) + td(tax)
-      + tdTxt(redCode) + td0(redAmt)
-      + tdPct(sixRate) + td0(sixAmt)
-      + tdTxt(pilotCode) + td0(pilotAmt) + td0(paid) + td(final) + '</tr>';
-  }
 
   var html = '';
-  html += '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>';
-  html += '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:8px">（附加税费情况表）</div>';
-
-  // ===== 上部：小微企业六税两费减免政策信息 =====
-  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
+  html += '<div style="overflow-x:auto"><table class="vat-form-table" style="font-size:10px">';
   html += '<colgroup>';
-  html += '<col><col><col><col><col>';
-  html += '<col><col><col><col>';
+  for (var i = 0; i < 16; i++) html += '<col>';
   html += '</colgroup>';
+
+  // === 第1行：标题 ===
   html += '<tr>';
-  html += '<td colspan="3" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费"减免政策</td>';
-  html += '<td colspan="3" rowspan="2" style="text-align:left">□是 □否</td>';
-  html += '<td colspan="2">减免政策适用主体</td>';
-  html += '<td colspan="8">□个体工商户 □小型微利企业</td>';
-  html += '</tr><tr>';
-  html += '<td colspan="2">适用减免政策起止时间</td>';
-  html += '<td colspan="8">年 月 至 年 月</td>';
-  html += '</tr></table>';
+  html += '<td colspan="5" style="border:none;background:white"></td>';
+  html += '<td colspan="11" style="text-align:center;font-size:13px;font-weight:700;padding:6px 0">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</td>';
+  html += '</tr>';
 
-  // ===== 主表格（15列） =====
-  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
-  html += '<colgroup>';
-  html += '<col><col>';
-  html += '<col><col><col>';
-  html += '<col><col>';
-  html += '<col><col>';
-  html += '<col><col>';
-  html += '<col><col>';
-  html += '<col><col>';
-  html += '</colgroup>';
+  // === 第2行：副标题 ===
+  html += '<tr>';
+  html += '<td colspan="5" style="border:none;background:white"></td>';
+  html += '<td colspan="3" style="border:none;background:white"></td>';
+  html += '<td colspan="8" style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:6px">（附加税费情况表）</td>';
+  html += '</tr>';
 
-  // === Header Row 1 ===
+  // === 第3-4行：小微企业六税两费减免政策信息 ===
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费"减免政策</td>';
+  html += '<td colspan="2" rowspan="2">□是 □否</td>';
+  html += '<td colspan="3">减免政策适用主体</td>';
+  html += '<td colspan="5">□个体工商户 □小型微利企业</td>';
+  html += '</tr>';
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="3">适用减免政策起止时间</td>';
+  html += '<td colspan="5">年 月 至 年 月</td>';
+  html += '</tr>';
+
+  // === 第5-6行：表头 ===
   html += '<thead><tr style="background:#d9e2f3">';
   html += '<th colspan="2" rowspan="2">税（费）种</th>';
   html += '<th colspan="3">计税（费）依据</th>';
-  html += '<th rowspan="2">税（费）<br>率（%）</th>';
+  html += '<th colspan="2" rowspan="2">税（费）<br>率（%）</th>';
   html += '<th rowspan="2">本期应纳税<br>（费）额</th>';
   html += '<th colspan="2">本期减免税<br>（费）额</th>';
   html += '<th colspan="2">小微企业"六税两费"<br>减免政策</th>';
@@ -1271,17 +1251,33 @@ function renderSchedule5(data) {
   html += '<th rowspan="2">本期应补（退）<br>税（费）额</th>';
   html += '</tr>';
 
-  // === Header Row 2 ===
   html += '<tr style="background:#d9e2f3">';
   html += '<th>增值税税额</th><th>增值税<br>免抵税额</th><th>留抵退税<br>本期扣除额</th>';
   html += '<th>减免性质<br>代码</th><th>减免税<br>（费）额</th>';
   html += '<th>减征比例<br>（%）</th><th>减征额</th>';
   html += '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>';
-  html += '</tr>';
-
-  html += '</thead><tbody>';
+  html += '</tr></thead>';
 
   // === 数据行 ===
+  function surRow(name, seq, base, exempt, refund, rate, tax,
+                  redCode, redAmt, sixRate, sixAmt, pilotCode, pilotAmt, paid, final, isTotal) {
+    if (isTotal) {
+      return '<tr style="background:#f0fdf4;font-weight:700"><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
+        + tdDash() + tdDash() + tdDash() + '<td colspan="2" class="num">——</td>'
+        + td(tax) + tdDash() + td0(redAmt)
+        + tdDash() + td0(sixAmt)
+        + tdDash() + td0(pilotAmt) + td0(paid) + td0(final) + '</tr>';
+    }
+    return '<tr><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
+      + td(base) + td0(exempt) + td0(refund)
+      + '<td colspan="2" class="num">' + ((rate||0)*100).toFixed(0) + '%</td>'
+      + td(tax)
+      + tdTxt(redCode) + td0(redAmt)
+      + tdPct(sixRate) + td0(sixAmt)
+      + tdTxt(pilotCode) + td0(pilotAmt) + td0(paid) + td0(final) + '</tr>';
+  }
+
+  html += '<tbody>';
   html += surRow('城市维护建设税', 1, scf.city_base, scf.vat_exempt_credit, scf.vat_refund_deduct,
            scf.city_rate, scf.city_tax, scf.city_reduction_code, scf.city_reduction_amount,
            scf.city_reduction_rate, scf.city_six_tax_amount,
@@ -1297,44 +1293,47 @@ function renderSchedule5(data) {
   html += surRow('合计', 4, null, null, null, null, scf.total_tax,
            null, scf.total_reduction, null, scf.total_six_tax_reduction,
            null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true);
-  html += '</tbody></table>';
+  html += '</tbody>';
 
-  // ===== 底部：产教融合抵免政策 (rows 12-14) =====
-  html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
-  html += '<colgroup>';
-  html += '<col><col><col><col>';
-  html += '</colgroup>';
+  // === 第12-14行：产教融合抵免政策 ===
   html += '<tr style="background:#d9e2f3">';
-  html += '<td rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
-  html += '<td rowspan="3">□是<br>□否</td>';
-  html += '<td>当期新增投资额</td>';
-  html += '<td style="text-align:center">5</td>';
-  html += '</tr><tr style="background:#d9e2f3">';
-  html += '<td>上期留抵可抵免金额</td>';
-  html += '<td style="text-align:center">6</td>';
-  html += '</tr><tr style="background:#d9e2f3">';
-  html += '<td>结转下期可抵免金额</td>';
-  html += '<td style="text-align:center">7</td>';
-  html += '</tr></table>';
-
-  // ===== 底部：留抵退税额使用情况 (rows 15-17) =====
-  html += '<table class="vat-form-table" style="font-size:10px;">';
-  html += '<colgroup>';
-  html += '<col><col><col>';
-  html += '</colgroup>';
+  html += '<td colspan="5" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
+  html += '<td colspan="2" rowspan="3">□是<br>□否</td>';
+  html += '<td colspan="6">当期新增投资额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">5</td>';
+  html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
-  html += '<td rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
-  html += '<td>当期新增可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">8</td>';
-  html += '</tr><tr style="background:#d9e2f3">';
-  html += '<td>上期结存可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">9</td>';
-  html += '</tr><tr style="background:#d9e2f3">';
-  html += '<td>结转下期可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">10</td>';
-  html += '</tr></table>';
+  html += '<td colspan="6">上期留抵可抵免金额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">6</td>';
+  html += '</tr>';
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="6">结转下期可抵免金额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">7</td>';
+  html += '</tr>';
 
-  return '<div style="overflow-x:auto">' + html + '</div>';
+  // === 第15-17行：留抵退税额使用情况 ===
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
+  html += '<td colspan="6">当期新增可用于扣除的留抵退税额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">8</td>';
+  html += '</tr>';
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="6">上期结存可用于扣除的留抵退税额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">9</td>';
+  html += '</tr>';
+  html += '<tr style="background:#d9e2f3">';
+  html += '<td colspan="6">结转下期可用于扣除的留抵退税额</td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td colspan="2" style="text-align:center">10</td>';
+  html += '</tr>';
+
+  html += '</table></div>';
+  return html;
 }
 
 
