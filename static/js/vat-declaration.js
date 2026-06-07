@@ -779,9 +779,12 @@ function renderSchedule1(data) {
 
   // ---- helper: 生成完整数据行(14个数值列: cols 4-17) ----
   // 销售额/税额按列号顺序: 第1列(销售额) 第2列(税额) ... 交替排列
-  // 货物行（无扣除项目）: cols 4-13 正常, cols 14-17=——
+  // 货物行（无扣除项目）: cols 4-13 正常, col 14价税合计, cols 15-17=——
   function Rg(spS,spT,otS,otT,niS,niT,ckS,ckT,toS,toT) {
-    return td(spS)+td(spT)+td(otS)+td(otT)+td(niS)+td(niT)+td(ckS)+td(ckT)+td(toS)+td(toT)+tdDash(5);
+    var pt = (parseFloat(toS||0))+(parseFloat(toT||0));
+    return td(spS)+td(spT)+td(otS)+td(otT)+td(niS)+td(niT)+td(ckS)+td(ckT)+td(toS)+td(toT)
+          +'<td class="num">'+_fm0(pt)+'</td>'
+          +tdDash(3);
   }
   // 服务行（含扣除项目）
   function Rs(spS,spT,otS,otT,niS,niT,ckS,ckT,toS,toT,ded,afS,afT) {
@@ -796,9 +799,10 @@ function renderSchedule1(data) {
           +td(toS)+td(toT)+'<td class="num">'+_fm0(pt)+'</td>'
           +td(ded)+td(afS)+td(afT);
   }
-  // 即征即退货物行: 前8列=——，后5列=——
+  // 即征即退货物行: 前8列=——，后3列=——
   function Rjg(toS,toT) {
-    return tdDash(8)+td(toS)+td(toT)+tdDash(5);
+    var pt = (parseFloat(toS||0))+(parseFloat(toT||0));
+    return tdDash(8)+td(toS)+td(toT)+'<td class="num">'+_fm0(pt)+'</td>'+tdDash(3);
   }
   // 全 —— 行
   function RD() { return tdDash(14); }
