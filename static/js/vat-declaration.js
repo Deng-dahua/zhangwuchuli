@@ -823,7 +823,7 @@ function renderSchedule1(data) {
     + '<th colspan="2">未开具发票</th>'
     + '<th colspan="2">纳税检查调整</th>'
     + '<th colspan="3">合计</th>'
-    + '<th rowspan="2">服务、不动产和无形资产扣除项目<br>本期实际扣除金额</th>'
+    + '<th rowspan="2">服务、不动产和无形资产<br>扣除项目本期实际扣除金额</th>'
     + '<th colspan="2">扣除后</th>'
     + '</tr>'
     + '<tr style="background:#d9e2f3">'
