@@ -1218,7 +1218,9 @@ function renderSchedule5(data) {
   for (var i = 0; i < 16; i++) html += '<col>';
   html += '</colgroup>';
 
-  // === 小微企业六税两费减免政策信息 ===
+  html += '<thead>';
+
+  // === 小微企业六税两费减免政策信息（模板Row 3-4，在表头上方） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费" 减免政策</td>';
   html += '<td colspan="2" rowspan="2">□是 □否</td>';
@@ -1231,7 +1233,7 @@ function renderSchedule5(data) {
   html += '</tr>';
 
   // === 表头第1行（模板Row 5：大类标题） ===
-  html += '<thead><tr style="background:#d9e2f3">';
+  html += '<tr style="background:#d9e2f3">';
   html += '<th colspan="2" rowspan="3">税（费）种</th>';
   html += '<th colspan="3">计税（费）依据</th>';
   html += '<th colspan="2" rowspan="2">税（费）<br>率（%）</th>';
