@@ -61,6 +61,25 @@ function stepHfImportMonth(delta) {
     monSel.value = String(m).padStart(2, '0');
 }
 
+// ============ 查询 / 清除期间 ============
+function hfQuery() {
+  if (typeof hfRefresh === 'function') hfRefresh();
+}
+
+function hfClearPeriod() {
+  const yearSel = document.getElementById('hf-year');
+  const monthSel = document.getElementById('hf-month');
+  if (!yearSel || !monthSel) return;
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = String(now.getMonth() + 1).padStart(2, '0');
+  const yearOpts = Array.from(yearSel.options).map(o => parseInt(o.value));
+  if (yearOpts.includes(cy)) yearSel.value = cy;
+  monthSel.value = cm;
+  hfPeriod = yearSel.value + '-' + monthSel.value;
+  if (typeof hfRefresh === 'function') hfRefresh();
+}
+
 // ============ 导入文件选择处理 ============
 function hfHandleFileSelected(input) {
     const zone = document.getElementById('hf-upload-zone');
@@ -96,42 +115,42 @@ async function renderHousingFund(container) {
       <div class="stats-row" id="hf-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;"></div>
       <div class="toolbar">
         <div class="toolbar-left" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增公积金</button>
-          <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
-          <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">⚡ 生成凭证</button>
-          <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
-          <div style="margin-left:12px;display:flex;align-items:center;gap:6px">
-            <label style="font-size:13px;font-weight:600;color:var(--gray-700)">期间</label>
-            <div class="period-selector-bar" style="display:inline-flex">
-              <div class="period-stepper">
-                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
-                <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
-                </div>
+          <div class="period-selector-bar" style="display:inline-flex">
+            <div class="period-stepper">
+              <select id="hf-year" class="period-selector-year">${yearOpts}</select>
+              <div class="stepper-arrows">
+                <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
+                <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
               </div>
-              <div class="period-stepper">
-                <select id="hf-month" class="period-selector-month">
-                  <option value="01"${defMonth==='01'?' selected':''}>01月</option>
-                  <option value="02"${defMonth==='02'?' selected':''}>02月</option>
-                  <option value="03"${defMonth==='03'?' selected':''}>03月</option>
-                  <option value="04"${defMonth==='04'?' selected':''}>04月</option>
-                  <option value="05"${defMonth==='05'?' selected':''}>05月</option>
-                  <option value="06"${defMonth==='06'?' selected':''}>06月</option>
-                  <option value="07"${defMonth==='07'?' selected':''}>07月</option>
-                  <option value="08"${defMonth==='08'?' selected':''}>08月</option>
-                  <option value="09"${defMonth==='09'?' selected':''}>09月</option>
-                  <option value="10"${defMonth==='10'?' selected':''}>10月</option>
-                  <option value="11"${defMonth==='11'?' selected':''}>11月</option>
-                  <option value="12"${defMonth==='12'?' selected':''}>12月</option>
-                </select>
-                <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
-                </div>
+            </div>
+            <div class="period-stepper">
+              <select id="hf-month" class="period-selector-month">
+                <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+              </select>
+              <div class="stepper-arrows">
+                <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
+                <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
               </div>
             </div>
           </div>
+          <button class="btn btn-outline" onclick="hfQuery()">查询</button>
+          <button class="btn btn-outline" onclick="hfClearPeriod()">清除</button>
+          <span style="color:var(--gray-300);margin:0 4px">|</span>
+          <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增公积金</button>
+          <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
+          <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">生成凭证</button>
+          <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
         </div>
       </div>
         <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">
