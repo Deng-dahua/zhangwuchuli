@@ -1089,7 +1089,7 @@ function renderSchedule4(data) {
 
     // 一、税额抵减情况
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、税额抵减情况</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:5%"><col style="width:15%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:100%"><colgroup><col style="width:5%"><col style="width:15%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">1</td><td style="white-space:nowrap">增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
@@ -1101,7 +1101,7 @@ function renderSchedule4(data) {
 
     // 二、加计抵减情况
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、加计抵减情况</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:5%"><col style="width:15%"><col style="width:14%"><col style="width:14%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:100%"><colgroup><col style="width:5%"><col style="width:15%"><col style="width:14%"><col style="width:14%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:10px">6=4-5</th></tr></thead><tbody>'
     + '<tr><td style="text-align:center">6</td><td>一般项目加计抵减额计算</td>' + td(c.item1_begin) + td(c.item1_occur) + td(c.item1_adjust) + td(c.item1_can_deduct) + td(c.item1_actual_deduct) + td(c.item1_end) + '</tr>'
