@@ -16,15 +16,54 @@ const VAT_PAGES = [
   { id: 'reduction', label: '减免税申报明细表' },
 ];
 
-// 在已有申报表列表中前后导航（按上下箭头）
-function navigateVATDeclaration(delta) {
-  if (!vatDeclarations || vatDeclarations.length === 0) return;
-  let idx = vatDeclarations.findIndex(d => d.id === vatSelectedId);
-  if (idx < 0) idx = 0;
-  idx = Math.max(0, Math.min(vatDeclarations.length - 1, idx + delta));
-  const nextId = vatDeclarations[idx].id;
-  if (nextId !== vatSelectedId) {
-    openVATDetailInline(nextId);
+async function stepVATPeriod(type, delta) {
+  const current = vatDeclarations.find(d => d.id === vatSelectedId);
+  if (!current) { showToast('请先选择申报表', 'info'); return; }
+  let [y, m] = (current.period || '').split('-').map(Number);
+  if (!y || !m) return;
+
+  if (type === 'year') {
+    y += delta;
+  } else {
+    m += delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+  }
+  const targetPeriod = y + '-' + String(m).padStart(2, '0');
+
+  // 先在本页缓存里查找
+  const found = vatDeclarations.find(d => d.period === targetPeriod);
+  if (found) {
+    openVATDetailInline(found.id);
+    return;
+  }
+
+  // 缓存里没有，尝试从后端加载
+  try {
+    const list = await api('/api/vat/declarations?period=' + encodeURIComponent(targetPeriod));
+    if (list && list.length > 0) {
+      const idx = vatDeclarations.findIndex(d => d.period === targetPeriod);
+      if (idx < 0) vatDeclarations.push(list[0]);
+      openVATDetailInline(list[0].id);
+    } else {
+      showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
+    }
+  } catch (e) {
+    showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
+  }
+}
+
+// 用户直接在下拉框选择年期/月份时触发
+function onVATDetailPeriodChange() {
+  const ySel = document.getElementById('vat-detail-year');
+  const mSel = document.getElementById('vat-detail-month');
+  if (!ySel || !mSel) return;
+  const period = ySel.value + '-' + mSel.value;
+  const found = vatDeclarations.find(d => d.period === period);
+  if (found) {
+    openVATDetailInline(found.id);
+  } else {
+    showToast('该期间（' + period + '）暂无申报表', 'info');
   }
 }
 
@@ -44,6 +83,8 @@ async function loadVATDeclarationList() {
     let url = '/api/vat/declarations';
     if (vatFilterPeriod) url += '?period=' + encodeURIComponent(vatFilterPeriod);
     vatDeclarations = await api(url);
+    // 按期次升序排列，确保导航顺序正确
+    vatDeclarations.sort((a, b) => (a.period || '').localeCompare(b.period || ''));
   } catch (e) { vatDeclarations = []; handleError(e, '加载申报表'); }
   renderVATStats();
   // 自动展示选中或第一条申报数据
@@ -217,28 +258,52 @@ function renderVATTemplateViewInline(data) {
   container.style.display = 'block';
 
   const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
+
+  // 从 vatDeclarations 提取所有不重复年份和对应月份
+  const yearMonthMap = {};
+  (vatDeclarations || []).forEach(d => {
+    const [y, m] = (d.period || '').split('-');
+    if (!y || !m) return;
+    if (!yearMonthMap[y]) yearMonthMap[y] = new Set();
+    yearMonthMap[y].add(m);
+  });
+  const years = Object.keys(yearMonthMap).sort();
   const _periodYear = escapeHtml((data.period || '').split('-')[0] || '');
   const _periodMonth = escapeHtml((data.period || '').split('-')[1] || '');
+
+  // 生成年份选项
+  let yearOpts = '';
+  years.forEach(y => {
+    yearOpts += '<option value="' + y + '" ' + (y === _periodYear ? 'selected>' : '>') + y + '年</option>';
+  });
+  // 生成当前年份对应的月份选项
+  let monthOpts = '';
+  const monthsForYear = yearMonthMap[_periodYear] || new Set();
+  // 若该年份无任何申报表（理论上不会），兜底显示1-12月
+  const allMonths = monthsForYear.size > 0 ? [...monthsForYear].sort() : Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
+  allMonths.forEach(m => {
+    monthOpts += '<option value="' + m + '" ' + (m === _periodMonth ? 'selected>' : '>') + m + '月</option>';
+  });
 
   // 构建与顶栏样式完全一致的 period-selector-bar（含 stepper arrows）
   let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
     + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
     + '<div class="period-selector-bar">'
     + '<div class="period-stepper">'
-    + '<select id="vat-detail-year" class="period-selector-year" disabled>'
-    + '<option value="' + _periodYear + '" selected>' + _periodYear + '年</option>'
+    + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'
+    + yearOpts
     + '</select>'
     + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="navigateVATDeclaration(1)" title="下一年">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="navigateVATDeclaration(-1)" title="上一年">▼</button>'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'year\',1)" title="下一年">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'year\',-1)" title="上一年">▼</button>'
     + '</div></div>'
     + '<div class="period-stepper">'
-    + '<select id="vat-detail-month" class="period-selector-month" disabled>'
-    + '<option value="' + _periodMonth + '" selected>' + _periodMonth + '月</option>'
+    + '<select id="vat-detail-month" class="period-selector-month" onchange="onVATDetailPeriodChange()">'
+    + monthOpts
     + '</select>'
     + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="navigateVATDeclaration(1)" title="下一月">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="navigateVATDeclaration(-1)" title="上一月">▼</button>'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div></div>';
 
   // 页签
