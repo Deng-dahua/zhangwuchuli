@@ -402,29 +402,6 @@ function renderMainForm(data) {
   // 标题
   h += '<div style="text-align:center;font-size:15px;font-weight:700;margin-bottom:2px">增值税及附加税费申报表</div>';
   h += '<div style="text-align:center;font-size:13px;margin-bottom:8px">（一般纳税人适用）</div>';
-  h += '<div style="font-size:11px;color:#6b7280;margin-bottom:8px">根据国家税收法律法规及增值税相关规定制定本表。纳税人不论有无销售额，均应按税务机关核定的纳税期限填写本表，并向当地税务机关申报。</div>';
-
-  // 税款所属时间 + 填表日期
-  h += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">';
-  h += '<span>税款所属时间：自 ' + (m.period || '') + ' 至 ' + (m.period || '') + '</span>';
-  h += '<span>填表日期：' + (y.fill_date || '') + '</span>';
-  h += '</div>';
-
-  // 纳税人信息头部（2列布局，匹配PDF）
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 24px;font-size:12px;margin-bottom:10px;padding:6px 0;border-bottom:1px solid #bbb">';
-  h += '<div>纳税人识别号（统一社会信用代码）：' + escapeHtml(y.taxpayer_id || '') + '</div>';
-  h += '<div>所属行业：' + escapeHtml(y.industry || '') + '</div>';
-  h += '<div>法定代表人姓名：' + escapeHtml(y.legal_representative || '') + '</div>';
-  h += '<div>纳税人名称：' + escapeHtml(y.taxpayer_name || '') + '</div>';
-  h += '<div>注册地址：' + escapeHtml(y.address || '') + '</div>';
-  h += '<div>生产经营地址：' + escapeHtml(y.production_address || y.address || '') + '</div>';
-  h += '<div>开户银行及账号：' + escapeHtml(y.bank_account || '') + '</div>';
-  h += '<div>登记注册类型：' + escapeHtml(y.register_type || '') + '</div>';
-  h += '<div>电话号码：' + escapeHtml(y.phone || '') + '</div>';
-  h += '</div>';
-
-  // 金额单位
-  h += '<div style="font-size:11px;color:#6b7280;margin-bottom:8px">金额单位：元（列至角分）</div>';
 
   // ========== 6列表格 ==========
   h += '<table class="vat-form-table" style="font-size:11px">';
@@ -662,14 +639,6 @@ function renderMainForm(data) {
   h += '<td class="num">' + _fmt2(m.row41_local_education_surcharge) + '</td>';
   h += '<td class="num">' + _fmt2(m.row41_local_education_surcharge_ytd) + '</td>';
   h += _fmtDash(m.row41_local_education_surcharge_refund) + _fmtDash(m.row41_local_education_surcharge_refund_ytd) + '</tr>';
-
-  // 声明
-  h += '<tr><td colspan="6" style="font-size:11px;color:#6b7280;padding:10px 8px;border-top:2px solid #999">';
-  h += '声明：此表是根据国家税收法律法规及相关规定填写的，本人（单位）对填报内容（及附带资料）的真实性、可靠性、完整性负责。<br>';
-  h += '<span style="float:right">纳税人（签章）：　　　　年　月　日</span></td></tr>';
-  h += '<tr><td colspan="6" style="font-size:11px;color:#6b7280;padding:10px 8px">';
-  h += '经办人：　　　　经办人身份证号：<br>代理机构签章：　　　　代理机构统一社会信用代码：<br>';
-  h += '<span style="float:right">受理人：　　　　受理税务机关（章）：　　　　受理日期：　年　月　日</span></td></tr>';
 
   h += '</tbody></table>';
   return h;
