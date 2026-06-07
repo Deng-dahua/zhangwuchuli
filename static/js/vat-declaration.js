@@ -772,7 +772,7 @@ function renderSchedule1(data) {
   const s = (typeof data.form_sales === 'string') ? JSON.parse(data.form_sales) : (data.form_sales || {});
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash(n) { n = n || 1; var d = '<td class="num"></td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
+  function tdDash(n) { n = n || 1; var d = '<td class="num" style="color:#b0b7c3">——</td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
   // 大类列样式
   var catStyle = 'text-align:center;vertical-align:middle;font-weight:700;font-size:11px;background:#f0f4fa;writing-mode:vertical-lr;letter-spacing:2px;padding:4px 3px';
   var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb';
@@ -810,13 +810,13 @@ function renderSchedule1(data) {
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（一）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
-    + '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%">'
+    + '<table class="vat-form-table" style="font-size:10px">'
     + '<colgroup>'
-    + '<col style="width:3%"><col style="width:5%"><col style="width:11%"><col style="width:4%">'
-    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
-    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
-    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
-    + '</colgroup>'
+    + '<col><col><col><col><col><col><col><col><col><col>'
+    + '<col><col><col><col><col><col><col><col></colgroup>'
+    + '<thead>'
+    + '<tr style="background:#d9e2f3">'
+    + '<th colspan="4" rowspan="3">项目及栏次</th>'
     + '<th colspan="2">开具增值税<br>专用发票</th>'
     + '<th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th>'
@@ -991,6 +991,8 @@ function renderSchedule1(data) {
 
     + '</tbody></table></div>';
 }
+
+// ==================== 附表二：进项税额明细 ====================
 
 // ==================== 附表二：进项税额明细 ====================
 function renderSchedule2(data) {
