@@ -5,6 +5,7 @@ let vatSelectedId = null;
 let vatActivePage = 'main'; // 默认主表
 let vatFilterPeriod = '';
 let vatInlineDisplayId = null;
+let vatCurrentData = null;
 
 const VAT_PAGES = [
   { id: 'main', label: '增值税主表' },
@@ -121,23 +122,7 @@ function renderVATPeriodEmpty(period) {
     monthOpts += '<option value="' + mv + '" ' + (mv === _periodMonth ? 'selected>' : '>') + mv + '月</option>';
   }
   container.style.display = 'block';
-  container.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
-    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
-    + '<div class="period-selector-bar">'
-    + '<div class="period-stepper">'
-    + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'
-    + yearOpts + '</select>'
-    + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'year\',1)" title="下一年">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'year\',-1)" title="上一年">▼</button>'
-    + '</div></div>'
-    + '<div class="period-stepper">'
-    + '<select id="vat-detail-month" class="period-selector-month" onchange="onVATDetailPeriodChange()">'
-    + monthOpts + '</select>'
-    + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
-    + '</div></div></div></div>'
+  container.innerHTML = renderVATToolbar(yearOpts, monthOpts)
     + '<div style="text-align:center;padding:40px 20px;color:#6b7280">'
     + '<div style="font-size:48px;margin-bottom:12px">📭</div>'
     + '<div style="font-size:15px;font-weight:600;margin-bottom:4px">该期间（' + period + '）暂无申报表</div>'
@@ -191,24 +176,37 @@ async function loadVATDeclarationList() {
 }
 
 function renderVATStats() {
-  const total = vatDeclarations.length;
-  const submitted = vatDeclarations.filter(d => d.status === '已申报').length;
-  const draft = vatDeclarations.filter(d => d.status === '草稿').length;
-  const paid = vatDeclarations.filter(d => d.status === '已缴税').length;
-  // 计算应纳税额合计
-  let totalTaxPayable = 0;
-  vatDeclarations.forEach(d => {
-    try {
-      const main = typeof d.form_main === 'string' ? JSON.parse(d.form_main) : (d.form_main || {});
-      totalTaxPayable += main.row19_tax_payable || 0;
-    } catch (e) { /* skip */ }
-  });
   const el = document.getElementById('vat-stats-row'); if (!el) return;
-  el.innerHTML = '<div class="stat-card"><div class="stat-label">申报表总数</div><div class="stat-value">' + total + '</div><div class="stat-sub">已申报 ' + submitted + ' 份</div></div>'
-    + '<div class="stat-card"><div class="stat-label">应纳税额合计</div><div class="stat-value" style="color:#d97706">' + fmt(totalTaxPayable) + '</div><div class="stat-sub">所有期间汇总</div></div>'
-    + '<div class="stat-card"><div class="stat-label">最新申报期间</div><div class="stat-value">' + (total > 0 ? vatDeclarations[0].period : '-') + '</div><div class="stat-sub">按时间倒序</div></div>'
-    + '<div class="stat-card"><div class="stat-label">草稿</div><div class="stat-value" style="color:#f59e0b">' + draft + '</div><div class="stat-sub">待完成</div></div>'
-    + '<div class="stat-card"><div class="stat-label">已缴税</div><div class="stat-value" style="color:#10b981">' + paid + '</div><div class="stat-sub">已完成</div></div>';
+  // 从当前选中的申报表取数据
+  let main = {};
+  let scf = {};
+  if (vatCurrentData) {
+    try {
+      main = typeof vatCurrentData.form_main === 'string' ? JSON.parse(vatCurrentData.form_main) : (vatCurrentData.form_main || {});
+    } catch (e) { /* skip */ }
+    try {
+      scf = typeof vatCurrentData.form_surcharge === 'string' ? JSON.parse(vatCurrentData.form_surcharge) : (vatCurrentData.form_surcharge || {});
+    } catch (e) { /* skip */ }
+  }
+  const vatTax = main.row19_tax_payable || 0;
+  const endCredit = main.row20_end_credit || 0;
+  const cityTax = scf.city_tax || main.row39_city_maintenance_tax || 0;
+  const eduTax = scf.edu_tax || main.row40_education_surcharge || 0;
+  const localEdu = scf.local_edu_tax || main.row41_local_education_surcharge || 0;
+  const totalSurcharge = vatTax + cityTax + eduTax + localEdu;
+
+  function card(label, value, color) {
+    var c = color || '#1a56db';
+    return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + c + '">' + fmt(value) + '</div></div>';
+  }
+
+  el.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  el.innerHTML = card('应纳增值税', vatTax, '#d97706')
+    + card('期末留抵税额', endCredit, '#059669')
+    + card('应纳城市维护建设税', cityTax, '#7c3aed')
+    + card('应纳教育费附加', eduTax, '#2563eb')
+    + card('应纳地方教育附加', localEdu, '#0891b2')
+    + card('应纳税费合计', totalSurcharge, '#dc2626');
 }
 
 // ==================== 新建/编辑 ====================
@@ -271,7 +269,7 @@ function renderVATTemplateView(data) {
   const statusLabel = {'草稿':'草稿','已申报':'已申报','已缴税':'已缴税'}[data.status] || data.status;
 
   // 页签
-  let tabs = '<div class="detail-header" style="margin-bottom:0"><h2 style="margin:0">📋 增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escapeHtml(data.period) + '</span></h2>';
+  let tabs = '<div class="detail-header" style="margin-bottom:0"><h2 style="margin:0">增值税及附加税费申报表 <span style="font-size:13px;color:#6b7280;font-weight:400">— ' + escapeHtml(data.period) + '</span></h2>';
   tabs += '<div style="display:flex;gap:6px"><span class="badge badge-info">' + statusLabel + '</span>';
   tabs += '<button class="btn btn-sm btn-outline" onclick="editVATDeclaration(' + data.id + ')">✏️ 编辑</button></div></div>';
 
@@ -335,6 +333,8 @@ function renderVATTemplateViewInline(data) {
   const container = document.getElementById('vat-forms-inline');
   if (!container) return;
   container.style.display = 'block';
+  // 缓存当前数据供统计卡使用
+  vatCurrentData = data;
 
   const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
 
@@ -362,26 +362,8 @@ function renderVATTemplateViewInline(data) {
     monthOpts += '<option value="' + mv + '" ' + (mv === _periodMonth ? 'selected>' : '>') + mv + '月</option>';
   }
 
-  // 构建与顶栏样式完全一致的 period-selector-bar（含 stepper arrows）
-  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">'
-    + '<h2 style="margin:0;font-size:18px">📋 增值税及附加税费申报表</h2>'
-    + '<div class="period-selector-bar">'
-    + '<div class="period-stepper">'
-    + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'
-    + yearOpts
-    + '</select>'
-    + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'year\',1)" title="下一年">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'year\',-1)" title="上一年">▼</button>'
-    + '</div></div>'
-    + '<div class="period-stepper">'
-    + '<select id="vat-detail-month" class="period-selector-month" onchange="onVATDetailPeriodChange()">'
-    + monthOpts
-    + '</select>'
-    + '<div class="stepper-arrows">'
-    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
-    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
-    + '</div></div></div></div>';
+  // 工具栏（时间栏在最左 + 按钮）
+  let html = renderVATToolbar(yearOpts, monthOpts);
 
   // 页签
   html += '<div style="display:flex;gap:0;border-bottom:1px solid #e5e7eb;margin:12px 0 0 0;overflow-x:auto;background:#fff;border-radius:8px 8px 0 0">';
@@ -520,6 +502,62 @@ function _fmtDash(v) {
   if (!v || parseFloat(v) === 0) return '<td class="num"></td>';
   return '<td class="num">' + parseFloat(v).toFixed(2) + '</td>';
 }
+
+
+// ==================== VAT 工具栏（时间栏+按钮） ====================
+function renderVATToolbar(yearOpts, monthOpts) {
+  var btnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;white-space:nowrap';
+  var dangerBtnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer;white-space:nowrap';
+  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
+    + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'
+    + yearOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'year\',1)" title="下一年">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'year\',-1)" title="上一年">▼</button>'
+    + '</div></div>'
+    + '<div class="period-stepper">'
+    + '<select id="vat-detail-month" class="period-selector-month" onchange="onVATDetailPeriodChange()">'
+    + monthOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
+    + '</div></div></div>'
+    + '<button style="' + btnStyle + '" onclick="onVATDetailPeriodChange()" title="按所选期间查询">🔍 查询</button>'
+    + '<button style="' + btnStyle + '" onclick="vatClearFilter()" title="清除筛选条件">✖ 清除</button>'
+    + '<button style="' + btnStyle + '" onclick="vatImportFile()" title="导入增值税申报数据">📥 导入文件</button>'
+    + '<button style="' + btnStyle + '" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">📝 生成凭证</button>'
+    + '<button style="' + dangerBtnStyle + '" onclick="vatDeleteCurrent()" title="删除当前申报表">🗑 删除报表</button>'
+    + '</div>';
+}
+
+function vatClearFilter() {
+  vatFilterPeriod = '';
+  vatCurrentData = null;
+  loadVATDeclarationList();
+}
+
+function vatImportFile() {
+  toast('请先通过侧边栏【开具发票】【取得发票】【进项抵扣】【银行流水】导入数据，系统会自动生成申报表', 'info');
+}
+
+function vatGenerateVoucher() {
+  if (!vatCurrentData || !vatCurrentData.id) {
+    toast('请先选择一份申报表', 'warning');
+    return;
+  }
+  toast('凭证生成功能开发中，请稍后...', 'info');
+}
+
+function vatDeleteCurrent() {
+  if (!vatCurrentData || !vatCurrentData.id) {
+    toast('没有可删除的申报表', 'warning');
+    return;
+  }
+  deleteVATDeclaration(vatCurrentData.id, vatCurrentData.period);
+}
+
 
 function renderMainForm(data) {
   const m = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
@@ -1307,7 +1345,7 @@ function renderSchedule5(data) {
   html += '<td style="text-align:center">10</td>';
   html += '</tr></table>';
 
-  return html;
+  return '<div style="overflow-x:auto">' + html + '</div>';
 }
 
 
