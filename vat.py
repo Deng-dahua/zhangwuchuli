@@ -397,47 +397,27 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row3_9_check_sales": 0.0, "row3_9_check_tax": 0.0,
         "row3_9_total_sales": round(_sr("rate_9")["amount"], 2),
         "row3_9_total_tax": round(_sr("rate_9")["tax"], 2),
-        # --- 6%税率 ---
-        "row4_6_special_sales": round(_sr("rate_6")["amount"], 2),
-        "row4_6_special_tax": round(_sr("rate_6")["tax"], 2),
-        "row4_6_other_sales": 0.0, "row4_6_other_tax": 0.0,
-        "row4_6_no_invoice_sales": 0.0, "row4_6_no_invoice_tax": 0.0,
-        "row4_6_check_sales": 0.0, "row4_6_check_tax": 0.0,
-        "row4_6_total_sales": round(_sr("rate_6")["amount"], 2),
-        "row4_6_total_tax": round(_sr("rate_6")["tax"], 2),
-        # --- 5%征收率 ---
-        "row5_5_special_sales": round(_sr("rate_5")["amount"], 2),
-        "row5_5_special_tax": round(_sr("rate_5")["tax"], 2),
-        "row5_5_other_sales": 0.0, "row5_5_other_tax": 0.0,
-        "row5_5_no_invoice_sales": 0.0, "row5_5_no_invoice_tax": 0.0,
-        "row5_5_check_sales": 0.0, "row5_5_check_tax": 0.0,
-        "row5_5_total_sales": round(_sr("rate_5")["amount"], 2),
-        "row5_5_total_tax": round(_sr("rate_5")["tax"], 2),
-        # --- 3%征收率的货物及加工修理修配劳务 ---
-        "row6_3_goods_special_sales": round(_sr("rate_3")["amount"], 2),
-        "row6_3_goods_special_tax": round(_sr("rate_3")["tax"], 2),
-        "row6_3_goods_other_sales": 0.0, "row6_3_goods_other_tax": 0.0,
-        "row6_3_goods_no_invoice_sales": 0.0, "row6_3_goods_no_invoice_tax": 0.0,
-        "row6_3_goods_check_sales": 0.0, "row6_3_goods_check_tax": 0.0,
-        "row6_3_goods_total_sales": round(_sr("rate_3")["amount"], 2),
-        "row6_3_goods_total_tax": round(_sr("rate_3")["tax"], 2),
-        # --- 3%征收率的服务、不动产和无形资产 ---
-        "row7_3_service_special_sales": 0.0, "row7_3_service_special_tax": 0.0,
-        "row7_3_service_total_sales": 0.0, "row7_3_service_total_tax": 0.0,
-        # 6%征收率
+        # --- 6%税率（行次5）---
+        "row5_6_special_sales": round(_sr("rate_6")["amount"], 2),
+        "row5_6_special_tax": round(_sr("rate_6")["tax"], 2),
+        "row5_6_other_sales": 0.0, "row5_6_other_tax": 0.0,
+        "row5_6_no_invoice_sales": 0.0, "row5_6_no_invoice_tax": 0.0,
+        "row5_6_check_sales": 0.0, "row5_6_check_tax": 0.0,
+        "row5_6_total_sales": round(_sr("rate_6")["amount"], 2),
+        "row5_6_total_tax": round(_sr("rate_6")["tax"], 2),
+        # --- 5%征收率（行次9a/9b，由下方 row9a_5_goods_* / row9b_5_service_* 正确生成）---
+        # 6%征收率（行次8）
         "row8_6_collect_sales": 0.0, "row8_6_collect_tax": 0.0,
         "row8_6_collect_other_sales": 0.0, "row8_6_collect_other_tax": 0.0,
         "row8_6_collect_no_invoice_sales": 0.0, "row8_6_collect_no_invoice_tax": 0.0,
         "row8_6_collect_check_sales": 0.0, "row8_6_collect_check_tax": 0.0,
         "row8_6_collect_total_sales": 0.0, "row8_6_collect_total_tax": 0.0,
-        # 9%税率服务
+        # 9%税率服务（行次4）
         "row4_9_service_sales": 0.0, "row4_9_service_tax": 0.0,
         "row4_9_service_other_sales": 0.0, "row4_9_service_other_tax": 0.0,
         "row4_9_service_no_invoice_sales": 0.0, "row4_9_service_no_invoice_tax": 0.0,
         "row4_9_service_check_sales": 0.0, "row4_9_service_check_tax": 0.0,
         "row4_9_service_total_sales": 0.0, "row4_9_service_total_tax": 0.0,
-        # 6%税率额外
-        "row5_6_extra": 0.0, "row5_6_extra_tax": 0.0,
         # 5%征收率货物(9a)
         "row9a_5_goods_sales": 0.0, "row9a_5_goods_tax": 0.0,
         "row9a_5_goods_other_sales": 0.0, "row9a_5_goods_other_tax": 0.0,
@@ -554,26 +534,27 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row1_17_price_tax": 0.0, "row1_17_begin": 0.0, "row1_17_occur": 0.0,
         "row1_17_should": 0.0, "row1_17_actual": 0.0, "row1_17_end": 0.0,
         # 13%税率项目
-        "row2_13_price_tax": 0.0, "row2_13_begin": 0.0, "row2_13_occur": 0.0,
-        "row2_13_should": 0.0, "row2_13_actual": 0.0, "row2_13_end": 0.0,
+        "row1_13_price_tax": 0.0, "row1_13_begin": 0.0, "row1_13_occur": 0.0,
+        "row1_13_should": 0.0, "row1_13_actual": 0.0, "row1_13_end": 0.0,
         # 9%税率项目
-        "row3_9_price_tax": 0.0, "row3_9_begin": 0.0, "row3_9_occur": 0.0,
-        "row3_9_should": 0.0, "row3_9_actual": 0.0, "row3_9_end": 0.0,
-        # 6%税率项目
-        "row4_6_price_tax": round(sales_total, 2), "row4_6_begin": 0.0, "row4_6_occur": 0.0,
-        "row4_6_should": 0.0, "row4_6_actual": 0.0, "row4_6_end": 0.0,
+        "row2_9_price_tax": 0.0, "row2_9_begin": 0.0, "row2_9_occur": 0.0,
+        "row2_9_should": 0.0, "row2_9_actual": 0.0, "row2_9_end": 0.0,
+        # 6%税率项目（不含金融商品转让）
+        "row3_6_price_tax": round(sales_total, 2), "row3_6_begin": 0.0, "row3_6_occur": 0.0,
+        "row3_6_should": 0.0, "row3_6_actual": 0.0, "row3_6_end": 0.0,
+        # 6%税率的金融商品转让项目
+        "row4_6_fin_price_tax": 0.0, "row4_6_fin_begin": 0.0, "row4_6_fin_occur": 0.0,
+        "row4_6_fin_should": 0.0, "row4_6_fin_actual": 0.0, "row4_6_fin_end": 0.0,
         # 5%征收率项目
         "row5_5_price_tax": 0.0, "row5_5_begin": 0.0, "row5_5_occur": 0.0,
         "row5_5_should": 0.0, "row5_5_actual": 0.0, "row5_5_end": 0.0,
         # 3%征收率
         "row6_3_price_tax": 0.0, "row6_3_begin": 0.0, "row6_3_occur": 0.0,
         "row6_3_should": 0.0, "row6_3_actual": 0.0, "row6_3_end": 0.0,
-        # 金融商品转让
-        "row4_fin_price_tax": 0.0, "row4_fin_begin": 0.0, "row4_fin_occur": 0.0,
-        "row4_fin_should": 0.0, "row4_fin_actual": 0.0, "row4_fin_end": 0.0,
-        # 免抵退税+免税
+        # 免抵退税
         "row7_exempt_credit_price_tax": 0.0, "row7_exempt_credit_begin": 0.0, "row7_exempt_credit_occur": 0.0,
         "row7_exempt_credit_should": 0.0, "row7_exempt_credit_actual": 0.0, "row7_exempt_credit_end": 0.0,
+        # 免税
         "row8_exempt_price_tax": 0.0, "row8_exempt_begin": 0.0, "row8_exempt_occur": 0.0,
         "row8_exempt_should": 0.0, "row8_exempt_actual": 0.0, "row8_exempt_end": 0.0,
         # 合计
