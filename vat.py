@@ -205,21 +205,30 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     vd.education_surcharge = edu_surcharge
     vd.local_education_surcharge = local_edu
 
+    # 解析当前期间（后续多处使用）
+    period_date = datetime.strptime(period + "-01", "%Y-%m-%d")
+
     # ====== 主表 —— 本年累计(YTD)计算 ======
-    # 取本年同期各月期间列表
+    # 取本年1月至当前月所有申报表，汇总各栏次数值
     year_str = period[:4]
     ytd_periods = [f"{year_str}-{m:02d}" for m in range(1, period_date.month + 1)]
+
+    # WARNING: 查询本年所有已保存申报表（不含当前正在计算的本条，因为 form_main 尚未入库）
     ytd_declarations = db.query(VATDeclaration).filter(
         VATDeclaration.company_id == company_id,
-        VATDeclaration.period.in_(ytd_periods)
+        VATDeclaration.period.in_(ytd_periods),
+        VATDeclaration.id != vd.id,
     ).all()
 
-    def _parse_main(vd):
-        if not vd or not vd.form_main:
+    def _parse_main(decl):
+        """安全解析申报表 form_main JSON"""
+        if not decl or not decl.form_main:
             return {}
-        return json.loads(vd.form_main) if isinstance(vd.form_main, str) else vd.form_main
+        if isinstance(decl.form_main, str):
+            return json.loads(decl.form_main)
+        return decl.form_main
 
-    # 需要累计的字段列表（主表所有数字字段）
+    # 需要累计的字段列表（主表所有数字栏次）
     ytd_fields = [
         "row1_sales", "row2_other_invoice", "row3_no_invoice", "row4_tax_check",
         "row5_simple_method", "row6_exempt_sales", "row7_export_exempt",
@@ -236,6 +245,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row38_end_check",
         "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge",
     ]
+    # 累加历史各月数据
     ytd_sums = {f: 0.0 for f in ytd_fields}
     for d in ytd_declarations:
         m = _parse_main(d)
@@ -244,8 +254,6 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     # ====== 主表（会企02号）—— 41行完整字段 ======
     # 取上期留抵：从同公司上期申报表取期末留抵
-    from datetime import datetime as dt
-    period_date = dt.strptime(period + "-01", "%Y-%m-%d")
     # 上期 = 当前期间往前1个月
     prev_year = period_date.year
     prev_month = period_date.month - 1
@@ -340,7 +348,9 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge"
     ]
     for _k in _ytd_keys:
-        form_main[_k + "_ytd"] = round(ytd_sums.get(_k, 0.0), 2)
+        # 本年累计 = 历史各月累计 + 本月发生额
+        this_month = form_main.get(_k, 0.0)
+        form_main[_k + "_ytd"] = round(ytd_sums.get(_k, 0.0) + this_month, 2)
         # 即征即退项目（当前系统不涉及，默认0）
         form_main[_k + "_refund"] = 0.0
         form_main[_k + "_refund_ytd"] = 0.0
