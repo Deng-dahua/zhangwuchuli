@@ -20,7 +20,7 @@ const VAT_PAGES = [
 async function renderVATDeclaration(container) {
   vatInlineDisplayId = null;
   const el = container || document.getElementById('page-vat-declaration') || document.getElementById('content-area');
-  el.innerHTML = '<div id="vat-stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>'
+  el.innerHTML = '<div id="vat-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
     + '<div class="toolbar"><div class="toolbar-left"><button class="btn btn-primary" onclick="showVATCreateModal()">＋ 新建申报</button></div>'
     + '<div class="toolbar-right"><input type="month" class="form-control" id="vat-filter-period" value="' + vatFilterPeriod + '" onchange="vatFilterPeriod=this.value;renderVATDeclaration()" style="width:160px"></div></div>'
     + '<div id="vat-list-table"></div>'
@@ -51,22 +51,37 @@ async function loadVATDeclarationList() {
   vatActivePage = 'main';
   try {
     const data = await api('/api/vat/declarations/' + first.id);
+    // 将完整数据合入缓存，供统计卡计算使用
+    const idx = vatDeclarations.findIndex(d => d.id === first.id);
+    if (idx >= 0) vatDeclarations[idx] = data;
     renderVATTemplateViewInline(data);
   } catch (e) {
     console.error('加载申报表详情失败:', e);
     if (inlineEl) inlineEl.style.display = 'none';
   }
+  renderVATStats(); // 详情加载后重新渲染统计卡（金额已更新）
   highlightVATRow(vatSelectedId);
 }
 
 function renderVATStats() {
   const total = vatDeclarations.length;
   const submitted = vatDeclarations.filter(d => d.status === '已申报').length;
+  const draft = vatDeclarations.filter(d => d.status === '草稿').length;
+  const paid = vatDeclarations.filter(d => d.status === '已缴税').length;
+  // 计算应纳税额合计
+  let totalTaxPayable = 0;
+  vatDeclarations.forEach(d => {
+    try {
+      const main = typeof d.form_main === 'string' ? JSON.parse(d.form_main) : (d.form_main || {});
+      totalTaxPayable += main.row19_tax_payable || 0;
+    } catch (e) { /* skip */ }
+  });
   const el = document.getElementById('vat-stats-row'); if (!el) return;
   el.innerHTML = '<div class="stat-card"><div class="stat-label">申报表总数</div><div class="stat-value">' + total + '</div><div class="stat-sub">已申报 ' + submitted + ' 份</div></div>'
+    + '<div class="stat-card"><div class="stat-label">应纳税额合计</div><div class="stat-value" style="color:#d97706">' + fmt(totalTaxPayable) + '</div><div class="stat-sub">所有期间汇总</div></div>'
     + '<div class="stat-card"><div class="stat-label">最新申报期间</div><div class="stat-value">' + (total > 0 ? vatDeclarations[0].period : '-') + '</div><div class="stat-sub">按时间倒序</div></div>'
-    + '<div class="stat-card"><div class="stat-label">草稿</div><div class="stat-value" style="color:#f59e0b">' + vatDeclarations.filter(d => d.status === '草稿').length + '</div><div class="stat-sub">待完成</div></div>'
-    + '<div class="stat-card"><div class="stat-label">已缴税</div><div class="stat-value" style="color:#10b981">' + vatDeclarations.filter(d => d.status === '已缴税').length + '</div><div class="stat-sub">已完成</div></div>';
+    + '<div class="stat-card"><div class="stat-label">草稿</div><div class="stat-value" style="color:#f59e0b">' + draft + '</div><div class="stat-sub">待完成</div></div>'
+    + '<div class="stat-card"><div class="stat-label">已缴税</div><div class="stat-value" style="color:#10b981">' + paid + '</div><div class="stat-sub">已完成</div></div>';
 }
 
 function renderVATTable() {
@@ -202,8 +217,12 @@ async function openVATDetailInline(id) {
   vatActivePage = 'main';
   try {
     const data = await api('/api/vat/declarations/' + id);
+    // 将完整数据合入缓存
+    const idx = vatDeclarations.findIndex(d => d.id === id);
+    if (idx >= 0) vatDeclarations[idx] = data;
     renderVATTemplateViewInline(data);
     highlightVATRow(id);
+    renderVATStats(); // 金额可能变化，重新渲染统计卡
   } catch (e) {
     toast('加载申报表失败: ' + (e.message || e), 'error');
   }
@@ -300,11 +319,6 @@ function switchVATPageInline(pageId, id) {
     data.form_reduction = data.form_reduction || '{}';
     renderVATTemplateViewInline(data);
   }
-}
-
-function closeVATInline() {
-  const container = document.getElementById('vat-forms-inline');
-  if (container) container.style.display = 'none';
 }
 
 // ==================== 编辑弹窗 ====================
