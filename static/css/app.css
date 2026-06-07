@@ -422,6 +422,7 @@
       padding: 4px 8px; border: 1px solid #ccc; color: #374151;
     }
     .vat-form-table tbody tr:hover td { background: #f8faff; }
+    .vat-form-table tbody td:first-child { white-space: nowrap; }
     .vat-form-table td.num {
       text-align: right; font-variant-numeric: tabular-nums;
       font-family: "Consolas", "Monaco", monospace;
