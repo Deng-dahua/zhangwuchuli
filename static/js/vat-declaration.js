@@ -1246,7 +1246,7 @@ function renderSchedule5(data) {
   html += '<td colspan="8">年 月 至 年 月</td>';
   html += '</tr></table>';
 
-  // ===== 主表格（16列） =====
+  // ===== 主表格（15列） =====
   html += '<table class="vat-form-table" style="font-size:10px;margin-bottom:0;border-bottom:none">';
   html += '<colgroup>';
   html += '<col><col>';
@@ -1262,7 +1262,7 @@ function renderSchedule5(data) {
   html += '<thead><tr style="background:#d9e2f3">';
   html += '<th colspan="2" rowspan="2">税（费）种</th>';
   html += '<th colspan="3">计税（费）依据</th>';
-  html += '<th colspan="2" rowspan="2">税（费）<br>率（%）</th>';
+  html += '<th rowspan="2">税（费）<br>率（%）</th>';
   html += '<th rowspan="2">本期应纳税<br>（费）额</th>';
   html += '<th colspan="2">本期减免税<br>（费）额</th>';
   html += '<th colspan="2">小微企业"六税两费"<br>减免政策</th>';
