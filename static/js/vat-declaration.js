@@ -1213,7 +1213,7 @@ function renderReductionForm(data) {
 
   // 一、减税项目
   html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、减税项目</div>';
-  html += '<table class="vat-form-table"><colgroup><col style="width:40%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:14%"></colgroup>'
+  html += '<table class="vat-form-table"><colgroup><col style="width:30%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">减税性质<br>代码及名称</th><th rowspan="2">栏次</th><th>期初余额</th><th>本期发生额</th><th>本期应<br>抵减税额</th><th>本期实际<br>抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead>';
 
