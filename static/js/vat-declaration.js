@@ -1254,9 +1254,6 @@ function renderSchedule5(data) {
              null, scf.total_reduction, null, scf.total_six_tax_reduction,
              null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true)
     + '</tbody></table>';
-
-    // 底部补充区域：产教融合抵免 + 留抵退税使用情况（该区域放在独立表格中，与模板一致）
-    // 注：当前先恢复主表，底部补充区域后续可根据需要补充
 }
 
 // ==================== 减免税申报明细表 ====================
