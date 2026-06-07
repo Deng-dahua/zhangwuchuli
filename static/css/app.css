@@ -99,6 +99,8 @@
     .btn-secondary:hover { background: var(--gray-200); }
     .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
     .btn-danger:hover { background: #fee2e2; }
+    .btn-confirm-period { background: var(--primary); color: #fff; border: 1px solid var(--primary); margin-right: 8px; }
+    .btn-confirm-period:hover { background: var(--primary-dark, #1d4ed8); }
     .btn-exit-company { background: #fff; color: var(--gray-500); border: 1px solid var(--gray-300); }
     .btn-exit-company:hover { background: var(--gray-100); color: var(--gray-700); }
     .btn-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
