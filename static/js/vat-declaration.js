@@ -1208,31 +1208,19 @@ function renderSchedule5(data) {
   function tdPct(v) { return '<td class="num">' + ((v||0)*100).toFixed(0) + '%</td>'; }
 
   var html = '';
+
+  // === 标题（表格外） ===
+  html += '<div style="text-align:center;font-size:13px;font-weight:700;padding:8px 0 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>';
+  html += '<div style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:8px">（附加税费情况表）</div>';
+
   html += '<div style="overflow-x:auto"><table class="vat-form-table" style="font-size:10px">';
   html += '<colgroup>';
   for (var i = 0; i < 16; i++) html += '<col>';
   html += '</colgroup>';
 
-  // === 第1行：标题（模板A1:C1空白+F1:P1标题） ===
-  html += '<tr>';
-  html += '<td colspan="3" style="border:none;background:white"></td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="11" style="text-align:center;font-size:13px;font-weight:700;padding:6px 0">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</td>';
-  html += '</tr>';
-
-  // === 第2行：副标题（模板A1:C1+F2:H2空白+I2:P2副标题） ===
-  html += '<tr>';
-  html += '<td colspan="3" style="border:none;background:white"></td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="3" style="border:none;background:white"></td>';
-  html += '<td colspan="8" style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:6px">（附加税费情况表）</td>';
-  html += '</tr>';
-
-  // === 第3-4行：小微企业六税两费减免政策信息 ===
+  // === 小微企业六税两费减免政策信息 ===
   html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费"减免政策</td>';
+  html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费" 减免政策</td>';
   html += '<td colspan="2" rowspan="2">□是 □否</td>';
   html += '<td colspan="3">减免政策适用主体</td>';
   html += '<td colspan="5">□个体工商户 □小型微利企业</td>';
