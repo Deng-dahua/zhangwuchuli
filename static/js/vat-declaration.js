@@ -928,20 +928,16 @@ function renderSchedule1(data) {
 
     // ==================== 三、免抵退税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免抵退税</td>'
-    + '<td></td>'
-    + '<td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
+    + '<td colspan="2">货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">16</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td></td>'
-    + '<td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
+    + '<tr><td colspan="2">服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">17</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 四、免税（大类rowspan=2） ====================
     + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免税</td>'
-    + '<td></td>'
-    + '<td>货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
+    + '<td colspan="2">货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">18</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td></td>'
-    + '<td>服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
+    + '<tr><td colspan="2">服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">19</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     + '</tbody></table>';
