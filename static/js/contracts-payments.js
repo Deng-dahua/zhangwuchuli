@@ -3,7 +3,7 @@ async function renderContracts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<button class="btn btn-primary" onclick="showContractForm()">\uff0b 新增合同</button>' +
+      '<button class="btn btn-primary" onclick="showContractForm()">新增合同</button>' +
     '</div>' +
     '<div class="filter-bar">' +
       '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key==\'Enter\')loadContracts()">' +
@@ -254,8 +254,8 @@ async function renderPayments(container) {
     '<div class="card" style="margin-bottom:0;padding:24px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-primary" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">＋ 新增付款</button>' +
-          '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">＋ 新增付款</button>' +
+          '<button class="btn btn-primary" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">新增付款</button>' +
+          '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">新增付款</button>' +
         '</div>' +
       '</div>' +
 

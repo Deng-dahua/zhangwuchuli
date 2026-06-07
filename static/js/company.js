@@ -49,6 +49,7 @@ async function showCompanyManager(container) {
     html += _detailRow('法定代表人身份证', c.legal_representative_id || '--');
     html += _detailRow('注册地址', c.address || '--');
     html += _detailRow('经营范围', c.business_scope || '--');
+    html += _detailRow('公司类型', c.company_type || '--');
     html += '</div>';
 
     html += '<div class="card-title" style="margin-top:24px">股东信息</div>';
@@ -119,8 +120,9 @@ async function showCompanyEditForm() {
   html += '<div class="form-group"><label>法定代表人</label><input type="text" class="form-control" name="legal_representative" value="' + (c.legal_representative || '') + '"></div>';
   html += '<div class="form-group"><label>法定代表人身份证</label><input type="text" class="form-control" name="legal_representative_id" value="' + (c.legal_representative_id || '') + '"></div>';
   html += '<div class="form-group"><label>注册地址</label><input type="text" class="form-control" name="address" value="' + (c.address || '') + '"></div>';
-  html += '<div class="form-group" style="grid-column:1/-1"><label>经营范围</label><textarea class="form-control" name="business_scope" rows="2">' + (c.business_scope || '') + '</textarea></div>';
-  html += '</form>';
+    html += '<div class="form-group" style="grid-column:1/-1"><label>经营范围</label><textarea class="form-control" name="business_scope" rows="2">' + (c.business_scope || '') + '</textarea></div>';
+    html += '<div class="form-group"><label>公司类型</label><select class="form-control" name="company_type"><option value="">请选择</option><option value="有限责任公司"' + (c.company_type==='有限责任公司'?' selected':'') + '>有限责任公司</option><option value="股份有限公司"' + (c.company_type==='股份有限公司'?' selected':'') + '>股份有限公司</option><option value="个人独资企业"' + (c.company_type==='个人独资企业'?' selected':'') + '>个人独资企业</option><option value="合伙企业"' + (c.company_type==='合伙企业'?' selected':'') + '>合伙企业</option><option value="外商投资企业"' + (c.company_type==='外商投资企业'?' selected':'') + '>外商投资企业</option><option value="其他"' + (c.company_type==='其他'?' selected':'') + '>其他</option></select></div>';
+    html += '</form>';
 
   html += _buildPersonSection('shareholders', '股东信息', c.shareholders || [], ['姓名/公司名称', '身份证号/统一社会信用代码', '持股比例(%)', '认缴出资额']);
   html += _buildPersonSection('directors', '董事信息', c.directors || [], ['姓名', '身份证号']);

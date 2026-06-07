@@ -47,9 +47,9 @@ const pages = {
   'payments': '付款管理',
   'sales-invoices': '开具发票',
   'purchase-invoices': '取得发票',
-  'input-vat-deductions': '进项抵扣',
+  'input-vat-deductions': '进项认证',
   'bank-transactions': '银行流水',
-  'vat-declaration': '增值税申报',
+  'vat-declaration': '增值税',
   'salary': '工资薪金',
   'social-security': '社会保险费',
   'housing-fund': '住房公积金'

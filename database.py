@@ -42,6 +42,7 @@ class Company(Base):
     legal_representative_id = Column(String(30), comment="法定代表人身份证")
     address = Column(String(200), comment="注册地址")
     business_scope = Column(Text, comment="经营范围")
+    company_type = Column(String(20), comment="公司类型")
     created_at = Column(DateTime, default=datetime.now)
 
     shareholders = relationship("CompanyShareholder", back_populates="company", cascade="all, delete-orphan")

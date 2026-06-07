@@ -5,7 +5,7 @@ async function renderFixedAssets(container) {
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="display:flex;gap:8px">' +
         '<button class="btn btn-success" onclick="depreciateAll()">计提本月折旧</button>' +
-        '<button class="btn btn-primary" onclick="showFixedAssetForm()">\uff0b 新增资产</button>' +
+        '<button class="btn btn-primary" onclick="showFixedAssetForm()">新增资产</button>' +
       '</div>' +
     '</div>' +
     '<div class="table-wrap" id="fa-table">\u52a0\u8f7d\u4e2d...</div>' +
@@ -148,7 +148,7 @@ async function renderIntangibleAssets(container) {
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
       '<div style="display:flex;gap:8px">' +
         '<button class="btn btn-success" onclick="amortizeAll()">摊销本月</button>' +
-        '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">\uff0b 新增无形资产</button>' +
+        '<button class="btn btn-primary" onclick="showIntangibleAssetForm()">新增无形资产</button>' +
       '</div>' +
     '</div>' +
     '<div class="table-wrap" id="ia-table">\u52a0\u8f7d\u4e2d...</div>' +
@@ -289,7 +289,7 @@ async function renderInventory(container) {
     '<div class="card" style="margin-bottom:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-primary" onclick="showInventoryItemForm()">\uff0b 新增存货</button>' +
+          '<button class="btn btn-primary" onclick="showInventoryItemForm()">新增存货</button>' +
           '<button class="btn btn-secondary" onclick="showInventoryTxForm()">录入收发记录</button>' +
         '</div>' +
       '</div>' +

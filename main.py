@@ -93,6 +93,7 @@ class CompanyUpdate(BaseModel):
     legal_representative_id: Optional[str] = None
     address: Optional[str] = None
     business_scope: Optional[str] = None
+    company_type: Optional[str] = None
     shareholders: Optional[List[dict]] = None
     directors: Optional[List[dict]] = None
     supervisors: Optional[List[dict]] = None
@@ -196,6 +197,7 @@ def get_company(company_id: int = Query(...), db: Session = Depends(get_db)):
         "legal_representative_id": info.legal_representative_id or "",
         "address": info.address or "",
         "business_scope": info.business_scope or "",
+        "company_type": info.company_type or "",
         "shareholders": [{"name": s.name, "id_number": s.id_number or "", "ratio": s.ratio, "contribution_amount": s.contribution_amount} for s in info.shareholders],
         "directors": [{"name": d.name, "id_number": d.id_number or ""} for d in info.directors],
         "supervisors": [{"name": s.name, "id_number": s.id_number or ""} for s in info.supervisors],
@@ -1358,6 +1360,7 @@ class CompanyCreate(BaseModel):
     legal_representative_id: Optional[str] = None
     address: Optional[str] = None
     business_scope: Optional[str] = None
+    company_type: Optional[str] = None
     shareholders: Optional[List[dict]] = None
     directors: Optional[List[dict]] = None
     supervisors: Optional[List[dict]] = None
@@ -1372,6 +1375,7 @@ class CompanyUpdateModel(BaseModel):
     legal_representative_id: Optional[str] = None
     address: Optional[str] = None
     business_scope: Optional[str] = None
+    company_type: Optional[str] = None
     shareholders: Optional[List[dict]] = None
     directors: Optional[List[dict]] = None
     supervisors: Optional[List[dict]] = None

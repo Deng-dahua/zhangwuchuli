@@ -23,7 +23,7 @@ async function renderAccounts(container) {
           <option>收入</option><option>费用</option><option>成本</option>
         </select>
         <input class="form-control" id="acc-kw" placeholder="科目编码/名称" style="width:180px" oninput="loadAccounts()">
-        <button class="btn btn-primary" onclick="showAddAccount()">＋ 新增科目</button>
+        <button class="btn btn-primary" onclick="showAddAccount()">新增科目</button>
       </div>
       <div class="table-wrap" id="acc-table" style="flex:1;overflow:auto">加载中...</div>
     </div>
@@ -432,7 +432,7 @@ async function renderDepartments(container) {
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
-          <button class="btn btn-primary btn-sm" onclick="showDeptForm()">＋ 新增部门</button>
+          <button class="btn btn-primary btn-sm" onclick="showDeptForm()">新增部门</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('department')">导入文件</button>
           <button class="btn btn-danger btn-sm" id="deptBatchDelBtn" onclick="batchDeleteDepts()">批量删除</button>
         </div>
@@ -542,7 +542,7 @@ async function renderEmployees(container) {
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
-          <button class="btn btn-primary btn-sm" onclick="showEmpForm()">＋ 新增人员</button>
+          <button class="btn btn-primary btn-sm" onclick="showEmpForm()">新增人员</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('employee')">导入文件</button>
           <button class="btn btn-danger btn-sm" id="btn-batch-del-emp" onclick="batchDeleteEmp()">批量删除</button>
         </div>
@@ -658,7 +658,7 @@ async function renderCustomers(container) {
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
-          <button class="btn btn-primary btn-sm" onclick="showCustForm()">＋ 新增客户</button>
+          <button class="btn btn-primary btn-sm" onclick="showCustForm()">新增客户</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('customer')">导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteCust()" id="btn-batch-del-cust">批量删除</button>
         </div>
@@ -789,7 +789,7 @@ async function renderSuppliers(container) {
     el.innerHTML = `
       <div class="card card-fill">
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-shrink:0">
-          <button class="btn btn-primary btn-sm" onclick="showSuppForm()">＋ 新增供应商</button>
+          <button class="btn btn-primary btn-sm" onclick="showSuppForm()">新增供应商</button>
           <button class="btn btn-outline btn-sm" onclick="showUploadModal('supplier')">导入文件</button>
           <button class="btn btn-danger btn-sm" onclick="batchDeleteSupp()" id="btn-batch-del-supp">批量删除</button>
         </div>

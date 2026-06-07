@@ -33,8 +33,8 @@ async function renderSalesInvoices(container) {
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'sales-invoice\')">导入文件</button>';
-    html += '<button class="btn btn-primary" id="siBatchGenBtn" onclick="batchGenerateVouchers()">⚡ 一键生成凭证</button>';
-    html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">🗑 批量删除</button>';
+    html += '<button class="btn btn-primary" id="siBatchGenBtn" onclick="batchGenerateVouchers()">生成凭证</button>';
+    html += '<button class="btn btn-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">批量删除</button>';
         html += '<div class="tab-btn-group">';
     const salesTabs = [['all', '全部'], [STATUS.NORMAL, STATUS.NORMAL], [STATUS.VOID, STATUS.VOID], [STATUS.RED, STATUS.RED]];
     salesTabs.forEach(([t, label]) => {
@@ -338,12 +338,12 @@ function updateSiBatchBtn() {
   const count = checkedEnabled.length;
   const delBtn = document.getElementById('siBatchDelBtn');
   if (delBtn) {
-    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
   const genBtn = document.getElementById('siBatchGenBtn');
   if (genBtn) {
-    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
   }
   // 同步全选框状态
   const selectAll = document.getElementById('siSelectAll');
@@ -477,8 +477,8 @@ async function renderPurchaseInvoices(container) {
     html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn btn-outline" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
-    html += '<button class="btn btn-primary" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">⚡ 一键生成凭证</button>';
-    html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">🗑 批量删除</button>';
+    html += '<button class="btn btn-primary" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">生成凭证</button>';
+    html += '<button class="btn btn-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const piTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票'], ['tlp', '铁路票']];
     piTabs.forEach(([t, label]) => {
@@ -654,12 +654,12 @@ function updatePiBatchBtn() {
   const count = checked.length;
   const delBtn = document.getElementById('piBatchDelBtn');
   if (delBtn) {
-    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
   const genBtn = document.getElementById('piBatchGenBtn');
   if (genBtn) {
-    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
     genBtn.disabled = count === 0;
   }
   // 同步全选框状态

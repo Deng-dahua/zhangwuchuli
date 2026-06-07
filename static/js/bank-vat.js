@@ -48,9 +48,8 @@ async function renderBankTransactions(container) {
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += bankSelectHtml;
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'bank-transaction\')">导入文件</button>';
-  html += '<button class="btn btn-secondary" onclick="showBankRuleModal()">⚙️ 规则管理</button>';
-  html += '<button class="btn btn-primary" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">⚡ 一键生成凭证</button>';
-  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">🗑 批量删除</button>';
+  html += '<button class="btn btn-primary" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">生成凭证</button>';
+  html += '<button class="btn btn-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">批量删除</button>';
   html += '</div></div>';
 
   // 表格
@@ -126,12 +125,12 @@ function updateBankTxBatchBtn() {
   const count = document.querySelectorAll('.bt-check:checked').length;
   const delBtn = document.getElementById('btBatchDelBtn');
   if (delBtn) {
-    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
   const genBtn = document.getElementById('btBatchGenBtn');
   if (genBtn) {
-    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
   }
 }
 
@@ -363,8 +362,8 @@ async function renderInputVATDeductions(container) {
   html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
   html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
   html += '<button class="btn btn-outline" onclick="showUploadModal(\'input-vat-deduction\')">导入文件</button>';
-  html += '<button class="btn btn-primary" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">⚡ 一键生成凭证</button>';
-  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">🗑 批量删除</button>';
+  html += '<button class="btn btn-primary" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">生成凭证</button>';
+  html += '<button class="btn btn-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">批量删除</button>';
   html += '</div></div>';
 
   // 表格
@@ -436,7 +435,7 @@ function updateIVDBatchBtn() {
   const delBtn = document.getElementById('ivdBatchDelBtn');
   const certBtn = document.getElementById('ivdBatchCertBtn');
   if (delBtn) {
-    delBtn.textContent = count > 0 ? '🗑 批量删除（' + count + '）' : '🗑 批量删除';
+    delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
   if (certBtn) {
@@ -445,7 +444,7 @@ function updateIVDBatchBtn() {
   }
   const genBtn = document.getElementById('ivdBatchGenBtn');
   if (genBtn) {
-    genBtn.textContent = count > 0 ? '⚡ 一键生成凭证（' + count + '）' : '⚡ 一键生成凭证';
+    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
     genBtn.disabled = count === 0;
   }
   // 同步全选框状态
@@ -765,7 +764,7 @@ async function showBankRuleModal() {
 
     const modal = createModal('银行规则库', `
       <div style="margin-bottom:12px">
-        <button class="btn btn-primary btn-sm" onclick="showBankRuleForm(0)">＋ 新增规则</button>
+        <button class="btn btn-primary btn-sm" onclick="showBankRuleForm(0)">新增规则</button>
         <span style="font-size:12px;color:var(--gray-500);margin-left:8px">规则按优先级从高到低匹配，关键词命中即使用对应科目</span>
       </div>
       <div class="table-wrap" style="max-height:400px;overflow:auto">

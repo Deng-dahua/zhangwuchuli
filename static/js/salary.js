@@ -76,10 +76,10 @@ function buildSalaryPeriodBar() {
         '</div>' +
         '<button class="sal-query-btn" style="padding:6px 12px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:13px">查询</button>' +
         '<button class="sal-clear-btn" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px">清除</button>' +
-        '<button class="sal-add-btn" style="padding:6px 12px;border:1px solid #16a34a;border-radius:6px;background:#16a34a;color:#fff;cursor:pointer;font-size:13px">➕ 新增工资薪金</button>' +
+        '<button class="sal-add-btn" style="padding:6px 12px;border:1px solid #16a34a;border-radius:6px;background:#16a34a;color:#fff;cursor:pointer;font-size:13px">新增工资薪金</button>' +
         '<button class="sal-import-btn" style="padding:6px 12px;border:1px solid #d97706;border-radius:6px;background:#d97706;color:#fff;cursor:pointer;font-size:13px">导入文件</button>' +
-        '<button class="sal-tax-btn" style="padding:6px 12px;border:1px solid #6b7280;border-radius:6px;background:#6b7280;color:#fff;cursor:pointer;font-size:13px">🧮 计算个税</button>' +
-        '<button class="sal-voucher-btn" style="padding:6px 12px;border:1px solid #7c3aed;border-radius:6px;background:#7c3aed;color:#fff;cursor:pointer;font-size:13px">⚡ 生成凭证</button>' +
+        '<button class="sal-tax-btn" style="padding:6px 12px;border:1px solid #6b7280;border-radius:6px;background:#6b7280;color:#fff;cursor:pointer;font-size:13px">计算个税</button>' +
+        '<button class="sal-voucher-btn" style="padding:6px 12px;border:1px solid #7c3aed;border-radius:6px;background:#7c3aed;color:#fff;cursor:pointer;font-size:13px">生成凭证</button>' +
         '<button class="sal-batch-del-btn" style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;font-size:13px">批量删除</button>';
 
     // stepper 按钮
