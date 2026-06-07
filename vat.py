@@ -683,8 +683,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row2_certified_curr_amount": round(cert_amount, 2),
         "row2_certified_curr_tax": round(cert_tax, 2),
         "row3_certified_prior_count": 0, "row3_certified_prior_amount": 0.0, "row3_certified_prior_tax": 0.0,
-        # 其他扣税凭证（所有非专票合计 = 旅客运输 + 其他，用于 row12 合计公式 12=1+4+11）
-        "row4_other_count": travel_count + other_count, "row4_other_amount": round(travel_amount + other_amount, 2), "row4_other_tax": round(travel_tax + other_tax, 2),
+        # 其他扣税凭证（不含旅客运输，旅客运输单独填入 row10）
+        "row4_other_count": other_count, "row4_other_amount": round(other_amount, 2), "row4_other_tax": round(other_tax, 2),
         "row5_customs_count": 0, "row5_customs_amount": 0.0, "row5_customs_tax": 0.0,
         "row6_agri_count": 0, "row6_agri_amount": 0.0, "row6_agri_tax": 0.0,
         "row7_wht_count": 0, "row7_wht_tax": 0.0,
