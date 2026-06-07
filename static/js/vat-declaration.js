@@ -980,14 +980,14 @@ function renderSchedule1(data) {
     // ============== 三、免抵退税 (2 rows) ==============
     + '<tr>'
     + '<td rowspan="2" style="'+catStyle+'">免抵退税</td>'
-    + '<td>货物及加工修理修配劳务</td><td></td><td style="text-align:center">16</td>' + RD() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产</td><td></td><td style="text-align:center">17</td>' + RD() + '</tr>'
+    + '<td>货物及加工修理修配劳务</td><td></td><td></td><td style="text-align:center">16</td>' + RD() + '</tr>'
+    + '<tr><td>服务、不动产和无形资产</td><td></td><td></td><td style="text-align:center">17</td>' + RD() + '</tr>'
 
     // ============== 四、免税 (2 rows) ==============
     + '<tr>'
     + '<td rowspan="2" style="'+catStyle+'">免税</td>'
-    + '<td>货物及加工修理修配劳务</td><td></td><td style="text-align:center">18</td>' + RD() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产</td><td></td><td style="text-align:center">19</td>' + RD() + '</tr>'
+    + '<td>货物及加工修理修配劳务</td><td></td><td></td><td style="text-align:center">18</td>' + RD() + '</tr>'
+    + '<tr><td>服务、不动产和无形资产</td><td></td><td></td><td style="text-align:center">19</td>' + RD() + '</tr>'
 
     + '</tbody></table></div>';
 }
