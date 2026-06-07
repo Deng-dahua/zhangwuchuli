@@ -1058,9 +1058,9 @@ function renderSchedule3(data) {
   let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（三）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（服务、不动产和无形资产扣除项目明细）</div>'
     + '<table class="vat-form-table">'
-    + '<colgroup><col style="width:28%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
+    + '<colgroup><col style="width:20%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
     + '<thead>'
-    + '<tr style="background:#d9e2f3"><th rowspan="3">项目及栏次</th>'
+    + '<tr style="background:#d9e2f3"><th rowspan="3" colspan="2">项目及栏次</th>'
     + '<th rowspan="2">本期服务、不动产和无形资产<br>价税合计额（免税销售额）</th>'
     + '<th colspan="5">服务、不动产和<br>无形资产扣除项目</th></tr>'
     + '<tr style="background:#d9e2f3"><th>期初余额</th><th>本期发生额</th><th>本期应扣除金额</th><th>本期实际扣除金额</th><th>期末余额</th></tr>'
@@ -1070,7 +1070,7 @@ function renderSchedule3(data) {
 
   for (let i = 0; i < projects.length; i++) {
     const r = rows[i];
-    html += '<tr><td>' + projects[i] + '</td>'
+    html += '<tr><td>' + projects[i] + '</td><td style="text-align:center">' + (i+1) + '</td>'
       + td(r.price_tax) + td(r.begin) + td(r.occur) + td(r.should) + td(r.actual) + td(r.end)
       + '</tr>';
   }
