@@ -781,7 +781,8 @@ function renderSchedule1(data) {
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（一）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
-    + '<table class="vat-form-table" style="font-size:10px">'
+    + '<div style="overflow:auto;max-height:70vh">'
+    + '<table class="vat-form-table" style="font-size:10px;min-width:1200px">'
     + '<colgroup>'
     + '<col style="width:4%">'   // 大类列
     + '<col style="width:5%">'   // 子类列
@@ -813,8 +814,7 @@ function renderSchedule1(data) {
     + '<tbody>'
 
     // ==================== 一、一般计税方法计税（大类rowspan=10） ====================
-    + '<tr><td rowspan="10" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税方法计税</td>'
-    + '<td colspan="17" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">一、一般计税方法计税</td></tr>'
+    + '<tr><td rowspan="9" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税方法计税</td></tr>'
     + '<tr><td rowspan="6" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
     + '<td colspan="16" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
     + '<tr><td>13%税率的货物及加工修理修配劳务</td><td style="text-align:center">1</td>'
@@ -859,8 +859,7 @@ function renderSchedule1(data) {
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 二、简易计税方法计税（大类rowspan=14） ====================
-    + '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税方法计税</td>'
-    + '<td colspan="17" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">二、简易计税方法计税</td></tr>'
+    + '<tr><td rowspan="13" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税方法计税</td></tr>'
     + '<tr><td rowspan="10" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
     + '<td colspan="16" style="background:#f5f7fa;font-weight:600;padding:3px 8px;font-size:10px">全部征税项目</td></tr>'
     + '<tr><td>6%征收率</td><td style="text-align:center">8</td>'
@@ -934,22 +933,20 @@ function renderSchedule1(data) {
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 三、免抵退税（大类rowspan=3） ====================
-    + '<tr><td rowspan="3" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免抵退税</td>'
-    + '<td colspan="17" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">三、免抵退税</td></tr>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免抵退税</td></tr>'
     + '<tr><td>货物及加工修理修配劳务</td><td style="text-align:center">16</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>服务、不动产和无形资产</td><td style="text-align:center">17</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 四、免税（大类rowspan=3） ====================
-    + '<tr><td rowspan="3" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免税</td>'
-    + '<td colspan="17" style="background:#f0f4fa;font-weight:600;padding:3px 8px;font-size:11px">四、免税</td></tr>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">免税</td></tr>'
     + '<tr><td>货物及加工修理修配劳务</td><td style="text-align:center">18</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>服务、不动产和无形资产</td><td style="text-align:center">19</td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
-    + '</tbody></table>'
+    + '</tbody></table></div>'
 }
 
 // ==================== 附表二：进项税额明细 ====================
