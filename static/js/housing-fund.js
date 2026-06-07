@@ -10,21 +10,21 @@ function hfEscAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 // ============ 期间步进（与顶栏 period-stepper 同款） ============
 function stepHfYear(delta) {
-    const yearSel = document.getElementById('hf-import-year') || document.getElementById('hf-year');
+    const yearSel = document.getElementById('hf-import-year');
     if (!yearSel) return;
     const opts = Array.from(yearSel.options).map(o => parseInt(o.value));
     const cur = parseInt(yearSel.value);
     const idx = opts.indexOf(cur);
     const next = idx + delta;
     if (next >= 0 && next < opts.length) yearSel.value = opts[next];
-    const monthSel = document.getElementById('hf-import-month') || document.getElementById('hf-month');
+    const monthSel = document.getElementById('hf-import-month');
     if (monthSel) hfPeriod = yearSel.value + '-' + monthSel.value;
     if (typeof hfRefresh === 'function') hfRefresh();
 }
 
 function stepHfMonth(delta) {
-    const yearSel = document.getElementById('hf-import-year') || document.getElementById('hf-year');
-    const monSel = document.getElementById('hf-import-month') || document.getElementById('hf-month');
+    const yearSel = document.getElementById('hf-import-year');
+    const monSel = document.getElementById('hf-import-month');
     if (!monSel) return;
     let y = parseInt(yearSel?.value || new Date().getFullYear());
     let m = parseInt(monSel.value) + delta;
@@ -33,11 +33,8 @@ function stepHfMonth(delta) {
     const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
     if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
     monSel.value = String(m).padStart(2, '0');
-    // 仅主界面选择器变化时更新 hfPeriod
-    if (yearSel === document.getElementById('hf-import-year') && monSel === document.getElementById('hf-import-month')) {
-        hfPeriod = yearSel.value + '-' + monSel.value;
-        if (typeof hfRefresh === 'function') hfRefresh();
-    }
+    hfPeriod = yearSel.value + '-' + monSel.value;
+    if (typeof hfRefresh === 'function') hfRefresh();
 }
 
 // ============ 导入弹窗步进（不触发主界面刷新） ============
@@ -211,7 +208,9 @@ async function renderHousingFund(container) {
 }
 
 async function hfRefresh() {
-  hfPeriod = document.getElementById('hf-period-filter')?.value || '';
+  const yearSel = document.getElementById('hf-import-year');
+  const monthSel = document.getElementById('hf-import-month');
+  if (yearSel && monthSel) hfPeriod = yearSel.value + '-' + monthSel.value;
   let url = `/api/housing-fund/details?company_id=${currentCompanyId}`;
   if (hfPeriod) url += `&period=${hfPeriod}`;
 
@@ -304,6 +303,29 @@ async function hfBatchDelete() {
 
 // ============ 新增/编辑弹窗 ============
 
+function stepHfModalYear(delta) {
+  const sel = document.getElementById('hf-modal-year');
+  if (!sel) return;
+  const opts = Array.from(sel.options).map(o => parseInt(o.value));
+  const cur = parseInt(sel.value);
+  const idx = opts.indexOf(cur);
+  const next = idx + delta;
+  if (next >= 0 && next < opts.length) sel.value = opts[next];
+}
+
+function stepHfModalMonth(delta) {
+  const yearSel = document.getElementById('hf-modal-year');
+  const monSel = document.getElementById('hf-modal-month');
+  if (!monSel) return;
+  let y = parseInt(yearSel?.value || new Date().getFullYear());
+  let m = parseInt(monSel.value) + delta;
+  if (m > 12) { m = 1; y++; }
+  if (m < 1) { m = 12; y--; }
+  const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
+  if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
+  monSel.value = String(m).padStart(2, '0');
+}
+
 function hfShowCreate() {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -329,14 +351,14 @@ function hfShowCreate() {
             <label>期间</label>
             <div class="period-selector-bar" style="display:inline-flex">
               <div class="period-stepper">
-                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
+                <select id="hf-modal-year" class="period-selector-year">${yearOpts}</select>
                 <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfModalYear(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfModalYear(-1)">▼</button>
                 </div>
               </div>
               <div class="period-stepper">
-                <select id="hf-month" class="period-selector-month">
+                <select id="hf-modal-month" class="period-selector-month">
                   <option value="01"${defMonth==='01'?' selected':''}>01月</option>
                   <option value="02"${defMonth==='02'?' selected':''}>02月</option>
                   <option value="03"${defMonth==='03'?' selected':''}>03月</option>
@@ -351,8 +373,8 @@ function hfShowCreate() {
                   <option value="12"${defMonth==='12'?' selected':''}>12月</option>
                 </select>
                 <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfModalMonth(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfModalMonth(-1)">▼</button>
                 </div>
               </div>
             </div>
@@ -387,8 +409,8 @@ function hfShowCreate() {
 async function hfDoCreate() {
   const name = document.getElementById('hf-emp-name').value.trim();
   if (!name) return alert('请输入姓名');
-  const year = document.getElementById('hf-year')?.value || new Date().getFullYear();
-  const month = document.getElementById('hf-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+  const year = document.getElementById('hf-modal-year')?.value || new Date().getFullYear();
+  const month = document.getElementById('hf-modal-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
   const period = year + '-' + month;
   const body = {
     company_id: currentCompanyId,
@@ -440,14 +462,14 @@ async function hfShowEdit(id) {
             <label>期间</label>
             <div class="period-selector-bar" style="display:inline-flex">
               <div class="period-stepper">
-                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
+                <select id="hf-modal-year" class="period-selector-year">${yearOpts}</select>
                 <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfModalYear(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfModalYear(-1)">▼</button>
                 </div>
               </div>
               <div class="period-stepper">
-                <select id="hf-month" class="period-selector-month">
+                <select id="hf-modal-month" class="period-selector-month">
                   <option value="01"${defMonth==='01'?' selected':''}>01月</option>
                   <option value="02"${defMonth==='02'?' selected':''}>02月</option>
                   <option value="03"${defMonth==='03'?' selected':''}>03月</option>
@@ -462,8 +484,8 @@ async function hfShowEdit(id) {
                   <option value="12"${defMonth==='12'?' selected':''}>12月</option>
                 </select>
                 <div class="stepper-arrows">
-                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
-                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfModalMonth(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfModalMonth(-1)">▼</button>
                 </div>
               </div>
             </div>
@@ -498,8 +520,8 @@ async function hfShowEdit(id) {
 async function hfDoEdit() {
   const name = document.getElementById('hf-emp-name').value.trim();
   if (!name) return alert('请输入姓名');
-  const year = document.getElementById('hf-year')?.value || new Date().getFullYear();
-  const month = document.getElementById('hf-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+  const year = document.getElementById('hf-modal-year')?.value || new Date().getFullYear();
+  const month = document.getElementById('hf-modal-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
   const period = year + '-' + month;
   const body = new URLSearchParams({
     company_id: currentCompanyId,
