@@ -191,25 +191,31 @@ function renderVATStats() {
       scf = typeof vatCurrentData.form_surcharge === 'string' ? JSON.parse(vatCurrentData.form_surcharge) : (vatCurrentData.form_surcharge || {});
     } catch (e) { /* skip */ }
   }
+  // 销售额：从主表取不含税销售额（已修正为 amount，不是价税合计 total_amount）
+  const salesRevenue = main.row1_sales || 0;
   const vatTax = main.row19_tax_payable || 0;
   const endCredit = main.row20_end_credit || 0;
-  const cityTax = scf.city_tax || main.row39_city_maintenance_tax || 0;
-  const eduTax = scf.edu_tax || main.row40_education_surcharge || 0;
-  const localEdu = scf.local_edu_tax || main.row41_local_education_surcharge || 0;
-  const totalSurcharge = vatTax + cityTax + eduTax + localEdu;
+  // 附加税费必须取"减免后实际应纳"值（city_final/edu_final/local_edu_final），
+  // 不能用 city_tax 原值（那是减免前的），否则六税两费减征时金额会偏大一倍
+  const cityTax = scf.city_final || scf.city_tax || main.row39_city_maintenance_tax || 0;
+  const eduTax = scf.edu_final || scf.edu_tax || main.row40_education_surcharge || 0;
+  const localEdu = scf.local_edu_final || scf.local_edu_tax || main.row41_local_education_surcharge || 0;
+  // 附加税费合计（不含增值税本身，增值税另有独立卡片）
+  const surchargeTotal = cityTax + eduTax + localEdu;
 
   function card(label, value, color) {
     var c = color || '#1a56db';
     return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + c + '">' + fmt(value) + '</div></div>';
   }
 
-  el.style.gridTemplateColumns = 'repeat(6, 1fr)';
-  el.innerHTML = card('应纳增值税', vatTax, '#d97706')
+  el.style.gridTemplateColumns = 'repeat(7, 1fr)';
+  el.innerHTML = card('本期销售额', salesRevenue, '#0f766e')
+    + card('应纳增值税', vatTax, '#d97706')
     + card('期末留抵税额', endCredit, '#059669')
-    + card('应纳城市维护建设税', cityTax, '#7c3aed')
-    + card('应纳教育费附加', eduTax, '#2563eb')
-    + card('应纳地方教育附加', localEdu, '#0891b2')
-    + card('应纳税费合计', totalSurcharge, '#dc2626');
+    + card('城建税', cityTax, '#7c3aed')
+    + card('教育费附加', eduTax, '#2563eb')
+    + card('地方教育附加', localEdu, '#0891b2')
+    + card('附加税费合计', surchargeTotal, '#dc2626');
 }
 
 // ==================== 新建/编辑 ====================

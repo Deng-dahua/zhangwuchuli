@@ -311,31 +311,41 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         JournalEntry.period == period
     ).all()
 
-    # 销项税额（贷方 2221 应交增值税-销项税额）
+    # ===== 销项税额 =====
+    # 优先从序时账取数（贷方 2221 应交增值税-销项税额）
     output_tax = sum(
         e.credit_amount or 0
         for e in entries
         if e.account_code and "2221" in e.account_code and "销项" in (e.account_name or "")
     )
+
+    # 销项发票：用于计算销售额（不含税）+ 销项税额兜底
+    # 增值税申报表的"销售额" = 不含税金额，仅统计正常正数发票
     sales_invoices = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.invoice_date >= period + "-01",
-        SalesInvoice.invoice_date <= _end_of_month(period)
+        SalesInvoice.invoice_date <= _end_of_month(period),
+        SalesInvoice.status == "正常",
+        SalesInvoice.is_positive == True,
     ).all()
-    sales_total = sum(i.total_amount or 0 for i in sales_invoices)
+    # 销售额 = 不含税金额（amount），不是价税合计（total_amount）
+    sales_total = sum(i.amount or 0 for i in sales_invoices)
+    # 销项税额兜底：序时账无数据时从发票取税
     if output_tax == 0:
         output_tax = sum(i.tax_amount or 0 for i in sales_invoices)
 
-    # 进项税额
+    # ===== 进项税额 =====
+    # 优先从序时账取数（借方 2221 应交增值税-进项税额）
     input_tax_journal = sum(
         e.debit_amount or 0
         for e in entries
         if e.account_code and "2221" in e.account_code and "进项" in (e.account_name or "")
     )
+    # 进项抵扣表：按抵扣所属期取数，仅正常发票
     input_deductions = db.query(InputVATDeduction).filter(
         InputVATDeduction.company_id == company_id,
-        (InputVATDeduction.deduction_period == period) |
-        (InputVATDeduction.invoice_date.like(period + "%"))
+        InputVATDeduction.deduction_period == period,
+        InputVATDeduction.invoice_status == "正常",
     ).all()
     input_tax = sum(d.deductible_tax_amount or 0 for d in input_deductions)
     if input_tax_journal > 0:
@@ -614,35 +624,44 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     vd.form_sales = json.dumps(form_sales, ensure_ascii=False)
 
     # ====== 附列资料（二）：本期进项税额明细 ======
-    # 取得进项发票列表
-    purchase_invoices = db.query(PurchaseInvoice).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= period + "-01",
-        PurchaseInvoice.invoice_date <= _end_of_month(period)
+    # 数据源：进项抵扣表 InputVATDeduction，按「抵扣所属期」取数
+    # 这才是增值税申报附表二的正确取数规则，不是按开票日期从PurchaseInvoice取
+    form2_deductions = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        InputVATDeduction.deduction_period == period,
+        InputVATDeduction.invoice_status == "正常",
     ).all()
 
-    def _cert_sum(inv_list, status_filter=None):
-        """汇总进项发票：返回(份数,金额,税额)"""
-        if status_filter:
-            inv_list = [i for i in inv_list if i.status in status_filter]
+    def _ded_sum(ded_list, cat_filter=None):
+        """汇总进项抵扣记录：返回(份数, 不含税金额, 税额)
+        税额取 deductible_tax_amount（有效抵扣税额）"""
+        if cat_filter is not None:
+            ded_list = [d for d in ded_list if (d.invoice_category or "") == cat_filter]
         return (
-            len(inv_list),
-            sum(i.amount or 0 for i in inv_list),
-            sum(i.tax_amount or 0 for i in inv_list)
+            len(ded_list),
+            sum((d.amount or 0) for d in ded_list),
+            sum((d.deductible_tax_amount or 0) for d in ded_list),
         )
 
-    cert_count, cert_amount, cert_tax = _cert_sum(purchase_invoices, ["正常"])
-    cert_all_count, cert_all_amount, cert_all_tax = _cert_sum(purchase_invoices)
+    # 增值税专用发票类（默认票种）
+    def _is_special_invoice(d):
+        cat = (d.invoice_category or "") or (d.invoice_category_label or "")
+        return "专用发票" in cat or "专用" in cat or (not cat)  # 无标签默认视为专票
+    special_list = [d for d in form2_deductions if _is_special_invoice(d)]
+
+    cert_count, cert_amount, cert_tax = _ded_sum(special_list)
 
     form_input = {
         "period": period,
         # 一、申报抵扣的进项税额
-        "row1_certified_count": cert_count,           # 认证相符的增值税专用发票-份数
-        "row1_certified_amount": round(cert_amount, 2), # 金额
-        "row1_certified_tax": round(cert_tax, 2),       # 税额
-        "row2_certified_curr_count": cert_count, "row2_certified_curr_amount": round(cert_amount, 2), "row2_certified_curr_tax": round(cert_tax, 2),
+        "row1_certified_count": cert_count,              # 认证相符的增值税专用发票-份数
+        "row1_certified_amount": round(cert_amount, 2),   # 金额（不含税）
+        "row1_certified_tax": round(cert_tax, 2),         # 税额
+        "row2_certified_curr_count": cert_count,
+        "row2_certified_curr_amount": round(cert_amount, 2),
+        "row2_certified_curr_tax": round(cert_tax, 2),
         "row3_certified_prior_count": 0, "row3_certified_prior_amount": 0.0, "row3_certified_prior_tax": 0.0,
-        # 其他扣税凭证
+        # 其他扣税凭证（海关缴款书等，后续按类别标识扩展）
         "row4_other_count": 0, "row4_other_amount": 0.0, "row4_other_tax": 0.0,
         "row5_customs_count": 0, "row5_customs_amount": 0.0, "row5_customs_tax": 0.0,
         "row6_agri_count": 0, "row6_agri_amount": 0.0, "row6_agri_tax": 0.0,
@@ -653,14 +672,14 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row9_real_estate_count": 0, "row9_real_estate_amount": 0.0, "row9_real_estate_tax": 0.0,
         "row10_travel_count": 0, "row10_travel_amount": 0.0, "row10_travel_tax": 0.0,
         "row11_foreign_trade_count": 0, "row11_foreign_trade_tax": 0.0,
-        # 二、进项税额转出额 (numbered 13-23b as frontend expects)
+        # 二、进项税额转出额
         "row13_transfer_out_total": 0.0,
         "row14_exempt_transfer": 0.0, "row15_collective_transfer": 0.0,
         "row16_abnormal_loss": 0.0, "row17_simple_tax_transfer": 0.0,
         "row18_exempt_credit_transfer": 0.0, "row19_tax_check_transfer": 0.0,
         "row20_red_letter_transfer": 0.0, "row21_prior_credit_arrears": 0.0,
         "row22_prior_credit_refund": 0.0, "row23a_abnormal_transfer": 0.0, "row23b_other_transfer": 0.0,
-        # 三、待抵扣进项税额 (numbered 24-34)
+        # 三、待抵扣进项税额
         "row25_pending_begin_count": 0, "row25_pending_begin_amount": 0.0, "row25_pending_begin_tax": 0.0,
         "row26_pending_curr_count": 0, "row26_pending_curr_amount": 0.0, "row26_pending_curr_tax": 0.0,
         "row27_pending_end_count": 0, "row27_pending_end_amount": 0.0, "row27_pending_end_tax": 0.0,
@@ -671,9 +690,11 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row32_wht_pending_count": 0, "row32_wht_pending_tax": 0.0,
         "row33_other_pending_count": 0, "row33_other_pending_amount": 0.0, "row33_other_pending_tax": 0.0,
         # 四、其他
-        "row35_cert_count": cert_count, "row35_cert_amount": round(cert_amount, 2), "row35_cert_tax": round(cert_tax, 2),
+        "row35_cert_count": cert_count,
+        "row35_cert_amount": round(cert_amount, 2),
+        "row35_cert_tax": round(cert_tax, 2),
         "row36_wht_total_tax": 0.0,
-        # 合计(兼容)
+        # 兼容旧字段
         "certified_count": cert_count,
         "certified_amount": round(cert_amount, 2),
         "certified_tax": round(cert_tax, 2),
@@ -758,7 +779,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         # 城市维护建设税
         "city_base": round(tax_payable, 2),
         "city_rate": 0.07,
-        "city_tax": round(city_full, 2),
+        "city_tax": city_tax,                                          # 减免后实际应纳
+        "city_full": round(city_full, 2),                              # 减免前原值
         "city_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "city_reduction_amount": round(city_full * reduction_rate, 2),
         "city_six_tax_amount": round(city_full * reduction_rate, 2),
@@ -772,7 +794,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         # 教育费附加
         "edu_base": round(tax_payable, 2),
         "edu_rate": 0.03,
-        "edu_tax": round(edu_full, 2),
+        "edu_tax": edu_surcharge,                                      # 减免后实际应纳
+        "edu_full": round(edu_full, 2),                                # 减免前原值
         "edu_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "edu_reduction_amount": round(edu_full * reduction_rate, 2),
         "edu_six_tax_amount": round(edu_full * reduction_rate, 2),
@@ -786,7 +809,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         # 地方教育附加
         "local_edu_base": round(tax_payable, 2),
         "local_edu_rate": 0.02,
-        "local_edu_tax": round(local_edu_full, 2),
+        "local_edu_tax": local_edu,                                    # 减免后实际应纳
+        "local_edu_full": round(local_edu_full, 2),                    # 减免前原值
         "local_edu_reduction_code": "六税两费减征" if reduction_rate > 0 else "",
         "local_edu_reduction_amount": round(local_edu_full * reduction_rate, 2),
         "local_edu_six_tax_amount": round(local_edu_full * reduction_rate, 2),
