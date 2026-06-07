@@ -596,7 +596,7 @@ function hfShowImport() {
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('hf-import-modal')">取消</button>
-        <button class="btn btn-primary" onclick="hfDoImport()">导入文件</button>
+        <button class="btn btn-primary" onclick="hfDoImport()">确定</button>
       </div>
     </div>
   `;
@@ -617,11 +617,11 @@ async function hfDoImport() {
 
   try {
     const result = await api('POST', `/api/housing-fund/import?company_id=${currentCompanyId}&period=${period}`, formData);
-    alert(result.message || `成功导入 ${result.imported} 条`);
     closeModal('hf-import-modal');
     hfRefresh();
+    toast(result.message || `成功导入 ${result.imported || 0} 条记录`, 'success');
   } catch (e) {
-    alert('导入失败: ' + (e.message || e));
+    toast('导入失败: ' + (e.message || e), 'error');
   }
 }
 
