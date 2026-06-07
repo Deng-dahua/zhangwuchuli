@@ -775,7 +775,7 @@ function renderSchedule1(data) {
   function tdDash(n) { n = n || 1; var d = '<td class="num" style="color:#b0b7c3">——</td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
   // 大类列样式
   var catStyle = 'text-align:center;vertical-align:middle;font-weight:700;font-size:11px;background:#f0f4fa;writing-mode:vertical-lr;letter-spacing:2px;padding:4px 3px';
-  var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb;writing-mode:vertical-lr;letter-spacing:1px;padding:4px 2px';
+  var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb';
 
   // ---- helper: 生成完整数据行(14个数值列: cols 4-17) ----
   // 销售额/税额按列号顺序: 第1列(销售额) 第2列(税额) ... 交替排列
