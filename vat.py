@@ -205,6 +205,43 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     vd.education_surcharge = edu_surcharge
     vd.local_education_surcharge = local_edu
 
+    # ====== 主表 —— 本年累计(YTD)计算 ======
+    # 取本年同期各月期间列表
+    year_str = period[:4]
+    ytd_periods = [f"{year_str}-{m:02d}" for m in range(1, period_date.month + 1)]
+    ytd_declarations = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period.in_(ytd_periods)
+    ).all()
+
+    def _parse_main(vd):
+        if not vd or not vd.form_main:
+            return {}
+        return json.loads(vd.form_main) if isinstance(vd.form_main, str) else vd.form_main
+
+    # 需要累计的字段列表（主表所有数字字段）
+    ytd_fields = [
+        "row1_sales", "row2_other_invoice", "row3_no_invoice", "row4_tax_check",
+        "row5_simple_method", "row6_exempt_sales", "row7_export_exempt",
+        "row8_tax_free", "row9_exempt_goods", "row10_exempt_service",
+        "row11_output_tax", "row12_input_tax", "row13_prior_credit",
+        "row14_input_transfer_out", "row15_exempt_refund", "row16_actual_deduct_by_item",
+        "row17_total_deductible", "row18_actual_deduct", "row19_tax_payable",
+        "row20_end_credit", "row21_simple_tax", "row22_simple_tax_reduction",
+        "row23_reduction", "row24_tax_payable_total",
+        "row25_prior_unpaid", "row26_real_paid_during", "row27_installment_prepaid",
+        "row28_export_tax_refund", "row29_remote_prepaid", "row30_already_paid_total",
+        "row31_should_pay_refund", "row32_check_tax_should", "row33_check_prepaid",
+        "row34_should_check", "row36_prior_unpaid_check", "row37_check_paid",
+        "row38_end_check",
+        "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge",
+    ]
+    ytd_sums = {f: 0.0 for f in ytd_fields}
+    for d in ytd_declarations:
+        m = _parse_main(d)
+        for f in ytd_fields:
+            ytd_sums[f] += m.get(f, 0.0)
+
     # ====== 主表（会企02号）—— 41行完整字段 ======
     # 取上期留抵：从同公司上期申报表取期末留抵
     from datetime import datetime as dt
@@ -284,6 +321,30 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "local_education_surcharge": local_edu,
         "total_surcharge": round(city_tax + edu_surcharge + local_edu, 2),
     }
+
+    # 本年累计(YTD) —— 注入 form_main
+    _ytd_keys = [
+        "row1_sales", "row2_other_invoice", "row3_no_invoice", "row4_tax_check",
+        "row5_simple_method", "row6_exempt_sales", "row7_export_exempt",
+        "row8_tax_free", "row9_exempt_goods", "row10_exempt_service",
+        "row11_output_tax", "row12_input_tax", "row13_prior_credit",
+        "row14_input_transfer_out", "row15_exempt_refund", "row16_actual_deduct_by_item",
+        "row17_total_deductible", "row18_actual_deduct", "row19_tax_payable",
+        "row20_end_credit", "row21_simple_tax", "row22_simple_tax_reduction",
+        "row23_reduction", "row24_tax_payable_total",
+        "row25_prior_unpaid", "row26_real_paid_during", "row27_installment_prepaid",
+        "row28_export_tax_refund", "row29_remote_prepaid", "row30_already_paid_total",
+        "row31_should_pay_refund", "row32_check_tax_should", "row33_check_prepaid",
+        "row34_should_check", "row36_prior_unpaid_check", "row37_check_paid",
+        "row38_end_check",
+        "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge"
+    ]
+    for _k in _ytd_keys:
+        form_main[_k + "_ytd"] = round(ytd_sums.get(_k, 0.0), 2)
+        # 即征即退项目（当前系统不涉及，默认0）
+        form_main[_k + "_refund"] = 0.0
+        form_main[_k + "_refund_ytd"] = 0.0
+
     vd.form_main = json.dumps(form_main, ensure_ascii=False)
 
     # ====== 附列资料（一）：本期销售情况明细 ======
