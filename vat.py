@@ -443,11 +443,25 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
         prior_credit = prior_main.get("row20_end_credit", 0.0)
 
-    # 主表计算链
-    total_deduct = round(input_tax + prior_credit, 2)  # row17=12+13-14-15+16
-    actual_deduct = min(total_deduct, output_tax)  # row18=min(17,11)
-    end_credit = round(total_deduct - actual_deduct, 2)  # row20=17-18
-    tax_payable_total = round(tax_payable, 2)  # row24=19+21-23 (简化为应纳税额)
+    # 主表计算链（按填表说明公式）
+    # 第17栏 应抵扣税额合计 = 第12栏+第13栏-第14栏-第15栏+第16栏
+    input_transfer_out = 0.0    # 第14栏 进项税额转出（当前无数据）
+    exempt_refund = 0.0         # 第15栏 免、抵、退应退税额（当前无数据）
+    tax_check = 0.0             # 第16栏 按适用税率计算的纳税检查应补缴税额（当前无数据）
+    total_deduct = round(input_tax + prior_credit - input_transfer_out - exempt_refund + tax_check, 2)
+    # 第18栏 实际抵扣税额 = min(第17栏, 第11栏)（不考虑加计抵减）
+    actual_deduct = min(total_deduct, output_tax)
+    # 第19栏 应纳税额 = 第11栏 - 第18栏 - 实际抵减额（无加计抵减时为0）
+    actual_reduction = 0.0  # 实际抵减额（当前不适用加计抵减政策）
+    tax_payable = max(0, round(output_tax - actual_deduct - actual_reduction, 2))
+    # 第20栏 期末留抵税额 = 第17栏 - 第18栏
+    end_credit = round(total_deduct - actual_deduct, 2)
+    # 第21栏 简易计税办法计算的应纳税额（当前无数据）
+    simple_tax = 0.0
+    # 第23栏 应纳税额减征额（当前无数据）
+    reduction = 0.0
+    # 第24栏 应纳税额合计 = 第19栏+第21栏-第23栏
+    tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
 
     form_main = {
         "period": period,
@@ -668,10 +682,13 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     travel_count, travel_amount, travel_tax = _ded_sum(travel_list)
     other_count, other_amount, other_tax = _ded_sum(other_list)
-    # 当期申报抵扣进项税额合计 = 专票 + 其他扣税凭证 + 旅客运输 + 外贸
-    total_ded_count = cert_count + other_count + travel_count
-    total_ded_amount = round(cert_amount + other_amount + travel_amount, 2)
-    total_ded_tax = round(cert_tax + other_tax + travel_tax, 2)
+    # 当期申报抵扣进项税额合计 = 第1栏+第4栏+第9栏+第10栏+第11栏
+    # 按填表说明：第12栏 = 第1栏+第4栏+第9栏+第10栏+第11栏
+    real_estate_count, real_estate_amount, real_estate_tax = 0, 0.0, 0.0  # 第9栏 本期用于购建不动产的扣税凭证（当前无数据）
+    foreign_count, foreign_tax = 0, 0.0  # 第11栏 外贸企业进项税额抵扣证明（当前无数据）
+    total_ded_count = cert_count + other_count + travel_count + real_estate_count + foreign_count
+    total_ded_amount = round(cert_amount + other_amount + travel_amount + real_estate_amount, 2)
+    total_ded_tax = round(cert_tax + other_tax + travel_tax + real_estate_tax + foreign_tax, 2)
 
     form_input = {
         "period": period,
