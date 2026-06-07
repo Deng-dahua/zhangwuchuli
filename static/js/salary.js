@@ -79,6 +79,7 @@ function buildSalaryPeriodBar() {
         '<button class="sal-add-btn" style="padding:6px 12px;border:1px solid #16a34a;border-radius:6px;background:#16a34a;color:#fff;cursor:pointer;font-size:13px">➕ 新增工资薪金</button>' +
         '<button class="sal-import-btn" style="padding:6px 12px;border:1px solid #d97706;border-radius:6px;background:#d97706;color:#fff;cursor:pointer;font-size:13px">导入文件</button>' +
         '<button class="sal-tax-btn" style="padding:6px 12px;border:1px solid #6b7280;border-radius:6px;background:#6b7280;color:#fff;cursor:pointer;font-size:13px">🧮 计算个税</button>' +
+        '<button class="sal-voucher-btn" style="padding:6px 12px;border:1px solid #7c3aed;border-radius:6px;background:#7c3aed;color:#fff;cursor:pointer;font-size:13px">⚡ 生成凭证</button>' +
         '<button class="sal-batch-del-btn" style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;font-size:13px">批量删除</button>';
 
     // stepper 按钮
@@ -115,6 +116,9 @@ function buildSalaryPeriodBar() {
     // 计算个税按钮
     var taxBtn = bar.querySelector('.sal-tax-btn');
     if (taxBtn) taxBtn.addEventListener('click', computeSalaryTax);
+    // 生成凭证按钮
+    var voucherBtn = bar.querySelector('.sal-voucher-btn');
+    if (voucherBtn) voucherBtn.addEventListener('click', generateSalaryVouchers);
     // 批量删除按钮
     var batchDelBtn = bar.querySelector('.sal-batch-del-btn');
     if (batchDelBtn) batchDelBtn.addEventListener('click', batchDeleteSalary);
@@ -238,8 +242,8 @@ function renderSalaryPage(container) {
 // ========== 凭证生成 ==========
 
 async function generateSalaryVouchers() {
-    const period = document.getElementById('salary-year-sel')?.value + '-' + 
-                   document.getElementById('salary-month-sel')?.value;
+    const period = document.getElementById('salary-y')?.value + '-' + 
+                   document.getElementById('salary-m')?.value;
     if (!period || period.length !== 7) {
         alert('请先选择期间');
         return;
