@@ -1260,7 +1260,7 @@ function renderSchedule5(data) {
 
   // === Header Row 1 ===
   html += '<thead><tr style="background:#d9e2f3">';
-  html += '<th colspan="2" rowspan="3">税（费）种</th>';
+  html += '<th colspan="2" rowspan="2">税（费）种</th>';
   html += '<th colspan="3">计税（费）依据</th>';
   html += '<th colspan="2" rowspan="2">税（费）<br>率（%）</th>';
   html += '<th rowspan="2">本期应纳税<br>（费）额</th>';
@@ -1279,18 +1279,7 @@ function renderSchedule5(data) {
   html += '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>';
   html += '</tr>';
 
-  // === Header Row 3 (公式/栏次) ===
-  html += '<tr style="background:#e8edf5">';
-  html += '<th colspan="2">栏次</th>';
-  html += '<th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th>';
-  html += '<th colspan="2" style="text-align:center">4</th>';
-  html += '<th style="text-align:center;font-size:9px">5=(1+2-3)×4</th>';
-  html += '<th style="text-align:center">6</th><th style="text-align:center">7</th>';
-  html += '<th style="text-align:center">8</th><th style="text-align:center;font-size:9px">9=(5-7)×8</th>';
-  html += '<th style="text-align:center">10</th><th style="text-align:center">11</th>';
-  html += '<th style="text-align:center">12</th>';
-  html += '<th style="text-align:center;font-size:9px">13=5-7-9-11-12</th>';
-  html += '</tr></thead><tbody>';
+  html += '</thead><tbody>';
 
   // === 数据行 ===
   html += surRow('城市维护建设税', 1, scf.city_base, scf.vat_exempt_credit, scf.vat_refund_deduct,
