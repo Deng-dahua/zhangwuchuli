@@ -517,7 +517,7 @@ function _fmt0_2(v) {
   return (n === 0) ? '' : (isNaN(n) ? '' : n.toFixed(2));
 }
 function _fmtDash(v) {
-  if (!v || parseFloat(v) === 0) return '<td class="num" style="color:#d1d5db">——</td>';
+  if (!v || parseFloat(v) === 0) return '<td class="num"></td>';
   return '<td class="num">' + parseFloat(v).toFixed(2) + '</td>';
 }
 
@@ -586,22 +586,22 @@ function renderMainForm(data) {
   h += '<tr><td>（三）免、抵、退办法出口销售额</td><td style="text-align:center">7</td>';
   h += '<td class="num">' + _fmt0_2(m.row7_export_exempt) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row7_export_exempt_ytd) + '</td>';
-  h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
+  h += '<td class="num"></td><td class="num"></td></tr>';
   // row 8
   h += '<tr><td>（四）免税销售额</td><td style="text-align:center">8</td>';
   h += '<td class="num">' + _fmt0_2(m.row8_tax_free) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row8_tax_free_ytd) + '</td>';
-  h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
+  h += '<td class="num"></td><td class="num"></td></tr>';
   // row 9
   h += '<tr><td style="padding-left:18px">其中：免税货物销售额</td><td style="text-align:center">9</td>';
   h += '<td class="num">' + _fmt0_2(m.row9_exempt_goods) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row9_exempt_goods_ytd) + '</td>';
-  h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
+  h += '<td class="num"></td><td class="num"></td></tr>';
   // row 10
   h += '<tr><td style="padding-left:18px">　　　免税劳务销售额</td><td style="text-align:center">10</td>';
   h += '<td class="num">' + _fmt0_2(m.row10_exempt_service) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row10_exempt_service_ytd) + '</td>';
-  h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
+  h += '<td class="num"></td><td class="num"></td></tr>';
 
   // --- 二、税款计算 ---
   // row 11
@@ -728,8 +728,8 @@ function renderMainForm(data) {
   h += _fmtDash(m.row34_should_check_refund) + _fmtDash(m.row34_should_check_refund_ytd) + '</tr>';
   // row 35
   h += '<tr><td>即征即退实际退税额</td><td style="text-align:center">35</td>';
-  h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td>';
-  h += '<td class="num">——</td><td class="num">——</td></tr>';
+  h += '<td class="num"></td><td class="num"></td>';
+  h += '<td class="num"></td><td class="num"></td></tr>';
   // row 36
   h += '<tr><td>期初未缴查补税额</td><td style="text-align:center">36</td>';
   h += '<td class="num">' + _fmt2(m.row36_prior_unpaid_check) + '</td>';
@@ -772,7 +772,7 @@ function renderSchedule1(data) {
   const s = (typeof data.form_sales === 'string') ? JSON.parse(data.form_sales) : (data.form_sales || {});
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash(n) { n = n || 1; var d = '<td class="num" style="color:#b0b7c3">——</td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
+  function tdDash(n) { n = n || 1; var d = '<td class="num"></td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
   // 大类列样式
   var catStyle = 'text-align:center;vertical-align:middle;font-weight:700;font-size:11px;background:#f0f4fa;writing-mode:vertical-lr;letter-spacing:2px;padding:4px 3px';
   var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb';
@@ -810,13 +810,13 @@ function renderSchedule1(data) {
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（一）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
-    + '<table class="vat-form-table" style="font-size:10px">'
+    + '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%">'
     + '<colgroup>'
-    + '<col><col><col><col><col><col><col><col><col><col>'
-    + '<col><col><col><col><col><col><col><col></colgroup>'
-    + '<thead>'
-    + '<tr style="background:#d9e2f3">'
-    + '<th colspan="4" rowspan="3">项目及栏次</th>'
+    + '<col style="width:3%"><col style="width:5%"><col style="width:11%"><col style="width:4%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '<col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">'
+    + '</colgroup>'
     + '<th colspan="2">开具增值税<br>专用发票</th>'
     + '<th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th>'
@@ -997,7 +997,7 @@ function renderSchedule2(data) {
   const inp = (typeof data.form_input === 'string') ? JSON.parse(data.form_input) : (data.form_input || {});
 
   function tdNum(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash() { return '<td class="num" style="color:#d1d5db">——</td>'; }
+  function tdDash() { return '<td class="num"></td>'; }
   function tdCnt(v) { return '<td class="num">' + ((v === 0 || v === null || v === undefined) ? '' : v) + '</td>'; }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（二）</div>'
@@ -1164,7 +1164,7 @@ function renderSchedule5(data) {
   const scf = (typeof data.form_surcharge === 'string') ? JSON.parse(data.form_surcharge) : (data.form_surcharge || {});
   function td(v) { return '<td class="num">' + _fmt(v) + '</td>'; }
   function td0(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash() { return '<td class="num">——</td>'; }
+  function tdDash() { return '<td class="num"></td>'; }
   function tdTxt(v) { return '<td>' + (v || '') + '</td>'; }
   function tdPct(v) { return '<td class="num">' + ((v||0)*100).toFixed(0) + '%</td>'; }
   var hdrBg = 'background:#d9e2f3';
@@ -1291,8 +1291,8 @@ function renderReductionForm(data) {
   const exemptItems = r.exempt_items || [];
   if (exemptItems.length === 0) {
     html += '<tr><td>合　计</td><td style="text-align:center">1</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
-      + '<tr><td>出口免税</td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
-      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
+      + '<tr><td>出口免税</td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num"></td><td class="num"></td><td class="num"></td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
+      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num"></td><td class="num"></td><td class="num"></td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
   } else {
     exemptItems.forEach((item, i) => {
       html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 1) + '</td>'
