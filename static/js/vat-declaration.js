@@ -1213,15 +1213,19 @@ function renderSchedule5(data) {
   for (var i = 0; i < 16; i++) html += '<col>';
   html += '</colgroup>';
 
-  // === 第1行：标题 ===
+  // === 第1行：标题（模板A1:C1空白+F1:P1标题） ===
   html += '<tr>';
-  html += '<td colspan="5" style="border:none;background:white"></td>';
+  html += '<td colspan="3" style="border:none;background:white"></td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td style="border:none;background:white"></td>';
   html += '<td colspan="11" style="text-align:center;font-size:13px;font-weight:700;padding:6px 0">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</td>';
   html += '</tr>';
 
-  // === 第2行：副标题 ===
+  // === 第2行：副标题（模板A1:C1+F2:H2空白+I2:P2副标题） ===
   html += '<tr>';
-  html += '<td colspan="5" style="border:none;background:white"></td>';
+  html += '<td colspan="3" style="border:none;background:white"></td>';
+  html += '<td style="border:none;background:white"></td>';
+  html += '<td style="border:none;background:white"></td>';
   html += '<td colspan="3" style="border:none;background:white"></td>';
   html += '<td colspan="8" style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:6px">（附加税费情况表）</td>';
   html += '</tr>';
@@ -1295,41 +1299,41 @@ function renderSchedule5(data) {
            null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true);
   html += '</tbody>';
 
-  // === 第12-14行：产教融合抵免政策 ===
+  // === 第12-14行：产教融合抵免政策（模板：A:E=政策名 F:G=□是□否 H:M=项目名 N=编号 O:P=空） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="5" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
   html += '<td colspan="2" rowspan="3">□是<br>□否</td>';
   html += '<td colspan="6">当期新增投资额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">5</td>';
+  html += '<td style="text-align:center">5</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">上期留抵可抵免金额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">6</td>';
+  html += '<td style="text-align:center">6</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">结转下期可抵免金额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">7</td>';
+  html += '<td style="text-align:center">7</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
 
-  // === 第15-17行：留抵退税额使用情况 ===
+  // === 第15-17行：留抵退税额使用情况（模板：A:G=政策名 H:M=项目名 N=编号 O:P=空） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
   html += '<td colspan="6">当期新增可用于扣除的留抵退税额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">8</td>';
+  html += '<td style="text-align:center">8</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">上期结存可用于扣除的留抵退税额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">9</td>';
+  html += '<td style="text-align:center">9</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6">结转下期可用于扣除的留抵退税额</td>';
-  html += '<td style="border:none;background:white"></td>';
-  html += '<td colspan="2" style="text-align:center">10</td>';
+  html += '<td style="text-align:center">10</td>';
+  html += '<td colspan="2" style="border:none;background:white"></td>';
   html += '</tr>';
 
   html += '</table></div>';
