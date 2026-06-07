@@ -553,84 +553,84 @@ function renderMainForm(data) {
   h += '<tbody>';
 
   // row 1
-  h += '<tr><td rowspan="10" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">销售额</td><td>（一）按适用税率计税销售额</td><td></td><td style="text-align:center">1</td>';
+  h += '<tr><td rowspan="10" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">销售额</td><td>（一）按适用税率计税销售额</td><td style="text-align:center">1</td>';
   h += '<td class="num">' + _fmt2(m.row1_sales) + '</td>';
   h += '<td class="num">' + _fmt2(m.row1_sales_ytd) + '</td>';
   h += _fmtDash(m.row1_sales_refund) + _fmtDash(m.row1_sales_refund_ytd) + '</tr>';
   // row 2
-  h += '<tr><td style="padding-left:18px">其中：应税货物销售额</td><td></td><td style="text-align:center">2</td>';
+  h += '<tr><td style="padding-left:18px">其中：应税货物销售额</td><td style="text-align:center">2</td>';
   h += '<td class="num">' + _fmt0_2(m.row2_other_invoice) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row2_other_invoice_ytd) + '</td>';
   h += _fmtDash(m.row2_other_invoice_refund) + _fmtDash(m.row2_other_invoice_refund_ytd) + '</tr>';
   // row 3
-  h += '<tr><td style="padding-left:18px">　　　应税劳务销售额</td><td></td><td style="text-align:center">3</td>';
+  h += '<tr><td style="padding-left:18px">　　　应税劳务销售额</td><td style="text-align:center">3</td>';
   h += '<td class="num">' + _fmt0_2(m.row3_no_invoice) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row3_no_invoice_ytd) + '</td>';
   h += _fmtDash(m.row3_no_invoice_refund) + _fmtDash(m.row3_no_invoice_refund_ytd) + '</tr>';
   // row 4
-  h += '<tr><td style="padding-left:18px">　　　纳税检查调整的销售额</td><td></td><td style="text-align:center">4</td>';
+  h += '<tr><td style="padding-left:18px">　　　纳税检查调整的销售额</td><td style="text-align:center">4</td>';
   h += '<td class="num">' + _fmt0_2(m.row4_tax_check) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row4_tax_check_ytd) + '</td>';
   h += _fmtDash(m.row4_tax_check_refund) + _fmtDash(m.row4_tax_check_refund_ytd) + '</tr>';
   // row 5
-  h += '<tr><td>（二）按简易办法计税销售额</td><td></td><td style="text-align:center">5</td>';
+  h += '<tr><td>（二）按简易办法计税销售额</td><td style="text-align:center">5</td>';
   h += '<td class="num">' + _fmt0_2(m.row5_simple_method) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row5_simple_method_ytd) + '</td>';
   h += _fmtDash(m.row5_simple_method_refund) + _fmtDash(m.row5_simple_method_refund_ytd) + '</tr>';
   // row 6
-  h += '<tr><td style="padding-left:18px">其中：纳税检查调整的销售额</td><td></td><td style="text-align:center">6</td>';
+  h += '<tr><td style="padding-left:18px">其中：纳税检查调整的销售额</td><td style="text-align:center">6</td>';
   h += '<td class="num">' + _fmt0_2(m.row6_exempt_sales) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row6_exempt_sales_ytd) + '</td>';
   h += _fmtDash(m.row6_exempt_sales_refund) + _fmtDash(m.row6_exempt_sales_refund_ytd) + '</tr>';
   // row 7
-  h += '<tr><td>（三）免、抵、退办法出口销售额</td><td></td><td style="text-align:center">7</td>';
+  h += '<tr><td>（三）免、抵、退办法出口销售额</td><td style="text-align:center">7</td>';
   h += '<td class="num">' + _fmt0_2(m.row7_export_exempt) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row7_export_exempt_ytd) + '</td>';
   h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
   // row 8
-  h += '<tr><td>（四）免税销售额</td><td></td><td style="text-align:center">8</td>';
+  h += '<tr><td>（四）免税销售额</td><td style="text-align:center">8</td>';
   h += '<td class="num">' + _fmt0_2(m.row8_tax_free) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row8_tax_free_ytd) + '</td>';
   h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
   // row 9
-  h += '<tr><td style="padding-left:18px">其中：免税货物销售额</td><td></td><td style="text-align:center">9</td>';
+  h += '<tr><td style="padding-left:18px">其中：免税货物销售额</td><td style="text-align:center">9</td>';
   h += '<td class="num">' + _fmt0_2(m.row9_exempt_goods) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row9_exempt_goods_ytd) + '</td>';
   h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
   // row 10
-  h += '<tr><td style="padding-left:18px">　　　免税劳务销售额</td><td></td><td style="text-align:center">10</td>';
+  h += '<tr><td style="padding-left:18px">　　　免税劳务销售额</td><td style="text-align:center">10</td>';
   h += '<td class="num">' + _fmt0_2(m.row10_exempt_service) + '</td>';
   h += '<td class="num">' + _fmt0_2(m.row10_exempt_service_ytd) + '</td>';
   h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td></tr>';
 
   // --- 二、税款计算 ---
   // row 11
-  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款计算</td><td>销项税额</td><td></td><td style="text-align:center">11</td>';
+  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款计算</td><td>销项税额</td><td style="text-align:center">11</td>';
   h += '<td class="num">' + _fmt2(m.row11_output_tax) + '</td>';
   h += '<td class="num">' + _fmt2(m.row11_output_tax_ytd) + '</td>';
   h += _fmtDash(m.row11_output_tax_refund) + _fmtDash(m.row11_output_tax_refund_ytd) + '</tr>';
   // row 12
-  h += '<tr><td>进项税额</td><td></td><td style="text-align:center">12</td>';
+  h += '<tr><td>进项税额</td><td style="text-align:center">12</td>';
   h += '<td class="num">' + _fmt2(m.row12_input_tax) + '</td>';
   h += '<td class="num">' + _fmt2(m.row12_input_tax_ytd) + '</td>';
   h += _fmtDash(m.row12_input_tax_refund) + _fmtDash(m.row12_input_tax_refund_ytd) + '</tr>';
   // row 13
-  h += '<tr><td>上期留抵税额</td><td></td><td style="text-align:center">13</td>';
+  h += '<tr><td>上期留抵税额</td><td style="text-align:center">13</td>';
   h += '<td class="num">' + _fmt2(m.row13_prior_credit) + '</td>';
   h += '<td class="num">' + _fmt2(m.row13_prior_credit_ytd) + '</td>';
   h += _fmtDash(m.row13_prior_credit_refund) + _fmtDash(m.row13_prior_credit_refund_ytd) + '</tr>';
   // row 14
-  h += '<tr><td>进项税额转出</td><td></td><td style="text-align:center">14</td>';
+  h += '<tr><td>进项税额转出</td><td style="text-align:center">14</td>';
   h += '<td class="num">' + _fmt2(m.row14_input_transfer_out) + '</td>';
   h += '<td class="num">' + _fmt2(m.row14_input_transfer_out_ytd) + '</td>';
   h += _fmtDash(m.row14_input_transfer_out_refund) + _fmtDash(m.row14_input_transfer_out_refund_ytd) + '</tr>';
   // row 15
-  h += '<tr><td>免、抵、退应退税额</td><td></td><td style="text-align:center">15</td>';
+  h += '<tr><td>免、抵、退应退税额</td><td style="text-align:center">15</td>';
   h += '<td class="num">' + _fmt2(m.row15_exempt_refund) + '</td>';
   h += '<td class="num">' + _fmt2(m.row15_exempt_refund_ytd) + '</td>';
   h += _fmtDash(m.row15_exempt_refund_refund) + _fmtDash(m.row15_exempt_refund_refund_ytd) + '</tr>';
   // row 16
-  h += '<tr><td>按适用税率计算的纳税检查应补缴税额</td><td></td><td style="text-align:center">16</td>';
+  h += '<tr><td>按适用税率计算的纳税检查应补缴税额</td><td style="text-align:center">16</td>';
   h += '<td class="num">' + _fmt2(m.row16_actual_deduct_by_item) + '</td>';
   h += '<td class="num">' + _fmt2(m.row16_actual_deduct_by_item_ytd) + '</td>';
   h += _fmtDash(m.row16_actual_deduct_by_item_refund) + _fmtDash(m.row16_actual_deduct_by_item_refund_ytd) + '</tr>';
@@ -655,17 +655,17 @@ function renderMainForm(data) {
   h += '<td class="num">' + _fmt2(m.row20_end_credit_ytd) + '</td>';
   h += _fmtDash(m.row20_end_credit_refund) + _fmtDash(m.row20_end_credit_refund_ytd) + '</tr>';
   // row 21
-  h += '<tr><td>简易计税办法计算的应纳税额</td><td></td><td style="text-align:center">21</td>';
+  h += '<tr><td>简易计税办法计算的应纳税额</td><td style="text-align:center">21</td>';
   h += '<td class="num">' + _fmt2(m.row21_simple_tax) + '</td>';
   h += '<td class="num">' + _fmt2(m.row21_simple_tax_ytd) + '</td>';
   h += _fmtDash(m.row21_simple_tax_refund) + _fmtDash(m.row21_simple_tax_refund_ytd) + '</tr>';
   // row 22
-  h += '<tr><td>按简易计税办法计算的纳税检查应补缴税额</td><td></td><td style="text-align:center">22</td>';
+  h += '<tr><td>按简易计税办法计算的纳税检查应补缴税额</td><td style="text-align:center">22</td>';
   h += '<td class="num">' + _fmt2(m.row22_simple_tax_reduction) + '</td>';
   h += '<td class="num">' + _fmt2(m.row22_simple_tax_reduction_ytd) + '</td>';
   h += _fmtDash(m.row22_simple_tax_reduction_refund) + _fmtDash(m.row22_simple_tax_reduction_refund_ytd) + '</tr>';
   // row 23
-  h += '<tr><td>应纳税额减征额</td><td></td><td style="text-align:center">23</td>';
+  h += '<tr><td>应纳税额减征额</td><td style="text-align:center">23</td>';
   h += '<td class="num">' + _fmt2(m.row23_reduction) + '</td>';
   h += '<td class="num">' + _fmt2(m.row23_reduction_ytd) + '</td>';
   h += _fmtDash(m.row23_reduction_refund) + _fmtDash(m.row23_reduction_refund_ytd) + '</tr>';
@@ -677,12 +677,12 @@ function renderMainForm(data) {
 
   // --- 三、税款缴纳 ---
   // row 25
-  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款缴纳</td><td>期初未缴税额（多缴为负数）</td><td></td><td style="text-align:center">25</td>';
+  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款缴纳</td><td>期初未缴税额（多缴为负数）</td><td style="text-align:center">25</td>';
   h += '<td class="num">' + _fmt2(m.row25_prior_unpaid) + '</td>';
   h += '<td class="num">' + _fmt2(m.row25_prior_unpaid_ytd) + '</td>';
   h += _fmtDash(m.row25_prior_unpaid_refund) + _fmtDash(m.row25_prior_unpaid_refund_ytd) + '</tr>';
   // row 26
-  h += '<tr><td>实收出口开具专用缴款书退税额</td><td></td><td style="text-align:center">26</td>';
+  h += '<tr><td>实收出口开具专用缴款书退税额</td><td style="text-align:center">26</td>';
   h += '<td class="num">' + _fmt2(m.row26_real_paid_during) + '</td>';
   h += '<td class="num">' + _fmt2(m.row26_real_paid_during_ytd) + '</td>';
   h += _fmtDash(m.row26_real_paid_during_refund) + _fmtDash(m.row26_real_paid_during_refund_ytd) + '</tr>';
@@ -692,22 +692,22 @@ function renderMainForm(data) {
   h += '<td class="num">' + _fmt2(m.row27_installment_prepaid_ytd) + '</td>';
   h += _fmtDash(m.row27_installment_prepaid_refund) + _fmtDash(m.row27_installment_prepaid_refund_ytd) + '</tr>';
   // row 28
-  h += '<tr><td style="padding-left:18px">①分次预缴税额</td><td></td><td style="text-align:center">28</td>';
+  h += '<tr><td style="padding-left:18px">①分次预缴税额</td><td style="text-align:center">28</td>';
   h += '<td class="num">' + _fmt2(m.row28_export_tax_refund) + '</td>';
   h += '<td class="num">' + _fmt2(m.row28_export_tax_refund_ytd) + '</td>';
   h += _fmtDash(m.row28_export_tax_refund_refund) + _fmtDash(m.row28_export_tax_refund_refund_ytd) + '</tr>';
   // row 29
-  h += '<tr><td style="padding-left:18px">②出口开具专用缴款书预缴税额</td><td></td><td style="text-align:center">29</td>';
+  h += '<tr><td style="padding-left:18px">②出口开具专用缴款书预缴税额</td><td style="text-align:center">29</td>';
   h += '<td class="num">' + _fmt2(m.row29_remote_prepaid) + '</td>';
   h += '<td class="num">' + _fmt2(m.row29_remote_prepaid_ytd) + '</td>';
   h += _fmtDash(m.row29_remote_prepaid_refund) + _fmtDash(m.row29_remote_prepaid_refund_ytd) + '</tr>';
   // row 30
-  h += '<tr><td style="padding-left:18px">③本期缴纳上期应纳税额</td><td></td><td style="text-align:center">30</td>';
+  h += '<tr><td style="padding-left:18px">③本期缴纳上期应纳税额</td><td style="text-align:center">30</td>';
   h += '<td class="num">' + _fmt2(m.row30_already_paid_total) + '</td>';
   h += '<td class="num">' + _fmt2(m.row30_already_paid_total_ytd) + '</td>';
   h += _fmtDash(m.row30_already_paid_total_refund) + _fmtDash(m.row30_already_paid_total_refund_ytd) + '</tr>';
   // row 31
-  h += '<tr><td style="padding-left:18px">④本期缴纳欠缴税额</td><td></td><td style="text-align:center">31</td>';
+  h += '<tr><td style="padding-left:18px">④本期缴纳欠缴税额</td><td style="text-align:center">31</td>';
   h += '<td class="num">' + _fmt2(m.row31_should_pay_refund) + '</td>';
   h += '<td class="num">' + _fmt2(m.row31_should_pay_refund_ytd) + '</td>';
   h += _fmtDash(m.row31_should_pay_refund_refund) + _fmtDash(m.row31_should_pay_refund_refund_ytd) + '</tr>';
@@ -727,16 +727,16 @@ function renderMainForm(data) {
   h += '<td class="num" style="font-weight:700;color:#d97706">' + _fmt2(m.row34_should_check_ytd) + '</td>';
   h += _fmtDash(m.row34_should_check_refund) + _fmtDash(m.row34_should_check_refund_ytd) + '</tr>';
   // row 35
-  h += '<tr><td>即征即退实际退税额</td><td></td><td style="text-align:center">35</td>';
+  h += '<tr><td>即征即退实际退税额</td><td style="text-align:center">35</td>';
   h += '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td>';
   h += '<td class="num">——</td><td class="num">——</td></tr>';
   // row 36
-  h += '<tr><td>期初未缴查补税额</td><td></td><td style="text-align:center">36</td>';
+  h += '<tr><td>期初未缴查补税额</td><td style="text-align:center">36</td>';
   h += '<td class="num">' + _fmt2(m.row36_prior_unpaid_check) + '</td>';
   h += '<td class="num">' + _fmt2(m.row36_prior_unpaid_check_ytd) + '</td>';
   h += _fmtDash(m.row36_prior_unpaid_check_refund) + _fmtDash(m.row36_prior_unpaid_check_refund_ytd) + '</tr>';
   // row 37
-  h += '<tr><td>本期入库查补税额</td><td></td><td style="text-align:center">37</td>';
+  h += '<tr><td>本期入库查补税额</td><td style="text-align:center">37</td>';
   h += '<td class="num">' + _fmt2(m.row37_check_paid) + '</td>';
   h += '<td class="num">' + _fmt2(m.row37_check_paid_ytd) + '</td>';
   h += _fmtDash(m.row37_check_paid_refund) + _fmtDash(m.row37_check_paid_refund_ytd) + '</tr>';
@@ -748,17 +748,17 @@ function renderMainForm(data) {
 
   // --- 四、附加税费 ---
   // row 39
-  h += '<tr><td rowspan="3" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">附加税费</td><td>城市维护建设税本期应补（退）税额</td><td></td><td style="text-align:center">39</td>';
+  h += '<tr><td rowspan="3" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">附加税费</td><td>城市维护建设税本期应补（退）税额</td><td style="text-align:center">39</td>';
   h += '<td class="num">' + _fmt2(m.row39_city_maintenance_tax) + '</td>';
   h += '<td class="num">' + _fmt2(m.row39_city_maintenance_tax_ytd) + '</td>';
   h += _fmtDash(m.row39_city_maintenance_tax_refund) + _fmtDash(m.row39_city_maintenance_tax_refund_ytd) + '</tr>';
   // row 40
-  h += '<tr><td>教育费附加本期应补（退）费额</td><td></td><td style="text-align:center">40</td>';
+  h += '<tr><td>教育费附加本期应补（退）费额</td><td style="text-align:center">40</td>';
   h += '<td class="num">' + _fmt2(m.row40_education_surcharge) + '</td>';
   h += '<td class="num">' + _fmt2(m.row40_education_surcharge_ytd) + '</td>';
   h += _fmtDash(m.row40_education_surcharge_refund) + _fmtDash(m.row40_education_surcharge_refund_ytd) + '</tr>';
   // row 41
-  h += '<tr><td>地方教育附加本期应补（退）费额</td><td></td><td style="text-align:center">41</td>';
+  h += '<tr><td>地方教育附加本期应补（退）费额</td><td style="text-align:center">41</td>';
   h += '<td class="num">' + _fmt2(m.row41_local_education_surcharge) + '</td>';
   h += '<td class="num">' + _fmt2(m.row41_local_education_surcharge_ytd) + '</td>';
   h += _fmtDash(m.row41_local_education_surcharge_refund) + _fmtDash(m.row41_local_education_surcharge_refund_ytd) + '</tr>';
@@ -813,10 +813,10 @@ function renderSchedule1(data) {
     + '<table class="vat-form-table" style="font-size:10px">'
     + '<colgroup>'
     + '<col><col><col><col><col><col><col><col><col><col>'
-    + '<col><col><col><col><col><col><col><col><col></colgroup>'
+    + '<col><col><col><col><col><col><col><col></colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3">'
-    + '<th colspan="5" rowspan="3">项目及栏次</th>'
+    + '<th colspan="4" rowspan="3">项目及栏次</th>'
     + '<th colspan="2">开具增值税<br>专用发票</th>'
     + '<th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th>'
@@ -846,13 +846,13 @@ function renderSchedule1(data) {
     + '<tr>'
     + '<td rowspan="7" style="'+catStyle+'">一般计税<br>方法计税</td>'
     + '<td rowspan="5" style="'+subStyle+'">全部征税<br>项目</td>'
-    + '<td>13%税率的货物及加工修理修配劳务</td><td></td><td style="text-align:center">1</td>'
+    + '<td>13%税率的货物及加工修理修配劳务</td><td style="text-align:center">1</td>'
     + Rg(s.row1_13_special_sales,s.row1_13_special_tax,s.row1_13_other_sales,s.row1_13_other_tax,
          s.row1_13_no_invoice_sales,s.row1_13_no_invoice_tax,s.row1_13_check_sales,s.row1_13_check_tax,
          s.row1_13_total_sales,s.row1_13_total_tax)
     + '</tr>'
     // Row 2: 13%服务
-    + '<tr><td>13%税率的服务、不动产和无形资产</td><td></td><td style="text-align:center">2</td>'
+    + '<tr><td>13%税率的服务、不动产和无形资产</td><td style="text-align:center">2</td>'
     + Rs(s.row2_13_service_special_sales,s.row2_13_service_special_tax,
          s.row2_13_service_other_sales,s.row2_13_service_other_tax,
          s.row2_13_service_no_invoice_sales,s.row2_13_service_no_invoice_tax,
@@ -861,13 +861,13 @@ function renderSchedule1(data) {
          s.row2_13_service_deduct||0,s.row2_13_service_after_sales||0,s.row2_13_service_after_tax||0)
     + '</tr>'
     // Row 3: 9%货物
-    + '<tr><td>9%税率的货物及加工修理修配劳务</td><td></td><td style="text-align:center">3</td>'
+    + '<tr><td>9%税率的货物及加工修理修配劳务</td><td style="text-align:center">3</td>'
     + Rg(s.row3_9_special_sales,s.row3_9_special_tax,s.row3_9_other_sales,s.row3_9_other_tax,
          s.row3_9_no_invoice_sales,s.row3_9_no_invoice_tax,s.row3_9_check_sales,s.row3_9_check_tax,
          s.row3_9_total_sales,s.row3_9_total_tax)
     + '</tr>'
     // Row 4: 9%服务
-    + '<tr><td>9%税率的服务、不动产和无形资产</td><td></td><td style="text-align:center">4</td>'
+    + '<tr><td>9%税率的服务、不动产和无形资产</td><td style="text-align:center">4</td>'
     + Rs(s.row4_9_service_sales,s.row4_9_service_tax,
          s.row4_9_service_other_sales,s.row4_9_service_other_tax,
          s.row4_9_service_no_invoice_sales,s.row4_9_service_no_invoice_tax,
@@ -876,7 +876,7 @@ function renderSchedule1(data) {
          s.row4_9_service_deduct||0,s.row4_9_service_after_sales||0,s.row4_9_service_after_tax||0)
     + '</tr>'
     // Row 5: 6%税率
-    + '<tr><td>6%税率</td><td></td><td style="text-align:center">5</td>'
+    + '<tr><td>6%税率</td><td style="text-align:center">5</td>'
     + Rs(s.row5_6_special_sales,s.row5_6_special_tax,
          s.row5_6_other_sales,s.row5_6_other_tax,
          s.row5_6_no_invoice_sales,s.row5_6_no_invoice_tax,
@@ -887,11 +887,11 @@ function renderSchedule1(data) {
     // Row 6: 即征即退货物
     + '<tr>'
     + '<td rowspan="2" style="'+subStyle+'">其中：即征<br>即退项目</td>'
-    + '<td>即征即退货物及加工修理修配劳务</td><td></td><td style="text-align:center">6</td>'
+    + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">6</td>'
     + Rjg(s.row6_refund_goods_total_sales||0,s.row6_refund_goods_total_tax||0)
     + '</tr>'
     // Row 7: 即征即退服务
-    + '<tr><td>即征即退服务、不动产和无形资产</td><td></td><td style="text-align:center">7</td>'
+    + '<tr><td>即征即退服务、不动产和无形资产</td><td style="text-align:center">7</td>'
     + Rj(s.row7_refund_service_total_sales||0,s.row7_refund_service_total_tax||0,
          s.row7_refund_service_deduct||0,s.row7_refund_service_after_sales||0,s.row7_refund_service_after_tax||0)
     + '</tr>'
@@ -901,21 +901,21 @@ function renderSchedule1(data) {
     + '<tr>'
     + '<td rowspan="11" style="'+catStyle+'">简易计税<br>方法计税</td>'
     + '<td rowspan="9" style="'+subStyle+'">全部征税<br>项目</td>'
-    + '<td>6%征收率</td><td></td><td style="text-align:center">8</td>'
+    + '<td>6%征收率</td><td style="text-align:center">8</td>'
     + Rg(s.row8_6_collect_sales,s.row8_6_collect_tax,s.row8_6_collect_other_sales,s.row8_6_collect_other_tax,
          s.row8_6_collect_no_invoice_sales,s.row8_6_collect_no_invoice_tax,
          s.row8_6_collect_check_sales,s.row8_6_collect_check_tax,
          s.row8_6_collect_total_sales,s.row8_6_collect_total_tax)
     + '</tr>'
     // Row 9: 5%货物
-    + '<tr><td>5%征收率的货物及加工修理修配劳务</td><td></td><td style="text-align:center">9a</td>'
+    + '<tr><td>5%征收率的货物及加工修理修配劳务</td><td style="text-align:center">9a</td>'
     + Rg(s.row9a_5_goods_sales,s.row9a_5_goods_tax,s.row9a_5_goods_other_sales,s.row9a_5_goods_other_tax,
          s.row9a_5_goods_no_invoice_sales,s.row9a_5_goods_no_invoice_tax,
          s.row9a_5_goods_check_sales,s.row9a_5_goods_check_tax,
          s.row9a_5_goods_total_sales,s.row9a_5_goods_total_tax)
     + '</tr>'
     // Row 10: 5%服务
-    + '<tr><td>5%征收率的服务、不动产和无形资产</td><td></td><td style="text-align:center">9b</td>'
+    + '<tr><td>5%征收率的服务、不动产和无形资产</td><td style="text-align:center">9b</td>'
     + Rs(s.row9b_5_service_sales,s.row9b_5_service_tax,
          s.row9b_5_service_other_sales,s.row9b_5_service_other_tax,
          s.row9b_5_service_no_invoice_sales,s.row9b_5_service_no_invoice_tax,
@@ -924,21 +924,21 @@ function renderSchedule1(data) {
          s.row9b_5_service_deduct||0,s.row9b_5_service_after_sales||0,s.row9b_5_service_after_tax||0)
     + '</tr>'
     // Row 11: 4%征收率
-    + '<tr><td>4%征收率</td><td></td><td style="text-align:center">10</td>'
+    + '<tr><td>4%征收率</td><td style="text-align:center">10</td>'
     + Rg(s.row10_4_collect_sales,s.row10_4_collect_tax,s.row10_4_collect_other_sales,s.row10_4_collect_other_tax,
          s.row10_4_collect_no_invoice_sales,s.row10_4_collect_no_invoice_tax,
          s.row10_4_collect_check_sales,s.row10_4_collect_check_tax,
          s.row10_4_collect_total_sales,s.row10_4_collect_total_tax)
     + '</tr>'
     // Row 12: 3%货物
-    + '<tr><td>3%征收率的货物及加工修理修配劳务</td><td></td><td style="text-align:center">11</td>'
+    + '<tr><td>3%征收率的货物及加工修理修配劳务</td><td style="text-align:center">11</td>'
     + Rg(s.row11_3_goods_sales,s.row11_3_goods_tax,s.row11_3_goods_other_sales,s.row11_3_goods_other_tax,
          s.row11_3_goods_no_invoice_sales,s.row11_3_goods_no_invoice_tax,
          s.row11_3_goods_check_sales,s.row11_3_goods_check_tax,
          s.row11_3_goods_total_sales,s.row11_3_goods_total_tax)
     + '</tr>'
     // Row 13: 3%服务
-    + '<tr><td>3%征收率的服务、不动产和无形资产</td><td></td><td style="text-align:center">12</td>'
+    + '<tr><td>3%征收率的服务、不动产和无形资产</td><td style="text-align:center">12</td>'
     + Rs(s.row12_3_service_sales,s.row12_3_service_tax,
          s.row12_3_service_other_sales,s.row12_3_service_other_tax,
          s.row12_3_service_no_invoice_sales,s.row12_3_service_no_invoice_tax,
@@ -947,19 +947,19 @@ function renderSchedule1(data) {
          s.row12_3_service_deduct||0,s.row12_3_service_after_sales||0,s.row12_3_service_after_tax||0)
     + '</tr>'
     // Row 14-16: 预征率 13a/13b/13c
-    + '<tr><td>预征率&nbsp;%</td><td></td><td style="text-align:center">13a</td>'
+    + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13a</td>'
     + Rg(s.row13a_rate_sales,s.row13a_rate_tax,s.row13a_rate_other_sales,s.row13a_rate_other_tax,
          s.row13a_rate_no_invoice_sales,s.row13a_rate_no_invoice_tax,
          s.row13a_rate_check_sales,s.row13a_rate_check_tax,
          s.row13a_rate_total_sales,s.row13a_rate_total_tax)
     + '</tr>'
-    + '<tr><td>预征率&nbsp;%</td><td></td><td style="text-align:center">13b</td>'
+    + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13b</td>'
     + Rg(s.row13b_rate_sales,s.row13b_rate_tax,s.row13b_rate_other_sales,s.row13b_rate_other_tax,
          s.row13b_rate_no_invoice_sales,s.row13b_rate_no_invoice_tax,
          s.row13b_rate_check_sales,s.row13b_rate_check_tax,
          s.row13b_rate_total_sales,s.row13b_rate_total_tax)
     + '</tr>'
-    + '<tr><td>预征率&nbsp;%</td><td></td><td style="text-align:center">13c</td>'
+    + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13c</td>'
     + Rg(s.row13c_rate_sales,s.row13c_rate_tax,s.row13c_rate_other_sales,s.row13c_rate_other_tax,
          s.row13c_rate_no_invoice_sales,s.row13c_rate_no_invoice_tax,
          s.row13c_rate_check_sales,s.row13c_rate_check_tax,
@@ -968,11 +968,11 @@ function renderSchedule1(data) {
     // Row 17: 即征即退货物
     + '<tr>'
     + '<td rowspan="2" style="'+subStyle+'">其中：即征<br>即退项目</td>'
-    + '<td>即征即退货物及加工修理修配劳务</td><td></td><td style="text-align:center">14</td>'
+    + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">14</td>'
     + Rjg(s.row14_refund_goods_total_sales||0,s.row14_refund_goods_total_tax||0)
     + '</tr>'
     // Row 18: 即征即退服务
-    + '<tr><td>即征即退服务、不动产和无形资产</td><td></td><td style="text-align:center">15</td>'
+    + '<tr><td>即征即退服务、不动产和无形资产</td><td style="text-align:center">15</td>'
     + Rj(s.row15_refund_service_total_sales||0,s.row15_refund_service_total_tax||0,
          s.row15_refund_service_deduct||0,s.row15_refund_service_after_sales||0,s.row15_refund_service_after_tax||0)
     + '</tr>'
@@ -980,14 +980,14 @@ function renderSchedule1(data) {
     // ============== 三、免抵退税 (2 rows) ==============
     + '<tr>'
     + '<td rowspan="2" style="'+catStyle+'">免抵退税</td>'
-    + '<td>货物及加工修理修配劳务</td><td></td><td></td><td style="text-align:center">16</td>' + RD() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产</td><td></td><td></td><td style="text-align:center">17</td>' + RD() + '</tr>'
+    + '<td>货物及加工修理修配劳务</td><td style="text-align:center">16</td>' + RD() + '</tr>'
+    + '<tr><td>服务、不动产和无形资产</td><td style="text-align:center">17</td>' + RD() + '</tr>'
 
     // ============== 四、免税 (2 rows) ==============
     + '<tr>'
     + '<td rowspan="2" style="'+catStyle+'">免税</td>'
-    + '<td>货物及加工修理修配劳务</td><td></td><td></td><td style="text-align:center">18</td>' + RD() + '</tr>'
-    + '<tr><td>服务、不动产和无形资产</td><td></td><td></td><td style="text-align:center">19</td>' + RD() + '</tr>'
+    + '<td>货物及加工修理修配劳务</td><td style="text-align:center">18</td>' + RD() + '</tr>'
+    + '<tr><td>服务、不动产和无形资产</td><td style="text-align:center">19</td>' + RD() + '</tr>'
 
     + '</tbody></table></div>';
 }
@@ -1007,19 +1007,19 @@ function renderSchedule2(data) {
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>（一）认证相符的增值税专用发票</td><td></td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td></td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　前期认证相符且本期申报抵扣</td><td></td><td style="text-align:center">3</td>' + tdCnt(inp.row3_certified_prior_count) + tdNum(inp.row3_certified_prior_amount) + tdNum(inp.row3_certified_prior_tax) + '</tr>'
-    + '<tr><td>（二）其他扣税凭证</td><td></td><td style="text-align:center">4=5+6+7+8a+8b</td>' + tdCnt(inp.row4_other_count) + tdNum(inp.row4_other_amount) + tdNum(inp.row4_other_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td></td><td style="text-align:center">5</td>' + tdCnt(inp.row5_customs_count) + tdNum(inp.row5_customs_amount) + tdNum(inp.row5_customs_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td></td><td style="text-align:center">6</td>' + tdCnt(inp.row6_agri_count) + tdNum(inp.row6_agri_amount) + tdNum(inp.row6_agri_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td></td><td style="text-align:center">7</td>' + tdCnt(inp.row7_wht_count) + tdDash() + tdNum(inp.row7_wht_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　加计扣除农产品进项税额</td><td></td><td style="text-align:center">8a</td>' + tdDash() + tdDash() + tdNum(inp.row8a_agri_extra) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他</td><td></td><td style="text-align:center">8b</td>' + tdCnt(inp.row8b_other_count) + tdNum(inp.row8b_other_amount) + tdNum(inp.row8b_other_tax) + '</tr>'
-    + '<tr><td>（三）本期用于购建不动产的扣税凭证</td><td></td><td style="text-align:center">9</td>' + tdCnt(inp.row9_real_estate_count) + tdNum(inp.row9_real_estate_amount) + tdNum(inp.row9_real_estate_tax) + '</tr>'
-    + '<tr><td>（四）本期用于抵扣的旅客运输服务扣税凭证</td><td></td><td style="text-align:center">10</td>' + tdCnt(inp.row10_travel_count) + tdNum(inp.row10_travel_amount) + tdNum(inp.row10_travel_tax) + '</tr>'
-    + '<tr><td>（五）外贸企业进项税额抵扣证明</td><td></td><td style="text-align:center">11</td>' + tdDash() + tdDash() + tdNum(inp.row11_foreign_trade_tax) + '</tr>'
-    + '<tr style="background:#f0fdf4;font-weight:700"><td>当期申报抵扣进项税额合计</td><td></td><td style="text-align:center">12=1+4+11</td>'
+    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　前期认证相符且本期申报抵扣</td><td style="text-align:center">3</td>' + tdCnt(inp.row3_certified_prior_count) + tdNum(inp.row3_certified_prior_amount) + tdNum(inp.row3_certified_prior_tax) + '</tr>'
+    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">4=5+6+7+8a+8b</td>' + tdCnt(inp.row4_other_count) + tdNum(inp.row4_other_amount) + tdNum(inp.row4_other_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">5</td>' + tdCnt(inp.row5_customs_count) + tdNum(inp.row5_customs_amount) + tdNum(inp.row5_customs_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">6</td>' + tdCnt(inp.row6_agri_count) + tdNum(inp.row6_agri_amount) + tdNum(inp.row6_agri_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">7</td>' + tdCnt(inp.row7_wht_count) + tdDash() + tdNum(inp.row7_wht_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　加计扣除农产品进项税额</td><td style="text-align:center">8a</td>' + tdDash() + tdDash() + tdNum(inp.row8a_agri_extra) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">8b</td>' + tdCnt(inp.row8b_other_count) + tdNum(inp.row8b_other_amount) + tdNum(inp.row8b_other_tax) + '</tr>'
+    + '<tr><td>（三）本期用于购建不动产的扣税凭证</td><td style="text-align:center">9</td>' + tdCnt(inp.row9_real_estate_count) + tdNum(inp.row9_real_estate_amount) + tdNum(inp.row9_real_estate_tax) + '</tr>'
+    + '<tr><td>（四）本期用于抵扣的旅客运输服务扣税凭证</td><td style="text-align:center">10</td>' + tdCnt(inp.row10_travel_count) + tdNum(inp.row10_travel_amount) + tdNum(inp.row10_travel_tax) + '</tr>'
+    + '<tr><td>（五）外贸企业进项税额抵扣证明</td><td style="text-align:center">11</td>' + tdDash() + tdDash() + tdNum(inp.row11_foreign_trade_tax) + '</tr>'
+    + '<tr style="background:#f0fdf4;font-weight:700"><td>当期申报抵扣进项税额合计</td><td style="text-align:center">12=1+4+11</td>'
     + '<td class="num">' + ((inp.row1_certified_count || 0) + (inp.row4_other_count || 0) || '') + '</td>'
     + '<td class="num">' + _fmt((inp.row1_certified_amount || 0) + (inp.row4_other_amount || 0)) + '</td>'
     + '<td class="num">' + _fmt((inp.row1_certified_tax || 0) + (inp.row4_other_tax || 0) + (inp.row11_foreign_trade_tax || 0)) + '</td></tr>'
@@ -1029,43 +1029,43 @@ function renderSchedule2(data) {
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:44%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>本期进项税额转出额</td><td></td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
-    + '<tr><td style="padding-left:16px">其中：免税项目用</td><td></td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　集体福利、个人消费</td><td></td><td style="text-align:center">15</td>' + tdNum(inp.row15_collective_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　非正常损失</td><td></td><td style="text-align:center">16</td>' + tdNum(inp.row16_abnormal_loss) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　简易计税方法征税项目用</td><td></td><td style="text-align:center">17</td>' + tdNum(inp.row17_simple_tax_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　免抵退税办法不得抵扣的进项税额</td><td></td><td style="text-align:center">18</td>' + tdNum(inp.row18_exempt_credit_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　纳税检查调减进项税额</td><td></td><td style="text-align:center">19</td>' + tdNum(inp.row19_tax_check_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　红字专用发票信息表注明的进项税额</td><td></td><td style="text-align:center">20</td>' + tdNum(inp.row20_red_letter_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　上期留抵税额抵减欠税</td><td></td><td style="text-align:center">21</td>' + tdNum(inp.row21_prior_credit_arrears) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　上期留抵税额退税</td><td></td><td style="text-align:center">22</td>' + tdNum(inp.row22_prior_credit_refund) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　异常凭证转出进项税额</td><td></td><td style="text-align:center">23a</td>' + tdNum(inp.row23a_abnormal_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他应作进项税额转出的情形</td><td></td><td style="text-align:center">23b</td>' + tdNum(inp.row23b_other_transfer) + '</tr>'
+    + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
+    + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　集体福利、个人消费</td><td style="text-align:center">15</td>' + tdNum(inp.row15_collective_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　非正常损失</td><td style="text-align:center">16</td>' + tdNum(inp.row16_abnormal_loss) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　简易计税方法征税项目用</td><td style="text-align:center">17</td>' + tdNum(inp.row17_simple_tax_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　免抵退税办法不得抵扣的进项税额</td><td style="text-align:center">18</td>' + tdNum(inp.row18_exempt_credit_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　纳税检查调减进项税额</td><td style="text-align:center">19</td>' + tdNum(inp.row19_tax_check_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　红字专用发票信息表注明的进项税额</td><td style="text-align:center">20</td>' + tdNum(inp.row20_red_letter_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　上期留抵税额抵减欠税</td><td style="text-align:center">21</td>' + tdNum(inp.row21_prior_credit_arrears) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　上期留抵税额退税</td><td style="text-align:center">22</td>' + tdNum(inp.row22_prior_credit_refund) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　异常凭证转出进项税额</td><td style="text-align:center">23a</td>' + tdNum(inp.row23a_abnormal_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　其他应作进项税额转出的情形</td><td style="text-align:center">23b</td>' + tdNum(inp.row23b_other_transfer) + '</tr>'
     + '</tbody></table>'
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>（一）认证相符的增值税专用发票</td><td></td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td></td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">本期认证相符且本期未申报抵扣</td><td></td><td style="text-align:center">26</td>' + tdCnt(inp.row26_pending_curr_count) + tdNum(inp.row26_pending_curr_amount) + tdNum(inp.row26_pending_curr_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">期末已认证相符但未申报抵扣</td><td></td><td style="text-align:center">27</td>' + tdCnt(inp.row27_pending_end_count) + tdNum(inp.row27_pending_end_amount) + tdNum(inp.row27_pending_end_tax) + '</tr>'
-    + '<tr><td style="padding-left:24px">其中：按照税法规定不允许抵扣</td><td></td><td style="text-align:center">28</td>' + tdCnt(inp.row28_not_allowed_count) + tdNum(inp.row28_not_allowed_amount) + tdNum(inp.row28_not_allowed_tax) + '</tr>'
-    + '<tr><td>（二）其他扣税凭证</td><td></td><td style="text-align:center">29=30至33之和</td>' + tdCnt(inp.row29_other_pending_count) + tdNum(inp.row29_other_pending_amount) + tdNum(inp.row29_other_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td></td><td style="text-align:center">30</td>' + tdCnt(inp.row30_customs_pending_count) + tdNum(inp.row30_customs_pending_amount) + tdNum(inp.row30_customs_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td></td><td style="text-align:center">31</td>' + tdCnt(inp.row31_agri_pending_count) + tdNum(inp.row31_agri_pending_amount) + tdNum(inp.row31_agri_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td></td><td style="text-align:center">32</td>' + tdCnt(inp.row32_wht_pending_count) + tdDash() + tdNum(inp.row32_wht_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他</td><td></td><td style="text-align:center">33</td>' + tdCnt(inp.row33_other_pending_count) + tdNum(inp.row33_other_pending_amount) + tdNum(inp.row33_other_pending_tax) + '</tr>'
-    + '<tr><td></td><td></td><td style="text-align:center">34</td><td class="num"></td><td class="num"></td><td class="num"></td></tr>'
+    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
+    + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">本期认证相符且本期未申报抵扣</td><td style="text-align:center">26</td>' + tdCnt(inp.row26_pending_curr_count) + tdNum(inp.row26_pending_curr_amount) + tdNum(inp.row26_pending_curr_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">期末已认证相符但未申报抵扣</td><td style="text-align:center">27</td>' + tdCnt(inp.row27_pending_end_count) + tdNum(inp.row27_pending_end_amount) + tdNum(inp.row27_pending_end_tax) + '</tr>'
+    + '<tr><td style="padding-left:24px">其中：按照税法规定不允许抵扣</td><td style="text-align:center">28</td>' + tdCnt(inp.row28_not_allowed_count) + tdNum(inp.row28_not_allowed_amount) + tdNum(inp.row28_not_allowed_tax) + '</tr>'
+    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">29=30至33之和</td>' + tdCnt(inp.row29_other_pending_count) + tdNum(inp.row29_other_pending_amount) + tdNum(inp.row29_other_pending_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">30</td>' + tdCnt(inp.row30_customs_pending_count) + tdNum(inp.row30_customs_pending_amount) + tdNum(inp.row30_customs_pending_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">31</td>' + tdCnt(inp.row31_agri_pending_count) + tdNum(inp.row31_agri_pending_amount) + tdNum(inp.row31_agri_pending_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">32</td>' + tdCnt(inp.row32_wht_pending_count) + tdDash() + tdNum(inp.row32_wht_pending_tax) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">33</td>' + tdCnt(inp.row33_other_pending_count) + tdNum(inp.row33_other_pending_amount) + tdNum(inp.row33_other_pending_tax) + '</tr>'
+    + '<tr><td></td><td style="text-align:center">34</td><td class="num"></td><td class="num"></td><td class="num"></td></tr>'
     + '</tbody></table>'
 
     // 四、其他
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
     + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:12%"><col style="width:8%"><col style="width:18%"><col style="width:18%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>本期认证相符的增值税专用发票</td><td></td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
-    + '<tr><td>代扣代缴税额</td><td></td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
+    + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
+    + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
     + '</tbody></table>';
 }
 
@@ -1113,7 +1113,7 @@ function renderSchedule3(data) {
 
   for (let i = 0; i < projects.length; i++) {
     const r = rows[i];
-    html += '<tr><td>' + projects[i] + '</td><td></td><td style="text-align:center">' + (i+1) + '</td>'
+    html += '<tr><td>' + projects[i] + '</td><td style="text-align:center">' + (i+1) + '</td>'
       + td(r.price_tax) + td(r.begin) + td(r.occur) + td(r.should) + td(r.actual) + td(r.end)
       + '</tr>';
   }
@@ -1197,7 +1197,7 @@ function renderSchedule5(data) {
     + '<th style="text-align:center">12</th><th style="text-align:center;font-size:9px">13=5-7-9-11-12</th></tr>'
     + '</thead>'
     + '<tbody>'
-    + '<tr><td>城市维护建设税</td><td></td><td style="text-align:center">1</td>'
+    + '<tr><td>城市维护建设税</td><td style="text-align:center">1</td>'
     + td(scf.city_base) + tdZero(scf.vat_exempt_credit) + tdZero(scf.vat_refund_deduct)
     + '<td class="num">' + ((scf.city_rate || 0) * 100).toFixed(0) + '%</td>'
     + td(scf.city_tax) + '<td>' + (scf.city_reduction_code || '') + '</td>' + tdZero(scf.city_reduction_amount)
@@ -1205,7 +1205,7 @@ function renderSchedule5(data) {
     + tdZero(scf.city_six_tax_amount)
     + '<td>' + (scf.city_edu_pilot_code || '') + '</td>' + tdZero(scf.city_edu_pilot_amount) + tdZero(scf.city_paid) + td(scf.city_final) + '</tr>'
 
-    + '<tr><td>教育费附加</td><td></td><td style="text-align:center">2</td>'
+    + '<tr><td>教育费附加</td><td style="text-align:center">2</td>'
     + td(scf.edu_base) + tdZero(scf.edu_exempt_credit) + tdZero(scf.edu_vat_refund_deduct)
     + '<td class="num">' + ((scf.edu_rate || 0) * 100).toFixed(0) + '%</td>'
     + td(scf.edu_tax) + '<td>' + (scf.edu_reduction_code || '') + '</td>' + tdZero(scf.edu_reduction_amount)
@@ -1213,7 +1213,7 @@ function renderSchedule5(data) {
     + tdZero(scf.edu_six_tax_amount)
     + '<td>' + (scf.edu_edu_pilot_code || '') + '</td>' + tdZero(scf.edu_edu_pilot_amount) + tdZero(scf.edu_paid) + td(scf.edu_final) + '</tr>'
 
-    + '<tr><td>地方教育附加</td><td></td><td style="text-align:center">3</td>'
+    + '<tr><td>地方教育附加</td><td style="text-align:center">3</td>'
     + td(scf.local_edu_base) + tdZero(scf.local_edu_exempt_credit) + tdZero(scf.local_edu_vat_refund_deduct)
     + '<td class="num">' + ((scf.local_edu_rate || 0) * 100).toFixed(0) + '%</td>'
     + td(scf.local_edu_tax) + '<td>' + (scf.local_edu_reduction_code || '') + '</td>' + tdZero(scf.local_edu_reduction_amount)
@@ -1221,7 +1221,7 @@ function renderSchedule5(data) {
     + tdZero(scf.local_edu_six_tax_amount)
     + '<td>' + (scf.local_edu_edu_pilot_code || '') + '</td>' + tdZero(scf.local_edu_edu_pilot_amount) + tdZero(scf.local_edu_paid) + td(scf.local_edu_final) + '</tr>'
 
-    + '<tr style="background:#f0fdf4;font-weight:700"><td>合计</td><td></td><td style="text-align:center">4</td>'
+    + '<tr style="background:#f0fdf4;font-weight:700"><td>合计</td><td style="text-align:center">4</td>'
     + '<td class="num">——</td><td class="num">——</td><td class="num">——</td><td class="num">——</td>'
     + td(scf.total_tax) + '<td>——</td>' + tdZero(scf.total_reduction)
     + '<td class="num">——</td>' + tdZero(scf.total_six_tax_reduction)
@@ -1245,11 +1245,11 @@ function renderReductionForm(data) {
 
   const taxReductionItems = (r.tax_reduction_items || r.reduction_items || []);
   if (taxReductionItems.length === 0) {
-    html += '<tbody><tr><td>合计</td><td></td><td style="text-align:center">1</td>' + td(r.tax_reduction_1_begin) + td(r.tax_reduction_1_occur) + td(r.tax_reduction_1_should) + td(r.tax_reduction_1_actual) + td(r.tax_reduction_1_end) + '</tr></tbody>';
+    html += '<tbody><tr><td>合计</td><td style="text-align:center">1</td>' + td(r.tax_reduction_1_begin) + td(r.tax_reduction_1_occur) + td(r.tax_reduction_1_should) + td(r.tax_reduction_1_actual) + td(r.tax_reduction_1_end) + '</tr></tbody>';
   } else {
     html += '<tbody>';
     taxReductionItems.forEach((item, i) => {
-      html += '<tr><td>' + escapeHtml(item.name || ('减税项目' + (i + 1))) + '</td><td></td><td style="text-align:center">' + (i + 1) + '</td>'
+      html += '<tr><td>' + escapeHtml(item.name || ('减税项目' + (i + 1))) + '</td><td style="text-align:center">' + (i + 1) + '</td>'
         + td(item.begin_balance) + td(item.current_amount) + td(item.should_reduce) + td(item.actual_reduce) + td(item.end_balance) + '</tr>';
     });
     html += '</tbody>';
@@ -1264,12 +1264,12 @@ function renderReductionForm(data) {
 
   const exemptItems = r.exempt_items || [];
   if (exemptItems.length === 0) {
-    html += '<tr><td>合　计</td><td></td><td style="text-align:center">1</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
-      + '<tr><td>出口免税</td><td></td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
-      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td></td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
+    html += '<tr><td>合　计</td><td style="text-align:center">1</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
+      + '<tr><td>出口免税</td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
+      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num" style="color:#d1d5db">——</td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
   } else {
     exemptItems.forEach((item, i) => {
-      html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td></td><td style="text-align:center">' + (i + 1) + '</td>'
+      html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 1) + '</td>'
         + td(item.exempt_sales) + td(item.deduction_amount) + td(item.after_deduction) + td(item.input_tax) + td(item.exempt_amount) + '</tr>';
     });
   }
