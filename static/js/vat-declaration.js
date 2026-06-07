@@ -226,7 +226,7 @@ function showVATCreateModal(period) {
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">'
     + '<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
-    + '<input type="checkbox" id="vat-micro"> 小规模纳税人（小微企业）</label></div>'
+    + '<input type="checkbox" id="vat-micro"> 小型微利企业</label></div>'
     + '<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
     + '<input type="checkbox" id="vat-six-tax"> 六税两费减征</label></div>'
     + '</div>'
