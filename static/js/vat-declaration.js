@@ -467,6 +467,20 @@ async function updateVATDeclaration(id) {
   } catch (e) { handleError(e, '更新申报表'); }
 }
 
+async function createEmptyVATDeclaration(period) {
+  try {
+    const resp = await api('/api/vat/declarations', {
+      method: 'POST',
+      body: JSON.stringify({ period: period }),
+    });
+    toast('申报表创建成功', 'success');
+    vatCurrentData = resp;
+    await loadVATDeclarationList();
+    // 直接打开新创建的申报表
+    if (resp && resp.id) openVATDetailInline(resp.id);
+  } catch (e) { handleError(e, '创建申报表'); }
+}
+
 async function deleteVATDeclaration(id, period) {
   if (!confirm('确定删除「' + period + '」的申报表吗？')) return;
   try {
@@ -528,6 +542,7 @@ function renderVATToolbar(yearOpts, monthOpts) {
     + '<button style="' + btnStyle + '" onclick="vatClearFilter()" title="清除筛选条件">✖ 清除</button>'
     + '<button style="' + btnStyle + '" onclick="vatImportFile()" title="导入增值税申报数据">📥 导入文件</button>'
     + '<button style="' + btnStyle + '" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">📝 生成凭证</button>'
+    + '<button style="' + btnStyle + '" onclick="vatCreateDeclaration()" title="创建增值税申报表">➕ 创建申报表</button>'
     + '<button style="' + dangerBtnStyle + '" onclick="vatDeleteCurrent()" title="删除当前申报表">🗑 删除报表</button>'
     + '</div>';
 }
@@ -556,6 +571,17 @@ function vatDeleteCurrent() {
     return;
   }
   deleteVATDeclaration(vatCurrentData.id, vatCurrentData.period);
+}
+
+function vatCreateDeclaration() {
+  const y = document.getElementById('vat-detail-year');
+  const m = document.getElementById('vat-detail-month');
+  if (!y || !m) {
+    toast('请先选择期间', 'warning');
+    return;
+  }
+  const period = y.value + '-' + m.value.padStart(2, '0');
+  createEmptyVATDeclaration(period);
 }
 
 
