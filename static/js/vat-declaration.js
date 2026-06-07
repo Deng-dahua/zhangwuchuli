@@ -30,6 +30,25 @@ async function stepVATPeriod(type, delta) {
     if (m < 1) { m = 12; y--; }
   }
   const targetPeriod = y + '-' + String(m).padStart(2, '0');
+  const targetYear = String(y);
+  const targetMonth = String(m).padStart(2, '0');
+
+  // 无论有没有申报表，先更新显示的年/月（数字必须跳动）
+  const ySel = document.getElementById('vat-detail-year');
+  const mSel = document.getElementById('vat-detail-month');
+  if (ySel) {
+    // 若目标年份不在下拉选项中，临时追加
+    if (!ySel.querySelector('option[value="' + targetYear + '"]')) {
+      ySel.appendChild(new Option(targetYear + '年', targetYear));
+    }
+    ySel.value = targetYear;
+  }
+  if (mSel) {
+    if (!mSel.querySelector('option[value="' + targetMonth + '"]')) {
+      mSel.appendChild(new Option(targetMonth + '月', targetMonth));
+    }
+    mSel.value = targetMonth;
+  }
 
   // 先在本页缓存里查找
   const found = vatDeclarations.find(d => d.period === targetPeriod);
@@ -45,12 +64,12 @@ async function stepVATPeriod(type, delta) {
       const idx = vatDeclarations.findIndex(d => d.period === targetPeriod);
       if (idx < 0) vatDeclarations.push(list[0]);
       openVATDetailInline(list[0].id);
-    } else {
-      showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
+      return;
     }
-  } catch (e) {
-    showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
-  }
+  } catch (e) { /* ignore */ }
+
+  // 至此确认无申报表，数字已跳，只弹提示
+  showToast('该期间（' + targetPeriod + '）暂无申报表', 'info');
 }
 
 // 用户直接在下拉框选择年期/月份时触发
