@@ -772,7 +772,7 @@ function renderSchedule1(data) {
   const s = (typeof data.form_sales === 'string') ? JSON.parse(data.form_sales) : (data.form_sales || {});
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash(n) { n = n || 1; var d = '<td class="num" style="color:#b0b7c3">——</td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
+  function tdDash(n) { n = n || 1; var d = '<td class="num"></td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
   // 大类列样式
   var catStyle = 'text-align:center;vertical-align:middle;font-weight:700;font-size:11px;background:#f0f4fa;writing-mode:vertical-lr;letter-spacing:2px;padding:4px 3px';
   var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb';
