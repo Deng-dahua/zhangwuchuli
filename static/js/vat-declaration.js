@@ -962,7 +962,7 @@ function renderSchedule2(data) {
 
     // 一、申报抵扣的进项税额
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:40%"><col style="width:12%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
     + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
@@ -984,7 +984,7 @@ function renderSchedule2(data) {
 
     // 二、进项税额转出额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:60%"><col style="width:10%"><col style="width:30%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:58%"><col style="width:12%"><col style="width:30%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
     + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
@@ -1002,7 +1002,7 @@ function renderSchedule2(data) {
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:40%"><col style="width:12%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
@@ -1019,7 +1019,7 @@ function renderSchedule2(data) {
 
     // 四、其他
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
-    + '<table class="vat-form-table"><colgroup><col style="width:44%"><col style="width:8%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
+    + '<table class="vat-form-table"><colgroup><col style="width:40%"><col style="width:12%"><col style="width:8%"><col style="width:20%"><col style="width:20%"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
     + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
     + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
