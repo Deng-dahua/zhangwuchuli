@@ -792,29 +792,26 @@ function renderSchedule1(data) {
     + '<col style="width:5.5%"><col style="width:5.5%"></col>'
     + '</colgroup>'
     + '<thead>'
-    + '<tr style="background:#d9e2f3"><th rowspan="3" style="padding:3px 2px"></th>'
-    + '<th rowspan="3" style="padding:3px 2px"></th>'
-    + '<th rowspan="3">项目及栏次</th>'
+    + '<tr style="background:#d9e2f3"><th colspan="3" rowspan="3" style="padding:4px 6px">项目及栏次</th>'
     + '<th colspan="2">开具增值税<br>专用发票</th><th colspan="2">开具其他<br>发票</th>'
     + '<th colspan="2">未开具发票</th><th colspan="2">纳税检查<br>调整</th>'
-    + '<th colspan="2">合计</th>'
-    + '<th rowspan="3">价税<br>合计</th>'
-    + '<th rowspan="3">服务、不动产和<br>无形资产扣除项目<br>本期实际扣除金额</th>'
+    + '<th colspan="3">合计</th>'
+    + '<th rowspan="2">服务、不动产和<br>无形资产扣除项目<br>本期实际扣除金额</th>'
     + '<th colspan="2" rowspan="2">扣除后</th></tr>'
     + '<tr style="background:#d9e2f3">'
     + '<th>销售额</th><th>销项(应纳)<br>税额</th><th>销售额</th><th>销项(应纳)<br>税额</th>'
     + '<th>销售额</th><th>销项(应纳)<br>税额</th><th>销售额</th><th>销项(应纳)<br>税额</th>'
-    + '<th>销售额</th><th>销项(应纳)<br>税额</th></tr>'
+    + '<th>销售额</th><th>销项(应纳)<br>税额</th><th>价税<br>合计</th></tr>'
     + '<tr style="background:#d9e2f3">'
     + '<th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th>'
-    + '<th>9=1+3+5+7</th><th>10=2+4+6+8</th>'
-    + '<th>11=9+10</th>'
+    + '<th>9=1+3+5+7</th><th>10=2+4+6+8</th><th>11=9+10</th>'
+    + '<th>12</th>'
     + '<th>13=11-12</th><th>14=13÷(100%+税率或征收率)×税率或征收率</th></tr>'
     + '</thead>'
     + '<tbody>'
 
     // ==================== 一、一般计税方法计税（大类rowspan=7） ====================
-    + '<tr><td rowspan="7" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税</td>'
+    + '<tr><td rowspan="7" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">一般计税方法计税</td>'
     + '<td rowspan="5" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
     + '<td>13%税率的货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">1</span></td>'
     + td(s.row1_13_special_sales) + td(s.row1_13_special_tax) + td(s.row1_13_other_sales) + td(s.row1_13_other_tax)
@@ -850,14 +847,14 @@ function renderSchedule1(data) {
     + td(s.row5_6_total_sales) + td(s.row5_6_total_tax)
     + tdP(s.row5_6_total_sales, s.row5_6_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">即征即退</td>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">其中：即征即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">6</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">7</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
 
     // ==================== 二、简易计税方法计税（大类rowspan=11） ====================
-    + '<tr><td rowspan="11" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税</td>'
+    + '<tr><td rowspan="11" style="text-align:center;vertical-align:middle;font-weight:700;font-size:12px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">简易计税方法计税</td>'
     + '<td rowspan="9" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">全部征税项目</td>'
     + '<td>6%征收率　<span style="font-size:9px;color:#6b7280">8</span></td>'
     + td(s.row8_6_collect_sales) + td(s.row8_6_collect_tax) + td(s.row8_6_collect_other_sales) + td(s.row8_6_collect_other_tax)
@@ -923,7 +920,7 @@ function renderSchedule1(data) {
     + td(s.row13c_rate_total_sales) + td(s.row13c_rate_total_tax)
     + tdP(s.row13c_rate_total_sales, s.row13c_rate_total_tax)
     + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">即征即退</td>'
+    + '<tr><td rowspan="2" style="text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f0f4fa">其中：即征即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务　<span style="font-size:9px;color:#6b7280">14</span></td>'
     + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + tdDash() + '</tr>'
     + '<tr><td>即征即退服务、不动产和无形资产　<span style="font-size:9px;color:#6b7280">15</span></td>'
