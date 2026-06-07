@@ -1159,75 +1159,104 @@ function renderSchedule4(data) {
     + '</tbody></table>';
 }
 
-// ==================== 附表五：附加税费情况表 ====================
+// ==================== 附表五：附加税费情况表（基于模板 009-1-1.xls 重做） ====================
 function renderSchedule5(data) {
   const scf = (typeof data.form_surcharge === 'string') ? JSON.parse(data.form_surcharge) : (data.form_surcharge || {});
   function td(v) { return '<td class="num">' + _fmt(v) + '</td>'; }
-  function tdZero(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+  function td0(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+  function tdDash() { return '<td class="num">——</td>'; }
+  function tdTxt(v) { return '<td>' + (v || '') + '</td>'; }
+  function tdPct(v) { return '<td class="num">' + ((v||0)*100).toFixed(0) + '%</td>'; }
+  var hdrBg = 'background:#d9e2f3';
+
+  // 辅助：生成一行数据（3种税费 + 合计）
+  function surRow(name, seq, base, exempt, refund, rate, tax,
+                  redCode, redAmt, sixRate, sixAmt, pilotCode, pilotAmt, paid, final, isTotal) {
+    if (isTotal) {
+      return '<tr style="background:#f0fdf4;font-weight:700"><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
+        + tdDash() + tdDash() + tdDash() + tdDash()
+        + td(tax) + tdDash() + td0(redAmt)
+        + tdDash() + td0(sixAmt)
+        + tdDash() + td0(pilotAmt) + td0(paid) + td(final) + '</tr>';
+    }
+    return '<tr><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
+      + td(base) + td0(exempt) + td0(refund)
+      + tdPct(rate) + td(tax)
+      + tdTxt(redCode) + td0(redAmt)
+      + tdPct(sixRate) + td0(sixAmt)
+      + tdTxt(pilotCode) + td0(pilotAmt) + td0(paid) + td(final) + '</tr>';
+  }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（附加税费情况表）</div>'
-    + '<table class="vat-form-table" style="font-size:10px">'
-    + '<colgroup><col style="width:8%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:5%">'
-    + '<col style="width:9%"><col style="width:5%"><col style="width:6%"><col style="width:5%"><col style="width:6%">'
-    + '<col style="width:5%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:7%"></col>'
+    + '<table class="vat-form-table" style="font-size:10px;table-layout:fixed;width:100%">'
+    // 15列: 税种|序号|增值税税额|免抵税额|留抵退税扣除|税率|应纳税额|减免代码|减免额|减征比|减征额|产教代码|抵免额|已缴|应补退
+    + '<colgroup>'
+    + '<col style="width:9%"><col style="width:4%">'
+    + '<col style="width:8%"><col style="width:8%"><col style="width:8%">'
+    + '<col style="width:5%"><col style="width:8%">'
+    + '<col style="width:5%"><col style="width:6%">'
+    + '<col style="width:5%"><col style="width:6%">'
+    + '<col style="width:5%"><col style="width:5%">'
+    + '<col style="width:6%"><col style="width:12%">'
     + '</colgroup>'
     + '<thead>'
-    + '<tr style="background:#d9e2f3">'
-    + '<th rowspan="2">税（费）种</th>'
+    // Header Row 1 (rowspan 3)
+    + '<tr style="'+hdrBg+'">'
+    + '<th colspan="2" rowspan="3">税（费）种</th>'
     + '<th colspan="3">计税（费）依据</th>'
-    + '<th rowspan="2">税（费）率（%）</th><th rowspan="2">本期应纳税<br>（费）额</th>'
+    + '<th rowspan="3">税（费）<br>率（%）</th>'
+    + '<th rowspan="3">本期应纳税<br>（费）额</th>'
     + '<th colspan="2">本期减免税<br>（费）额</th>'
     + '<th colspan="2">小微企业<br>"六税两费"<br>减免政策</th>'
-    + '<th colspan="3">试点建设培育<br>产教融合型企业</th>'
-    + '<th rowspan="2">本期已缴税<br>（费）额</th><th rowspan="2">本期应补（退）<br>税（费）额</th>'
+    + '<th colspan="2">试点建设培育<br>产教融合型企业</th>'
+    + '<th rowspan="3">本期已缴<br>税（费）额</th>'
+    + '<th rowspan="3">本期应补（退）<br>税（费）额</th>'
     + '</tr>'
-    + '<tr style="background:#d9e2f3">'
+    // Header Row 2
+    + '<tr style="'+hdrBg+'">'
     + '<th>增值税<br>税额</th><th>增值税<br>免抵税额</th><th>留抵退税<br>本期扣除额</th>'
     + '<th>减免性质<br>代码</th><th>减免税<br>（费）额</th>'
     + '<th>减征比例<br>（%）</th><th>减征额</th>'
     + '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>'
     + '</tr>'
-    + '<tr style="background:#e8edf5"><th colspan="2">栏次</th>'
+    // Header Row 3 (栏次/列号)
+    + '<tr style="background:#e8edf5">'
+    + '<th colspan="2">栏次</th>'
     + '<th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th>'
-    + '<th style="text-align:center">4</th><th style="text-align:center;font-size:9px">5=(1+2-3)×4</th>'
+    + '<th style="text-align:center">4</th>'
+    + '<th style="text-align:center;font-size:9px">5=(1+2-3)×4</th>'
     + '<th style="text-align:center">6</th><th style="text-align:center">7</th>'
     + '<th style="text-align:center">8</th><th style="text-align:center;font-size:9px">9=(5-7)×8</th>'
     + '<th style="text-align:center">10</th><th style="text-align:center">11</th>'
-    + '<th style="text-align:center">12</th><th style="text-align:center;font-size:9px">13=5-7-9-11-12</th></tr>'
+    + '<th style="text-align:center">12</th>'
+    + '<th style="text-align:center;font-size:9px">13=5-7-9-11-12</th>'
+    + '</tr>'
     + '</thead>'
     + '<tbody>'
-    + '<tr><td>城市维护建设税</td><td style="text-align:center">1</td>'
-    + td(scf.city_base) + tdZero(scf.vat_exempt_credit) + tdZero(scf.vat_refund_deduct)
-    + '<td class="num">' + ((scf.city_rate || 0) * 100).toFixed(0) + '%</td>'
-    + td(scf.city_tax) + '<td>' + (scf.city_reduction_code || '') + '</td>' + tdZero(scf.city_reduction_amount)
-    + '<td class="num">' + ((scf.city_reduction_rate || 0) * 100).toFixed(0) + '%</td>'
-    + tdZero(scf.city_six_tax_amount)
-    + '<td>' + (scf.city_edu_pilot_code || '') + '</td>' + tdZero(scf.city_edu_pilot_amount) + tdZero(scf.city_paid) + td(scf.city_final) + '</tr>'
-
-    + '<tr><td>教育费附加</td><td style="text-align:center">2</td>'
-    + td(scf.edu_base) + tdZero(scf.edu_exempt_credit) + tdZero(scf.edu_vat_refund_deduct)
-    + '<td class="num">' + ((scf.edu_rate || 0) * 100).toFixed(0) + '%</td>'
-    + td(scf.edu_tax) + '<td>' + (scf.edu_reduction_code || '') + '</td>' + tdZero(scf.edu_reduction_amount)
-    + '<td class="num">' + ((scf.edu_reduction_rate || 0) * 100).toFixed(0) + '%</td>'
-    + tdZero(scf.edu_six_tax_amount)
-    + '<td>' + (scf.edu_edu_pilot_code || '') + '</td>' + tdZero(scf.edu_edu_pilot_amount) + tdZero(scf.edu_paid) + td(scf.edu_final) + '</tr>'
-
-    + '<tr><td>地方教育附加</td><td style="text-align:center">3</td>'
-    + td(scf.local_edu_base) + tdZero(scf.local_edu_exempt_credit) + tdZero(scf.local_edu_vat_refund_deduct)
-    + '<td class="num">' + ((scf.local_edu_rate || 0) * 100).toFixed(0) + '%</td>'
-    + td(scf.local_edu_tax) + '<td>' + (scf.local_edu_reduction_code || '') + '</td>' + tdZero(scf.local_edu_reduction_amount)
-    + '<td class="num">' + ((scf.local_edu_reduction_rate || 0) * 100).toFixed(0) + '%</td>'
-    + tdZero(scf.local_edu_six_tax_amount)
-    + '<td>' + (scf.local_edu_edu_pilot_code || '') + '</td>' + tdZero(scf.local_edu_edu_pilot_amount) + tdZero(scf.local_edu_paid) + td(scf.local_edu_final) + '</tr>'
-
-    + '<tr style="background:#f0fdf4;font-weight:700"><td>合计</td><td style="text-align:center">4</td>'
-    + '<td class="num">——</td><td class="num">——</td><td class="num">——</td><td class="num">——</td>'
-    + td(scf.total_tax) + '<td>——</td>' + tdZero(scf.total_reduction)
-    + '<td class="num">——</td>' + tdZero(scf.total_six_tax_reduction)
-    + '<td>——</td>' + tdZero(scf.total_edu_pilot) + tdZero(scf.total_paid) + td(scf.total_final) + '</tr>'
-
+    // 城市维护建设税
+    + surRow('城市维护建设税', 1, scf.city_base, scf.vat_exempt_credit, scf.vat_refund_deduct,
+             scf.city_rate, scf.city_tax, scf.city_reduction_code, scf.city_reduction_amount,
+             scf.city_reduction_rate, scf.city_six_tax_amount,
+             scf.city_edu_pilot_code, scf.city_edu_pilot_amount, scf.city_paid, scf.city_final)
+    // 教育费附加
+    + surRow('教育费附加', 2, scf.edu_base, scf.edu_exempt_credit, scf.edu_vat_refund_deduct,
+             scf.edu_rate, scf.edu_tax, scf.edu_reduction_code, scf.edu_reduction_amount,
+             scf.edu_reduction_rate, scf.edu_six_tax_amount,
+             scf.edu_edu_pilot_code, scf.edu_edu_pilot_amount, scf.edu_paid, scf.edu_final)
+    // 地方教育附加
+    + surRow('地方教育附加', 3, scf.local_edu_base, scf.local_edu_exempt_credit, scf.local_edu_vat_refund_deduct,
+             scf.local_edu_rate, scf.local_edu_tax, scf.local_edu_reduction_code, scf.local_edu_reduction_amount,
+             scf.local_edu_reduction_rate, scf.local_edu_six_tax_amount,
+             scf.local_edu_edu_pilot_code, scf.local_edu_edu_pilot_amount, scf.local_edu_paid, scf.local_edu_final)
+    // 合计
+    + surRow('合计', 4, null, null, null, null, scf.total_tax,
+             null, scf.total_reduction, null, scf.total_six_tax_reduction,
+             null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true)
     + '</tbody></table>';
+
+    // 底部补充区域：产教融合抵免 + 留抵退税使用情况（该区域放在独立表格中，与模板一致）
+    // 注：当前先恢复主表，底部补充区域后续可根据需要补充
 }
 
 // ==================== 减免税申报明细表 ====================
