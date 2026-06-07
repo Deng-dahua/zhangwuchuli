@@ -8,19 +8,171 @@ let hfEditId = null;  // 编辑时暂存ID
 // 自定义escAttr（escapeHtml已有，但attr需额外转引号）
 function hfEscAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
+// ============ 期间步进（与顶栏 period-stepper 同款） ============
+function stepHfYear(delta) {
+    const yearSel = document.getElementById('hf-import-year') || document.getElementById('hf-year');
+    if (!yearSel) return;
+    const opts = Array.from(yearSel.options).map(o => parseInt(o.value));
+    const cur = parseInt(yearSel.value);
+    const idx = opts.indexOf(cur);
+    const next = idx + delta;
+    if (next >= 0 && next < opts.length) yearSel.value = opts[next];
+    const monthSel = document.getElementById('hf-import-month') || document.getElementById('hf-month');
+    if (monthSel) hfPeriod = yearSel.value + '-' + monthSel.value;
+    if (typeof hfRefresh === 'function') hfRefresh();
+}
+
+function stepHfMonth(delta) {
+    const yearSel = document.getElementById('hf-import-year') || document.getElementById('hf-year');
+    const monSel = document.getElementById('hf-import-month') || document.getElementById('hf-month');
+    if (!monSel) return;
+    let y = parseInt(yearSel?.value || new Date().getFullYear());
+    let m = parseInt(monSel.value) + delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
+    if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
+    monSel.value = String(m).padStart(2, '0');
+    // 仅主界面选择器变化时更新 hfPeriod
+    if (yearSel === document.getElementById('hf-import-year') && monSel === document.getElementById('hf-import-month')) {
+        hfPeriod = yearSel.value + '-' + monSel.value;
+        if (typeof hfRefresh === 'function') hfRefresh();
+    }
+}
+
+// ============ 导入弹窗步进（不触发主界面刷新） ============
+function stepHfImportYear(delta) {
+    const sel = document.getElementById('hf-import-year');
+    if (!sel) return;
+    const opts = Array.from(sel.options).map(o => parseInt(o.value));
+    const cur = parseInt(sel.value);
+    const idx = opts.indexOf(cur);
+    const next = idx + delta;
+    if (next >= 0 && next < opts.length) sel.value = opts[next];
+}
+
+// ============ 导入弹窗步进（不触发主界面刷新） ============
+function stepHfImportYear(delta) {
+    const sel = document.getElementById('hf-import-year');
+    if (!sel) return;
+    const opts = Array.from(sel.options).map(o => parseInt(o.value));
+    const cur = parseInt(sel.value);
+    const idx = opts.indexOf(cur);
+    const next = idx + delta;
+    if (next >= 0 && next < opts.length) sel.value = opts[next];
+}
+
+function stepHfImportMonth(delta) {
+    const yearSel = document.getElementById('hf-import-year');
+    const monSel = document.getElementById('hf-import-month');
+    if (!monSel) return;
+    let y = parseInt(yearSel?.value || new Date().getFullYear());
+    let m = parseInt(monSel.value) + delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
+    if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
+    monSel.value = String(m).padStart(2, '0');
+}
+
+// ============ 导入文件选择处理 ============
+function hfHandleFileSelected(input) {
+    const zone = document.getElementById('hf-upload-zone');
+    const text = document.getElementById('hf-upload-text');
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (zone) zone.classList.add('has-file');
+        if (text) text.textContent = file.name;
+    } else {
+        if (zone) zone.classList.remove('has-file');
+        if (text) text.textContent = '点击或拖拽上传 Excel 文件';
+    }
+}
+
+function stepHfImportMonth(delta) {
+    const yearSel = document.getElementById('hf-import-year');
+    const monSel = document.getElementById('hf-import-month');
+    if (!monSel) return;
+    let y = parseInt(yearSel?.value || new Date().getFullYear());
+    let m = parseInt(monSel.value) + delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
+    if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
+    monSel.value = String(m).padStart(2, '0');
+}
+
+// ============ 导入文件选择处理 ============
+function hfHandleFileSelected(input) {
+    const zone = document.getElementById('hf-upload-zone');
+    const text = document.getElementById('hf-upload-text');
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (zone) zone.classList.add('has-file');
+        if (text) text.textContent = file.name;
+    } else {
+        if (zone) zone.classList.remove('has-file');
+        if (text) text.textContent = '点击或拖拽上传 Excel 文件';
+    }
+}
+
 async function renderHousingFund(container) {
+  // 默认期间：与顶栏 currentPeriod 一致
+  let defYear = new Date().getFullYear();
+  let defMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  if (typeof currentPeriod !== 'undefined' && currentPeriod && currentPeriod.includes('-')) {
+    const parts = currentPeriod.split('-');
+    defYear = parseInt(parts[0]);
+    defMonth = parts[1];
+  }
+  const hfDefPeriod = defYear + '-' + defMonth;
+
+  let yearOpts = '';
+  for (let y = defYear - 5; y <= defYear + 1; y++) {
+    yearOpts += '<option value="' + y + '"' + (y === defYear ? ' selected' : '') + '>' + y + '年</option>';
+  }
+
   container.innerHTML = `
     <div class="module-page">
       <div class="stats-row" id="hf-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;"></div>
       <div class="toolbar">
-        <div class="toolbar-left">
-          <input type="month" id="hf-period-filter" onchange="hfRefresh()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
-        </div>
-        <div class="toolbar-right" style="display:flex;gap:8px;">
-          <button class="btn btn-primary" onclick="hfShowCreate()">+ 新增</button>
-          <button class="btn btn-outline" onclick="hfShowImport()">导入</button>
+        <div class="toolbar-left" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增公积金</button>
+          <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
           <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">⚡ 生成凭证</button>
           <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
+          <div style="margin-left:12px;display:flex;align-items:center;gap:6px">
+            <label style="font-size:13px;font-weight:600;color:var(--gray-700)">期间</label>
+            <div class="period-selector-bar" style="display:inline-flex">
+              <div class="period-stepper">
+                <select id="hf-import-year" class="period-selector-year">${yearOpts}</select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
+                </div>
+              </div>
+              <div class="period-stepper">
+                <select id="hf-import-month" class="period-selector-month">
+                  <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                  <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                  <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                  <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                  <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                  <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                  <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                  <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                  <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                  <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                  <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                  <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+                </select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
         <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">
@@ -46,6 +198,15 @@ async function renderHousingFund(container) {
       </div>
     </div>
   `;
+  // 设置默认期间并加载数据
+  hfPeriod = hfDefPeriod;
+  const yearSel = document.getElementById('hf-import-year');
+  const monthSel = document.getElementById('hf-import-month');
+  if (yearSel) yearSel.value = defYear;
+  if (monthSel) monthSel.value = defMonth;
+  // 绑定期间变化事件
+  if (yearSel) yearSel.addEventListener('change', () => { hfPeriod = yearSel.value + '-' + monthSel.value; hfRefresh(); });
+  if (monthSel) monthSel.addEventListener('change', () => { hfPeriod = yearSel.value + '-' + monthSel.value; hfRefresh(); });
   hfRefresh();
 }
 
@@ -144,54 +305,94 @@ async function hfBatchDelete() {
 // ============ 新增/编辑弹窗 ============
 
 function hfShowCreate() {
-  showModal(`
-    <div class="modal-title">新增公积金缴存记录</div>
-    <div class="form-group">
-      <label>工号</label>
-      <input class="form-input" id="hf-emp-id" placeholder="工号（选填）" />
-    </div>
-    <div class="form-group">
-      <label>姓名 <span style="color:red">*</span></label>
-      <input class="form-input" id="hf-emp-name" placeholder="姓名" />
-    </div>
-    <div class="form-group">
-      <label>身份证号</label>
-      <input class="form-input" id="hf-id-number" placeholder="身份证号" />
-    </div>
-    <div class="form-group">
-      <label>缴存基数</label>
-      <input class="form-input" type="number" id="hf-deposit-base" placeholder="0" step="0.01" />
-    </div>
-    <div class="form-row-2">
-      <div class="form-group">
-        <label>单位缴存比例(%)</label>
-        <input class="form-input" type="number" id="hf-company-ratio" placeholder="0" step="0.01" />
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'hf-modal';
+  // 默认期间与顶栏一致
+  let defYear = new Date().getFullYear();
+  let defMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  if (typeof currentPeriod !== 'undefined' && currentPeriod && currentPeriod.includes('-')) {
+    const parts = currentPeriod.split('-');
+    defYear = parseInt(parts[0]);
+    defMonth = parts[1];
+  }
+  let yearOpts = '';
+  for (let y = defYear - 5; y <= defYear + 1; y++) {
+    yearOpts += '<option value="' + y + '"' + (y === defYear ? ' selected' : '') + '>' + y + '年</option>';
+  }
+  modal.innerHTML = `
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+      <div class="modal-header"><h3>新增公积金</h3><button class="modal-close" onclick="closeModal('hf-modal')">&times;</button></div>
+      <div class="modal-body salary-form">
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>期间</label>
+            <div class="period-selector-bar" style="display:inline-flex">
+              <div class="period-stepper">
+                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
+                </div>
+              </div>
+              <div class="period-stepper">
+                <select id="hf-month" class="period-selector-month">
+                  <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                  <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                  <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                  <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                  <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                  <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                  <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                  <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                  <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                  <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                  <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                  <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+                </select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row"><label>工号</label><input class="form-input" id="hf-emp-id" placeholder="工号（选填）" /></div>
+          <div class="form-row"><label>姓名 <span style="color:#ef4444">*</span></label><input class="form-input" id="hf-emp-name" placeholder="姓名" /></div>
+          <div class="form-row"><label>身份证号</label><input class="form-input" id="hf-id-number" placeholder="身份证号" /></div>
+        </div>
+        <div class="section-title">缴存信息</div>
+        <div class="form-grid-2">
+          <div class="form-row"><label>缴存基数</label><input class="form-input" type="number" id="hf-deposit-base" placeholder="0" step="0.01" /></div>
+          <div class="form-row"><label>状态</label>
+            <select class="form-input" id="hf-status">
+              <option value="正常" selected>正常</option>
+              <option value="封存">封存</option>
+            </select>
+          </div>
+          <div class="form-row"><label>单位缴存比例(%)</label><input class="form-input" type="number" id="hf-company-ratio" placeholder="0" step="0.01" /></div>
+          <div class="form-row"><label>个人缴存比例(%)</label><input class="form-input" type="number" id="hf-personal-ratio" placeholder="0" step="0.01" /></div>
+        </div>
       </div>
-      <div class="form-group">
-        <label>个人缴存比例(%)</label>
-        <input class="form-input" type="number" id="hf-personal-ratio" placeholder="0" step="0.01" />
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('hf-modal')">取消</button>
+        <button class="btn btn-primary" onclick="hfDoCreate()">保存</button>
       </div>
     </div>
-    <div class="form-group">
-      <label>状态</label>
-      <select class="form-input" id="hf-status">
-        <option value="正常">正常</option>
-        <option value="封存">封存</option>
-      </select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
-      <button class="btn btn-primary" onclick="hfDoCreate()">保存</button>
-    </div>
-  `);
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
 }
 
 async function hfDoCreate() {
   const name = document.getElementById('hf-emp-name').value.trim();
   if (!name) return alert('请输入姓名');
+  const year = document.getElementById('hf-year')?.value || new Date().getFullYear();
+  const month = document.getElementById('hf-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+  const period = year + '-' + month;
   const body = {
     company_id: currentCompanyId,
-    period: hfPeriod || new Date().toISOString().slice(0, 7),
+    period: period,
     employee_id: document.getElementById('hf-emp-id').value.trim(),
     employee_name: name,
     id_number: document.getElementById('hf-id-number').value.trim(),
@@ -201,60 +402,108 @@ async function hfDoCreate() {
     status: document.getElementById('hf-status').value,
   };
   await api('POST', `/api/housing-fund/details?${new URLSearchParams(body).toString()}`);
-  closeModal();
+  closeModal('hf-modal');
   hfRefresh();
 }
 
 async function hfShowEdit(id) {
   const data = await api('GET', `/api/housing-fund/details/${id}?company_id=${currentCompanyId}`);
   hfEditId = id;
-  showModal(`
-    <div class="modal-title">编辑公积金缴存记录</div>
-    <div class="form-group">
-      <label>工号</label>
-      <input class="form-input" id="hf-emp-id" value="${hfEscAttr(data.employee_id || '')}" />
-    </div>
-    <div class="form-group">
-      <label>姓名 <span style="color:red">*</span></label>
-      <input class="form-input" id="hf-emp-name" value="${hfEscAttr(data.employee_name)}" />
-    </div>
-    <div class="form-group">
-      <label>身份证号</label>
-      <input class="form-input" id="hf-id-number" value="${hfEscAttr(data.id_number || '')}" />
-    </div>
-    <div class="form-group">
-      <label>缴存基数</label>
-      <input class="form-input" type="number" id="hf-deposit-base" value="${data.deposit_base || 0}" step="0.01" />
-    </div>
-    <div class="form-row-2">
-      <div class="form-group">
-        <label>单位缴存比例(%)</label>
-        <input class="form-input" type="number" id="hf-company-ratio" value="${data.company_ratio || 0}" step="0.01" />
+
+  // 解析已有期间（优先用 data.period，否则用 currentPeriod）
+  let defYear = new Date().getFullYear();
+  let defMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const existPeriod = data.period || (typeof currentPeriod !== 'undefined' && currentPeriod) || '';
+  if (existPeriod && existPeriod.includes('-')) {
+    const parts = existPeriod.split('-');
+    defYear = parseInt(parts[0]);
+    defMonth = parts[1];
+  } else if (typeof currentPeriod !== 'undefined' && currentPeriod && currentPeriod.includes('-')) {
+    const parts = currentPeriod.split('-');
+    defYear = parseInt(parts[0]);
+    defMonth = parts[1];
+  }
+  let yearOpts = '';
+  for (let y = defYear - 5; y <= defYear + 1; y++) {
+    yearOpts += '<option value="' + y + '"' + (y === defYear ? ' selected' : '') + '>' + y + '年</option>';
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'hf-modal-edit';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+      <div class="modal-header"><h3>编辑公积金</h3><button class="modal-close" onclick="closeModal('hf-modal-edit')">&times;</button></div>
+      <div class="modal-body salary-form">
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>期间</label>
+            <div class="period-selector-bar" style="display:inline-flex">
+              <div class="period-stepper">
+                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
+                </div>
+              </div>
+              <div class="period-stepper">
+                <select id="hf-month" class="period-selector-month">
+                  <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                  <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                  <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                  <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                  <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                  <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                  <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                  <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                  <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                  <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                  <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                  <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+                </select>
+                <div class="stepper-arrows">
+                  <button class="stepper-btn stepper-up" type="button" onclick="stepHfMonth(1)">▲</button>
+                  <button class="stepper-btn stepper-down" type="button" onclick="stepHfMonth(-1)">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row"><label>工号</label><input class="form-input" id="hf-emp-id" value="${hfEscAttr(data.employee_id || '')}" /></div>
+          <div class="form-row"><label>姓名 <span style="color:#ef4444">*</span></label><input class="form-input" id="hf-emp-name" value="${hfEscAttr(data.employee_name)}" /></div>
+          <div class="form-row"><label>身份证号</label><input class="form-input" id="hf-id-number" value="${hfEscAttr(data.id_number || '')}" /></div>
+        </div>
+        <div class="section-title">缴存信息</div>
+        <div class="form-grid-2">
+          <div class="form-row"><label>缴存基数</label><input class="form-input" type="number" id="hf-deposit-base" value="${data.deposit_base || 0}" step="0.01" /></div>
+          <div class="form-row"><label>状态</label>
+            <select class="form-input" id="hf-status">
+              <option value="正常" ${data.status === '正常' ? 'selected' : ''}>正常</option>
+              <option value="封存" ${data.status === '封存' ? 'selected' : ''}>封存</option>
+            </select>
+          </div>
+          <div class="form-row"><label>单位缴存比例(%)</label><input class="form-input" type="number" id="hf-company-ratio" value="${data.company_ratio || 0}" step="0.01" /></div>
+          <div class="form-row"><label>个人缴存比例(%)</label><input class="form-input" type="number" id="hf-personal-ratio" value="${data.personal_ratio || 0}" step="0.01" /></div>
+        </div>
       </div>
-      <div class="form-group">
-        <label>个人缴存比例(%)</label>
-        <input class="form-input" type="number" id="hf-personal-ratio" value="${data.personal_ratio || 0}" step="0.01" />
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('hf-modal-edit')">取消</button>
+        <button class="btn btn-primary" onclick="hfDoEdit()">保存</button>
       </div>
     </div>
-    <div class="form-group">
-      <label>状态</label>
-      <select class="form-input" id="hf-status">
-        <option value="正常" ${data.status === '正常' ? 'selected' : ''}>正常</option>
-        <option value="封存" ${data.status === '封存' ? 'selected' : ''}>封存</option>
-      </select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
-      <button class="btn btn-primary" onclick="hfDoEdit()">保存</button>
-    </div>
-  `);
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
 }
 
 async function hfDoEdit() {
   const name = document.getElementById('hf-emp-name').value.trim();
   if (!name) return alert('请输入姓名');
+  const year = document.getElementById('hf-year')?.value || new Date().getFullYear();
+  const month = document.getElementById('hf-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+  const period = year + '-' + month;
   const body = new URLSearchParams({
     company_id: currentCompanyId,
+    period: period,
     employee_id: document.getElementById('hf-emp-id').value.trim(),
     employee_name: name,
     id_number: document.getElementById('hf-id-number').value.trim(),
@@ -264,7 +513,7 @@ async function hfDoEdit() {
     status: document.getElementById('hf-status').value,
   });
   await api('PUT', `/api/housing-fund/details/${hfEditId}?${body.toString()}`);
-  closeModal();
+  closeModal('hf-modal-edit');
   hfRefresh();
 }
 
@@ -277,30 +526,88 @@ async function hfDelete(id) {
 // ============ 导入弹窗 ============
 
 function hfShowImport() {
-  showModal(`
-    <div class="modal-title">导入公积金缴存明细</div>
-    <div class="form-group">
-      <label>汇缴期间</label>
-      <input type="month" class="form-input" id="hf-import-period" value="${hfPeriod || new Date().toISOString().slice(0, 7)}" />
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'hf-import-modal';
+
+  // 默认期间与顶栏一致
+  let defYear = new Date().getFullYear();
+  let defMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  if (typeof currentPeriod !== 'undefined' && currentPeriod && currentPeriod.includes('-')) {
+    const parts = currentPeriod.split('-');
+    defYear = parseInt(parts[0]);
+    defMonth = parts[1];
+  }
+  let yearOpts = '';
+  for (let y = defYear - 5; y <= defYear + 1; y++) {
+    yearOpts += '<option value="' + y + '"' + (y === defYear ? ' selected' : '') + '>' + y + '年</option>';
+  }
+
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header"><h3>导入公积金</h3><button class="modal-close" onclick="closeModal('hf-import-modal')">&times;</button></div>
+      <div class="modal-body salary-form">
+        <div style="margin-top:16px;text-align:center">
+          <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:6px">所属期间</label>
+          <div class="period-selector-bar" style="display:inline-flex">
+            <div class="period-stepper">
+              <select id="hf-import-year" class="period-selector-year">${yearOpts}</select>
+              <div class="stepper-arrows">
+                <button class="stepper-btn stepper-up" type="button" onclick="stepHfImportYear(1)">▲</button>
+                <button class="stepper-btn stepper-down" type="button" onclick="stepHfImportYear(-1)">▼</button>
+              </div>
+            </div>
+            <div class="period-stepper">
+              <select id="hf-import-month" class="period-selector-month">
+                <option value="01"${defMonth==='01'?' selected':''}>01月</option>
+                <option value="02"${defMonth==='02'?' selected':''}>02月</option>
+                <option value="03"${defMonth==='03'?' selected':''}>03月</option>
+                <option value="04"${defMonth==='04'?' selected':''}>04月</option>
+                <option value="05"${defMonth==='05'?' selected':''}>05月</option>
+                <option value="06"${defMonth==='06'?' selected':''}>06月</option>
+                <option value="07"${defMonth==='07'?' selected':''}>07月</option>
+                <option value="08"${defMonth==='08'?' selected':''}>08月</option>
+                <option value="09"${defMonth==='09'?' selected':''}>09月</option>
+                <option value="10"${defMonth==='10'?' selected':''}>10月</option>
+                <option value="11"${defMonth==='11'?' selected':''}>11月</option>
+                <option value="12"${defMonth==='12'?' selected':''}>12月</option>
+              </select>
+              <div class="stepper-arrows">
+                <button class="stepper-btn stepper-up" type="button" onclick="stepHfImportMonth(1)">▲</button>
+                <button class="stepper-btn stepper-down" type="button" onclick="stepHfImportMonth(-1)">▼</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:24px;flex-direction:column;align-items:stretch;gap:6px">
+          <label style="width:auto;text-align:left">选择文件</label>
+          <div class="file-upload-zone" id="hf-upload-zone" onclick="document.getElementById('hf-import-file').click()">
+            <div class="upload-icon">&#128206;</div>
+            <div class="upload-text" id="hf-upload-text">点击或拖拽上传 Excel 文件</div>
+            <div class="upload-hint">支持 .xls、.xlsx 格式</div>
+          </div>
+          <input type="file" id="hf-import-file" accept=".xls,.xlsx" style="display:none" onchange="hfHandleFileSelected(this)">
+        </div>
+        <div style="font-size:12px;color:#888;margin-top:8px;">
+          表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('hf-import-modal')">取消</button>
+        <button class="btn btn-primary" onclick="hfDoImport()">导入文件</button>
+      </div>
     </div>
-    <div class="form-group">
-      <label>Excel 文件 (.xlsx/.xls)</label>
-      <input type="file" class="form-input" id="hf-import-file" accept=".xlsx,.xls" />
-    </div>
-    <div style="font-size:12px;color:#888;margin-top:8px;">
-      表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
-      <button class="btn btn-primary" onclick="hfDoImport()">导入</button>
-    </div>
-  `);
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
 }
 
 async function hfDoImport() {
   const file = document.getElementById('hf-import-file').files[0];
   if (!file) return alert('请选择文件');
-  const period = document.getElementById('hf-import-period').value;
+  const year = document.getElementById('hf-import-year')?.value || new Date().getFullYear();
+  const month = document.getElementById('hf-import-month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+  const period = year + '-' + month;
   if (!period) return alert('请选择汇缴期间');
 
   const formData = new FormData();
