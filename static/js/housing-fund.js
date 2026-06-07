@@ -146,11 +146,10 @@ async function renderHousingFund(container) {
           </div>
           <button class="btn btn-outline" onclick="hfQuery()">查询</button>
           <button class="btn btn-outline" onclick="hfClearPeriod()">清除</button>
-          <span style="color:var(--gray-300);margin:0 4px">|</span>
           <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增公积金</button>
           <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
           <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">生成凭证</button>
-          <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn" style="display:none;">删除</button>
+          <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn">批量删除</button>
         </div>
       </div>
         <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">
@@ -272,11 +271,11 @@ function hfToggleCheck(cb) {
 
 function updateBatchBtn() {
   const btn = document.getElementById('hf-batch-del-btn');
-  if (btn) btn.style.display = hfSelectedIds.size > 0 ? '' : 'none';
+  if (btn) btn.textContent = hfSelectedIds.size > 0 ? `批量删除(${hfSelectedIds.size})` : '批量删除';
 }
 
 async function hfBatchDelete() {
-  if (hfSelectedIds.size === 0) return;
+  if (hfSelectedIds.size === 0) return alert('请先勾选要删除的记录');
   if (!confirm(`确认删除选中的 ${hfSelectedIds.size} 条记录？`)) return;
   await api('POST', `/api/housing-fund/details/batch-delete?company_id=${currentCompanyId}`, [...hfSelectedIds]);
   hfRefresh();
