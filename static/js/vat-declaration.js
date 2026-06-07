@@ -1060,11 +1060,11 @@ function renderSchedule3(data) {
     + '<table class="vat-form-table">'
     + '<colgroup><col style="width:28%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>'
     + '<thead>'
-    + '<tr style="background:#d9e2f3"><th rowspan="2">项目及栏次</th>'
+    + '<tr style="background:#d9e2f3"><th rowspan="3">项目及栏次</th>'
     + '<th rowspan="2">本期服务、不动产和无形资产<br>价税合计额（免税销售额）</th>'
     + '<th colspan="5">服务、不动产和<br>无形资产扣除项目</th></tr>'
     + '<tr style="background:#d9e2f3"><th>期初余额</th><th>本期发生额</th><th>本期应扣除金额</th><th>本期实际扣除金额</th><th>期末余额</th></tr>'
-    + '<tr style="background:#e8edf5"><th style="text-align:center">栏次</th><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5（5≤1且5≤4）</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
+    + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=2+3</th><th style="text-align:center;font-size:10px">5（5≤1且5≤4）</th><th style="text-align:center;font-size:10px">6=4-5</th></tr>'
     + '</thead>'
     + '<tbody>';
 
