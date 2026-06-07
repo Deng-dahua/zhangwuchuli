@@ -516,9 +516,9 @@ function showSalaryImportModal() {
         <div class="modal" style="max-width:480px">
             <div class="modal-header"><h3>导入工资薪金</h3><button class="modal-close" onclick="closeModal('salary-import-modal')">&times;</button></div>
             <div class="modal-body salary-form">
-                <div style="margin-top:16px">
+                <div style="margin-top:16px;text-align:center">
                     <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:6px">所属期间</label>
-                    <div class="period-selector-bar">
+                    <div class="period-selector-bar" style="display:inline-flex">
                         <div class="period-stepper">
                             <select id="sal-import-year" class="period-selector-year">${yearOpts}</select>
                             <div class="stepper-arrows">
