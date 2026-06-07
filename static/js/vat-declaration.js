@@ -539,8 +539,7 @@ function renderMainForm(data) {
   h += '<thead>';
   h += '<tr style="background:#d9e2f3">';
   h += '<th rowspan="2" style="padding:4px 4px"></th>';
-  h += '<th rowspan="2" style="padding:4px 6px">项目</th>';
-  h += '<th rowspan="2" style="padding:4px 6px">栏次</th>';
+  h += '<th colspan="2" rowspan="2" style="padding:4px 6px">项目</th>';
   h += '<th colspan="2" style="padding:4px 6px">一般项目</th>';
   h += '<th colspan="2" style="padding:4px 6px">即征即退项目</th>';
   h += '</tr>';
