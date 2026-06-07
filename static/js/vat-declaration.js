@@ -531,38 +531,8 @@ function renderMainForm(data) {
   h += '<div style="text-align:center;font-size:15px;font-weight:700;margin-bottom:2px">增值税及附加税费申报表</div>';
   h += '<div style="text-align:center;font-size:13px;margin-bottom:4px">（一般纳税人适用）</div>';
 
-  // ========== 表头：纳税人信息（按官方PDF模板红框位置） ==========
-  h += '<table class="vat-form-table" style="margin-bottom:0;border-bottom:none;font-size:11px">';
-  h += '<colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>';
-  h += '<tbody>';
-  h += '<tr>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">纳税人名称</span><br>' + escapeHtml(data.taxpayer_name || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">法定代表人姓名</span><br>' + escapeHtml(data.legal_representative || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">注册地址</span><br>' + escapeHtml(data.address || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">电话号码</span><br>' + escapeHtml(data.phone || '') + '</td>';
-  h += '</tr>';
-  h += '<tr>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">纳税人识别号（统一社会信用代码）</span><br>' + escapeHtml(data.taxpayer_id || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">登记注册类型</span><br>' + escapeHtml(data.register_type || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">所属行业</span><br>' + escapeHtml(data.industry || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">开户银行及账号</span><br>' + escapeHtml(data.bank_account || '') + '</td>';
-  h += '</tr>';
-  h += '</tbody></table>';
-
-  // 税款所属期
-  const [m_year, m_month] = (data.period || '').split('-');
-  h += '<table class="vat-form-table" style="margin-bottom:0;border-top:none;border-bottom:none;font-size:11px">';
-  h += '<colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>';
-  h += '<tbody>';
-  h += '<tr>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">税款所属时间</span><br>自 ' + (m_year || '') + ' 年 ' + (m_month || '') + ' 月 1 日至 ' + (m_month || '') + ' 月 末</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc"><span style="font-size:10px;color:#6b7280">填表日期</span><br>' + escapeHtml(data.fill_date || '') + '</td>';
-  h += '<td style="padding:3px 6px;border-bottom:1px solid #ccc" colspan="2"><span style="font-size:10px;color:#6b7280">所属期</span><br>' + escapeHtml(data.period || '') + '</td>';
-  h += '</tr>';
-  h += '</tbody></table>';
-
   // ========== 7列表格主表（第1列为纵向分类标签） ==========
-  h += '<table class="vat-form-table" style="font-size:11px;border-top:none">';
+  h += '<table class="vat-form-table" style="font-size:11px">';
   h += '<colgroup>';
   h += '<col style="width:8%"><col style="width:21%"><col style="width:5%"><col style="width:16.5%"><col style="width:16.5%"><col style="width:16.5%"><col style="width:16.5%">';
   h += '</colgroup>';
