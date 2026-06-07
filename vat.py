@@ -298,7 +298,6 @@ def recompute_vat_declaration(declaration_id: int, company_id: int = Query(), db
     db.commit()
     return {"msg": "重新计算完成"}
 
-
 # ========== 计算逻辑 ==========
 
 def _compute_vat_forms(db: Session, vd: VATDeclaration):
@@ -330,6 +329,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     ).all()
     # 销售额 = 不含税金额（amount），不是价税合计（total_amount）
     sales_total = sum(i.amount or 0 for i in sales_invoices)
+    # 价税合计（含税金额），供附表三"价税合计额"列使用
+    sales_total_inclusive = sum(i.total_amount or 0 for i in sales_invoices)
     # 销项税额兜底：序时账无数据时从发票取税
     if output_tax == 0:
         output_tax = sum(i.tax_amount or 0 for i in sales_invoices)
@@ -633,18 +634,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # ====== 附列资料（二）：本期进项税额明细 ======
     # 数据源：进项抵扣表 InputVATDeduction，按「抵扣所属期」取数
     # 这才是增值税申报附表二的正确取数规则，不是按开票日期从PurchaseInvoice取
-    # 抵扣所属期为空时，fallback 到开票日期（invoice_date）的年月
-    form2_deductions = db.query(InputVATDeduction).filter(
-        InputVATDeduction.company_id == company_id,
-        or_(
-            InputVATDeduction.deduction_period == period,
-            and_(InputVATDeduction.deduction_period == None,
-                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
-            and_(InputVATDeduction.deduction_period == "",
-                 func.strftime('%Y-%m', InputVATDeduction.invoice_date) == period),
-        ),
-        InputVATDeduction.invoice_status == "正常",
-    ).all()
+    # 复用上方的 input_deductions 查询结果，保证主表和附表二数据源一致
+    form2_deductions = input_deductions
 
     def _ded_sum(ded_list, cat_filter=None):
         """汇总进项抵扣记录：返回(份数, 不含税金额, 税额)
@@ -665,6 +656,14 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     cert_count, cert_amount, cert_tax = _ded_sum(special_list)
 
+    # 非专票（普票/电子票等）→ row4 其他扣税凭证
+    non_special_list = [d for d in form2_deductions if not _is_special_invoice(d)]
+    other_count, other_amount, other_tax = _ded_sum(non_special_list)
+    # 当期申报抵扣进项税额合计 = 专票 + 其他
+    total_ded_count = cert_count + other_count
+    total_ded_amount = round(cert_amount + other_amount, 2)
+    total_ded_tax = round(cert_tax + other_tax, 2)
+
     form_input = {
         "period": period,
         # 一、申报抵扣的进项税额
@@ -675,8 +674,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row2_certified_curr_amount": round(cert_amount, 2),
         "row2_certified_curr_tax": round(cert_tax, 2),
         "row3_certified_prior_count": 0, "row3_certified_prior_amount": 0.0, "row3_certified_prior_tax": 0.0,
-        # 其他扣税凭证（海关缴款书等，后续按类别标识扩展）
-        "row4_other_count": 0, "row4_other_amount": 0.0, "row4_other_tax": 0.0,
+        # 其他扣税凭证（普通发票/电子发票等非专票）
+        "row4_other_count": other_count, "row4_other_amount": round(other_amount, 2), "row4_other_tax": round(other_tax, 2),
         "row5_customs_count": 0, "row5_customs_amount": 0.0, "row5_customs_tax": 0.0,
         "row6_agri_count": 0, "row6_agri_amount": 0.0, "row6_agri_tax": 0.0,
         "row7_wht_count": 0, "row7_wht_tax": 0.0,
@@ -712,7 +711,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "certified_count": cert_count,
         "certified_amount": round(cert_amount, 2),
         "certified_tax": round(cert_tax, 2),
-        "total_deductible": round(input_tax, 2),
+        "total_deductible": round(total_ded_tax, 2),
     }
     vd.form_input = json.dumps(form_input, ensure_ascii=False)
 
@@ -730,7 +729,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row2_9_price_tax": 0.0, "row2_9_begin": 0.0, "row2_9_occur": 0.0,
         "row2_9_should": 0.0, "row2_9_actual": 0.0, "row2_9_end": 0.0,
         # 6%税率项目（不含金融商品转让）
-        "row3_6_price_tax": round(sales_total, 2), "row3_6_begin": 0.0, "row3_6_occur": 0.0,
+        "row3_6_price_tax": round(sales_total_inclusive, 2), "row3_6_begin": 0.0, "row3_6_occur": 0.0,
         "row3_6_should": 0.0, "row3_6_actual": 0.0, "row3_6_end": 0.0,
         # 6%税率的金融商品转让项目
         "row4_6_fin_price_tax": 0.0, "row4_6_fin_begin": 0.0, "row4_6_fin_occur": 0.0,
@@ -748,12 +747,12 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row8_exempt_price_tax": 0.0, "row8_exempt_begin": 0.0, "row8_exempt_occur": 0.0,
         "row8_exempt_should": 0.0, "row8_exempt_actual": 0.0, "row8_exempt_end": 0.0,
         # 合计
-        "row_total_price_tax": round(sales_total, 2), "row_total_begin": 0.0,
+        "row_total_price_tax": round(sales_total_inclusive, 2), "row_total_begin": 0.0,
         "row_total_occur": 0.0, "row_total_should": 0.0, "row_total_actual": 0.0, "row_total_end": 0.0,
         # 兼容旧字段
-        "row1_total_price_tax": round(sales_total, 2),
+        "row1_total_price_tax": round(sales_total_inclusive, 2),
         "row1_deduction": 0.0,
-        "row1_after_deduction": round(sales_total, 2),
+        "row1_after_deduction": round(sales_total_inclusive, 2),
     }
     vd.form_deduction = json.dumps(form_deduction, ensure_ascii=False)
 
