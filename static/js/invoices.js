@@ -138,6 +138,7 @@ async function renderSalesInvoices(container) {
     });
     html += '</tbody></table></div>';
     el.innerHTML = html;
+  }
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -598,9 +599,10 @@ async function renderPurchaseInvoices(container) {
         html += '</td>';
         html += '</tr>';
       });
-    }
+    });
     html += '</tbody></table></div>';
     el.innerHTML = html;
+  }
   } catch (e) {
     toast(e.message, 'error');
   }
