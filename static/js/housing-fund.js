@@ -1,4 +1,4 @@
-// ========== 公积金缴存模块 ==========
+// ========== 住房公积金模块 ==========
 
 let hfPeriod = '';
 let hfStats = {};
@@ -146,7 +146,7 @@ async function renderHousingFund(container) {
           </div>
           <button class="btn btn-outline" onclick="hfQuery()">查询</button>
           <button class="btn btn-outline" onclick="hfClearPeriod()">清除</button>
-          <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增公积金</button>
+          <button class="btn btn-primary" onclick="hfShowCreate()">＋ 新增住房公积金</button>
           <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
           <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">生成凭证</button>
           <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn">批量删除</button>
@@ -324,7 +324,7 @@ function hfShowCreate() {
   }
   modal.innerHTML = `
     <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
-      <div class="modal-header"><h3>新增公积金</h3><button class="modal-close" onclick="closeModal('hf-modal')">&times;</button></div>
+      <div class="modal-header"><h3>新增住房公积金</h3><button class="modal-close" onclick="closeModal('hf-modal')">&times;</button></div>
       <div class="modal-body salary-form">
         <div class="form-grid-2">
           <div class="form-row">
@@ -435,7 +435,7 @@ async function hfShowEdit(id) {
   modal.id = 'hf-modal-edit';
   modal.innerHTML = `
     <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
-      <div class="modal-header"><h3>编辑公积金</h3><button class="modal-close" onclick="closeModal('hf-modal-edit')">&times;</button></div>
+      <div class="modal-header"><h3>编辑住房公积金</h3><button class="modal-close" onclick="closeModal('hf-modal-edit')">&times;</button></div>
       <div class="modal-body salary-form">
         <div class="form-grid-2">
           <div class="form-row">
@@ -547,7 +547,7 @@ function hfShowImport() {
 
   modal.innerHTML = `
     <div class="modal" style="max-width:480px">
-      <div class="modal-header"><h3>导入公积金</h3><button class="modal-close" onclick="closeModal('hf-import-modal')">&times;</button></div>
+      <div class="modal-header"><h3>导入住房公积金</h3><button class="modal-close" onclick="closeModal('hf-import-modal')">&times;</button></div>
       <div class="modal-body salary-form">
         <div style="margin-top:16px;text-align:center">
           <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:6px">所属期间</label>
@@ -633,7 +633,7 @@ async function generateHfVouchers() {
         alert('请先选择期间');
         return;
     }
-    if (!confirm(`确认生成 ${period} 的公积金凭证？（将生成计提+缴纳2组凭证）`)) return;
+    if (!confirm(`确认生成 ${period} 的住房公积金凭证？（将生成计提+缴纳2组凭证）`)) return;
     try {
         // 1. 生成计提凭证
         const result1 = await api('POST', `/api/housing-fund/generate-accrual?company_id=${currentCompanyId}&period=${period}`);

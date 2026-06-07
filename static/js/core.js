@@ -51,8 +51,8 @@ const pages = {
   'bank-transactions': '银行流水',
   'vat-declaration': '增值税申报',
   'salary': '工资薪金',
-  'social-security': '社保申报',
-  'housing-fund': '公积金缴存'
+  'social-security': '社会保险费',
+  'housing-fund': '住房公积金'
 };
 
 // ==================== 初始化（多公司版本） ====================

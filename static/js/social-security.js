@@ -1,4 +1,4 @@
-// ==================== 社保申报页面 ====================
+// ==================== 社会保险费页面 ====================
 let ssDeclarations = [];
 let ssFilterPeriod = '';
 
@@ -25,7 +25,7 @@ async function loadSSDeclarationList() {
     if (ssFilterPeriod) url += '?period=' + encodeURIComponent(ssFilterPeriod);
     const res = await api(url);
     ssDeclarations = res.items || [];
-  } catch (e) { ssDeclarations = []; handleError(e, '加载社保申报'); }
+  } catch (e) { ssDeclarations = []; handleError(e, '加载社会保险费'); }
   renderSSStats();
   renderSSTable();
 }
@@ -71,7 +71,7 @@ function showSSCreateModal() {
   const now = new Date();
   const defaultPeriod = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   document.getElementById('ss-modal').style.display = 'flex';
-  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">＋ 新建社保申报</h2>'
+  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">＋ 新建社会保险费</h2>'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">费款所属期 <span style="color:red">*</span></label>'
     + '<input type="month" class="form-control" id="ss-period" value="' + defaultPeriod + '" style="width:200px"></div>'
     + '<div class="form-group" style="margin-top:12px"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">备注</label>'
@@ -174,7 +174,7 @@ async function openSSDetail(id) {
     }
 
     document.getElementById('ss-modal').style.display = 'flex';
-    document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 12px 0;font-size:18px">📋 社保申报详情 — ' + escapeHtml(decl.period) + '</h2>'
+    document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 12px 0;font-size:18px">📋 社会保险费详情 — ' + escapeHtml(decl.period) + '</h2>'
       + '<div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">'
       + '<span class="badge ' + (decl.status === '已确认' ? 'badge-posted' : 'badge-draft') + '">' + escapeHtml(decl.status) + '</span>'
       + '<span style="color:#6b7280;font-size:13px">' + (decl.note ? '备注：' + escapeHtml(decl.note) : '') + '</span>'
@@ -187,7 +187,7 @@ async function openSSDetail(id) {
 
 // ==================== 删除 ====================
 async function deleteSSDeclaration(id, period) {
-  if (!confirm('确定要删除 ' + period + ' 的社保申报记录？')) return;
+  if (!confirm('确定要删除 ' + period + ' 的社会保险费记录？')) return;
   try {
     await api('/api/social-security/declarations/' + id, { method: 'DELETE' });
     await renderSocialSecurity();
@@ -198,7 +198,7 @@ async function deleteSSDeclaration(id, period) {
 function showSSImportModal() {
   const defaultPeriod = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
   document.getElementById('ss-modal').style.display = 'flex';
-  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">导入社保申报Excel</h2>'
+  document.getElementById('ss-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">导入社会保险费Excel</h2>'
     + '<div style="margin-bottom:16px;padding:12px;background:#fef3c7;border-radius:6px;font-size:13px;color:#92400e">'
     + '支持"日常申报明细表"格式的Excel文件（.xlsx / .xls）</div>'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">费款所属期 <span style="color:red">*</span></label>'
@@ -236,7 +236,7 @@ async function doSSImport() {
       resultEl.innerHTML = '<div style="padding:8px;background:#fef2f2;color:#dc2626;border-radius:4px">❌ 导入失败：未识别到有效数据' + (res.errors?.length ? '<br>' + res.errors.join('<br>') : '') + '</div>';
     }
   } catch (e) {
-    handleError(e, '导入社保申报');
+    handleError(e, '导入社会保险费');
     resultEl.innerHTML = '<div style="padding:8px;background:#fef2f2;color:#dc2626;border-radius:4px">❌ 导入失败</div>';
   }
 }
