@@ -10,21 +10,21 @@ function hfEscAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 // ============ 期间步进（与顶栏 period-stepper 同款） ============
 function stepHfYear(delta) {
-    const yearSel = document.getElementById('hf-import-year');
+    const yearSel = document.getElementById('hf-year');
     if (!yearSel) return;
     const opts = Array.from(yearSel.options).map(o => parseInt(o.value));
     const cur = parseInt(yearSel.value);
     const idx = opts.indexOf(cur);
     const next = idx + delta;
     if (next >= 0 && next < opts.length) yearSel.value = opts[next];
-    const monthSel = document.getElementById('hf-import-month');
+    const monthSel = document.getElementById('hf-month');
     if (monthSel) hfPeriod = yearSel.value + '-' + monthSel.value;
     if (typeof hfRefresh === 'function') hfRefresh();
 }
 
 function stepHfMonth(delta) {
-    const yearSel = document.getElementById('hf-import-year');
-    const monSel = document.getElementById('hf-import-month');
+    const yearSel = document.getElementById('hf-year');
+    const monSel = document.getElementById('hf-month');
     if (!monSel) return;
     let y = parseInt(yearSel?.value || new Date().getFullYear());
     let m = parseInt(monSel.value) + delta;
@@ -46,44 +46,6 @@ function stepHfImportYear(delta) {
     const idx = opts.indexOf(cur);
     const next = idx + delta;
     if (next >= 0 && next < opts.length) sel.value = opts[next];
-}
-
-// ============ 导入弹窗步进（不触发主界面刷新） ============
-function stepHfImportYear(delta) {
-    const sel = document.getElementById('hf-import-year');
-    if (!sel) return;
-    const opts = Array.from(sel.options).map(o => parseInt(o.value));
-    const cur = parseInt(sel.value);
-    const idx = opts.indexOf(cur);
-    const next = idx + delta;
-    if (next >= 0 && next < opts.length) sel.value = opts[next];
-}
-
-function stepHfImportMonth(delta) {
-    const yearSel = document.getElementById('hf-import-year');
-    const monSel = document.getElementById('hf-import-month');
-    if (!monSel) return;
-    let y = parseInt(yearSel?.value || new Date().getFullYear());
-    let m = parseInt(monSel.value) + delta;
-    if (m > 12) { m = 1; y++; }
-    if (m < 1) { m = 12; y--; }
-    const yearOpts = Array.from(yearSel?.options || []).map(o => parseInt(o.value));
-    if (yearSel && yearOpts.length > 0 && yearOpts.includes(y)) yearSel.value = y;
-    monSel.value = String(m).padStart(2, '0');
-}
-
-// ============ 导入文件选择处理 ============
-function hfHandleFileSelected(input) {
-    const zone = document.getElementById('hf-upload-zone');
-    const text = document.getElementById('hf-upload-text');
-    if (input.files && input.files[0]) {
-        const file = input.files[0];
-        if (zone) zone.classList.add('has-file');
-        if (text) text.textContent = file.name;
-    } else {
-        if (zone) zone.classList.remove('has-file');
-        if (text) text.textContent = '点击或拖拽上传 Excel 文件';
-    }
 }
 
 function stepHfImportMonth(delta) {
@@ -142,14 +104,14 @@ async function renderHousingFund(container) {
             <label style="font-size:13px;font-weight:600;color:var(--gray-700)">期间</label>
             <div class="period-selector-bar" style="display:inline-flex">
               <div class="period-stepper">
-                <select id="hf-import-year" class="period-selector-year">${yearOpts}</select>
+                <select id="hf-year" class="period-selector-year">${yearOpts}</select>
                 <div class="stepper-arrows">
                   <button class="stepper-btn stepper-up" type="button" onclick="stepHfYear(1)">▲</button>
                   <button class="stepper-btn stepper-down" type="button" onclick="stepHfYear(-1)">▼</button>
                 </div>
               </div>
               <div class="period-stepper">
-                <select id="hf-import-month" class="period-selector-month">
+                <select id="hf-month" class="period-selector-month">
                   <option value="01"${defMonth==='01'?' selected':''}>01月</option>
                   <option value="02"${defMonth==='02'?' selected':''}>02月</option>
                   <option value="03"${defMonth==='03'?' selected':''}>03月</option>
@@ -197,8 +159,8 @@ async function renderHousingFund(container) {
   `;
   // 设置默认期间并加载数据
   hfPeriod = hfDefPeriod;
-  const yearSel = document.getElementById('hf-import-year');
-  const monthSel = document.getElementById('hf-import-month');
+  const yearSel = document.getElementById('hf-year');
+  const monthSel = document.getElementById('hf-month');
   if (yearSel) yearSel.value = defYear;
   if (monthSel) monthSel.value = defMonth;
   // 绑定期间变化事件
@@ -208,8 +170,8 @@ async function renderHousingFund(container) {
 }
 
 async function hfRefresh() {
-  const yearSel = document.getElementById('hf-import-year');
-  const monthSel = document.getElementById('hf-import-month');
+  const yearSel = document.getElementById('hf-year');
+  const monthSel = document.getElementById('hf-month');
   if (yearSel && monthSel) hfPeriod = yearSel.value + '-' + monthSel.value;
   let url = `/api/housing-fund/details?company_id=${currentCompanyId}`;
   if (hfPeriod) url += `&period=${hfPeriod}`;
@@ -638,7 +600,7 @@ async function hfDoImport() {
   try {
     const result = await api('POST', `/api/housing-fund/import?company_id=${currentCompanyId}&period=${period}`, formData);
     alert(result.message || `成功导入 ${result.imported} 条`);
-    closeModal();
+    closeModal('hf-import-modal');
     hfRefresh();
   } catch (e) {
     alert('导入失败: ' + (e.message || e));
@@ -648,7 +610,7 @@ async function hfDoImport() {
 // ============ 生成凭证 ============
 
 async function generateHfVouchers() {
-    const period = document.getElementById('hf-period-filter')?.value;
+    const period = hfPeriod;
     if (!period) {
         alert('请先选择期间');
         return;
