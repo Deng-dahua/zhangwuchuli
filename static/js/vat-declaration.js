@@ -4,6 +4,7 @@ let vatDeclarations = [];
 let vatSelectedId = null;
 let vatActivePage = 'main'; // 默认主表
 let vatFilterPeriod = '';
+let vatInlineDisplayId = null;
 
 const VAT_PAGES = [
   { id: 'main', label: '增值税主表' },
@@ -17,6 +18,7 @@ const VAT_PAGES = [
 
 // ==================== 主渲染（列表页） ====================
 async function renderVATDeclaration(container) {
+  vatInlineDisplayId = null;
   const el = container || document.getElementById('page-vat-declaration') || document.getElementById('content-area');
   el.innerHTML = '<div id="vat-stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>'
     + '<div class="toolbar"><div class="toolbar-left"><button class="btn btn-primary" onclick="showVATCreateModal()">＋ 新建申报</button></div>'
@@ -36,19 +38,25 @@ async function loadVATDeclarationList() {
   } catch (e) { vatDeclarations = []; handleError(e, '加载申报表'); }
   renderVATStats();
   renderVATTable();
-  // 自动展示第一条申报数据
-  if (vatDeclarations.length > 0) {
-    const first = vatDeclarations[0];
-    vatSelectedId = first.id;
-    vatActivePage = 'main';
-    try {
-      const data = await api('/api/vat/declarations/' + first.id);
-      renderVATTemplateViewInline(data);
-    } catch (e) { /* 静默失败，用户可手动点击 */ }
-  } else {
-    const inlineEl = document.getElementById('vat-forms-inline');
+  // 自动展示选中或第一条申报数据
+  const inlineEl = document.getElementById('vat-forms-inline');
+  if (vatDeclarations.length === 0) {
+    if (inlineEl) inlineEl.style.display = 'none';
+    return;
+  }
+  // 如果之前有选中的 ID，优先展示它；否则展示第一条
+  const target = vatSelectedId ? vatDeclarations.find(d => d.id === vatSelectedId) : null;
+  const first = target || vatDeclarations[0];
+  vatSelectedId = first.id;
+  vatActivePage = 'main';
+  try {
+    const data = await api('/api/vat/declarations/' + first.id);
+    renderVATTemplateViewInline(data);
+  } catch (e) {
+    console.error('加载申报表详情失败:', e);
     if (inlineEl) inlineEl.style.display = 'none';
   }
+  highlightVATRow(vatSelectedId);
 }
 
 function renderVATStats() {
@@ -72,7 +80,7 @@ function renderVATTable() {
         const main = typeof d.form_main === 'string' ? JSON.parse(d.form_main) : (d.form_main || {});
         const taxPayable = main.row19_tax_payable || 0;
         const badge = {'草稿':'<span class="badge badge-draft">草稿</span>','已申报':'<span class="badge badge-audited">已申报</span>','已缴税':'<span class="badge badge-posted">已缴税</span>'}[d.status] || d.status;
-        html += '<tr><td><strong>' + escapeHtml(d.period) + '</strong></td><td>' + escapeHtml(d.taxpayer_name || '') + '</td>'
+        html += '<tr data-vat-id="' + d.id + '"><td><strong>' + escapeHtml(d.period) + '</strong></td><td>' + escapeHtml(d.taxpayer_name || '') + '</td>'
           + '<td>' + (d.micro_enterprise ? '✅ 是' : '否') + '</td><td>' + (d.six_tax_reduction ? '✅ 是' : '否') + '</td>'
           + '<td>' + badge + '</td><td class="num" style="font-weight:600;color:' + (taxPayable > 0 ? '#d97706' : '#6b7280') + '">' + fmt(taxPayable) + '</td>'
           + '<td>' + (d.fill_date || '-') + '</td><td>' + (d.submitted_at ? new Date(d.submitted_at).toLocaleDateString('zh-CN') : '-') + '</td>'
@@ -195,8 +203,20 @@ async function openVATDetailInline(id) {
   try {
     const data = await api('/api/vat/declarations/' + id);
     renderVATTemplateViewInline(data);
+    highlightVATRow(id);
   } catch (e) {
     toast('加载申报表失败: ' + (e.message || e), 'error');
+  }
+}
+
+function highlightVATRow(id) {
+  // 清除所有高亮
+  const allRows = document.querySelectorAll('#vat-list-table tr[data-vat-id]');
+  allRows.forEach(r => r.style.background = '');
+  // 高亮当前行
+  if (id) {
+    const row = document.querySelector('#vat-list-table tr[data-vat-id="' + id + '"]');
+    if (row) row.style.background = '#eef2ff';
   }
 }
 
@@ -213,8 +233,7 @@ function renderVATTemplateViewInline(data) {
     + '<div style="display:flex;gap:8px;align-items:center">'
     + '<span class="badge badge-info">' + statusLabel + '</span>'
     + '<button class="btn btn-sm btn-outline" onclick="editVATDeclaration(' + data.id + ')">✏️ 编辑</button>'
-    + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + data.id + ',\'' + escJs(data.period) + '\')">🗑 删除</button>'
-    + '<button class="btn btn-sm btn-outline" onclick="closeVATInline()">✕ 收起</button></div></div>';
+    + '<button class="btn btn-sm btn-danger" onclick="deleteVATDeclaration(' + data.id + ',\'' + escJs(data.period) + '\')">🗑 删除</button></div></div>';
 
   // 页签
   html += '<div style="display:flex;gap:0;border-bottom:1px solid #e5e7eb;margin:12px 0 0 0;overflow-x:auto;background:#fff;border-radius:8px 8px 0 0">';
@@ -240,14 +259,38 @@ function renderVATTemplateViewInline(data) {
   } catch (e) { formHtml = '<div style="padding:20px;color:#ef4444">渲染错误: ' + e.message + '</div>'; }
   container.innerHTML = html + '<div style="overflow-x:auto;padding:12px 0">' + formHtml + '</div>';
 
-  // 滚动到报表区域
-  container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // 切换到不同记录或首次渲染时才滚动到表单区域
+  if (vatInlineDisplayId !== data.id) {
+    vatInlineDisplayId = data.id;
+    setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
+}
+
+function closeVATInline() {
+  // 内联表单已常驻显示，不再支持隐藏
 }
 
 function switchVATPageInline(pageId, id) {
   vatActivePage = pageId;
-  const data = vatDeclarations.find(d => d.id === id);
-  if (data) {
+  // 从缓存获取数据并补充完整字段（若缺失则重新从 API 获取）
+  let data = vatDeclarations.find(d => d.id === id);
+  if (data && data.form_main === undefined) {
+    // 缓存数据不含表单详情，重新从 API 获取
+    api('/api/vat/declarations/' + id).then(fullData => {
+      // 将完整数据合入缓存供后续切换使用
+      Object.assign(data, fullData);
+      data.form_main = data.form_main || '{}';
+      data.form_sales = data.form_sales || '{}';
+      data.form_input = data.form_input || '{}';
+      data.form_deduction = data.form_deduction || '{}';
+      data.form_credit = data.form_credit || '{}';
+      data.form_surcharge = data.form_surcharge || '{}';
+      data.form_reduction = data.form_reduction || '{}';
+      renderVATTemplateViewInline(data);
+    }).catch(e => {
+      toast('切换页签失败: ' + (e.message || e), 'error');
+    });
+  } else if (data) {
     data.form_main = data.form_main || '{}';
     data.form_sales = data.form_sales || '{}';
     data.form_input = data.form_input || '{}';
@@ -303,9 +346,8 @@ async function deleteVATDeclaration(id, period) {
   if (!confirm('确定删除「' + period + '」的申报表吗？')) return;
   try {
     await api('/api/vat/declarations/' + id, { method: 'DELETE' });
-    await loadVATDeclarationList();
     closeVATModal();
-    closeVATInline();
+    await loadVATDeclarationList();
   } catch (e) { handleError(e, '删除申报表'); }
 }
 
