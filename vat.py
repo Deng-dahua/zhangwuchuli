@@ -4,13 +4,14 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime
 import calendar
 import json
 
 from database import (
     VATDeclaration, Company, SalesInvoice, PurchaseInvoice,
-    InputVATDeduction, JournalEntry, get_db
+    InputVATDeduction, JournalEntry, SalaryRecord, get_db
 )
 
 def _end_of_month(period: str) -> str:
@@ -39,6 +40,132 @@ def list_vat_declarations(company_id: int, period: str = Query(None), db: Sessio
     } for v in items]
 
 
+# ===== 小型微利企业自动校验 =====
+SMALL_MICRO_INCOME_LIMIT  = 3_000_000.00   # 年度应纳税所得额 ≤ 300万元
+SMALL_MICRO_EMPLOYEE_LIMIT = 300            # 从业人数 ≤ 300人
+SMALL_MICRO_ASSET_LIMIT    = 50_000_000.00  # 资产总额 ≤ 5000万元
+# 法律依据：财政部 税务总局公告2023年第12号、公告2022年第10号
+# 六税两费减征50%，政策有效期 2023-01-01 至 2027-12-31
+
+
+def _validate_small_micro_enterprise(db: Session, company_id: int, period: str) -> dict:
+    """
+    自动校验小型微利企业三大指标，返回完整校验报告。
+    应纳税所得额：利润表 1-12月 净利润
+    从业人数：工资记录 1-12月 身份证去重
+    资产总额：资产负债表 期末资产总计
+    """
+    year = int(period[:4])
+    p_from = f"{year}-01"
+    p_to   = f"{year}-12"
+
+    # ---- 1. 汇算科目余额（整年 1-12月）----
+    balances = {}
+    for e in db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= p_from,
+        JournalEntry.period <= p_to,
+    ).all():
+        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
+        c["debit"] += e.debit_amount or 0
+        c["credit"] += e.credit_amount or 0
+
+    def _pl(code_prefix, is_credit=True):
+        dr = sum(v["debit"]  for k, v in balances.items() if k.startswith(code_prefix))
+        cr = sum(v["credit"] for k, v in balances.items() if k.startswith(code_prefix))
+        return round(cr - dr, 2) if is_credit else round(dr - cr, 2)
+
+    def _bs(code_prefix, is_debit=True):
+        dr = sum(v["debit"]  for k, v in balances.items() if k.startswith(code_prefix))
+        cr = sum(v["credit"] for k, v in balances.items() if k.startswith(code_prefix))
+        return round(dr - cr, 2) if is_debit else round(cr - dr, 2)
+
+    # ---- 1. 利润总额 & 净利润（≈ 应纳税所得额基础）----
+    revenue     = _pl("6001") + _pl("6051")
+    cost        = _pl("6401", False) + _pl("6402", False)
+    tax_sur     = _pl("6403", False)
+    period_exp  = _pl("6601", False) + _pl("6602", False) + _pl("6604", False) + _pl("6603", False)
+    invest      = _pl("6111")
+    interest_in = _pl("660301")
+    credit_l    = _pl("6701", False)
+    asset_l     = _pl("6702", False)
+    disposal    = _pl("6712")
+    non_op_in   = _pl("6301")
+    non_op_out  = _pl("6711", False)
+    income_tax  = _pl("6801", False)
+
+    gross_profit       = round(revenue - cost - tax_sur, 2)
+    operating_profit   = round(gross_profit - period_exp + invest + interest_in - credit_l - asset_l + disposal, 2)
+    profit_total       = round(operating_profit + non_op_in - non_op_out, 2)
+    net_profit         = round(profit_total - income_tax, 2)
+
+    # ---- 2. 从业人数（年度有工资记录的去重人数）----
+    employee_count = db.query(func.count(func.distinct(SalaryRecord.id_number))).filter(
+        SalaryRecord.company_id == company_id,
+        SalaryRecord.period >= p_from,
+        SalaryRecord.period <= p_to,
+        SalaryRecord.id_number.isnot(None),
+        SalaryRecord.id_number != "",
+    ).scalar() or 0
+
+    # ---- 3. 资产总额 = 流动资产合计 + 非流动资产合计 ----
+    cur = (
+        _bs("1001") + _bs("1002") + _bs("1003") +   # 货币资金
+        _bs("1101") + _bs("1121") + _bs("1122") +   # 交易性金融资产 + 应收票据 + 应收账款
+        _bs("1124") + _bs("1123") + _bs("1221") +   # 应收款项融资 + 预付款项 + 其他应收款
+        _bs("1403") + _bs("1405") + _bs("1406") + _bs("1408") + _bs("1411") +  # 存货
+        _bs("1401") + _bs("1501") + _bs("1502") + _bs("1503")  # 合同资产 + 持有待售 + 一年内到期 + 其他流动
+    )
+    nc = (
+        _bs("1504") + _bs("1505") + _bs("1511") + _bs("1512") +
+        _bs("1513") + _bs("1514") + _bs("1521") +
+        _bs("1601") + _bs("1602", False) + _bs("1604") +
+        _bs("1621") + _bs("1631") + _bs("1641") +
+        _bs("1701") + _bs("1702") + _bs("1711") +
+        _bs("1801") + _bs("1811") + _bs("1901")
+    )
+    total_assets = round(cur + nc, 2)
+
+    # ---- 判定 ----
+    income_ok   = net_profit <= SMALL_MICRO_INCOME_LIMIT if net_profit > 0 else True
+    employee_ok = employee_count <= SMALL_MICRO_EMPLOYEE_LIMIT
+    asset_ok    = total_assets <= SMALL_MICRO_ASSET_LIMIT
+    all_ok      = income_ok and employee_ok and asset_ok
+
+    warnings = []
+    if not income_ok:
+        warnings.append(f"年度净利润 ¥{net_profit:,.2f} 超过 ¥{SMALL_MICRO_INCOME_LIMIT/10000:.0f}万标准")
+    if not employee_ok:
+        warnings.append(f"从业人数 {employee_count} 人 超过 {SMALL_MICRO_EMPLOYEE_LIMIT} 人标准")
+    if not asset_ok:
+        warnings.append(f"资产总额 ¥{total_assets:,.2f} 超过 ¥{SMALL_MICRO_ASSET_LIMIT/10000:.0f}万标准")
+    if not all_ok and warnings:
+        warnings.append("⚠️ 不符合小型微利企业认定标准，如勾选六税两费减征可能产生税务风险")
+
+    return {
+        "profit_total":     profit_total,
+        "net_profit":       net_profit,
+        "employee_count":   employee_count,
+        "total_assets":     total_assets,
+        "income_ok":        income_ok,
+        "employee_ok":      employee_ok,
+        "asset_ok":         asset_ok,
+        "all_ok":           all_ok,
+        "warnings":         warnings,
+        "standards": {
+            "income":   SMALL_MICRO_INCOME_LIMIT,
+            "employees": SMALL_MICRO_EMPLOYEE_LIMIT,
+            "assets":   SMALL_MICRO_ASSET_LIMIT,
+        },
+    }
+
+
+@router.get("/check-micro-enterprise")
+def check_micro_enterprise(company_id: int = Query(), period: str = Query(), db: Session = Depends(get_db)):
+    """预校验：创建申报表前先查看是否符合小型微利企业标准"""
+    return _validate_small_micro_enterprise(db, company_id, period)
+
+
 @router.post("/declarations")
 def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = Depends(get_db)):
     period = data.get("period", "")
@@ -51,16 +178,16 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
     micro = data.get("micro_enterprise", False)
     six_tax = data.get("six_tax_reduction", False)
 
-    # 法律校验提醒（不阻止创建，仅 warning）
-    legal_warning = None
+    # ===== 自动校验小型微利企业三大指标 =====
+    validation = _validate_small_micro_enterprise(db, company_id, period)
+
+    legal_warnings = []
     if micro and six_tax:
-        # 小型微利企业认定标准（财政部 税务总局公告2023年第12号）：
-        # 年度应纳税所得额 ≤ 300万元、从业人数 ≤ 300人、资产总额 ≤ 5000万元
-        # 六税两费减征政策有效期：2023-01-01 至 2027-12-31
-        # 此处仅做政策有效期检查，企业资质需用户自行确认
         period_year = int(period[:4])
         if period_year > 2027:
-            legal_warning = f"⚠️ 六税两费减征政策有效期至2027-12-31，当前期间{period}已超出政策有效期，减征可能不适用"
+            legal_warnings.append(f"⚠️ 六税两费减征政策有效期至2027-12-31，当前期间{period}已超出政策有效期，减征可能不适用")
+        if not validation["all_ok"]:
+            legal_warnings.extend(validation["warnings"])
 
     reduction_start = None
     reduction_end = None
@@ -88,9 +215,13 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
     _compute_vat_forms(db, vd)
     db.commit()
     db.refresh(vd)
-    result = {"id": vd.id, "period": vd.period, "status": vd.status, "msg": "申报表已创建并计算完成"}
-    if legal_warning:
-        result["legal_warning"] = legal_warning
+    result = {
+        "id": vd.id, "period": vd.period, "status": vd.status,
+        "msg": "申报表已创建并计算完成",
+        "validation": validation,
+    }
+    if legal_warnings:
+        result["legal_warnings"] = legal_warnings
     return result
 
 

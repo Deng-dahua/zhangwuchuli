@@ -222,7 +222,7 @@ function showVATCreateModal(period) {
   document.getElementById('vat-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">＋ 新建增值税申报表</h2>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">税款所属期 <span style="color:red">*</span></label>'
-    + '<input type="month" class="form-control" id="vat-period" value="' + defaultPeriod + '" style="width:100%"></div>'
+    + '<input type="month" class="form-control" id="vat-period" value="' + defaultPeriod + '" style="width:100%" onchange="vatFetchMicroCheck()"></div>'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">纳税人名称</label>'
     + '<input type="text" class="form-control" id="vat-taxpayer" value="' + escapeHtml(defaultTaxpayerName) + '" style="width:100%"></div>'
     + '</div>'
@@ -232,14 +232,103 @@ function showVATCreateModal(period) {
     + '<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
     + '<input type="checkbox" id="vat-six-tax"> 六税两费减征</label></div>'
     + '</div>'
-    + '<div style="margin-top:8px;font-size:11px;color:#ef4444;line-height:1.5" id="vat-legal-hint">'
-    + '⚠️ 是否符合小型微利企业标准，请自行对照最新法律法规确认。'
-    + '认定标准：年度应纳税所得额≤300万元、从业人数≤300人、资产总额≤5000万元（财政部 税务总局公告2023年第12号）'
+    + '<div id="vat-micro-check-result" style="margin-top:8px;font-size:12px;line-height:1.6">'
+    + '<div style="color:#6b7280;text-align:center;padding:8px">⏳ 正在校验小型微利企业标准...</div>'
     + '</div>'
     + '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
     + '<button class="btn btn-outline" onclick="closeVATModal()">取消</button>'
     + '<button class="btn btn-primary" onclick="createVATDeclaration()">✅ 创建申报表</button></div>';
   document.getElementById('vat-modal').style.display = 'flex';
+  // 自动拉取校验结果
+  vatFetchMicroCheck();
+}
+
+// 拉取小型微利企业自动校验结果
+async function vatFetchMicroCheck() {
+  var periodEl = document.getElementById('vat-period');
+  var resultEl = document.getElementById('vat-micro-check-result');
+  if (!periodEl || !resultEl) return;
+  var period = periodEl.value;
+  if (!period) return;
+
+  resultEl.innerHTML = '<div style="color:#6b7280;text-align:center;padding:8px">⏳ 正在校验...</div>';
+  try {
+    var resp = await api('/api/vat/check-micro-enterprise?period=' + encodeURIComponent(period));
+    _renderMicroCheckResult(resp, resultEl);
+  } catch(e) {
+    resultEl.innerHTML = '<div style="color:#ef4444;padding:8px">❌ 校验失败：' + (e.message || '网络错误') + '</div>';
+  }
+}
+
+// 渲染校验结果卡片
+function _renderMicroCheckResult(v, el) {
+  var allOk = v.all_ok;
+  var statusColor = allOk ? '#059669' : '#dc2626';
+  var statusIcon  = allOk ? '✅' : '❌';
+  var statusText  = allOk ? '符合小型微利企业标准' : '不符合小型微利企业标准';
+
+  function fmtWan(val) {
+    if (typeof val !== 'number') return '—';
+    return (val / 10000).toFixed(2) + '万';
+  }
+
+  function fmtCount(val) {
+    if (typeof val !== 'number') return '—';
+    return val + '人';
+  }
+
+  function badge(ok) { return ok ? '✅' : '❌'; }
+
+  // 自动勾选复选框
+  var microCB = document.getElementById('vat-micro');
+  var sixTaxCB = document.getElementById('vat-six-tax');
+  if (allOk) {
+    if (microCB) microCB.checked = true;
+    if (sixTaxCB) sixTaxCB.checked = true;
+  }
+
+  var html = '';
+  // 判定结果条
+  html += '<div style="background:' + statusColor + ';color:#fff;padding:6px 12px;border-radius:6px;font-weight:600;margin-bottom:8px">';
+  html += statusIcon + ' ' + statusText;
+  html += '</div>';
+
+  // 三列指标卡片
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">';
+  // 1. 应纳税所得额
+  html += '<div style="background:#f9fafb;border:1px solid ' + (v.income_ok ? '#d1fae5' : '#fecaca') + ';border-radius:6px;padding:8px;text-align:center">';
+  html += '<div style="font-size:11px;color:#6b7280;margin-bottom:2px">' + badge(v.income_ok) + ' 应纳税所得额</div>';
+  html += '<div style="font-weight:700;font-size:15px;color:' + (v.income_ok ? '#059669' : '#dc2626') + '">' + fmtWan(v.net_profit) + '</div>';
+  html += '<div style="font-size:10px;color:#9ca3af">标准 ≤300万</div>';
+  html += '</div>';
+  // 2. 从业人数
+  html += '<div style="background:#f9fafb;border:1px solid ' + (v.employee_ok ? '#d1fae5' : '#fecaca') + ';border-radius:6px;padding:8px;text-align:center">';
+  html += '<div style="font-size:11px;color:#6b7280;margin-bottom:2px">' + badge(v.employee_ok) + ' 从业人数</div>';
+  html += '<div style="font-weight:700;font-size:15px;color:' + (v.employee_ok ? '#059669' : '#dc2626') + '">' + fmtCount(v.employee_count) + '</div>';
+  html += '<div style="font-size:10px;color:#9ca3af">标准 ≤300人</div>';
+  html += '</div>';
+  // 3. 资产总额
+  html += '<div style="background:#f9fafb;border:1px solid ' + (v.asset_ok ? '#d1fae5' : '#fecaca') + ';border-radius:6px;padding:8px;text-align:center">';
+  html += '<div style="font-size:11px;color:#6b7280;margin-bottom:2px">' + badge(v.asset_ok) + ' 资产总额</div>';
+  html += '<div style="font-weight:700;font-size:15px;color:' + (v.asset_ok ? '#059669' : '#dc2626') + '">' + fmtWan(v.total_assets) + '</div>';
+  html += '<div style="font-size:10px;color:#9ca3af">标准 ≤5000万</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // 警告列表
+  if (v.warnings && v.warnings.length > 0) {
+    html += '<div style="margin-top:6px">';
+    for (var i = 0; i < v.warnings.length; i++) {
+      html += '<div style="font-size:11px;color:#dc2626;padding:2px 0">⚠️ ' + v.warnings[i] + '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '<div style="margin-top:6px;font-size:10px;color:#9ca3af;text-align:center">'
+    + '数据来源：年度利润表（净利润）+ 年度工资记录（去重人数）+ 期末资产负债表（资产总计）<br>'
+    + '法律依据：财政部 税务总局公告2023年第12号</div>';
+
+  el.innerHTML = html;
 }
 
 function closeVATModal() { document.getElementById('vat-modal').style.display = 'none'; }
@@ -256,7 +345,20 @@ async function createVATDeclaration() {
       body: JSON.stringify({ period: period, taxpayer_name: taxpayer, micro_enterprise: micro, six_tax_reduction: sixTax }),
     });
     closeVATModal();
-    if (resp.legal_warning) toast(resp.legal_warning, 'warning', 8000);
+    // 显示校验结果提醒
+    if (resp.validation) {
+      var v = resp.validation;
+      if (!v.all_ok && micro && sixTax) {
+        toast('⚠️ 系统自动校验不通过！' + (v.warnings && v.warnings.length ? v.warnings[0] : '不符合小型微利企业标准'), 'warning', 10000);
+      } else if (v.all_ok) {
+        toast('✅ 系统校验通过：符合小型微利企业标准', 'success', 4000);
+      }
+    }
+    if (resp.legal_warnings && resp.legal_warnings.length) {
+      for (var i = 0; i < resp.legal_warnings.length; i++) {
+        toast(resp.legal_warnings[i], 'warning', 8000);
+      }
+    }
     await loadVATDeclarationList();
     openVATDetailInline(resp.id);
   } catch (e) { handleError(e, '创建申报表'); }
