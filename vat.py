@@ -47,9 +47,30 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(404, detail="公司不存在")
+
+    micro = data.get("micro_enterprise", False)
+    six_tax = data.get("six_tax_reduction", False)
+
+    # 法律校验提醒（不阻止创建，仅 warning）
+    legal_warning = None
+    if micro and six_tax:
+        # 小型微利企业认定标准（财政部 税务总局公告2023年第12号）：
+        # 年度应纳税所得额 ≤ 300万元、从业人数 ≤ 300人、资产总额 ≤ 5000万元
+        # 六税两费减征政策有效期：2023-01-01 至 2027-12-31
+        # 此处仅做政策有效期检查，企业资质需用户自行确认
+        period_year = int(period[:4])
+        if period_year > 2027:
+            legal_warning = f"⚠️ 六税两费减征政策有效期至2027-12-31，当前期间{period}已超出政策有效期，减征可能不适用"
+
+    reduction_start = None
+    reduction_end = None
+    if micro and six_tax:
+        reduction_start = period + "-01"
+        reduction_end = _end_of_month(period)
+
     vd = VATDeclaration(
         company_id=company_id, period=period,
-        taxpayer_name=company.name,
+        taxpayer_name=data.get("taxpayer_name") or company.name,
         taxpayer_id=company.uscc or "",
         industry=data.get("industry", ""),
         register_type=data.get("register_type", ""),
@@ -57,17 +78,20 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
         address=company.address or "",
         bank_account=data.get("bank_account", ""),
         phone=data.get("phone", ""),
-        micro_enterprise=data.get("micro_enterprise", True),
-        six_tax_reduction=data.get("six_tax_reduction", True),
-        reduction_start=period + "-01",
-        reduction_end=_end_of_month(period),
+        micro_enterprise=micro,
+        six_tax_reduction=six_tax,
+        reduction_start=reduction_start,
+        reduction_end=reduction_end,
     )
     db.add(vd)
     db.flush()
     _compute_vat_forms(db, vd)
     db.commit()
     db.refresh(vd)
-    return {"id": vd.id, "period": vd.period, "status": vd.status, "msg": "申报表已创建并计算完成"}
+    result = {"id": vd.id, "period": vd.period, "status": vd.status, "msg": "申报表已创建并计算完成"}
+    if legal_warning:
+        result["legal_warning"] = legal_warning
+    return result
 
 
 @router.get("/declarations/{declaration_id}")

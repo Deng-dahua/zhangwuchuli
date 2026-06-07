@@ -217,12 +217,14 @@ function showVATCreateModal(period) {
   const now = new Date();
   // 优先使用传入的期间，其次用全局过滤期间，最后取当前日期
   const defaultPeriod = period || vatFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+  // 纳税人名称默认取顶格栏账套名称
+  const defaultTaxpayerName = (typeof currentCompanyName !== 'undefined' && currentCompanyName) ? currentCompanyName : '';
   document.getElementById('vat-modal-inner').innerHTML = '<h2 style="margin:0 0 20px 0;font-size:18px">＋ 新建增值税申报表</h2>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">税款所属期 <span style="color:red">*</span></label>'
     + '<input type="month" class="form-control" id="vat-period" value="' + defaultPeriod + '" style="width:100%"></div>'
     + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">纳税人名称</label>'
-    + '<input type="text" class="form-control" id="vat-taxpayer" style="width:100%"></div>'
+    + '<input type="text" class="form-control" id="vat-taxpayer" value="' + escapeHtml(defaultTaxpayerName) + '" style="width:100%"></div>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">'
     + '<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
@@ -230,7 +232,11 @@ function showVATCreateModal(period) {
     + '<div class="form-group"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
     + '<input type="checkbox" id="vat-six-tax"> 六税两费减征</label></div>'
     + '</div>'
-    + '<div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end">'
+    + '<div style="margin-top:8px;font-size:11px;color:#ef4444;line-height:1.5" id="vat-legal-hint">'
+    + '⚠️ 是否符合小型微利企业标准，请自行对照最新法律法规确认。'
+    + '认定标准：年度应纳税所得额≤300万元、从业人数≤300人、资产总额≤5000万元（财政部 税务总局公告2023年第12号）'
+    + '</div>'
+    + '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
     + '<button class="btn btn-outline" onclick="closeVATModal()">取消</button>'
     + '<button class="btn btn-primary" onclick="createVATDeclaration()">✅ 创建申报表</button></div>';
   document.getElementById('vat-modal').style.display = 'flex';
@@ -250,6 +256,7 @@ async function createVATDeclaration() {
       body: JSON.stringify({ period: period, taxpayer_name: taxpayer, micro_enterprise: micro, six_tax_reduction: sixTax }),
     });
     closeVATModal();
+    if (resp.legal_warning) toast(resp.legal_warning, 'warning', 8000);
     await loadVATDeclarationList();
     openVATDetailInline(resp.id);
   } catch (e) { handleError(e, '创建申报表'); }
@@ -1227,15 +1234,29 @@ function renderSchedule5(data) {
   html += '<thead>';
 
   // === 小微企业六税两费减免政策信息（模板Row 3-4，在表头上方） ===
+  var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
+  var microNo  = (data.micro_enterprise && data.six_tax_reduction) ? '□' : '☑';
+  var主体小型 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
+  var主体个体 = (data.micro_enterprise && data.six_tax_reduction) ? '□' : '☑';
+  var 减免起 = (data.reduction_start || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_start ? '日' : '');
+  var 减免止 = (data.reduction_end || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_end ? '日' : '');
+  // 简化显示：YYYY-MM-DD → YYYY年MM月DD日
+  function fmtDate(d) {
+    if (!d) return '';
+    var parts = d.split('-');
+    return parts[0] + '年' + (parts[1]||'') + '月' + (parts[2]||'') + '日';
+  }
+  var rs = fmtDate(data.reduction_start);
+  var re = fmtDate(data.reduction_end);
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费" 减免政策</td>';
-  html += '<td colspan="2" rowspan="2">□是 □否</td>';
+  html += '<td colspan="2" rowspan="2">' + microYes + '是　' + microNo + '否</td>';
   html += '<td colspan="3">减免政策适用主体</td>';
-  html += '<td colspan="5">□个体工商户 □小型微利企业</td>';
+  html += '<td colspan="5">' +主体个体 + '个体工商户　' +主体小型 + '小型微利企业</td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="3">适用减免政策起止时间</td>';
-  html += '<td colspan="5">年 月 至 年 月</td>';
+  html += '<td colspan="5">' + (rs || '　　　年　月　日') + ' 至 ' + (re || '　　　年　月　日') + '</td>';
   html += '</tr>';
 
   // === 表头第1行（模板Row 5：大类标题） ===
