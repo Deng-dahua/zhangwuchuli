@@ -176,32 +176,31 @@
 
 ---
 
-## 六、修复进度（2026-06-08 更新）
+## 六、修复进度（2026-06-08 最终更新）
 
 | 严重级别 | 总数 | 已修复 | 待修复 | 修复率 |
 |----------|------|--------|--------|--------|
 | CRITICAL | 13 | 13 | 0 | 100% |
 | HIGH | 28 | 30 | 0 | 100% |
 | MEDIUM | 31 | 31 | 0 | 100% |
-| LOW | 22 | 15 | 7 | 68% |
-| **总计** | **94** | **89** | **7** | **95%** |
+| LOW | 22 | 22 | 0 | 100% |
+| **总计** | **94** | **94** | **0** | **100%** |
 
-### 6 轮提交记录
+### 11 轮提交记录
 | 提交 | 修复内容 |
 |------|----------|
 | `ae2fb83` | Float→Numeric, 科目编码, 前端CRITICAL, 凭证科目, 裸except |
 | `52d9c54` | 凭证号辅助函数, import清理, 索引约束, 前端事件/命名 |
 | `e966bca` | 事务回滚保护 (H12/H13) |
 | `a28d299` | 日期验证 (M17), var→let (M15) |
-| *(本轮R5)* | M5-VAT科目常量, M19-nullable约束, M22-backref→back_populates, M23-免税零金额分录, M25-幂等检查死代码, M26-bank journal ref_id |
-| *(本轮R6)* | M7-公积金比例日志透明化, M8-期初余额使用实际数据, M29-get_full_name N+1查询优化 |
-| *(本轮R7)* | M12-M14 迁移死代码注释、M18确认无重复函数、M28确认已正确使用660216、LOW: script标签添加defer、修复 accounts 批量插入缺少 flush、修复 journal_entries(source,ref_id) UNIQUE约束冲突 |
-| *(本轮R8)* | M9-M10: chat代码提取到chat.py独立模块(~750行)、M30: 现金流量表按对方科目精细分类（收入/成本/薪酬/税费）、M31: 权益变动表未分配利润直接取科目余额表、修复Float→Numeric迁移导致的Decimal类型兼容问题 |
-| *(本轮R9)* | H3-H6: 裸dict→Pydantic模型(vat/social_security/housing_fund/main)、M11: intent_from_text评分制匹配、LOW: esc()冗余清理、死代码移除(64行)、摘要括号统一、DDL f-string安全注释 |
-| *(本轮R10)* | LOW: 24个模型Company relationship补全（双向back_populates） |
+| *(R5)* | M5-VAT科目常量, M19-nullable约束, M22-backref→back_populates, M23-免税零金额分录, M25-幂等检查死代码, M26-bank journal ref_id |
+| *(R6)* | M7-公积金比例日志透明化, M8-期初余额使用实际数据, M29-get_full_name N+1查询优化 |
+| *(R7)* | M12-M14 迁移死代码注释、M18确认无重复函数、LOW: script标签添加defer |
+| *(R8)* | M9-M10: chat代码提取到chat.py(~750行)、M30: 现金流量表按对方科目分类、M31: 权益变动表未分配利润 |
+| *(R9)* | H3-H6: 裸dict→Pydantic模型、M11: intent_from_text评分制匹配、LOW: esc()/死代码/括号/DDL注释 |
+| *(R10)* | LOW: 24个模型Company relationship补全（双向back_populates） |
+| *(R11)* | LOW: 最终7项——docstring补充、异常类型收紧、logging日志、类型提示、废弃代码清理 |
 
-### 待修复（剩7项）
-**HIGH（0项）**：已完成
-**MEDIUM（0项）**：已完成
-**LOW（7项）**：代码注释补充、代码风格微调
+### ✅ 审计已全部完成
+所有 94 项审计问题已 100% 修复完毕。
 
