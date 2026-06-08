@@ -35,7 +35,7 @@ async function renderSocialSecurity(container) {
 
   el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
     // 工具栏：时间栏（与顶栏同款样式）+ 按钮组
-    + '<div class="toolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+    + '<div class="toolbar" style="display:flex;align-items:center;gap:0;margin-bottom:16px;flex-wrap:wrap">'
       // 时间栏 —— 复用顶栏 period-selector-bar 样式
       + '<div class="period-selector-bar">'
         + '<div class="period-stepper">'
@@ -56,9 +56,9 @@ async function renderSocialSecurity(container) {
       // 功能按钮
       + '<button class="btn btn-confirm-period" onclick="loadSSDeclarationList()" title="按当前期间查询">查询</button>'
       + '<button class="btn btn-secondary" onclick="clearSSFilter()" title="清除期间条件">清除</button>'
-      + '<button class="btn btn-secondary" onclick="triggerSSImport()" title="从Excel导入申报明细">📥 导入文件</button>'
-      + '<button class="btn btn-success" onclick="generateSSVoucher()" title="生成社保相关凭证">⚡ 生成凭证</button>'
-      + '<button class="btn btn-danger" onclick="deleteSSDeclaration()" title="删除当前期间申报记录">🗑️ 删除报表</button>'
+      + '<button class="btn btn-secondary" onclick="triggerSSImport()" title="从Excel导入申报明细">导入文件</button>'
+      + '<button class="btn btn-success" onclick="generateSSVoucher()" title="生成社保相关凭证">生成凭证</button>'
+      + '<button class="btn btn-danger" onclick="deleteSSDeclaration()" title="删除当前期间申报记录">删除报表</button>'
       // 隐藏的文件输入
       + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
     + '</div>'
