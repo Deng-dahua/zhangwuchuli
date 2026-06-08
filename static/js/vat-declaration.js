@@ -631,8 +631,6 @@ function _fmtDash(v) {
 
 // ==================== VAT 工具栏（时间栏+按钮） ====================
 function renderVATToolbar(yearOpts, monthOpts) {
-  var btnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;white-space:nowrap';
-  var dangerBtnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer;white-space:nowrap';
   return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
     + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
     + '<div class="period-stepper">'
@@ -649,11 +647,11 @@ function renderVATToolbar(yearOpts, monthOpts) {
     + '<button class="stepper-btn stepper-up" onclick="stepVATPeriod(\'month\',1)" title="下一月">▲</button>'
     + '<button class="stepper-btn stepper-down" onclick="stepVATPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div>'
-    + '<button style="' + btnStyle + '" onclick="onVATDetailPeriodChange()" title="按所选期间查询">查询</button>'
-    + '<button style="' + btnStyle + '" onclick="vatClearFilter()" title="清除筛选条件">清除</button>'
-    + '<button style="' + btnStyle + '" onclick="vatImportFile()" title="导入增值税申报数据">导入文件</button>'
-    + '<button style="' + btnStyle + '" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">生成凭证</button>'
-    + '<button style="' + dangerBtnStyle + '" onclick="vatDeleteCurrent()" title="删除当前申报表">删除报表</button>'
+    + '<button class="btn-toolbar" onclick="onVATDetailPeriodChange()" title="按所选期间查询">查询</button>'
+    + '<button class="btn-toolbar" onclick="vatClearFilter()" title="清除筛选条件">清除</button>'
+    + '<button class="btn-toolbar" onclick="vatImportFile()" title="导入增值税申报数据">导入文件</button>'
+    + '<button class="btn-toolbar" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">生成凭证</button>'
+    + '<button class="btn-toolbar-danger" onclick="vatDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
 

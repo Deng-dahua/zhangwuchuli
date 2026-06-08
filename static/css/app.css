@@ -111,6 +111,22 @@
     .link-danger { color: var(--danger); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
+    /* 工具栏按钮 — 统一增值税查询按钮风格 */
+    .btn-toolbar {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 12px; font-size: 12px; border-radius: 6px;
+      border: 1px solid #d1d5db; background: #fff; color: #374151;
+      cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .btn-toolbar:hover { background: #f9fafb; border-color: #9ca3af; }
+    .btn-toolbar-danger {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 12px; font-size: 12px; border-radius: 6px;
+      border: 1px solid #fca5a5; background: #fff; color: #dc2626;
+      cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .btn-toolbar-danger:hover { background: #fef2f2; border-color: #f87171; }
+
     /* 表格操作列固定右侧 */
     .table-wrap { overflow-x: auto; width: 100%; position: relative; }
     .table-wrap table { min-width: 100%; }

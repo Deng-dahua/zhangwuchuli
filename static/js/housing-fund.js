@@ -144,12 +144,12 @@ async function renderHousingFund(container) {
               </div>
             </div>
           </div>
-          <button class="btn btn-outline" onclick="hfQuery()">查询</button>
-          <button class="btn btn-outline" onclick="hfClearPeriod()">清除</button>
-          <button class="btn btn-primary" onclick="hfShowCreate()">新增住房公积金</button>
-          <button class="btn btn-outline" onclick="hfShowImport()">导入文件</button>
-          <button class="btn btn-info" onclick="generateHfVouchers()" style="background:#7c3aed;color:#fff">生成凭证</button>
-          <button class="btn btn-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn">批量删除</button>
+          <button class="btn-toolbar" onclick="hfQuery()">查询</button>
+          <button class="btn-toolbar" onclick="hfClearPeriod()">清除</button>
+          <button class="btn-toolbar" onclick="hfShowCreate()">新增住房公积金</button>
+          <button class="btn-toolbar" onclick="hfShowImport()">导入文件</button>
+          <button class="btn-toolbar" onclick="generateHfVouchers()">生成凭证</button>
+          <button class="btn-toolbar-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn">批量删除</button>
         </div>
       </div>
         <div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">

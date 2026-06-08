@@ -4,8 +4,8 @@ async function renderContracts(container) {
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div class="filter-bar">' +
       '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key==\'Enter\')loadContracts()">' +
-      '<button class="btn btn-primary" onclick="loadContracts()">搜索</button>' +
-      '<button class="btn btn-primary" onclick="showContractForm()" style="margin-left:8px">新增合同</button>' +
+      '<button class="btn-toolbar" onclick="loadContracts()">搜索</button>' +
+      '<button class="btn-toolbar" onclick="showContractForm()" style="margin-left:8px">新增合同</button>' +
     '</div>' +
     '<div class="table-wrap" id="contract-table">加载中...</div>' +
   '</div>';
@@ -251,8 +251,8 @@ async function renderPayments(container) {
     '<div class="card" style="margin-bottom:0;padding:24px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-primary" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">新增付款</button>' +
-          '<button class="btn btn-primary" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">新增付款</button>' +
+          '<button class="btn-toolbar" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">新增付款</button>' +
+          '<button class="btn-toolbar" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">新增付款</button>' +
         '</div>' +
       '</div>' +
 
@@ -281,7 +281,7 @@ async function renderPayments(container) {
           '<option value="' + STATUS.REJECTED + '">' + STATUS.REJECTED + '</option>' +
         '</select>' +
         '<input class="form-control" id="payment-keyword-filter" placeholder="搜索单号/人员/供应商/用途..." style="width:240px">' +
-        '<button class="btn btn-primary" onclick="loadPayments()">查询</button>' +
+        '<button class="btn-toolbar" onclick="loadPayments()">查询</button>' +
       '</div>' +
 
       // Table

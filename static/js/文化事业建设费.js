@@ -313,9 +313,6 @@ function switchCCFPageInline(pageId, id) {
 // ==================== 工具栏 ====================
 
 function renderCCFToolbar(yearOpts, monthOpts) {
-  var btnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;white-space:nowrap';
-  var dangerBtnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer;white-space:nowrap';
-  var primaryBtnStyle = 'padding:4px 12px;font-size:12px;border-radius:6px;border:1px solid #1a56db;background:#1a56db;color:#fff;cursor:pointer;white-space:nowrap';
   return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
     + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
     + '<div class="period-stepper">'
@@ -332,12 +329,11 @@ function renderCCFToolbar(yearOpts, monthOpts) {
     + '<button class="stepper-btn stepper-up" onclick="stepCCFPeriod(\'month\',1)" title="下一月">▲</button>'
     + '<button class="stepper-btn stepper-down" onclick="stepCCFPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div>'
-    + '<button style="' + btnStyle + '" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
-    + '<button style="' + btnStyle + '" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
-    + '<button style="' + btnStyle + '" onclick="showCCFEditModal()" title="编辑申报表基本信息">编辑</button>'
-    + '<button style="' + primaryBtnStyle + '" onclick="ccfSaveCurrent()" title="保存当前申报表">保存</button>'
-    + '<button style="' + btnStyle + '" onclick="ccfAutoCalculate()" title="自动计算各栏次">自动计算</button>'
-    + '<button style="' + dangerBtnStyle + '" onclick="ccfDeleteCurrent()" title="删除当前申报表">删除报表</button>'
+    + '<button class="btn-toolbar" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
+    + '<button class="btn-toolbar" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
+    + '<button class="btn-toolbar" onclick="ccfImportFile()" title="导入文化事业建设费申报数据">导入文件</button>'
+    + '<button class="btn-toolbar" onclick="ccfGenerateVoucher()" title="生成文化事业建设费相关凭证">生成凭证</button>'
+    + '<button class="btn-toolbar-danger" onclick="ccfDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
 
@@ -591,6 +587,22 @@ async function ccfDeleteCurrent() {
     ccfSelectedId = null;
     await loadCCFDeclarationList();
   } catch (e) { toast('删除失败：' + (e.message || e), 'error'); }
+}
+
+// ==================== 导入文件 ====================
+
+function ccfImportFile() {
+  toast('请先通过侧边栏【开具发票】导入广告服务相关数据，系统会自动生成申报表', 'info');
+}
+
+// ==================== 生成凭证 ====================
+
+function ccfGenerateVoucher() {
+  if (!ccfCurrentData || !ccfCurrentData.id) {
+    toast('请先选择一份申报表', 'warning');
+    return;
+  }
+  toast('凭证生成功能开发中，请稍后...', 'info');
 }
 
 // ==================== 自动计算 ====================
