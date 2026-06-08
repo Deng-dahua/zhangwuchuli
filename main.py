@@ -2768,7 +2768,7 @@ def purchase_invoice_stats(company_id: int = Query(...), tab: str = Query("all")
     else:
         deduct_q = db.query(PurchaseInvoice).filter(
             PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.tax_amount > 0,
+            PurchaseInvoice.tax_amount != 0,  # 含红字发票（负税额应扣减）
         )
         if tab == "zpt":
             deduct_q = deduct_q.filter(PurchaseInvoice.invoice_category.contains("专用发票"))
