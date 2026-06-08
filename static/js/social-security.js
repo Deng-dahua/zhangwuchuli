@@ -10,7 +10,7 @@ async function renderSocialSecurity(container) {
     if (currentPeriod && currentPeriod !== ssFilterPeriod) ssFilterPeriod = currentPeriod;
     el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
       + '<div class="toolbar"><div class="toolbar-left">'
-      + '<input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px" placeholder="选择期间">'
+      + '<input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px" placeholder="选择期间">'
       + '</div>'
       + '<div id="ss-list-table"></div>'
       + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1200px"></div></div>';
@@ -48,7 +48,7 @@ function renderSSTable() {
   const el = document.getElementById('ss-list-table'); if (!el) return;
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>税款所属期</th><th>参保人数</th><th>状态</th><th>备注</th><th>更新时间</th><th>操作</th></tr></thead><tbody>';
   if (ssDeclarations.length === 0) {
-    html += '<tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">暂无申报记录，点击「＋ 新建申报」或「导入Excel」创建</td></tr>';
+    html += '<tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">暂无申报记录</td></tr>';
   } else {
     ssDeclarations.forEach(d => {
       const badge = {'草稿':'<span class="badge badge-draft">草稿</span>','已确认':'<span class="badge badge-posted">已确认</span>'}[d.status] || d.status;
@@ -57,9 +57,9 @@ function renderSSTable() {
         + '<td>' + badge + '</td>'
         + '<td>' + escapeHtml(d.note || '-') + '</td>'
         + '<td>' + (d.updated_at ? new Date(d.updated_at).toLocaleString('zh-CN') : '-') + '</td>'
-        + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openSSDetail(' + d.id + ')">📋 查看详情</button> '
-        + '<button class="btn btn-sm btn-info" onclick="generateSSAccrualJournal(' + d.id + ')" style="background:#10b981;color:#fff">📝 生成计提凭证</button> '
-        + '<button class="btn btn-sm btn-danger" onclick="deleteSSDeclaration(' + d.id + ',\'' + escJs(d.period) + '\')">🗑</button></td></tr>';
+        + '<td class="col-action"><button class="btn btn-sm btn-outline" onclick="openSSDetail(' + d.id + ')">查看详情</button> '
+        + '<button class="btn btn-sm btn-info" onclick="generateSSAccrualJournal(' + d.id + ')" style="background:#10b981;color:#fff">生成计提凭证</button> '
+        + '<button class="btn btn-sm btn-danger" onclick="deleteSSDeclaration(' + d.id + ',\'' + escJs(d.period) + '\')">删除</button></td></tr>';
     });
   }
   html += '</tbody></table></div>'; el.innerHTML = html;
