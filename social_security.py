@@ -238,6 +238,7 @@ def get_stats(company_id: int, period: str = Query(None), db: Session = Depends(
 async def import_excel(
     company_id: int,
     period: str = Query(...),
+    declaration_id: int = Query(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -338,26 +339,42 @@ async def import_excel(
         return {"imported": 0, "errors": errors, "message": "未识别到有效数据"}
 
     # 创建/更新申报记录
-    existing = db.query(SocialSecurityDeclaration).filter(
-        SocialSecurityDeclaration.company_id == company_id,
-        SocialSecurityDeclaration.period == period
-    ).first()
-
-    if existing:
-        # 删除旧明细
-        db.query(SocialSecurityDetail).filter(
-            SocialSecurityDetail.declaration_id == existing.id
-        ).delete()
-        existing.updated_at = datetime.now()
-        decl = existing
+    if declaration_id:
+        decl = db.query(SocialSecurityDeclaration).filter(
+            SocialSecurityDeclaration.id == declaration_id,
+            SocialSecurityDeclaration.company_id == company_id
+        ).first()
+        if not decl:
+            raise HTTPException(404, "申报记录不存在")
+        # 追加模式：不清空旧明细
+        existing_count = db.query(SocialSecurityDetail).filter(
+            SocialSecurityDetail.declaration_id == decl.id
+        ).count()
+        seq = existing_count
+        decl.updated_at = datetime.now()
     else:
-        decl = SocialSecurityDeclaration(
-            company_id=company_id, period=period, status="已确认"
-        )
-        db.add(decl)
-        db.flush()
+        # 按公司+期间查找（不删除旧记录，改为追加）
+        decl = db.query(SocialSecurityDeclaration).filter(
+            SocialSecurityDeclaration.company_id == company_id,
+            SocialSecurityDeclaration.period == period
+        ).first()
+        if decl:
+            existing_count = db.query(SocialSecurityDetail).filter(
+                SocialSecurityDetail.declaration_id == decl.id
+            ).count()
+            seq = existing_count
+            decl.updated_at = datetime.now()
+        else:
+            decl = SocialSecurityDeclaration(
+                company_id=company_id, period=period, status="已确认"
+            )
+            db.add(decl)
+            db.flush()
+            seq = 0
 
     for d in details:
+        seq += 1
+        d["seq"] = seq
         detail = SocialSecurityDetail(
             declaration_id=decl.id,
             seq=d["seq"],
@@ -390,6 +407,107 @@ async def import_excel(
 
 
 # ========== 生成凭证 ==========
+
+@router.post("/declarations/{declaration_id}/details")
+def add_detail(declaration_id: int, company_id: int, payload: dict, db: Session = Depends(get_db)):
+    """新增参保人员明细"""
+    decl = db.query(SocialSecurityDeclaration).filter(
+        SocialSecurityDeclaration.id == declaration_id,
+        SocialSecurityDeclaration.company_id == company_id
+    ).first()
+    if not decl:
+        raise HTTPException(404, "申报记录不存在")
+
+    # 计算总金额、个人合计、单位合计
+    insurance_items = payload.get("insurance_items", [])
+    personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
+    company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
+    total_amount = personal_amount + company_amount
+
+    # 自动设置 seq
+    max_seq = db.query(SocialSecurityDetail).filter(
+        SocialSecurityDetail.declaration_id == declaration_id
+    ).count()
+
+    detail = SocialSecurityDetail(
+        declaration_id=declaration_id,
+        seq=max_seq + 1,
+        employee_name=payload.get("employee_name", ""),
+        id_number=payload.get("id_number", ""),
+        period_start=payload.get("period_start", decl.period),
+        period_end=payload.get("period_end", decl.period),
+        total_amount=total_amount,
+        personal_amount=personal_amount,
+        company_amount=company_amount,
+        salary_base=payload.get("salary_base", 0),
+        category=payload.get("category", "在职人员"),
+        insurance_items=json.dumps(insurance_items, ensure_ascii=False),
+    )
+    db.add(detail)
+    decl.updated_at = datetime.now()
+    db.commit()
+    db.refresh(detail)
+    return {"id": detail.id, "message": "新增成功"}
+
+
+@router.put("/details/{detail_id}")
+def update_detail(detail_id: int, company_id: int, payload: dict, db: Session = Depends(get_db)):
+    """更新参保人员明细"""
+    detail = db.query(SocialSecurityDetail).filter(
+        SocialSecurityDetail.id == detail_id
+    ).first()
+    if not detail:
+        raise HTTPException(404, "明细记录不存在")
+
+    # 校验公司归属
+    decl = db.query(SocialSecurityDeclaration).filter(
+        SocialSecurityDeclaration.id == detail.declaration_id,
+        SocialSecurityDeclaration.company_id == company_id
+    ).first()
+    if not decl:
+        raise HTTPException(403, "无权限操作此记录")
+
+    insurance_items = payload.get("insurance_items", [])
+    personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
+    company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
+    total_amount = personal_amount + company_amount
+
+    detail.employee_name = payload.get("employee_name", detail.employee_name)
+    detail.id_number = payload.get("id_number", detail.id_number)
+    detail.period_start = payload.get("period_start", detail.period_start)
+    detail.period_end = payload.get("period_end", detail.period_end)
+    detail.total_amount = total_amount
+    detail.personal_amount = personal_amount
+    detail.company_amount = company_amount
+    detail.salary_base = payload.get("salary_base", detail.salary_base)
+    detail.category = payload.get("category", detail.category)
+    detail.insurance_items = json.dumps(insurance_items, ensure_ascii=False)
+    decl.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@router.delete("/details/{detail_id}")
+def delete_detail(detail_id: int, company_id: int, db: Session = Depends(get_db)):
+    """删除参保人员明细"""
+    detail = db.query(SocialSecurityDetail).filter(
+        SocialSecurityDetail.id == detail_id
+    ).first()
+    if not detail:
+        raise HTTPException(404, "明细记录不存在")
+
+    decl = db.query(SocialSecurityDeclaration).filter(
+        SocialSecurityDeclaration.id == detail.declaration_id,
+        SocialSecurityDeclaration.company_id == company_id
+    ).first()
+    if not decl:
+        raise HTTPException(403, "无权限操作此记录")
+
+    db.delete(detail)
+    decl.updated_at = datetime.now()
+    db.commit()
+    return {"message": "删除成功"}
+
 
 @router.post("/generate-payment-journals")
 def generate_ss_payment_journals(company_id: int = Query(...), db: Session = Depends(get_db)):
