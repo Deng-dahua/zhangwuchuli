@@ -1084,11 +1084,30 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row1_sales": round(sales_total, 2),         # 按适用税率计税销售额
         "row2_other_invoice": 0.0,                     # 其中：开具其他发票
         "row3_no_invoice": 0.0,                        # 未开具发票
-        "row4_tax_check": 0.0,                         # 纳税检查调整
-        "row5_simple_method": 0.0,                     # （二）按简易办法计税销售额
+        "row4_tax_check": round(s1.get("row4_check_total_sales", 0), 2),  # 纳税检查调整 = 附表一第7列第1至5行之和
+        "row5_simple_method": max(0, round(
+            s1.get("row8_simple_6_total_sales", 0) +
+            s1.get("row9a_simple_5a_total_sales", 0) +
+            s1.get("row10_simple_4_total_sales", 0) +
+            s1.get("row11_simple_3a_total_sales", 0) +
+            s1.get("row12_simple_3b_total_sales", 0) +
+            s1.get("row13a_prepay_total_sales", 0) +
+            s1.get("row13b_prepay_2_total_sales", 0) -
+            s1.get("row14_refund_simple_total_sales", 0) -
+            s1.get("row15_refund_simple_total_sales", 0),
+            2
+        )),  # 简易计税销售额
         "row6_exempt_sales": 0.0,                      # 免税销售额
-        "row7_export_exempt": 0.0,                     # 出口免税销售额
-        "row8_tax_free": 0.0,                          # 其中：免税劳务
+        "row7_export_exempt": round(
+            s1.get("row16_export_goods_total_sales", 0) +
+            s1.get("row17_export_service_total_sales", 0),
+            2
+        ),  # 免抵退销售额 = 附表一第9列第16、17行之和
+        "row8_tax_free": round(
+            s1.get("row18_exempt_goods_total_sales", 0) +
+            s1.get("row19_exempt_service_total_sales", 0),
+            2
+        ),  # 免税销售额 = 附表一第9列第18、19行之和
         "row9_exempt_goods": 0.0,                      # 免税货物销售额
         "row10_exempt_service": 0.0,                   # 免税劳务销售额
         # 二、税款计算
