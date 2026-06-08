@@ -1133,6 +1133,14 @@ def auto_generate_journals(db):
         ).order_by(SalesInvoice.invoice_date.asc()).all()
 
         for inv in invoices:
+            # 幂等检查：该发票已生成过凭证则跳过
+            _existing = db.query(JournalEntry).filter(
+                JournalEntry.company_id == comp.id,
+                JournalEntry.source == "开具发票",
+                JournalEntry.ref_id == inv.id
+            ).first()
+            if _existing:
+                continue
             buyer = inv.buyer_name or "客户"
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"

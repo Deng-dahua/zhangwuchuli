@@ -748,8 +748,8 @@ def compute_salary_tax(
         r.quick_deduction = qd
         r.tax_payable = round(cum_tax, 2)
         r.tax_to_pay = round(tax_this, 2)
-        r.tax_already_withheld = round(tax_this, 2)
-        r.tax_refund = round(tax_this, 2)  # 应补(退)税额 = 本期应预扣税额
+        r.tax_already_withheld = round(prev_cum_tax, 2)  # 已预扣=上期累计应纳税额
+        r.tax_refund = round(min(tax_this, 0), 2)        # 应补(退)税额：负值表示退税
         r.cumulative_income = round(prev_cum_income + (r.current_income or 0), 2)
         r.cumulative_deduction = round(cum_deduction, 2)
         r.cumulative_special = round(cum_special, 2)

@@ -55,6 +55,15 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0", lifespan=lifespan)
+# ==================== 开发模式：强制无缓存 ====================
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    """给所有响应加 no-cache 头，强制浏览器不用本地缓存。"""
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 app.include_router(vat_router)
 app.include_router(salary_router)
 app.include_router(social_security_router)
@@ -7094,3 +7103,14 @@ def save_employee(data, db, sess, sid, company_id):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+# ========== 开发模式：强制无缓存 ==========
+@app.middleware('http')
+async def add_cache_headers(request, call_next):
+    '''强制浏览器不用本地缓存，每次都重新验证资源'''
+    response = await call_next(request)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
