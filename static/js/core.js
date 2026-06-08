@@ -559,3 +559,10 @@ function showError(el, err, context) {
   el.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">' + msg + '</p></div>';
 }
 
+// ==================== 启动 ====================
+document.addEventListener('DOMContentLoaded', function () {
+  init().catch(function (e) {
+    console.error('初始化失败', e);
+  });
+});
+
