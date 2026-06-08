@@ -318,8 +318,9 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         if e.account_code and "2221" in e.account_code and "销项" in (e.account_name or "")
     )
 
-    # 销项发票：用于计算销售额（不含税）+ 销项税额兜底
-    # 增值税申报表的"销售额" = 不含税金额，仅统计正常正数发票
+    # 销项发票：按税收分类编码前两位自动分类，填入主表各栏
+    # 税收分类编码规则：10=货物，11=矿产品，12=电力，20=加工修理修配劳务，
+    # 30=服务，40=不动产，50=无形资产
     sales_invoices = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.invoice_date >= period + "-01",
@@ -327,11 +328,77 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         SalesInvoice.status == "正常",
         SalesInvoice.is_positive == True,
     ).all()
+
+    def _inv_category(inv):
+        """根据税收分类编码前两位判断类别：goods/service/realestate/intangible"""
+        code = (inv.tax_category_code or "").strip()
+        prefix = code[:2]
+        if prefix in ("10", "11", "12", "13", "14", "15"):
+            return "goods"
+        if prefix == "20":
+            return "labor"
+        if prefix in ("30",):
+            return "service"
+        if prefix in ("40",):
+            return "realestate"
+        if prefix in ("50",):
+            return "intangible"
+        # fallback: 根据goods_name关键词判断
+        name = (inv.goods_name or "").lower()
+        if any(k in name for k in ["货物", "产品", "材料", "设备"]):
+            return "goods"
+        if any(k in name for k in ["服务", "咨询", "软件", "技术", "租赁"]):
+            return "service"
+        return "goods"  # 默认货物
+
+    def _is_exempt(inv):
+        """判断是否免税：税率为0且有免税标志，或invoice_category含'免税'"""
+        return (inv.tax_rate or 0) == 0 or "免税" in (inv.invoice_category or "")
+
+    def _is_simple(inv):
+        """判断是否简易计税：征收率3%、5%等"""
+        return (inv.tax_rate or 0) in (0.03, 0.05, 3, 5)
+
+    # 按类别+税率分类汇总
+    category_sales = {}   # (category, tax_rate) -> amount
+    category_tax = {}     # (category, tax_rate) -> tax_amount
+    exempt_sales = 0.0    # 免税销售额
+    simple_sales = 0.0    # 简易计税销售额
+    simple_tax = 0.0      # 简易计税税额
+    goods_sales = 0.0      # 应税货物销售额（第2栏）
+    labor_sales = 0.0      # 应税劳务销售额（第3栏）
+    service_sales = 0.0    # 应税服务销售额
+    goods_tax = 0.0
+    labor_tax = 0.0
+    service_tax = 0.0
+
+    for inv in sales_invoices:
+        if _is_exempt(inv):
+            exempt_sales += inv.amount or 0
+            continue
+        if _is_simple(inv):
+            simple_sales += inv.amount or 0
+            simple_tax += inv.tax_amount or 0
+            continue
+        cat = _inv_category(inv)
+        rate = inv.tax_rate or 0
+        key = (cat, rate)
+        category_sales[key] = category_sales.get(key, 0) + (inv.amount or 0)
+        category_tax[key] = category_tax.get(key, 0) + (inv.tax_amount or 0)
+        if cat == "goods":
+            goods_sales += inv.amount or 0
+            goods_tax += inv.tax_amount or 0
+        elif cat == "labor":
+            labor_sales += inv.amount or 0
+            labor_tax += inv.tax_amount or 0
+        elif cat in ("service", "realestate", "intangible"):
+            service_sales += inv.amount or 0
+            service_tax += inv.tax_amount or 0
+
     # 销售额 = 不含税金额（amount），不是价税合计（total_amount）
     sales_total = sum(i.amount or 0 for i in sales_invoices)
-    # 价税合计（含税金额），供附表三"价税合计额"列使用
     sales_total_inclusive = sum(i.total_amount or 0 for i in sales_invoices)
-    # 销项税额兜底：序时账无数据时从发票取税
+    # 销项税额：优先序时账，兜底发票
     if output_tax == 0:
         output_tax = sum(i.tax_amount or 0 for i in sales_invoices)
 
@@ -443,25 +510,127 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
         prior_credit = prior_main.get("row20_end_credit", 0.0)
 
-    # 主表计算链（按填表说明公式）
-    # 第17栏 应抵扣税额合计 = 第12栏+第13栏-第14栏-第15栏+第16栏
-    input_transfer_out = 0.0    # 第14栏 进项税额转出（当前无数据）
-    exempt_refund = 0.0         # 第15栏 免、抵、退应退税额（当前无数据）
-    tax_check = 0.0             # 第16栏 按适用税率计算的纳税检查应补缴税额（当前无数据）
-    total_deduct = round(input_tax + prior_credit - input_transfer_out - exempt_refund + tax_check, 2)
-    # 第18栏 实际抵扣税额 = min(第17栏, 第11栏)（不考虑加计抵减）
-    actual_deduct = min(total_deduct, output_tax)
-    # 第19栏 应纳税额 = 第11栏 - 第18栏 - 实际抵减额（无加计抵减时为0）
-    actual_reduction = 0.0  # 实际抵减额（当前不适用加计抵减政策）
-    tax_payable = max(0, round(output_tax - actual_deduct - actual_reduction, 2))
+    # ===== 主表栏次赋值（按官方填写说明）=====
+    # 第1栏 按适用税率计税销售额 = 一般计税所有货物+服务销售额
+    row1_sales = round(sales_total - exempt_sales - simple_sales, 2) if sales_total > 0 else 0.0
+
+    # 第2栏 应税货物销售额（税收编码前两位10/11/12/13/14/15）
+    row2_goods = round(goods_sales, 2)
+    # 第3栏 应税劳务销售额（税收编码前两位20）
+    row3_labor = round(labor_sales, 2)
+    # 第4栏 纳税检查调整的销售额（从序时账"纳税检查"关键词提取）
+    row4_tax_check = round(
+        sum(e.credit_amount or 0 for e in entries
+             if e.account_code and "2221" in e.account_code
+             and "销项" in (e.account_name or "")
+             and "检查" in (e.description or "")), 2
+    )
+    # 第5栏 简易计税销售额
+    row5_simple = round(simple_sales, 2)
+    # 第6栏 免税销售额（其中：纳税检查调整，暂为0）
+    row6_exempt_check = 0.0
+    # 第7栏 免、抵、退销售额（从出口销售模块取数，暂为0）
+    row7_export = 0.0
+    # 第8栏 免税销售额
+    row8_exempt = round(exempt_sales, 2)
+    # 第9栏 免税货物销售额（从免税销售额中再分货物）
+    row9_exempt_goods = round(
+        sum(i.amount or 0 for i in sales_invoices
+             if _is_exempt(i) and _inv_category(i) == "goods"), 2
+    )
+    # 第10栏 免税劳务销售额
+    row10_exempt_service = round(row8_exempt - row9_exempt_goods, 2)
+
+    # 第11栏 销项税额（已从前序计算）
+    row11_output_tax = round(output_tax, 2)
+
+    # 第12栏 进项税额（已从前序计算）
+    row12_input_tax = round(input_tax, 2)
+
+    # 第13栏 上期留抵税额
+    row13_prior_credit = round(prior_credit, 2)
+
+    # 第14栏 进项税额转出 = 附表二第13栏合计
+    # 从进项发票中筛选进项税额转出的记录（红字或标注"转出"）
+    # 第14栏 进项税额转出：从序时账取"进项税额转出"类分录
+    # 会计科目2221下的贷方发生额，或摘要含"转出"、"进项转出"、"免税项目"、"集体福利"等
+    input_transfer_out = round(
+        sum(e.credit_amount or 0 for e in entries
+             if e.account_code and "2221" in e.account_code
+             and e.entry_type == "贷"
+             and any(k in (e.description or "") + " " + (e.account_name or "")
+                     for k in ["转出", "进项转出", "免税项目", "集体福利", "个人消费", "非正常损失"])) +
+        sum(d.deductible_tax_amount or 0 for d in input_deductions
+             if "转出" in (d.remark or "") or (d.invoice_status or "") == "红字"),
+        2
+    )
+    # 第15栏 免、抵、退应退税额（从出口退税模块取，无则为0）
+    exempt_refund = 0.0
+    # 第16栏 按适用税率计算的纳税检查应补缴税额（无税务检查则为0）
+    row16_tax_check = 0.0
+
+    # 第17栏 应抵扣税额合计 = 第12+第13-第14-第15+第16
+    row17_total_deduct = round(row12_input_tax + row13_prior_credit - input_transfer_out - exempt_refund + row16_tax_check, 2)
+
+    # 第18栏 实际抵扣税额 = min(第17栏, 第11栏)
+    row18_actual_deduct = min(round(row17_total_deduct, 2), row11_output_tax)
+
+    # 第19栏 应纳税额 = 第11栏 - 第18栏
+    row19_tax_payable = max(0, round(row11_output_tax - row18_actual_deduct, 2))
+
     # 第20栏 期末留抵税额 = 第17栏 - 第18栏
-    end_credit = round(total_deduct - actual_deduct, 2)
-    # 第21栏 简易计税办法计算的应纳税额（当前无数据）
-    simple_tax = 0.0
-    # 第23栏 应纳税额减征额（当前无数据）
-    reduction = 0.0
-    # 第24栏 应纳税额合计 = 第19栏+第21栏-第23栏
-    tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
+    row20_end_credit = round(row17_total_deduct - row18_actual_deduct, 2)
+
+    # 第21栏 简易计税办法计算的应纳税额
+    row21_simple_tax = round(simple_tax, 2)
+
+    # 第22栏 简易计税纳税检查应补缴税额（无税务检查则为0）
+    row22_simple_check = 0.0
+
+    # 第23栏 应纳税额减征额（从税收优惠政策，暂为0）
+    row23_reduction = 0.0
+
+    # 第24栏 应纳税额合计 = 第19+第21-第23
+    row24_tax_total = round(row19_tax_payable + row21_simple_tax - row23_reduction, 2)
+
+    # 第25栏 期初未缴税额 = 上期申报表第32栏
+    row25_prior_unpaid = round(prior_main.get("row32_end_unpaid", 0.0) if prior_vd and prior_vd.form_main else 0.0, 2)
+
+    # 第26-31栏 本期已缴税额（从银行流水取数）
+    # 第26栏 本期已缴税额（本期缴纳前期应纳税额）
+    row26_paid_prior = round(
+        sum(e.debit_amount or 0 for e in entries
+             if e.account_code and "2221" in e.account_code
+             and "已缴" in (e.description or "")
+             and "前期" in (e.description or "")), 2
+    )
+    # 第27栏 本期已缴税额（本期预缴税额）
+    row27_prepay = round(
+        sum(e.debit_amount or 0 for e in entries
+             if e.account_code and "2221" in e.account_code
+             and "预缴" in (e.description or "")), 2
+    )
+    # 第28栏 本期已缴税额（本期缴纳查补税额）
+    row28_paid_check = round(
+        sum(e.debit_amount or 0 for e in entries
+             if e.account_code and "2221" in e.account_code
+             and "查补" in (e.description or "")), 2
+    )
+    # 第30栏 本期已缴税额合计 = 第26+第27+第28
+    row30_paid_total = round(row26_paid_prior + row27_prepay + row28_paid_check, 2)
+
+    # 第31栏 期末未缴税额 = 第25+第24-第30
+    row31_end_unpaid = round(row25_prior_unpaid + row24_tax_total - row30_paid_total, 2)
+
+    # 第32-38栏 查补税额（暂为0）
+    row32_check_tax = 0.0
+    row33_check_paid = 0.0
+    row34_check_end = 0.0
+
+    # 第39-41栏 附加税费（已计算）
+    row39_city_tax = round(city_tax, 2)
+    row40_edu_surcharge = round(edu_surcharge, 2)
+    row41_local_edu = round(local_edu, 2)
 
 
     # ====== 附列资料（一）：本期销售情况明细 ======
