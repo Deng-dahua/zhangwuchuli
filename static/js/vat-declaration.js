@@ -7,6 +7,11 @@ var vatFilterPeriod = '';
 var vatInlineDisplayId = null;
 var vatCurrentData = null;
 
+function safeJSON(val, fallback) {
+  if (typeof val !== 'string') return val || fallback;
+  try { return JSON.parse(val); } catch (e) { console.warn('JSON parse failed:', e); return fallback; }
+}
+
 const VAT_PAGES = [
   { id: 'main', label: '增值税主表' },
   { id: 'schedule1', label: '附表一 — 销售明细' },
@@ -185,10 +190,10 @@ function renderVATStats() {
   let scf = {};
   if (vatCurrentData) {
     try {
-      main = typeof vatCurrentData.form_main === 'string' ? JSON.parse(vatCurrentData.form_main) : (vatCurrentData.form_main || {});
+      main = safeJSON(vatCurrentData.form_main, {});
     } catch (e) { /* skip */ }
     try {
-      scf = typeof vatCurrentData.form_surcharge === 'string' ? JSON.parse(vatCurrentData.form_surcharge) : (vatCurrentData.form_surcharge || {});
+      scf = safeJSON(vatCurrentData.form_surcharge, {});
     } catch (e) { /* skip */ }
   }
   // 销售额：从主表取不含税销售额（已修正为 amount，不是价税合计 total_amount）
@@ -384,7 +389,7 @@ async function openVATDetail(id) {
 
 function renderVATTemplateView(data) {
   const el = document.getElementById('vat-modal-inner');
-  const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
+  const main = safeJSON(data.form_main, {});
   const statusLabel = {'草稿':'草稿','已申报':'已申报','已缴税':'已缴税'}[data.status] || data.status;
 
   // 页签
@@ -455,7 +460,7 @@ function renderVATTemplateViewInline(data) {
   // 缓存当前数据供统计卡使用
   vatCurrentData = data;
 
-  const main = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
+  const main = safeJSON(data.form_main, {});
 
   // 年份：从已有数据取范围，并确保包含当前年 ± 3 年
   const currentYear = new Date().getFullYear();
@@ -681,8 +686,8 @@ function vatDeleteCurrent() {
 
 
 function renderMainForm(data) {
-  const m = (typeof data.form_main === 'string') ? JSON.parse(data.form_main) : (data.form_main || {});
-  const s = (typeof data.form_surcharge === 'string') ? JSON.parse(data.form_surcharge) : (data.form_surcharge || {});
+  const m = safeJSON(data.form_main, {});
+  const s = safeJSON(data.form_surcharge, {});
 
   let h = '';
 
@@ -928,7 +933,7 @@ function renderMainForm(data) {
 
 // ==================== 附表一：销售情况明细 ====================
 function renderSchedule1(data) {
-  const s = (typeof data.form_sales === 'string') ? JSON.parse(data.form_sales) : (data.form_sales || {});
+  const s = safeJSON(data.form_sales, {});
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
   function tdDash(n) { n = n || 1; var d = '<td class="num"></td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
@@ -1154,7 +1159,7 @@ function renderSchedule1(data) {
 
 // ==================== 附表二：进项税额明细 ====================
 function renderSchedule2(data) {
-  const inp = (typeof data.form_input === 'string') ? JSON.parse(data.form_input) : (data.form_input || {});
+  const inp = safeJSON(data.form_input, {});
 
   function tdNum(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
   function tdDash() { return '<td class="num"></td>'; }
@@ -1231,7 +1236,7 @@ function renderSchedule2(data) {
 
 // ==================== 附表三：扣除项目明细 ====================
 function renderSchedule3(data) {
-  const d = (typeof data.form_deduction === 'string') ? JSON.parse(data.form_deduction) : (data.form_deduction || {});
+  const d = safeJSON(data.form_deduction, {});
 
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
 
@@ -1284,7 +1289,7 @@ function renderSchedule3(data) {
 
 // ==================== 附表四：税额抵减情况表 ====================
 function renderSchedule4(data) {
-  const c = (typeof data.form_credit === 'string') ? JSON.parse(data.form_credit) : (data.form_credit || {});
+  const c = safeJSON(data.form_credit, {});
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（四）</div>'
@@ -1321,7 +1326,7 @@ function renderSchedule4(data) {
 
 // ==================== 附表五：附加税费情况表（16列统一大表格，按Excel模板列对齐） ====================
 function renderSchedule5(data) {
-  const scf = (typeof data.form_surcharge === 'string') ? JSON.parse(data.form_surcharge) : (data.form_surcharge || {});
+  const scf = safeJSON(data.form_surcharge, {});
   function td(v) { return '<td class="num">' + _fmt(v) + '</td>'; }
   function td0(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
   function tdDash() { return '<td class="num">——</td>'; }
@@ -1479,7 +1484,7 @@ function renderSchedule5(data) {
 
 
 function renderReductionForm(data) {
-  const r = (typeof data.form_reduction === 'string') ? JSON.parse(data.form_reduction) : (data.form_reduction || {});
+  const r = safeJSON(data.form_reduction, {});
   function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
 
   let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税减免税申报明细表</div>';

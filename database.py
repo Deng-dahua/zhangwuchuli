@@ -2293,7 +2293,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     """
     savepoint = db.begin_nested()
     try:
-    from datetime import datetime
 
     # 查询该期间的工资记录
     records = db.query(SalaryRecord).filter(

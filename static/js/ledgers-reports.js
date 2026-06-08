@@ -193,7 +193,7 @@ function _monthOptions(sel) {
 }
 function _periodSelectsHTML(prefix, value) {
   let y = '', m = '';
-  if (value && value.includes('-')) { var parts = value.split('-'); y = parts[0]; m = parts[1]; }
+  if (value && value.includes('-')) { let parts = value.split('-'); y = parts[0]; m = parts[1]; }
   return '<select id="' + prefix + '-y" style="padding:6px 6px;border:1px solid #d1d5db;border-radius:6px;width:72px"><option value="">年</option>' + _yearOptions(y) + '</select>' +
     '<select id="' + prefix + '-m" style="padding:6px 6px;border:1px solid #d1d5db;border-radius:6px;width:62px"><option value="">月</option>' + _monthOptions(m) + '</select>';
 }

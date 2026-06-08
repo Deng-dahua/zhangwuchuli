@@ -206,9 +206,14 @@ function showBankTxForm(id) {
 }
 
 async function saveBankTx(id) {
+  const dateVal = document.getElementById('btf-date').value;
+  if (!dateVal || !/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+    toast('请输入有效的日期（YYYY-MM-DD）', 'error');
+    return;
+  }
   const body = {
     bank_config_id: parseInt(document.getElementById('btf-bank').value) || null,
-    transaction_date: document.getElementById('btf-date').value,
+    transaction_date: dateVal,
     transaction_time: document.getElementById('btf-time').value || null,
     application_date: document.getElementById('btf-app-date').value || null,
     voucher_no: document.getElementById('btf-voucher').value,
