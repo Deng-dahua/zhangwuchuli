@@ -284,31 +284,36 @@ function renderSSExcelTemplate(decl, details) {
     else groups['在职人员'].push(d);
   });
 
-  // 生成表头（按Excel模板）
+  // 生成表头（按Excel模板列顺序）
   let thead = '<thead>';
-  // 第一行：跨列分组
-  thead += '<tr>';
+  // 第一行：顶层分类
+  thead += '<tr style="background:#d9e2f3">';
   thead += '<th rowspan="2" style="vertical-align:middle;min-width:50px">序号</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:100px">姓名</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:160px">证件号码</th>';
-  thead += '<th colspan="2" style="text-align:center;min-width:120px">费款所属期</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:100px">缴费工资</th>';
+  thead += '<th rowspan="2" style="vertical-align:middle;min-width:80px">姓名</th>';
+  thead += '<th rowspan="2" style="vertical-align:middle;min-width:140px">证件号码</th>';
+  thead += '<th colspan="2" style="text-align:center;min-width:100px">费款所属期</th>';
+  thead += '<th rowspan="2" style="min-width:90px;background:#fde68a">应收金额</th>';
+  thead += '<th rowspan="2" style="min-width:90px;background:#fde68a">个人社保合计</th>';
+  thead += '<th rowspan="2" style="min-width:90px;background:#fde68a">单位社保合计</th>';
+  thead += '<th rowspan="2" style="min-width:90px">缴费工资</th>';
   SS_INSURANCE_LIST.forEach(ins => {
-    thead += '<th colspan="2" style="text-align:center;min-width:90px;background:#fef3c7">' + escapeHtml(ins.name) + '</th>';
+    thead += '<th colspan="2" style="text-align:center;min-width:80px">' + escapeHtml(ins.name) + '</th>';
   });
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:100px;background:#fde68a">应收金额</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:110px;background:#fde68a">个人社保合计</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:110px;background:#fde68a">单位社保合计</th>';
-  thead += '<th rowspan="2" style="vertical-align:middle;min-width:120px">操作</th>';
+  thead += '<th rowspan="2" style="min-width:80px">操作</th>';
   thead += '</tr>';
-  // 第二行：每个险种下分"费率"+"应缴费额"
-  thead += '<tr>';
-  thead += '<th style="font-weight:normal;font-size:11px;min-width:60px">起</th>';
-  thead += '<th style="font-weight:normal;font-size:11px;min-width:60px">止</th>';
-  SS_INSURANCE_LIST.forEach(ins => {
-    thead += '<th style="font-weight:normal;font-size:11px;min-width:45px">费率</th>';
-    thead += '<th style="font-weight:normal;font-size:11px;min-width:60px">应缴费额</th>';
+  // 第二行：子列
+  thead += '<tr style="background:#e8edf5">';
+  thead += '<th style="font-weight:normal;font-size:11px;min-width:45px">起</th>';
+  thead += '<th style="font-weight:normal;font-size:11px;min-width:45px">止</th>';
+  thead += '<th style="font-weight:normal;font-size:11px">—</th>';
+  thead += '<th style="font-weight:normal;font-size:11px">—</th>';
+  thead += '<th style="font-weight:normal;font-size:11px">—</th>';
+  thead += '<th style="font-weight:normal;font-size:11px">—</th>';
+  SS_INSURANCE_LIST.forEach(() => {
+    thead += '<th style="font-weight:normal;font-size:11px">费率</th>';
+    thead += '<th style="font-weight:normal;font-size:11px">应缴费额</th>';
   });
+  thead += '<th></th>';
   thead += '</tr></thead>';
 
   // 生成数据行（按Excel模板的分组结构）
@@ -318,7 +323,7 @@ function renderSSExcelTemplate(decl, details) {
     const items = groups[cat];
     // 分组标题
     tbody += '<tr style="background:#dbeafe;font-weight:600"><td colspan="4">' + escapeHtml(cat) + '</td>';
-    tbody += '<td colspan="' + (1 + SS_INSURANCE_LIST.length * 2 + 4) + '"></td></tr>';
+    tbody += '<td colspan="' + (SS_INSURANCE_LIST.length * 2 + 1) + '"></td></tr>';
 
     if (items.length === 0) {
       // 小计行（全0）
@@ -341,30 +346,36 @@ function renderSSExcelTemplate(decl, details) {
     items.forEach((d, idx) => {
       const im = insMap(d.insurance_items);
       let rowPersonal = 0, rowCompany = 0;
+      // 先遍历险种收集合计值
+      SS_INSURANCE_LIST.forEach(ins => {
+        const it = im[ins.code] || im[ins.name];
+        const amt = it ? (it.amount || 0) : 0;
+        if (ins.type === 'unit') rowCompany += amt;
+        else rowPersonal += amt;
+      });
+      const rowTotal = rowPersonal + rowCompany;
+      subtotalPersonal += rowPersonal;
+      subtotalCompany += rowCompany;
+      subtotalTotal += rowTotal;
+
       tbody += '<tr>';
       tbody += '<td>' + (idx + 1) + '</td>';
       tbody += '<td>' + escapeHtml(d.employee_name || '') + '</td>';
       tbody += '<td>' + escapeHtml(d.id_number || '') + '</td>';
       tbody += '<td>' + escapeHtml(d.period_start || periodRange) + '</td>';
       tbody += '<td>' + escapeHtml(d.period_end || periodRange) + '</td>';
+      tbody += '<td class="num" style="font-weight:600;background:#fef3c7">' + fmt(rowTotal) + '</td>';
+      tbody += '<td class="num" style="background:#fef3c7;color:#d97706">' + fmt(rowPersonal) + '</td>';
+      tbody += '<td class="num" style="background:#fef3c7;color:#db2777">' + fmt(rowCompany) + '</td>';
       tbody += '<td class="num">' + fmt(d.salary_base || 0) + '</td>';
       SS_INSURANCE_LIST.forEach(ins => {
         const it = im[ins.code] || im[ins.name];
         const amt = it ? (it.amount || 0) : 0;
         const rate = it ? (it.rate || '-') : '-';
-        if (ins.type === 'unit') rowCompany += amt;
-        else rowPersonal += amt;
         subtotalsByIns[ins.code] += amt;
         tbody += '<td class="num">' + (rate === '-' ? '-' : (rate + (typeof rate === 'string' && rate.endsWith('%') ? '' : '%'))) + '</td>';
         tbody += '<td class="num">' + fmt(amt) + '</td>';
       });
-      const rowTotal = rowPersonal + rowCompany;
-      subtotalPersonal += rowPersonal;
-      subtotalCompany += rowCompany;
-      subtotalTotal += rowTotal;
-      tbody += '<td class="num" style="background:#fef3c7;font-weight:600">' + fmt(rowTotal) + '</td>';
-      tbody += '<td class="num" style="background:#fef3c7;color:#d97706">' + fmt(rowPersonal) + '</td>';
-      tbody += '<td class="num" style="background:#fef3c7;color:#db2777">' + fmt(rowCompany) + '</td>';
       tbody += '<td class="col-action">'
         + '<button class="btn btn-sm btn-outline" onclick="openSSDetailEdit(' + decl.id + ',' + d.id + ')">编辑</button> '
         + '<button class="btn btn-sm btn-danger" onclick="deleteSSDetail(' + decl.id + ',' + d.id + ')">删除</button>'
@@ -373,14 +384,11 @@ function renderSSExcelTemplate(decl, details) {
 
     // 小计行
     tbody += '<tr style="font-weight:600;background:#f9fafb">';
-    tbody += '<td colspan="6" style="text-align:right">小计</td>';
+    tbody += '<td colspan="9" style="text-align:right">小计</td>';
     SS_INSURANCE_LIST.forEach(ins => {
       tbody += '<td class="num">-</td>';
       tbody += '<td class="num">' + fmt(subtotalsByIns[ins.code]) + '</td>';
     });
-    tbody += '<td class="num" style="background:#fef3c7">' + fmt(subtotalTotal) + '</td>';
-    tbody += '<td class="num" style="background:#fde68a">' + fmt(subtotalPersonal) + '</td>';
-    tbody += '<td class="num" style="background:#fde68a">' + fmt(subtotalCompany) + '</td>';
     tbody += '<td></td></tr>';
   }
 
@@ -400,14 +408,11 @@ function renderSSExcelTemplate(decl, details) {
   });
   const totalAll = totalPersonal + totalCompany;
   tbody += '<tr style="font-weight:700;background:#fef3c7">';
-  tbody += '<td colspan="6" style="text-align:right">合计</td>';
+  tbody += '<td colspan="9" style="text-align:right">合计</td>';
   SS_INSURANCE_LIST.forEach(ins => {
     tbody += '<td class="num">-</td>';
     tbody += '<td class="num">' + fmt(totalsByIns[ins.code]) + '</td>';
   });
-  tbody += '<td class="num" style="background:#fcd34d">' + fmt(totalAll) + '</td>';
-  tbody += '<td class="num" style="background:#fcd34d">' + fmt(totalPersonal) + '</td>';
-  tbody += '<td class="num" style="background:#fcd34d">' + fmt(totalCompany) + '</td>';
   tbody += '<td></td></tr>';
   tbody += '</tbody>';
 
