@@ -118,6 +118,12 @@ async function renderSocialSecurity(container) {
             + '</div>'
           + '</div>'
         + '</div>'
+        + '<button class="btn btn-primary" onclick="ssRefresh()">查询</button>'
+        + '<button class="btn btn-secondary" onclick="ssClearPeriod()">清除</button>'
+        + '<button class="btn btn-secondary" onclick="triggerSSImport()">导入文件</button>'
+        + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
+        + '<button class="btn btn-success" onclick="generateSSVoucher()">生成凭证</button>'
+        + '<button class="btn btn-danger" onclick="deleteSSDeclaration()">删除报表</button>'
       + '</div>'
     + '</div>'
     + '<div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">'
@@ -391,4 +397,50 @@ async function ssDelete(id) {
     await api('/api/social-security/details/' + id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
     ssRefresh();
   } catch (e) { handleError(e, '删除参保记录'); }
+}
+
+// ============ 导入文件 ============
+function triggerSSImport() {
+  var input = document.getElementById('ss-import-file');
+  if (input) input.click();
+}
+
+async function handleSSImportFile(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  var formData = new FormData();
+  formData.append('file', file);
+  var url = '/api/social-security/import?company_id=' + currentCompanyId + '&period=' + ssPeriod;
+  try {
+    var result = await api(url, { method: 'POST', body: formData, headers: {} });
+    toast(result.message || '导入成功', 'success');
+    ssRefresh();
+  } catch (e) { handleError(e, '导入文件'); }
+  event.target.value = '';
+}
+
+// ============ 生成凭证 ============
+async function generateSSVoucher() {
+  if (!confirm('确认生成当前期间(' + ssPeriod + ')的社保凭证？')) return;
+  try {
+    var result = await api('/api/social-security/generate-payment-journals?company_id=' + currentCompanyId + '&period=' + ssPeriod, {
+      method: 'POST'
+    });
+    toast(result.message || '凭证生成成功', 'success');
+    ssRefresh();
+  } catch (e) { handleError(e, '生成凭证'); }
+}
+
+// ============ 删除报表 ============
+async function deleteSSDeclaration() {
+  if (!confirm('确认删除当前期间(' + ssPeriod + ')的全部申报记录？此操作不可恢复！')) return;
+  try {
+    var decls = await api('/api/social-security/declarations?company_id=' + currentCompanyId + '&period=' + ssPeriod);
+    if (!decls || decls.length === 0) { toast('当前期间无申报记录', 'warning'); return; }
+    for (var i = 0; i < decls.length; i++) {
+      await api('/api/social-security/declarations/' + decls[i].id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
+    }
+    toast('申报记录已删除', 'success');
+    ssRefresh();
+  } catch (e) { handleError(e, '删除报表'); }
 }
