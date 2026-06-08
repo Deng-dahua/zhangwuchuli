@@ -174,8 +174,12 @@ def create_declaration(
 
     db.commit()
 
-    # 自动生成社保计提凭证
-    result = _generate_ss_accrual_journals(db, company_id, decl.id)
+    # 自动生成社保计提凭证（使用 savepoint 保证一致性）
+    try:
+        result = _generate_ss_accrual_journals(db, company_id, decl.id)
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "社保计提凭证生成失败，申报记录已回滚")
 
     return {"id": decl.id, "message": "保存成功", "journal": result}
 

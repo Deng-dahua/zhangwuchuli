@@ -78,7 +78,6 @@ ALLOWED_EXTENSIONS = {'.xlsx', '.xls', '.csv', '.pdf', '.txt'}
 
 def _validate_upload(file: UploadFile):
     """验证上传文件大小和扩展名"""
-    import os
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"不支持的文件类型: {ext}，仅接受 {'/'.join(sorted(ALLOWED_EXTENSIONS))}")
@@ -1335,7 +1334,6 @@ def close_period(period: str, company_id: int = Query(...), db: Session = Depend
 @app.get("/api/dashboard")
 def dashboard(company_id: int = Query(...), db: Session = Depends(get_db)):
     """统计看板 - 基础档案统计"""
-    from datetime import date
     period = date.today().strftime("%Y-%m")
 
     customer_count = db.query(Customer).filter(Customer.company_id == company_id).count()
@@ -5575,7 +5573,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         rows_data.append(row_dict)
 
         # 根据映射转换并导入
-        import uuid
         import_batch_id = str(uuid.uuid4())
         imported = 0
         errors = []

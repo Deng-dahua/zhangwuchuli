@@ -363,7 +363,7 @@ async function loadProfitLoss() {
   try {
     const data = await api('/api/reports/profit-loss?period_from=' + from + '&period_to=' + to);
     let rows = '';
-    for (var i = 0; i < data.items.length; i++) {
+    for (let i = 0; i < data.items.length; i++) {
       let it = data.items[i];
       let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
       let indent = (it.indent || 0) * 16;
@@ -397,7 +397,7 @@ function bsFmt(v) { if (v === 0 || v === null || v === undefined) return '-'; re
 function bsRenderRows(rows, showHeader) {
   let h = showHeader ? '<thead><tr><th>项目</th><th class="num">期末余额</th><th class="num">年初余额</th></tr></thead>' : '';
   let r = '';
-  for (var i = 0; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     let it = rows[i];
     let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
     let indent = (it.indent || 0) * 16;
@@ -444,7 +444,7 @@ async function loadCashFlow() {
   try {
     let data = await api('/api/reports/cash-flow?period_from=' + from + '&period_to=' + to);
     let rows = '';
-    for (var i = 0; i < data.items.length; i++) {
+    for (let i = 0; i < data.items.length; i++) {
       let it = data.items[i];
       let cls = (it.bold ? 'report-bold' : '') + ' ' + (it.highlight ? 'report-highlight' : '');
       let indent = (it.indent || 0) * 16;
@@ -481,14 +481,14 @@ async function loadEquityChanges() {
     let data = await api('/api/reports/equity-changes?period=' + period);
     let cols = data.columns;
     let th = '<th>项目</th>';
-    for (var c = 0; c < cols.length; c++) { th += '<th class="num">' + cols[c] + '</th>'; }
+    for (let c = 0; c < cols.length; c++) { th += '<th class="num">' + cols[c] + '</th>'; }
     let rows = '';
-    for (var i = 0; i < data.items.length; i++) {
+    for (let i = 0; i < data.items.length; i++) {
       let it = data.items[i];
       let cls = (it.bold ? 'report-bold' : '') + (it.highlight ? ' report-highlight' : '');
       let indent = (it.indent || 0) * 16;
       rows += '<tr class="' + cls.trim() + '"><td style="padding-left:' + (8 + indent) + 'px">' + it.label + '</td>';
-      for (var j = 0; j < it.vals.length; j++) { rows += '<td class="num">' + plFmt(it.vals[j]) + '</td>'; }
+      for (let j = 0; j < it.vals.length; j++) { rows += '<td class="num">' + plFmt(it.vals[j]) + '</td>'; }
       rows += '</tr>';
     }
     el.innerHTML =

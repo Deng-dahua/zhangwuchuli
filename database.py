@@ -714,7 +714,7 @@ class JournalEntry(Base):
     unit = Column(String(20), comment="单位")
     unit_price = Column(Numeric(18, 2), default=0.0, comment="单价")
     source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/销项发票/进项抵扣/银行流水")
-    ref_id = Column(Integer, comment="关联业务ID（开具发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
+    ref_id = Column(Integer, comment="关联业务ID（销项发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -2287,10 +2287,12 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     """工资发放凭证：根据工资记录生成4笔分录。
     1. 计提工资：借 管理费用-工资 / 贷 应付职工薪酬-工资
     2. 发放工资：借 应付职工薪酬-工资 / 贷 银行存款（实发）
-    3. 缴纳个税：借 应付职工薪酬-工资（应扣个税）/ 贷 银行存款
-    4. 缴纳社保公积金个人部分：借 应付职工薪酬-工资（应扣社保、应扣公积金）/ 贷 银行存款
-    按 (period, source='工资计提'/'工资发放'/'个税缴纳'/'社保公积金缴纳') 去重。
+    3. 缴纳个税：借 应交个人所得税 / 贷 银行存款
+    4. 缴纳社保公积金个人部分：借 代扣社保/公积金 / 贷 银行存款
+    按 (period, source) 去重。
     """
+    savepoint = db.begin_nested()
+    try:
     from datetime import datetime
 
     # 查询该期间的工资记录
@@ -2364,12 +2366,12 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 2. 发放工资凭证（实发）
     if total_net > 0:
         summary_tag2 = f"工资发放-{period}"
-        next_voucher_no2 = _next_voucher_no(db, company_id, period, "记")
+        next_voucher_no += 1
 
         entries2 = [
             JournalEntry(
                 company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no2,
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag2,
                 account_code="221101", account_name="应付职工薪酬-工资",
                 debit_amount=round(total_net, 2), credit_amount=0,
@@ -2377,7 +2379,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             ),
             JournalEntry(
                 company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no2,
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag2,
                 account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(total_net, 2),
@@ -2391,12 +2393,12 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 3. 缴纳个税凭证
     if total_tax > 0:
         summary_tag3 = f"缴纳个税-{period}"
-        next_voucher_no3 = _next_voucher_no(db, company_id, period, "记")
+        next_voucher_no += 1
 
         entries3 = [
             JournalEntry(
                 company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no3,
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag3,
                 account_code="221003", account_name="应交个人所得税",
                 debit_amount=round(total_tax, 2), credit_amount=0,
@@ -2404,7 +2406,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             ),
             JournalEntry(
                 company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no3,
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag3,
                 account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(total_tax, 2),
@@ -2419,7 +2421,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     total_deduct = total_personal_ss + total_personal_hf
     if total_deduct > 0:
         summary_tag4 = f"缴纳社保公积金个人部分-{period}"
-        next_voucher_no4 = _next_voucher_no(db, company_id, period, "记")
+        next_voucher_no += 1
 
         entries4 = []
         # 借：其他应付款-代扣社会保险费（个人社保部分）
@@ -2427,7 +2429,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             entries4.append(
                 JournalEntry(
                     company_id=company_id, entry_date=entry_date,
-                    period=period, voucher_word="记", voucher_no=next_voucher_no4,
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag4 + "（个人社保）",
                     account_code="222101", account_name="代扣社会保险费",
                     debit_amount=round(total_personal_ss, 2), credit_amount=0,
@@ -2439,7 +2441,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             entries4.append(
                 JournalEntry(
                     company_id=company_id, entry_date=entry_date,
-                    period=period, voucher_word="记", voucher_no=next_voucher_no4,
+                    period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag4 + "（个人公积金）",
                     account_code="221103", account_name="住房公积金",
                     debit_amount=round(total_personal_hf, 2), credit_amount=0,
@@ -2450,7 +2452,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
         entries4.append(
             JournalEntry(
                 company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no4,
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag4,
                 account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(total_deduct, 2),
@@ -2462,6 +2464,9 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
         generated += 1
 
     return {"generated": generated, "period": period}
+    except Exception:
+        savepoint.rollback()
+        raise
 
 
 def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
@@ -2470,6 +2475,8 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     贷：应付职工薪酬-住房公积金（单位部分合计）
     按 (company_id, period, source='公积金计提') 去重。
     """
+    savepoint = db.begin_nested()
+    try:
     from datetime import datetime
 
     # 查询该期间的公积金明细
@@ -2533,6 +2540,9 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     db.flush()
 
     return {"generated": 1, "voucher_no": next_voucher_no, "company_amount": round(total_company, 2)}
+    except Exception:
+        savepoint.rollback()
+        raise
 
 
 def _match_hf_payment_journals(db: Session, company_id: int):
