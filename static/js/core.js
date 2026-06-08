@@ -422,6 +422,7 @@ function navigateTo(page) {
     case 'salary': showSalaryPage(container); break;
     case 'social-security': renderSocialSecurity(container); break;
     case 'housing-fund': renderHousingFund(container); break;
+    case 'cultural-construction-fee': renderCulturalConstructionFee(container); break;
   }
 }
 

@@ -79,6 +79,7 @@ class Company(Base):
     column_templates = relationship("ColumnTemplate", back_populates="company", cascade="all, delete-orphan")
     journal_entries = relationship("JournalEntry", back_populates="company")
     salary_records = relationship("SalaryRecord", back_populates="company", cascade="all, delete-orphan")
+    cultural_construction_fee_declarations = relationship("CulturalConstructionFeeDeclaration", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyShareholder(Base):
@@ -3046,6 +3047,89 @@ class SalaryRecord(Base):
         Index('idx_salary_company_period', 'company_id', 'period'),
     )
     company = relationship("Company", back_populates="salary_records")
+
+
+# ==================== 文化事业建设费申报 ====================
+
+class CulturalConstructionFeeDeclaration(Base):
+    """文化事业建设费申报表（主表）"""
+    __tablename__ = "cultural_construction_fee_declarations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    period = Column(String(7), nullable=False, comment="申报期间 YYYY-MM")
+    status = Column(String(20), default="草稿", comment="状态：草稿/已确认/已申报")
+    note = Column(Text, comment="备注")
+
+    # 主表栏次（本月数 / 本年累计）
+    taxable_income_current = Column(Numeric(18, 2), default=0.0, comment="栏次1 应征收入 本月数")
+    taxable_income_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次1 应征收入 本年累计")
+    tax_exempt_income_current = Column(Numeric(18, 2), default=0.0, comment="栏次2 免征收入 本月数")
+    tax_exempt_income_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次2 免征收入 本年累计")
+    deduction_beginning_current = Column(Numeric(18, 2), default=0.0, comment="栏次3 减除项目期初金额 本月数")
+    deduction_beginning_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次3 减除项目期初金额 本年累计")
+    deduction_current_period_current = Column(Numeric(18, 2), default=0.0, comment="栏次4 减除项目本期发生额 本月数")
+    deduction_current_period_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次4 减除项目本期发生额 本年累计")
+    taxable_income_deduction_current = Column(Numeric(18, 2), default=0.0, comment="栏次5 应征收入减除额 本月数")
+    taxable_income_deduction_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次5 应征收入减除额 本年累计")
+    tax_exempt_deduction_current = Column(Numeric(18, 2), default=0.0, comment="栏次6 免征收入减除额 本月数")
+    tax_exempt_deduction_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次6 免征收入减除额 本年累计")
+    deduction_ending_balance_current = Column(Numeric(18, 2), default=0.0, comment="栏次7 减除项目期末余额 本月数")
+    deduction_ending_balance_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次7 减除项目期末余额 本年累计")
+    taxable_sales_current = Column(Numeric(18, 2), default=0.0, comment="栏次8 计费销售额 本月数")
+    taxable_sales_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次8 计费销售额 本年累计")
+    fee_rate = Column(Numeric(18, 4), default=0.03, comment="栏次9 费率")
+    payable_fee_current = Column(Numeric(18, 2), default=0.0, comment="栏次10 应缴费额 本月数")
+    payable_fee_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次10 应缴费额 本年累计")
+    unpaid_beginning_current = Column(Numeric(18, 2), default=0.0, comment="栏次11 期初未缴费额 本月数")
+    unpaid_beginning_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次11 期初未缴费额 本年累计")
+    paid_current_period_current = Column(Numeric(18, 2), default=0.0, comment="栏次12 本期已缴费额 本月数")
+    paid_current_period_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次12 本期已缴费额 本年累计")
+    prepaid_current = Column(Numeric(18, 2), default=0.0, comment="栏次13 本期预缴费额 本月数")
+    prepaid_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次13 本期预缴费额 本年累计")
+    paid_last_period_current = Column(Numeric(18, 2), default=0.0, comment="栏次14 本期缴纳上期费额 本月数")
+    paid_last_period_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次14 本期缴纳上期费额 本年累计")
+    paid_arrears_current = Column(Numeric(18, 2), default=0.0, comment="栏次15 本期缴纳欠费额 本月数")
+    paid_arrears_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次15 本期缴纳欠费额 本年累计")
+    unpaid_ending_current = Column(Numeric(18, 2), default=0.0, comment="栏次16 期末未缴费额 本月数")
+    unpaid_ending_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次16 期末未缴费额 本年累计")
+    arrears_current = Column(Numeric(18, 2), default=0.0, comment="栏次17 欠缴费额 本月数")
+    arrears_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次17 欠缴费额 本年累计")
+    fill_refund_current = Column(Numeric(18, 2), default=0.0, comment="栏次18 本期应补(退)费额 本月数")
+    fill_refund_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次18 本期应补(退)费额 本年累计")
+    inspected_supplement_current = Column(Numeric(18, 2), default=0.0, comment="栏次19 本期检查已补缴费额 本月数")
+    inspected_supplement_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次19 本期检查已补缴费额 本年累计")
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index('idx_ccf_company_period', 'company_id', 'period'),
+    )
+    company = relationship("Company", back_populates="cultural_construction_fee_declarations")
+    deductions = relationship("CulturalConstructionFeeDeduction", back_populates="declaration", cascade="all, delete-orphan")
+
+
+class CulturalConstructionFeeDeduction(Base):
+    """应税服务扣除项目清单"""
+    __tablename__ = "cultural_construction_fee_deductions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    declaration_id = Column(Integer, ForeignKey("cultural_construction_fee_declarations.id"), nullable=False)
+    seq = Column(Integer, default=0, comment="序号")
+    invoice_supplier_tax_no = Column(String(50), comment="开票方纳税人识别号")
+    invoice_supplier_name = Column(String(100), comment="开票方单位名称")
+    service_item_name = Column(String(100), comment="服务项目名称")
+    voucher_type = Column(String(20), comment="凭证种类")
+    voucher_no = Column(String(50), comment="凭证号码")
+    amount = Column(Numeric(18, 2), default=0.0, comment="金额")
+
+    __table_args__ = (
+        Index('idx_ccf_ded_decl', 'declaration_id'),
+    )
+    declaration = relationship("CulturalConstructionFeeDeclaration", back_populates="deductions")
+
+
 def init_db():
     """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据
 
