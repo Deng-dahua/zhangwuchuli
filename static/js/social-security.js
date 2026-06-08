@@ -53,12 +53,7 @@ async function renderSocialSecurity(container) {
           + '</div>'
         + '</div>'
       + '</div>'
-      + '<button class="btn btn-confirm-period" onclick="loadSSDeclarationList()" title="按当前期间查询">查询</button>'
-      + '<button class="btn btn-secondary" onclick="clearSSFilter()" title="清除期间条件">清除</button>'
-      + '<button class="btn btn-secondary" onclick="triggerSSImport()" title="从Excel导入申报明细">导入文件</button>'
-      + '<button class="btn btn-success" onclick="generateSSVoucher()" title="生成社保相关凭证">生成凭证</button>'
-      + '<button class="btn btn-danger" onclick="deleteSSDeclaration()" title="删除当前期间申报记录">删除报表</button>'
-      + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
+'
     + '</div>'
     + '<div id="ss-list-table"></div>'
     + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1500px"></div></div>';
