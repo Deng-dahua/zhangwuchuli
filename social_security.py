@@ -37,6 +37,44 @@ INSURANCE_NAMES = [
     "地方补充养老（单位）",
 ]
 
+# 保险项目完整映射（name → {code, type}），保证导入和手动录入数据格式一致
+INSURANCE_MAP = [
+    {"name": "基本养老保险（单位）", "code": "PENSION_UNIT", "type": "unit"},
+    {"name": "基本养老保险（个人）", "code": "PENSION_PERS", "type": "personal"},
+    {"name": "基本医疗保险（单位）", "code": "MEDICAL_UNIT", "type": "unit"},
+    {"name": "地方补充医疗（单位）", "code": "MEDICAL_LS_UNIT", "type": "unit"},
+    {"name": "基本医疗保险（个人）", "code": "MEDICAL_PERS", "type": "personal"},
+    {"name": "生育保险", "code": "MATERNITY", "type": "unit"},
+    {"name": "职业年金（单位）", "code": "ANNUITY_UNIT", "type": "unit"},
+    {"name": "职业年金（个人）", "code": "ANNUITY_PERS", "type": "personal"},
+    {"name": "工伤保险（单位）", "code": "INJURY", "type": "unit"},
+    {"name": "公务员医疗补助", "code": "CIVIL_MEDICAL", "type": "unit"},
+    {"name": "家属统筹医疗（单位）", "code": "FAMILY_UNIT", "type": "unit"},
+    {"name": "家属统筹医疗（个人）", "code": "FAMILY_PERS", "type": "personal"},
+    {"name": "失业保险（单位）", "code": "UNEMP_UNIT", "type": "unit"},
+    {"name": "失业保险（个人）", "code": "UNEMP_PERS", "type": "personal"},
+    {"name": "地方补充养老（单位）", "code": "PENSION_LS_UNIT", "type": "unit"},
+]
+
+# 构建 name -> {code, type} 的快速查找字典
+_INSURANCE_DICT = {item["name"]: item for item in INSURANCE_MAP}
+
+
+def _normalize_insurance_items(items: list) -> list:
+    """规范化保险项目：确保每个项目都有 code/name/type/rate/amount 字段"""
+    result = []
+    for it in items:
+        name = it.get("name", "")
+        info = _INSURANCE_DICT.get(name, {})
+        result.append({
+            "code": it.get("code") or info.get("code", ""),
+            "name": info.get("name", name),
+            "type": it.get("type") or info.get("type", ""),
+            "rate": it.get("rate", ""),
+            "amount": float(it.get("amount", 0) or 0),
+        })
+    return result
+
 
 # ============ CRUD ============
 
@@ -304,7 +342,7 @@ async def import_excel(
             salary_base = float(row[8] or 0)
 
             # 解析保险项目（第9列开始，每2列：费率+金额）
-            insurance_items = []
+            insurance_items_raw = []
             for j in range(num_insurance):
                 col_idx = 9 + j * 2
                 rate = ""
@@ -317,11 +355,12 @@ async def import_excel(
                     except (ValueError, TypeError):
                         pass
                 if amount > 0 or rate:
-                    insurance_items.append({
+                    insurance_items_raw.append({
                         "name": INSURANCE_NAMES[j] if j < len(INSURANCE_NAMES) else f"保险项{j+1}",
                         "rate": rate,
                         "amount": amount,
                     })
+            insurance_items = _normalize_insurance_items(insurance_items_raw)
 
             details.append({
                 "seq": seq,
@@ -433,7 +472,7 @@ def add_detail(declaration_id: int, company_id: int, payload: SocialSecurityDeta
         raise HTTPException(404, "申报记录不存在")
 
     # 计算总金额、个人合计、单位合计
-    insurance_items = payload.insurance_items
+    insurance_items = _normalize_insurance_items(payload.insurance_items)
     personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
     company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
     total_amount = personal_amount + company_amount
@@ -491,7 +530,7 @@ def update_detail(detail_id: int, company_id: int, payload: SocialSecurityDetail
     if not decl:
         raise HTTPException(403, "无权限操作此记录")
 
-    insurance_items = payload.insurance_items
+    insurance_items = _normalize_insurance_items(payload.insurance_items)
     personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
     company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
     total_amount = personal_amount + company_amount
