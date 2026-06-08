@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import datetime
 import io
 import openpyxl
 import json

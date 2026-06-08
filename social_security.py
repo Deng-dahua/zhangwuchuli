@@ -8,7 +8,6 @@ from datetime import datetime
 import json
 import openpyxl
 import io
-import re
 from typing import Optional, List
 
 from database import (

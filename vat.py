@@ -60,15 +60,22 @@ def _validate_small_micro_enterprise(db: Session, company_id: int, period: str) 
     p_to   = f"{year}-12"
 
     # ---- 1. 汇算科目余额（整年 1-12月）----
+    # 使用 SQL 聚合，避免全量加载到内存
     balances = {}
-    for e in db.query(JournalEntry).filter(
+    from sqlalchemy import func
+    for row in db.query(
+        JournalEntry.account_code,
+        func.sum(JournalEntry.debit_amount).label('total_debit'),
+        func.sum(JournalEntry.credit_amount).label('total_credit')
+    ).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period >= p_from,
         JournalEntry.period <= p_to,
-    ).all():
-        c = balances.setdefault(e.account_code, {"debit": 0.0, "credit": 0.0})
-        c["debit"] += e.debit_amount or 0
-        c["credit"] += e.credit_amount or 0
+    ).group_by(JournalEntry.account_code).all():
+        balances[row.account_code] = {
+            "debit": float(row.total_debit or 0),
+            "credit": float(row.total_credit or 0)
+        }
 
     def _pl(code_prefix, is_credit=True):
         dr = sum(v["debit"]  for k, v in balances.items() if k.startswith(code_prefix))

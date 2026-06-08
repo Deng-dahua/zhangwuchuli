@@ -538,18 +538,18 @@ async function renderPurchaseInvoices(container) {
       html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
       // 按发票三号分组
-      const siGroups = [];
-      let siCur = null;
+      const piGroups = [];
+      let piCur = null;
       items.forEach(i => {
-        const siKey = (i.invoice_code||'') + '|' + (i.invoice_no||'') + '|' + (i.digital_invoice_no||'');
-        if (!siCur || siCur.key !== siKey) {
-          siCur = { key: siKey, items: [] };
-          siGroups.push(siCur);
+        const piKey = (i.invoice_code||'') + '|' + (i.invoice_no||'') + '|' + (i.digital_invoice_no||'');
+        if (!piCur || piCur.key !== piKey) {
+          piCur = { key: piKey, items: [] };
+          piGroups.push(piCur);
         }
-        siCur.items.push(i);
+        piCur.items.push(i);
       });
-      siGroups.forEach(g => {
-        const siAllIds = g.items.map(i => i.id).join(',');
+      piGroups.forEach(g => {
+        const piAllIds = g.items.map(i => i.id).join(',');
         g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
@@ -1022,12 +1022,12 @@ async function savePurchaseInvoice(id) {
 }
 
 // 一键生成勾选发票的记账凭证
-async function batchGenerateVouchers() {
+async function batchGenerateVouchers(clickedBtn) {
   let checked = document.querySelectorAll('.si-check:checked');
   if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
   let ids = Array.from(checked).map(function(cb) { return parseInt(cb.dataset.id); });
   if (!confirm('确认为选中的 ' + ids.length + ' 条发票生成记账凭证？')) return;
-  let btn = event.target;
+  let btn = clickedBtn || event.target;
   btn.disabled = true;
   let origText = btn.textContent;
   btn.textContent = '⏳ 生成中...';

@@ -713,7 +713,7 @@ class JournalEntry(Base):
     quantity = Column(Numeric(18, 2), default=0.0, comment="数量")
     unit = Column(String(20), comment="单位")
     unit_price = Column(Numeric(18, 2), default=0.0, comment="单价")
-    source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/开具发票/进项抵扣/银行流水")
+    source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/销项发票/进项抵扣/银行流水")
     ref_id = Column(Integer, comment="关联业务ID（开具发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -1122,6 +1122,47 @@ def migrate_schema(db):
         db.commit()
         print("  [OK] 已创建 housing_fund_declarations 表")
 
+    # ── 17. 补充索引与唯一约束 ──
+    idx_defs = [
+        ("idx_accounts_company", "accounts", "company_id"),
+        ("idx_customers_company", "customers", "company_id"),
+        ("idx_suppliers_company", "suppliers", "company_id"),
+        ("idx_employees_company", "employees", "company_id"),
+        ("idx_departments_company", "departments", "company_id"),
+        ("idx_ss_details_company", "social_security_details", "company_id"),
+        ("idx_hf_details_company", "housing_fund_details", "company_id"),
+        ("idx_salary_company", "salary_records", "company_id"),
+        ("idx_je_source", "journal_entries", "source"),
+        ("idx_je_ref_id", "journal_entries", "ref_id"),
+        ("idx_ivd_period", "input_vat_deductions", "period"),
+    ]
+    for idx_name, tbl, col in idx_defs:
+        try:
+            if tbl in inspector.get_table_names():
+                db.execute(TextClause(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tbl}({col})"))
+                db.commit()
+        except Exception:
+            db.rollback()
+
+    # Account(company_id, code) 唯一约束
+    if "accounts" in inspector.get_table_names():
+        try:
+            db.execute(TextClause("CREATE UNIQUE INDEX IF NOT EXISTS uq_account_company_code ON accounts(company_id, code)"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    # JournalEntry(source, ref_id) 部分唯一索引（仅 ref_id 非空时去重）
+    if "journal_entries" in inspector.get_table_names():
+        try:
+            db.execute(TextClause(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_je_source_ref "
+                "ON journal_entries(source, ref_id) WHERE ref_id IS NOT NULL"
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
+
 
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
@@ -1138,7 +1179,7 @@ def auto_generate_journals(db):
             # 幂等检查：该发票已生成过凭证则跳过
             _existing = db.query(JournalEntry).filter(
                 JournalEntry.company_id == comp.id,
-                JournalEntry.source == "开具发票",
+                JournalEntry.source == "销项发票",
                 JournalEntry.ref_id == inv.id
             ).first()
             if _existing:
@@ -1192,12 +1233,7 @@ def auto_generate_journals(db):
             date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
 
             # 计算下一个凭证号
-            max_no = db.query(JournalEntry.voucher_no).filter(
-                JournalEntry.company_id == comp.id,
-                JournalEntry.period == period,
-                JournalEntry.voucher_word == "记"
-            ).order_by(JournalEntry.voucher_no.desc()).first()
-            next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+            next_voucher_no = _next_voucher_no(db, comp.id, period, "记")
 
             rev_code, rev_name = ensure_revenue_sub(goods)
 
@@ -1212,7 +1248,7 @@ def auto_generate_journals(db):
                     contact_project=buyer,
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票", ref_id=inv.id,
+                    source="销项发票", ref_id=inv.id,
                 ),
                 JournalEntry(
                     company_id=comp.id,
@@ -1223,7 +1259,7 @@ def auto_generate_journals(db):
                     contact_project="",
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票", ref_id=inv.id,
+                    source="销项发票", ref_id=inv.id,
                 ),
             ]
             # 仅在税额>0时生成增值税分录
@@ -1240,7 +1276,7 @@ def auto_generate_journals(db):
                         contact_project="",
                         spec_model=inv.spec or "", quantity=inv.quantity or 0,
                         unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                        source="开具发票", ref_id=inv.id,
+                        source="销项发票", ref_id=inv.id,
                     )
                 )
             for e in entries:
@@ -1265,7 +1301,7 @@ def auto_generate_single_invoice(db, inv):
     # 跳过已生成凭证的发票（按发票ID精确去重）
     existing = db.query(JournalEntry).filter(
         JournalEntry.company_id == inv.company_id,
-        JournalEntry.source == "开具发票",
+        JournalEntry.source == "销项发票",
         JournalEntry.ref_id == inv.id
     ).first()
     if existing:
@@ -1313,12 +1349,7 @@ def auto_generate_single_invoice(db, inv):
     period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
     date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
 
-    max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == inv.company_id,
-        JournalEntry.period == period,
-        JournalEntry.voucher_word == "记"
-    ).order_by(JournalEntry.voucher_no.desc()).first()
-    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+    next_voucher_no = _next_voucher_no(db, inv.company_id, period, "记")
 
     rev_code, rev_name = ensure_revenue_sub(goods)
 
@@ -1442,12 +1473,7 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
 
     # 凭证号取 period 最大号+1
     entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
-    max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.voucher_word == "记"
-    ).order_by(JournalEntry.voucher_no.desc()).first()
-    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 
     summary = f"{period}月进项认证汇总"
     tax_name = get_full_name("221001002")
@@ -1819,6 +1845,16 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     return None
 
 
+def _next_voucher_no(db, company_id, period, voucher_word="记"):
+    """获取指定期间下一个凭证号（并发不安全，需外层加锁或事务）"""
+    max_no = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.voucher_word == voucher_word
+    ).order_by(JournalEntry.voucher_no.desc()).first()
+    return (max_no[0] + 1) if max_no and max_no[0] else 1
+
+
 def _ensure_account(db, company_id, code, name, category, direction):
     """确保科目存在，不存在则创建"""
     if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
@@ -1939,12 +1975,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             cp = tx.counterparty_name or tx.summary or "银行流水"
             summary_tag = f"银行流水-#{tx.id}-{cp}"
             period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
-            max_no = db.query(JournalEntry.voucher_no).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.period == period,
-                JournalEntry.voucher_word == "记"
-            ).order_by(JournalEntry.voucher_no.desc()).first()
-            next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+            next_voucher_no = _next_voucher_no(db, company_id, period, "记")
             date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
             is_debit = tx.debit_amount and tx.debit_amount > 0
@@ -2070,12 +2101,7 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
         db.flush()
 
     # 获取凭证号
-    max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.voucher_word == "记"
-    ).order_by(JournalEntry.voucher_no.desc()).first()
-    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 
     # 计提分录：单位部分计入管理费用
     # 借：管理费用-社会保险费
@@ -2213,12 +2239,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
             total_personal = 0
 
         period = tx_period or datetime.now().strftime("%Y-%m")
-        max_no = db.query(JournalEntry.voucher_no).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == "记"
-        ).order_by(JournalEntry.voucher_no.desc()).first()
-        next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+        next_voucher_no = _next_voucher_no(db, company_id, period, "记")
         date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
         entries = []
@@ -2290,7 +2311,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             return {"generated": 0, "message": f"凭证已存在（{_src}），跳过"}
 
     # 确保科目存在
-    _ensure_account(db, company_id, "660204", "工资", "费用", "借")
+    _ensure_account(db, company_id, "660204", "工资", "损益", "借")
     _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
     _ensure_account(db, company_id, "221003", "应交个人所得税", "负债", "贷")
     _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
@@ -2315,13 +2336,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
 
     # 1. 计提工资凭证
     summary_tag = f"工资计提-{period}"
-
-    max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.voucher_word == "记"
-    ).order_by(JournalEntry.voucher_no.desc()).first()
-    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 
     if total_income > 0:
         entries = [
@@ -2349,13 +2364,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 2. 发放工资凭证（实发）
     if total_net > 0:
         summary_tag2 = f"工资发放-{period}"
-
-        max_no2 = db.query(JournalEntry.voucher_no).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == "记"
-        ).order_by(JournalEntry.voucher_no.desc()).first()
-        next_voucher_no2 = (max_no2[0] + 1) if max_no2 and max_no2[0] else 1
+        next_voucher_no2 = _next_voucher_no(db, company_id, period, "记")
 
         entries2 = [
             JournalEntry(
@@ -2382,13 +2391,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     # 3. 缴纳个税凭证
     if total_tax > 0:
         summary_tag3 = f"缴纳个税-{period}"
-
-        max_no3 = db.query(JournalEntry.voucher_no).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == "记"
-        ).order_by(JournalEntry.voucher_no.desc()).first()
-        next_voucher_no3 = (max_no3[0] + 1) if max_no3 and max_no3[0] else 1
+        next_voucher_no3 = _next_voucher_no(db, company_id, period, "记")
 
         entries3 = [
             JournalEntry(
@@ -2416,13 +2419,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     total_deduct = total_personal_ss + total_personal_hf
     if total_deduct > 0:
         summary_tag4 = f"缴纳社保公积金个人部分-{period}"
-
-        max_no4 = db.query(JournalEntry.voucher_no).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == "记"
-        ).order_by(JournalEntry.voucher_no.desc()).first()
-        next_voucher_no4 = (max_no4[0] + 1) if max_no4 and max_no4[0] else 1
+        next_voucher_no4 = _next_voucher_no(db, company_id, period, "记")
 
         entries4 = []
         # 借：其他应付款-代扣社会保险费（个人社保部分）
@@ -2492,12 +2489,7 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
 
     # 获取凭证号
     entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
-    max_no = db.query(JournalEntry.voucher_no).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.voucher_word == "记"
-    ).order_by(JournalEntry.voucher_no.desc()).first()
-    next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 
     summary_tag = f"公积金计提-{period}"
 
@@ -2624,12 +2616,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
             total_personal = 0
 
         period = tx_period or datetime.now().strftime("%Y-%m")
-        max_no = db.query(JournalEntry.voucher_no).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == "记"
-        ).order_by(JournalEntry.voucher_no.desc()).first()
-        next_voucher_no = (max_no[0] + 1) if max_no and max_no[0] else 1
+        next_voucher_no = _next_voucher_no(db, company_id, period, "记")
         date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
         entries = []
@@ -2897,9 +2884,9 @@ ACCOUNTS_TEMPLATE = [
     ("660215", "业务招待费", "损益", "借", 2, "6602"),
     ("660216", "住房公积金", "损益", "借", 2, "6602"),
     ("6603", "财务费用", "损益", "借", 1),
-    ("660301", "手续费", "费用", "借", 2, "6603"),
-    ("6711", "营业外支出", "费用", "借", 1),
-    ("6801", "所得税费用", "费用", "借", 1),
+    ("660301", "手续费", "损益", "借", 2, "6603"),
+    ("6711", "营业外支出", "损益", "借", 1),
+    ("6801", "所得税费用", "损益", "借", 1),
 ]
 
 DEPARTMENTS_TEMPLATE = [
