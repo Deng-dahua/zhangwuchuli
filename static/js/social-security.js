@@ -41,7 +41,8 @@ const SS_INSURANCE_LIST = [
 // ==================== 主渲染（列表页）====================
 async function renderSocialSecurity(container) {
   const el = container || document.getElementById('content-area');
-  if (!el) return;
+  if (!el) { console.error('renderSocialSecurity: el is null'); return; }
+  try {
   // 自动同步顶格栏期间
   if (currentPeriod && currentPeriod !== ssFilterPeriod) ssFilterPeriod = currentPeriod;
   const [fy, fm] = (ssFilterPeriod || currentPeriod || '2025-01').split('-');
@@ -76,6 +77,10 @@ async function renderSocialSecurity(container) {
     + '<div id="ss-list-table"></div>'
     + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1500px"></div></div>';
   await loadSSDeclarationList();
+  } catch(e) {
+    if (el) el.innerHTML = '<div style="color:red;padding:20px"><h3>❌ 社保页面错误</h3><pre>' + (e.stack || e.message || String(e)) + '</pre></div>';
+    console.error('renderSocialSecurity error:', e);
+  }
 }
 
 // ==================== 时间栏辅助函数 ====================
