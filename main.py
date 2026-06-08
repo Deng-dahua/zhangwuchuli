@@ -15,6 +15,7 @@ import os
 import csv
 import io
 import re
+import logging
 import hashlib
 import uuid
 import openpyxl
@@ -759,8 +760,8 @@ def list_suppliers(
             JournalEntry.counterparty.isnot(None)
         ).all()
         names_with_entries = {e.counterparty for e in entries if e.counterparty}
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"供应商往来查询失败: {e}")
     q = db.query(Supplier).filter(Supplier.company_id == company_id)
     if keyword:
         q = q.filter(or_(
@@ -1205,8 +1206,8 @@ def list_accounts(
         journal_codes = {r[0] for r in db.query(JournalEntry.account_code).filter(
             JournalEntry.company_id == company_id
         ).distinct().all()}
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"科目序时账使用检查失败: {e}")
 
     return [
         {

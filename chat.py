@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 import os
 import csv
@@ -712,7 +712,7 @@ def handle_file_confirm(sess, message: str, db, sid: str):
 
 # ==================== CRUD 处理器 ====================
 
-def handle_create_voucher(sess, msg, db, sid, company_id):
+def handle_create_voucher(sess: Dict[str, Any], msg: str, db: Session, sid: str, company_id: int) -> Dict[str, Any]:
     """AI 录入凭证：引导用户去序时账页面操作"""
     sess["intent"] = None
     return {
@@ -722,8 +722,8 @@ def handle_create_voucher(sess, msg, db, sid, company_id):
     }
 
 
-def handle_create_customer(sess, msg, db, sid, company_id):
-    step = sess["step"]
+def handle_create_customer(sess: Dict[str, Any], msg: str, db: Session, sid: str, company_id: int) -> Dict[str, Any]:
+    """AI 新增客户：多步骤引导录入客户档案"""
     data = sess["data"]
 
     if step == 0:
@@ -782,7 +782,8 @@ def handle_create_customer(sess, msg, db, sid, company_id):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_customer(data, db, sess, sid, company_id):
+def save_customer(data: Dict[str, Any], db: Session, sess: Dict[str, Any], sid: str, company_id: int) -> Dict[str, Any]:
+    """保存客户档案到数据库，处理异常回滚"""
     try:
         name = data.get("name", "")
         code = data.get("code", "")
@@ -806,8 +807,8 @@ def save_customer(data, db, sess, sid, company_id):
         return {"reply": f"❌ 保存失败：{str(e)}", "session_id": sid, "action": None}
 
 
-def handle_create_supplier(sess, msg, db, sid, company_id):
-    step = sess["step"]
+def handle_create_supplier(sess: Dict[str, Any], msg: str, db: Session, sid: str, company_id: int) -> Dict[str, Any]:
+    """AI 新增供应商：多步骤引导录入供应商档案"""
     data = sess["data"]
 
     if step == 0:
@@ -839,7 +840,8 @@ def handle_create_supplier(sess, msg, db, sid, company_id):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_supplier(data, db, sess, sid, company_id):
+def save_supplier(data: Dict[str, Any], db: Session, sess: Dict[str, Any], sid: str, company_id: int) -> Dict[str, Any]:
+    """保存供应商档案到数据库"""
     try:
         name = data.get("name", "")
         code = data.get("code", "")
@@ -851,8 +853,8 @@ def save_supplier(data, db, sess, sid, company_id):
         return {"reply": f"❌ {e}", "session_id": sid, "action": None}
 
 
-def handle_create_employee(sess, msg, db, sid, company_id):
-    step = sess["step"]
+def handle_create_employee(sess: Dict[str, Any], msg: str, db: Session, sid: str, company_id: int) -> Dict[str, Any]:
+    """AI 新增员工：多步骤引导录入员工档案"""
     data = sess["data"]
 
     if step == 0:
@@ -890,7 +892,8 @@ def handle_create_employee(sess, msg, db, sid, company_id):
     return {"reply": "请继续...", "session_id": sid, "action": None}
 
 
-def save_employee(data, db, sess, sid, company_id):
+def save_employee(data: Dict[str, Any], db: Session, sess: Dict[str, Any], sid: str, company_id: int) -> Dict[str, Any]:
+    """保存员工档案到数据库"""
     try:
         e = Employee(company_id=company_id, code=data.get("code", ""), name=data.get("name", ""), id_card=data.get("id_card"), email=data.get("email"))
         db.add(e); db.commit()

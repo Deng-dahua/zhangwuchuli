@@ -14,6 +14,7 @@ from sqlalchemy import func, or_
 from typing import Optional, List
 from datetime import datetime
 import io
+import logging
 import openpyxl
 import json
 
@@ -135,8 +136,8 @@ def _parse_id_number(id_number: str):
         elif len(id_number) == 15:
             birthday = f"19{id_number[6:8]}-{id_number[8:10]}-{id_number[10:12]}"
             gender = "女" if int(id_number[14]) % 2 == 0 else "男"
-    except Exception:
-        pass
+    except (ValueError, IndexError) as e:
+        logging.warning(f"身份证号解析失败 {id_number}: {e}")
     return birthday, gender
 
 
@@ -576,7 +577,7 @@ def import_salary_excel(
                         return default
                     try:
                         return float(v)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return default
             return default
 

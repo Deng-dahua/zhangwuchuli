@@ -21,6 +21,7 @@ Base = declarative_base()
 
 
 def get_db():
+    """FastAPI 依赖注入：生成数据库会话，请求完成后自动关闭"""
     db = SessionLocal()
     try:
         yield db
@@ -813,12 +814,7 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"创建子表 {table_name} 失败: {e}")
 
-    # ── 2. 如果没有公司，将旧 company_info 数据迁移到 companies（已废弃：旧架构不存在此路径） ──
-    # DEPRECATED: company_info 表已从当前架构移除，此代码块永不执行。保留作为参考。
-    # if db.query(Company).count() == 0:
-    #    ... (旧迁移逻辑已注释)
-
-    # ── 3. 给所有表增加 company_id 列 ──
+    # ── 2. 给所有表增加 company_id 列 ──
     migrations = {
         "departments": "ALTER TABLE departments ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
         "employees": "ALTER TABLE employees ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1",
