@@ -3174,49 +3174,6 @@ def init_db():
                 except Exception as e:
                     print(f"[init_db] 警告：公司{company.id} 数据初始化失败: {e}")
 
-        # 为每家公司创建演示发票数据（仅在无发票时）
-        for company in companies:
-            try:
-                if db.query(SalesInvoice).filter(SalesInvoice.company_id == company.id).count() == 0:
-                    today = date.today()
-                    demo_invoices = [
-                        SalesInvoice(company_id=company.id, invoice_no=f"DEMO-{company.id}001",
-                            invoice_date=today, buyer_name="演示客户A", goods_name="咨询服务",
-                            amount=50000.0, tax_amount=3000.0, total_amount=53000.0,
-                            tax_rate=6, status="正常", invoice_category="增值税专用发票", is_positive=True),
-                        SalesInvoice(company_id=company.id, invoice_no=f"DEMO-{company.id}002",
-                            invoice_date=today, buyer_name="演示客户B", goods_name="软件产品",
-                            amount=100000.0, tax_amount=13000.0, total_amount=113000.0,
-                            tax_rate=13, status="正常", invoice_category="增值税专用发票", is_positive=True),
-                        SalesInvoice(company_id=company.id, invoice_no=f"DEMO-{company.id}003",
-                            invoice_date=today, buyer_name="演示客户C", goods_name="设备租赁",
-                            amount=20000.0, tax_amount=2600.0, total_amount=22600.0,
-                            tax_rate=13, status="正常", invoice_category="增值税普通发票", is_positive=True),
-                    ]
-                    for inv in demo_invoices:
-                        db.add(inv)
-                    db.flush()
-                    # 自动生成凭证
-                    for inv in demo_invoices:
-                        try:
-                            auto_generate_single_invoice(db, inv)
-                        except Exception as e:
-                            print(f"[init_db] 警告：演示发票凭证生成失败: {e}")
-                    print(f"[init_db] 公司{company.id}: 创建 {len(demo_invoices)} 张演示发票")
-
-                if db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company.id).count() == 0:
-                    today = date.today()
-                    demo_purchases = [
-                        PurchaseInvoice(company_id=company.id, invoice_no=f"PUR-{company.id}001",
-                            invoice_date=today, seller_name="供应商A", goods_name="办公用品",
-                            amount=5000.0, tax_amount=650.0, total_amount=5650.0,
-                            tax_rate=13, status="已认证"),
-                    ]
-                    for inv in demo_purchases:
-                        db.add(inv)
-                    print(f"[init_db] 公司{company.id}: 创建 {len(demo_purchases)} 张演示进项发票")
-            except Exception as e:
-                print(f"[init_db] 警告：公司{company.id} 演示数据创建失败: {e}")
 
         db.commit()
         print(f"数据库初始化完成（{len(companies)} 家公司）")
