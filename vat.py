@@ -973,51 +973,74 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
         prior_credit = prior_main.get("row20_end_credit", 0.0)
     
-    # 主表第1栏 = 附表一第13行第9列 - 第14行第9列
+    # 读取附表一和附表二
     s1 = json.loads(vd.form_sales) if isinstance(vd.form_sales, str) else (vd.form_sales or {})
-    sales_total = s1.get("row13_total_special_sales", 0)
-    if s1.get("row14_refund_special_sales"):
-        sales_total = round(sales_total - s1.get("row14_refund_special_sales", 0), 2)
-    
-    # 主表第11栏 = 附表一第13行第10列 - 第14行第10列
-    output_tax = s1.get("row13_total_special_tax", 0)
-    if s1.get("row14_refund_special_tax"):
-        output_tax = round(output_tax - s1.get("row14_refund_special_tax", 0), 2)
-    
-    # 主表第12栏 = 附表二第12栏
     s2 = json.loads(vd.form_input) if isinstance(vd.form_input, str) else (vd.form_input or {})
+    
+    # ===== 主表第1栏：按适用税率计税销售额 =====
+    # 官方公式：第1栏 = 附表一第9列第1至5行之和 - 第9列第6、7行之和
+    sales_total = round(
+        s1.get("row1_13_goods_total_sales", 0) +
+        s1.get("row2_13_service_total_sales", 0) +
+        s1.get("row3_9_goods_total_sales", 0) +
+        s1.get("row4_9_service_total_sales", 0) +
+        s1.get("row5_6_service_total_sales", 0) -
+        s1.get("row6_refund_goods_total_sales", 0) -
+        s1.get("row7_refund_service_total_sales", 0),
+        2
+    )
+    
+    # ===== 主表第11栏：销项税额 =====
+    # 官方公式：第11栏 = 附表一（第10列第1、3行之和 - 第10列第6行）+（第14列第2、4、5行之和 - 第14列第7行）
+    output_tax_part1 = round(
+        s1.get("row1_13_goods_total_tax", 0) +
+        s1.get("row3_9_goods_total_tax", 0) -
+        s1.get("row6_refund_goods_total_tax", 0),
+        2
+    )
+    output_tax_part2 = round(
+        s1.get("row2_13_service_after_deduction_tax", 0) +
+        s1.get("row4_9_service_after_deduction_tax", 0) +
+        s1.get("row5_6_service_after_deduction_tax", 0) -
+        s1.get("row7_refund_service_after_deduction_tax", 0),
+        2
+    )
+    output_tax = round(output_tax_part1 + output_tax_part2, 2)
+    
+    # ===== 主表第12栏：进项税额 =====
     input_tax = s2.get("total_deductible", 0)
     
+    # ===== 主表第21栏：简易计税办法计算的应纳税额 =====
+    simple_tax_part1 = round(
+        s1.get("row8_simple_6_total_tax", 0) +
+        s1.get("row9a_simple_5a_total_tax", 0) +
+        s1.get("row10_simple_4_total_tax", 0) +
+        s1.get("row11_simple_3a_total_tax", 0) -
+        s1.get("row14_refund_simple_total_tax", 0),
+        2
+    )
+    simple_tax_part2 = round(
+        s1.get("row9b_simple_5b_after_deduction_tax", 0) +
+        s1.get("row12_simple_3b_after_deduction_tax", 0) +
+        s1.get("row13a_prepay_after_deduction_tax", 0) +
+        s1.get("row13b_prepay_2_after_deduction_tax", 0) -
+        s1.get("row15_refund_simple_after_deduction_tax", 0),
+        2
+    )
+    simple_tax = round(simple_tax_part1 + simple_tax_part2, 2)
+    
     # 主表计算链（按填表说明公式）
-    # 第17栏 应抵扣税额合计 = 第12栏+第13栏-第14栏-第15栏+第16栏
-    input_transfer_out = 0.0    # 第14栏 进项税额转出（当前无数据）
-    exempt_refund = 0.0         # 第15栏 免、抵、退应退税额（当前无数据）
-    tax_check = 0.0             # 第16栏 按适用税率计算的纳税检查应补缴税额（当前无数据）
+    input_transfer_out = 0.0
+    exempt_refund = 0.0
+    tax_check = 0.0
     total_deduct = round(input_tax + prior_credit - input_transfer_out - exempt_refund + tax_check, 2)
-    
-    # 第18栏 实际抵扣税额 = min(第17栏, 第11栏)（不考虑加计抵减）
     actual_deduct = min(total_deduct, output_tax)
-    
-    # 第19栏 应纳税额 = 第11栏 - 第18栏 - 实际抵减额（无加计抵减时为0）
-    actual_reduction = 0.0  # 实际抵减额（当前不适用加计抵减政策）
+    actual_reduction = 0.0
     tax_payable = max(0, round(output_tax - actual_deduct - actual_reduction, 2))
-    
-    # 第20栏 期末留抵税额 = 第17栏 - 第18栏
     end_credit = round(total_deduct - actual_deduct, 2)
-    
-    # 第21栏 简易计税办法计算的应纳税额
-    # = 《附列资料（一）》（第10列第8、9a、10、11行之和 - 第10列第14行）+（第14列第9b、12、13a、13b行之和 - 第14列第15行）
-    # 当前无简易计税数据，暂为0
-    simple_tax = 0.0
-    
-    # 第23栏 应纳税额减征额（当前无数据）
     reduction = 0.0
-    
-    # 第24栏 应纳税额合计 = 第19栏+第21栏-第23栏
     tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
     
-    # 计算本年累计(YTD)
-    # 取本年1月至当前月所有申报表，汇总各栏次数值
     year_str = period[:4]
     ytd_periods = [f"{year_str}-{m:02d}" for m in range(1, period_date.month + 1)]
     
