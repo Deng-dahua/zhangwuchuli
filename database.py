@@ -766,35 +766,10 @@ def migrate_schema(db):
                     db.rollback()
                     print(f"创建子表 {table_name} 失败: {e}")
 
-    # ── 2. 如果没有公司，将旧 company_info 数据迁移到 companies ──
-    if db.query(Company).count() == 0:
-        # 检查旧 company_info 表是否有数据
-        if "company_info" in inspector.get_table_names():
-            try:
-                old = db.execute(TextClause("SELECT * FROM company_info LIMIT 1")).fetchone()
-                if old:
-                    keys = [c for c in old._mapping.keys()]
-                    vals = [old._mapping[k] for k in keys]
-                    placeholders = ", ".join([f":{k}" for k in keys])
-                    cols = ", ".join(keys)
-                    params = {k: old._mapping[k] for k in keys}
-                    # 映射 company_name → name
-                    if "company_name" in params:
-                        params["name"] = params.pop("company_name")
-                    # 去掉 id 让数据库自增
-                    cols_no_id = ", ".join([k for k in keys if k != "id"])
-                    placeholders_no_id = ", ".join([f":{k}" for k in keys if k != "id"])
-                    params_no_id = {k: v for k, v in params.items() if k != "id"}
-                    if "name" not in params_no_id:
-                        params_no_id["name"] = "默认公司"
-                    db.execute(TextClause(
-                        f"INSERT INTO companies ({cols_no_id}) VALUES ({placeholders_no_id})"
-                    ), params_no_id)
-                    db.commit()
-                    print("已从 company_info 迁移数据到 companies 表")
-            except Exception as e:
-                db.rollback()
-                print(f"迁移 company_info → companies 失败: {e}")
+    # ── 2. 如果没有公司，将旧 company_info 数据迁移到 companies（已废弃：旧架构不存在此路径） ──
+    # DEPRECATED: company_info 表已从当前架构移除，此代码块永不执行。保留作为参考。
+    # if db.query(Company).count() == 0:
+    #    ... (旧迁移逻辑已注释)
 
     # ── 3. 给所有表增加 company_id 列 ──
     migrations = {
@@ -1156,12 +1131,11 @@ def migrate_schema(db):
         except Exception:
             db.rollback()
 
-    # JournalEntry(source, ref_id) 部分唯一索引（仅 ref_id 非空时去重）
+    # JournalEntry(source, ref_id) 索引（加速查询，非唯一约束：同一发票生成多行分录共享ref_id）
     if "journal_entries" in inspector.get_table_names():
         try:
             db.execute(TextClause(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_je_source_ref "
-                "ON journal_entries(source, ref_id) WHERE ref_id IS NOT NULL"
+                "CREATE INDEX IF NOT EXISTS idx_je_source_ref ON journal_entries(source, ref_id)"
             ))
             db.commit()
         except Exception:
@@ -2907,6 +2881,7 @@ def init_company_data(db, company_id: int):
                 category=category, balance_direction=direction,
                 level=level, parent_code=parent
             ))
+        db.flush()  # 立即刷新，让后续 _ensure_account 能查询到已添加的科目
 
     # 始终确保增值税完整科目体系（财会〔2016〕22号）
     vat_accounts = [
