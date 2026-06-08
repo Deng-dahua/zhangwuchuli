@@ -120,6 +120,7 @@ async function renderSocialSecurity(container) {
         + '</div>'
         + '<button class="btn btn-primary" onclick="ssRefresh()">查询</button>'
         + '<button class="btn btn-secondary" onclick="ssClearPeriod()">清除</button>'
+        + '<button class="btn btn-success" onclick="ssAddNew()">新增社会保险费</button>'
         + '<button class="btn btn-secondary" onclick="triggerSSImport()">导入文件</button>'
         + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
         + '<button class="btn btn-success" onclick="generateSSVoucher()">生成凭证</button>'
@@ -443,4 +444,94 @@ async function deleteSSDeclaration() {
     toast('申报记录已删除', 'success');
     ssRefresh();
   } catch (e) { handleError(e, '删除报表'); }
+}
+
+// ============ 新增参保人员 ============
+async function ssAddNew() {
+  try {
+    // 先确保当前期间有申报记录
+    var decls = await api('/api/social-security/declarations?company_id=' + currentCompanyId + '&period=' + ssPeriod);
+    var declId;
+    if (!decls || decls.length === 0) {
+      var decl = await api('/api/social-security/declarations?company_id=' + currentCompanyId + '&period=' + ssPeriod, {
+        method: 'POST',
+        body: JSON.stringify({ period: ssPeriod, status: '草稿', details: [] }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      declId = decl.id;
+    } else {
+      declId = decls[0].id;
+    }
+
+    // 弹窗输入新员工信息
+    var insHtml = '';
+    SS_INSURANCE_LIST.forEach(function(ins) {
+      insHtml += '<tr>'
+        + '<td>' + escapeHtml(ins.name) + '</td>'
+        + '<td><input type="text" class="form-control ss-edit-rate" data-code="' + ins.code + '" placeholder="费率" style="width:80px"></td>'
+        + '<td><input type="number" step="0.01" class="form-control ss-edit-amount" data-code="' + ins.code + '" placeholder="0.00" style="width:120px"></td>'
+        + '</tr>';
+    });
+
+    var modal = document.createElement('div');
+    modal.id = 'ss-add-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = '<div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">'
+      + '<div class="modal-header"><h3>新增参保明细</h3><button class="modal-close" onclick="closeModal(\'ss-add-modal\')">&times;</button></div>'
+      + '<div class="modal-body">'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'
+          + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">姓名 <span style="color:red">*</span></label>'
+          + '<input type="text" class="form-control" id="ss-add-name"></div>'
+          + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">身份证号</label>'
+          + '<input type="text" class="form-control" id="ss-add-idno"></div>'
+          + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">人员类别</label>'
+          + '<select class="form-control" id="ss-add-cat"><option value="在职人员" selected>在职人员</option><option value="退休人员">退休人员</option><option value="家属统筹人员">家属统筹人员</option></select></div>'
+          + '<div class="form-group"><label class="form-label" style="display:block;margin-bottom:4px;font-size:13px">缴费工资</label>'
+          + '<input type="number" step="0.01" class="form-control" id="ss-add-salary" value="0"></div>'
+        + '</div>'
+        + '<h4 style="font-size:14px;margin:12px 0 8px">险种明细</h4>'
+        + '<div style="max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px">'
+        + '<table class="data-table" style="font-size:12px"><thead><tr><th>险种</th><th style="width:100px">费率</th><th style="width:120px">应缴费额</th></tr></thead><tbody>'
+        + insHtml
+        + '</tbody></table></div>'
+      + '</div>'
+      + '<div class="modal-footer">'
+        + '<button class="btn btn-outline" onclick="closeModal(\'ss-add-modal\')">取消</button>'
+        + '<button class="btn btn-primary" onclick="ssDoAdd(' + declId + ')">保存</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) { closeModal('ss-add-modal'); }
+    });
+  } catch (e) { handleError(e, '打开新增窗口'); }
+}
+
+async function ssDoAdd(declarationId) {
+  var name = (document.getElementById('ss-add-name') || {}).value;
+  if (!name) { alert('请填写姓名'); return; }
+  var insuranceItems = [];
+  SS_INSURANCE_LIST.forEach(function(ins) {
+    var rateEl = document.querySelector('.ss-edit-rate[data-code="' + ins.code + '"]');
+    var amountEl = document.querySelector('.ss-edit-amount[data-code="' + ins.code + '"]');
+    var rate = rateEl ? rateEl.value : '';
+    var amount = parseFloat(amountEl ? amountEl.value : 0) || 0;
+    insuranceItems.push({ code: ins.code, name: ins.name, type: ins.type, rate: rate, amount: amount });
+  });
+
+  var body = {
+    employee_name: name,
+    id_number: (document.getElementById('ss-add-idno') || {}).value || '',
+    category: (document.getElementById('ss-add-cat') || {}).value || '在职人员',
+    salary_base: parseFloat((document.getElementById('ss-add-salary') || {}).value) || 0,
+    insurance_items: insuranceItems,
+  };
+
+  try {
+    await api('/api/social-security/declarations/' + declarationId + '/details?company_id=' + currentCompanyId, {
+      method: 'POST', body: JSON.stringify(body)
+    });
+    closeModal('ss-add-modal');
+    ssRefresh();
+  } catch (e) { handleError(e, '新增参保明细'); }
 }
