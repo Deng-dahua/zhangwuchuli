@@ -1252,8 +1252,9 @@ def auto_generate_journals(db):
                     Account.company_id == comp.id,
                     Account.parent_code == "6001"
                 ).order_by(Account.code.desc()).first()
-                next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
-                new_code = f"6001{next_num:03d}"
+                next_num = int(max_sub[0][4:7]) + 1 if (max_sub and max_sub[0] and len(max_sub[0]) >= 6) else 1
+                # 科目编码规则：6001 下级为 600101/600102/...（6位，2位序号）
+                new_code = f"6001{next_num:02d}"
                 new_acc = Account(
                     company_id=comp.id, code=new_code, name=gn,
                     category="收入", balance_direction="贷",
