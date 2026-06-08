@@ -649,11 +649,10 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # 第11行：简易计税 3%征收率（货物）
     # 第12行：简易计税 3%征收率（服务）
     
-    # 按税率和发票类型分类汇总
+    # 按税率分类汇总
     sales_by_rate = {}
     for inv in sales_invoices:
         rate = int(inv.tax_rate or 13)
-        inv_type = (inv.invoice_type or "").strip()
         # 判断是货物劳务还是服务不动产
         # 根据发票内容判断（这里简化处理，实际应根据商品名称判断）
         is_service = "服务" in (inv.goods_name or "") or "不动产" in (inv.goods_name or "") or "无形资产" in (inv.goods_name or "")
@@ -1161,6 +1160,13 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     
     # ===== 主表第11栏：销项税额 =====
     # 官方公式：第11栏 = 附表一（第10列第1、3行之和 - 第10列第6行）+（第14列第2、4、5行之和 - 第14列第7行）
+    # 注：当"扣除后销项税额"（第14列）未实现时，回退使用"合计销项税额"（第10列）
+    def _tax_s1(row_key):
+        """取第14列(扣除后)，若为0则回退第10列(合计)"""
+        after = s1.get(f"{row_key}_after_deduction_tax", 0) or 0
+        total = s1.get(f"{row_key}_total_tax", 0) or 0
+        return after if after else total
+    
     output_tax_part1 = round(
         s1.get("row1_13_goods_total_tax", 0) +
         s1.get("row3_9_goods_total_tax", 0) -
@@ -1168,10 +1174,10 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         2
     )
     output_tax_part2 = round(
-        s1.get("row2_13_service_after_deduction_tax", 0) +
-        s1.get("row4_9_service_after_deduction_tax", 0) +
-        s1.get("row5_6_service_after_deduction_tax", 0) -
-        s1.get("row7_refund_service_after_deduction_tax", 0),
+        _tax_s1("row2_13_service") +
+        _tax_s1("row4_9_service") +
+        _tax_s1("row5_6_service") -
+        _tax_s1("row7_refund_service"),
         2
     )
     output_tax = round(output_tax_part1 + output_tax_part2, 2)
