@@ -1,8 +1,8 @@
 // ==================== 社会保险费页面（按Excel模板设计）====================
-let ssDeclarations = [];
-let ssFilterPeriod = '';
-let ssImportData = null;  // 导入预览数据
-let ssCurrentDeclaration = null;  // 当前查看的申报表
+var ssDeclarations = [];
+var ssFilterPeriod = '';
+var ssImportData = null;  // 导入预览数据
+var ssCurrentDeclaration = null;  // 当前查看的申报表
 
 // 险种定义（按Excel模板顺序：1-15个险种，每个险种含缴费工资+费率+应缴费额）
 const SS_INSURANCE_LIST = [

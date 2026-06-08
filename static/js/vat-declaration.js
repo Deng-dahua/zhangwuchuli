@@ -1,11 +1,11 @@
 // ==================== 增值税申报页面 ====================
 // 按官方《增值税及附加税费申报表（一般纳税人适用）》009-1-1.xls 模板渲染
-let vatDeclarations = [];
-let vatSelectedId = null;
-let vatActivePage = 'main'; // 默认主表
-let vatFilterPeriod = '';
-let vatInlineDisplayId = null;
-let vatCurrentData = null;
+var vatDeclarations = [];
+var vatSelectedId = null;
+var vatActivePage = 'main'; // 默认主表
+var vatFilterPeriod = '';
+var vatInlineDisplayId = null;
+var vatCurrentData = null;
 
 const VAT_PAGES = [
   { id: 'main', label: '增值税主表' },

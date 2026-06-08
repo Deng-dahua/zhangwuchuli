@@ -1,9 +1,9 @@
 // ========== 住房公积金模块 ==========
 
-let hfPeriod = '';
-let hfStats = {};
-let hfSelectedIds = new Set();
-let hfEditId = null;  // 编辑时暂存ID
+var hfPeriod = '';
+var hfStats = {};
+var hfSelectedIds = new Set();
+var hfEditId = null;  // 编辑时暂存ID
 
 // 自定义escAttr（escapeHtml已有，但attr需额外转引号）
 function hfEscAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }

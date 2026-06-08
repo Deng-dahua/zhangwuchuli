@@ -1,17 +1,17 @@
 // ==================== 全局状态 ====================
-let currentPage = 'dashboard';
-let currentPeriod = '';
-let allAccounts = [];
+var currentPage = 'dashboard';
+var currentPeriod = '';
+var allAccounts = [];
 
 // 多公司全局状态（供所有模块访问）
-let currentCompanyId = 1;
-let currentCompanyName = '';
-let allCompanies = [];
+var currentCompanyId = 1;
+var currentCompanyName = '';
+var allCompanies = [];
 
 // 文件导入全局状态
-let _importFile = null;
-let _importModule = '';
-let _importBankConfigId = null;
+var _importFile = null;
+var _importModule = '';
+var _importBankConfigId = null;
 
 // ==================== 全局工具函数 ====================
 function escapeHtml(s) {
@@ -499,7 +499,7 @@ function toast(msg, type = 'default') {
 }
 
 // ==================== 分页工具 ====================
-let _paginationState = {};
+var _paginationState = {};
 
 function setPageState(key, skip, limit) {
   _paginationState[key] = { skip: skip || 0, limit: limit || 50 };

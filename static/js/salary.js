@@ -2,9 +2,9 @@
  * 工资薪金所得模块 - 前端
  * 功能：按期间管理工资表、导入税务模板、自动建人员档案、计算个税
  */
-let currentSalaryPeriod = '';
-let currentSalaryRecords = [];
-let currentEditingSalaryId = null;
+var currentSalaryPeriod = '';
+var currentSalaryRecords = [];
+var currentEditingSalaryId = null;
 
 // 确认 salary.js 已加载（调试用）
 console.log('[salary.js] 已加载，当前时间：' + new Date().toLocaleTimeString());

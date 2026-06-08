@@ -1,10 +1,10 @@
 // ==================== 银行流水 ====================
 
-let _bankConfigs = [];
-let _currentBankId = null;
+var _bankConfigs = [];
+var _currentBankId = null;
 
 // ==================== 进项抵扣 ====================
-let ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
+var ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function loadBankConfigs() {
   const data = await api('/api/bank-configs');
@@ -773,7 +773,7 @@ async function batchGenerateBankVouchers() {
 
 // ==================== 银行规则库管理 ====================
 
-let _bankRules = [];
+var _bankRules = [];
 
 async function showBankRuleModal() {
   try {
@@ -908,7 +908,7 @@ async function deleteBankRule(ruleId) {
 
 // ==================== 凭证生成预览 ====================
 
-let _previewIds = [];
+var _previewIds = [];
 
 async function showBankVoucherPreview(results, ids) {
   _previewIds = ids;
