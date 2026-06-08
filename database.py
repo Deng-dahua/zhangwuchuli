@@ -1168,6 +1168,30 @@ def migrate_schema(db):
             db.rollback()
 
 
+def _build_account_name_resolver(db, company_id):
+    """预加载公司全部会计科目到内存dict，返回 (resolve函数, 科目dict)。
+    
+    避免 get_full_name 每次调用都查询 DB（N+1问题）。
+    resolve(code) 返回科目全级次名称如 '应交税费/应交增值税/销项税额'。
+    调用方在新增科目后应将其加入 dict：account_map[new_code] = new_acc。
+    """
+    accounts = db.query(Account).filter(Account.company_id == company_id).all()
+    code_to_acc = {a.code: a for a in accounts}
+
+    def get_full_name(code):
+        parts = []
+        cur = code
+        while cur:
+            acc = code_to_acc.get(cur)
+            if not acc:
+                break
+            parts.insert(0, acc.name)
+            cur = acc.parent_code
+        return "/".join(parts) if parts else code
+
+    return get_full_name, code_to_acc
+
+
 def auto_generate_journals(db):
     """为所有"正常"状态的开具发票自动生成记账凭证（未生成过的）"""
     companies = db.query(Company).order_by(Company.id).all()
@@ -1192,20 +1216,7 @@ def auto_generate_journals(db):
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"
 
-            def get_full_name(code):
-                """构建科目的全级次名称"""
-                parts = []
-                cur = code
-                while cur:
-                    acc = db.query(Account).filter(
-                        Account.company_id == comp.id,
-                        Account.code == cur
-                    ).first()
-                    if not acc:
-                        break
-                    parts.insert(0, acc.name)
-                    cur = acc.parent_code
-                return "/".join(parts) if parts else code
+            get_full_name, account_map = _build_account_name_resolver(db, comp.id)
 
             def ensure_revenue_sub(gn):
                 """确保主营业务收入下存在对应货物的子科目"""
@@ -1231,6 +1242,7 @@ def auto_generate_journals(db):
                 )
                 db.add(new_acc)
                 db.flush()
+                account_map[new_code] = new_acc
                 return (new_code, get_full_name(new_code))
 
             period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
@@ -1311,19 +1323,7 @@ def auto_generate_single_invoice(db, inv):
     if existing:
         return
 
-    def get_full_name(code):
-        parts = []
-        cur = code
-        while cur:
-            acc = db.query(Account).filter(
-                Account.company_id == inv.company_id,
-                Account.code == cur
-            ).first()
-            if not acc:
-                break
-            parts.insert(0, acc.name)
-            cur = acc.parent_code
-        return "/".join(parts) if parts else code
+    get_full_name, account_map = _build_account_name_resolver(db, inv.company_id)
 
     def ensure_revenue_sub(gn):
         if not gn:
@@ -1348,6 +1348,7 @@ def auto_generate_single_invoice(db, inv):
         )
         db.add(new_acc)
         db.flush()
+        account_map[new_code] = new_acc
         return (new_code, get_full_name(new_code))
 
     period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
@@ -1441,35 +1442,29 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     if not total_tax or total_tax <= 0:
         return 0
 
-    def get_full_name(code):
-        parts = []
-        cur = code
-        while cur:
-            acc = db.query(Account).filter(
-                Account.company_id == company_id,
-                Account.code == cur
-            ).first()
-            if not acc:
-                break
-            parts.insert(0, acc.name)
-            cur = acc.parent_code
-        return "/".join(parts) if parts else code
+    get_full_name, account_map = _build_account_name_resolver(db, company_id)
 
     # 确保 221001002 进项税额 科目存在
-    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "221001002").first():
-        db.add(Account(
+    acc_221001002 = db.query(Account).filter(Account.company_id == company_id, Account.code == "221001002").first()
+    if not acc_221001002:
+        acc_221001002 = Account(
             company_id=company_id, code="221001002", name="进项税额",
             category="负债", balance_direction="借", level=3, parent_code="221001",
-        ))
+        )
+        db.add(acc_221001002)
         db.flush()
+        account_map["221001002"] = acc_221001002
 
     # 确保 221001003 待认证进项税额 科目存在
-    if not db.query(Account).filter(Account.company_id == company_id, Account.code == "221001003").first():
-        db.add(Account(
+    acc_221001003 = db.query(Account).filter(Account.company_id == company_id, Account.code == "221001003").first()
+    if not acc_221001003:
+        acc_221001003 = Account(
             company_id=company_id, code="221001003", name="待认证进项税额",
             category="负债", balance_direction="贷", level=3, parent_code="221001",
-        ))
+        )
+        db.add(acc_221001003)
         db.flush()
+        account_map["221001003"] = acc_221001003
 
     # 凭证号取 period 最大号+1
     entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()

@@ -3799,8 +3799,11 @@ def general_ledger(
         c = cum_agg[acc.code]
         o = open_raw.get(acc.code, {"debit": 0.0, "credit": 0.0})
         direction = acc.balance_direction or "借"
-        # 期初余额暂设为0
-        ob = 0.0
+        # 期初余额：从前期累计发生额推算
+        if direction == "借":
+            ob = round(o["debit"] - o["credit"], 2)
+        else:
+            ob = round(o["credit"] - o["debit"], 2)
         # 期末余额
         if direction == "借":
             balance = round(c["debit"] - c["credit"], 2)

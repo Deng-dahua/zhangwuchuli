@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import openpyxl
 import io
+import logging
 from typing import Optional, List
 
 from database import HousingFundDetail, Company, get_db, _generate_hf_accrual_journals, _match_hf_payment_journals
@@ -92,10 +93,10 @@ def create_detail(
 ):
     """新增一条缴存记录（自动计算缴存额）"""
     if 0 < company_ratio <= 1:
-        print(f"[公积金] 单位缴存比例自动从小数 {company_ratio} 转为百分比 {company_ratio*100}%")
+        logging.warning(f"[公积金] 员工{employee_name} 单位缴存比例自动从小数 {company_ratio} 转为百分比 {company_ratio*100}%")
         company_ratio *= 100
     if 0 < personal_ratio <= 1:
-        print(f"[公积金] 个人缴存比例自动从小数 {personal_ratio} 转为百分比 {personal_ratio*100}%")
+        logging.warning(f"[公积金] 员工{employee_name} 个人缴存比例自动从小数 {personal_ratio} 转为百分比 {personal_ratio*100}%")
         personal_ratio *= 100
     company_amount = round(deposit_base * company_ratio / 100, 2)
     personal_amount = round(deposit_base * personal_ratio / 100, 2)
@@ -285,9 +286,11 @@ async def import_excel(
             # 自动检测小数比例（如 0.1=10%），转换为百分比
             if 0 < company_ratio <= 1:
                 auto_corrected_ratios += 1
+                logging.warning(f"[公积金导入] 第{i}行 {name}: 单位比例从小数 {company_ratio} 自动转为 {company_ratio*100}%")
                 company_ratio *= 100
             if 0 < personal_ratio <= 1:
                 auto_corrected_ratios += 1
+                logging.warning(f"[公积金导入] 第{i}行 {name}: 个人比例从小数 {personal_ratio} 自动转为 {personal_ratio*100}%")
                 personal_ratio *= 100
 
             company_amount = round(deposit_base * company_ratio / 100, 2)
