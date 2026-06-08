@@ -6,15 +6,14 @@ let ssFilterPeriod = '';
 async function renderSocialSecurity(container) {
   const el = container || document.getElementById('content-area');
   if (!el) return;
+    // 自动同步顶格栏期间
+    if (currentPeriod && currentPeriod !== ssFilterPeriod) ssFilterPeriod = currentPeriod;
     el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
-    + '<div class="toolbar"><div class="toolbar-left">'
-    + '<button class="btn btn-primary" onclick="showSSCreateModal()">＋ 新建申报</button> '
-    + '<button class="btn btn-outline" onclick="showSSImportModal()">导入Excel</button>'
-    + '<button class="btn btn-info" onclick="generateSSPaymentVoucher()" style="background:#7c3aed">⚡ 生成缴纳凭证</button>'
-    + '</div>'
-    + '<div class="toolbar-right"><input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px" placeholder="选择期间"></div></div>'
-    + '<div id="ss-list-table"></div>'
-    + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1200px"></div></div>';
+      + '<div class="toolbar"><div class="toolbar-left">'
+      + '<input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;renderSocialSecurity()" style="width:160px" placeholder="选择期间">'
+      + '</div>'
+      + '<div id="ss-list-table"></div>'
+      + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1200px"></div></div>';
   await loadSSDeclarationList();
 }
 
@@ -111,7 +110,7 @@ async function openSSDetail(id) {
         groups[cat].push(d);
       });
 
-      // Insurance header names
+      // Get all insurance names from first detail
       const insuranceNames = decl.details[0]?.insurance_items?.map(i => i.name) || [];
 
       detailsHtml = '<div style="overflow-x:auto">';
@@ -121,50 +120,79 @@ async function openSSDetail(id) {
         const catCompany = items.reduce((s, d) => s + (d.company_amount || 0), 0);
 
         detailsHtml += '<h4 style="margin:16px 0 8px;padding:8px 12px;background:#f3f4f6;border-radius:4px">' + escapeHtml(cat) + '（' + items.length + ' 人，应收合计 ' + fmt(catTotal) + '）</h4>';
-        detailsHtml += '<table class="data-table" style="font-size:12px"><thead><tr>'
-          + '<th>序号</th><th>姓名</th><th>证件号码</th><th>所属期</th><th>缴费工资</th><th>个人合计</th><th>单位合计</th><th>应收金额</th>';
-        // Insurance items columns
-        if (insuranceNames.length > 0) {
-          insuranceNames.forEach(name => {
-            detailsHtml += '<th>' + escapeHtml(name) + '</th>';
-          });
-        }
-        detailsHtml += '</tr></thead><tbody>';
+        
+        // Table with two header rows (match Excel template)
+        detailsHtml += '<table class="data-table" style="font-size:12px"><thead>';
+        
+        // Row 1: Main headers (some merged)
+        detailsHtml += '<tr>';
+        detailsHtml += '<th rowspan="2" style="vertical-align:middle">序号</th>';
+        detailsHtml += '<th rowspan="2" style="vertical-align:middle">姓名</th>';
+        detailsHtml += '<th rowspan="2" style="vertical-align:middle">证件号码</th>';
+        detailsHtml += '<th colspan="2" style="text-align:center">费款所属期</th>';
+        detailsHtml += '<th colspan="2" style="text-align:center">应收金额</th>';
+        insuranceNames.forEach(name => {
+          detailsHtml += '<th colspan="3" style="text-align:center">' + escapeHtml(name) + '</th>';
+        });
+        detailsHtml += '</tr>';
+        
+        // Row 2: Sub headers
+        detailsHtml += '<tr>';
+        detailsHtml += '<th style="font-weight:normal;font-size:11px">起</th>';
+        detailsHtml += '<th style="font-weight:normal;font-size:11px">止</th>';
+        detailsHtml += '<th style="font-weight:normal;font-size:11px">个人合计</th>';
+        detailsHtml += '<th style="font-weight:normal;font-size:11px">单位合计</th>';
+        insuranceNames.forEach(name => {
+          detailsHtml += '<th style="font-weight:normal;font-size:11px">缴费工资</th>';
+          detailsHtml += '<th style="font-weight:normal;font-size:11px">费率</th>';
+          detailsHtml += '<th style="font-weight:normal;font-size:11px">应缴费额</th>';
+        });
+        detailsHtml += '</tr>';
+        
+        detailsHtml += '</thead><tbody>';
+        
+        // Data rows
         items.forEach(d => {
-          const periodStr = (d.period_start || '') + '~' + (d.period_end || '');
-          detailsHtml += '<tr>'
-            + '<td>' + (d.seq || '') + '</td>'
-            + '<td>' + escapeHtml(d.employee_name || '') + '</td>'
-            + '<td>' + escapeHtml(d.id_number || '') + '</td>'
-            + '<td>' + escapeHtml(periodStr) + '</td>'
-            + '<td class="num">' + fmt(d.salary_base) + '</td>'
-            + '<td class="num" style="color:#d97706">' + fmt(d.personal_amount) + '</td>'
-            + '<td class="num" style="color:#db2777">' + fmt(d.company_amount) + '</td>'
-            + '<td class="num" style="font-weight:600">' + fmt(d.total_amount) + '</td>';
-          if (insuranceNames.length > 0) {
-            insuranceNames.forEach(name => {
-              const item = (d.insurance_items || []).find(i => i.name === name);
-              detailsHtml += '<td class="num">' + (item ? fmt(item.amount) : '-') + '</td>';
-            });
-          }
+          const itemsMap = {};
+          (d.insurance_items || []).forEach(i => { itemsMap[i.name] = i; });
+          
+          detailsHtml += '<tr>';
+          detailsHtml += '<td>' + (d.seq || '') + '</td>';
+          detailsHtml += '<td>' + escapeHtml(d.employee_name || '') + '</td>';
+          detailsHtml += '<td>' + escapeHtml(d.id_number || '') + '</td>';
+          detailsHtml += '<td>' + escapeHtml(d.period_start || '') + '</td>';
+          detailsHtml += '<td>' + escapeHtml(d.period_end || '') + '</td>';
+          detailsHtml += '<td class="num" style="color:#d97706">' + fmt(d.personal_amount) + '</td>';
+          detailsHtml += '<td class="num" style="color:#db2777">' + fmt(d.company_amount) + '</td>';
+          
+          insuranceNames.forEach(name => {
+            const item = itemsMap[name];
+            detailsHtml += '<td class="num">' + (item ? fmt(item.salary_base || d.salary_base || 0) : '-') + '</td>';
+            detailsHtml += '<td class="num">' + (item ? (item.rate || '-') : '-') + '</td>';
+            detailsHtml += '<td class="num">' + (item ? fmt(item.amount) : '-') + '</td>';
+          });
+          
           detailsHtml += '</tr>';
         });
+        
         // Subtotal row
-        detailsHtml += '<tr style="font-weight:600;background:#f9fafb">'
-          + '<td colspan="4">小计</td>'
-          + '<td class="num">-</td>'
-          + '<td class="num" style="color:#d97706">' + fmt(catPersonal) + '</td>'
-          + '<td class="num" style="color:#db2777">' + fmt(catCompany) + '</td>'
-          + '<td class="num">' + fmt(catTotal) + '</td>';
-        if (insuranceNames.length > 0) {
-          insuranceNames.forEach(name => {
-            const totalAmt = items.reduce((s, d) => {
-              const item = (d.insurance_items || []).find(i => i.name === name);
-              return s + (item ? item.amount : 0);
-            }, 0);
-            detailsHtml += '<td class="num">' + fmt(totalAmt) + '</td>';
-          });
-        }
+        detailsHtml += '<tr style="font-weight:600;background:#f9fafb">';
+        detailsHtml += '<td colspan="5">小计</td>';
+        detailsHtml += '<td class="num" style="color:#d97706">' + fmt(catPersonal) + '</td>';
+        detailsHtml += '<td class="num" style="color:#db2777">' + fmt(catCompany) + '</td>';
+        
+        insuranceNames.forEach(name => {
+          const totalAmt = items.reduce((s, d) => {
+            const item = (d.insurance_items || []).find(i => i.name === name);
+            return s + (item ? item.amount : 0);
+          }, 0);
+          const totalRate = '-';  // Rate doesn't sum
+          const totalSalary = items[0]?.salary_base || 0;  // Salary base is same for all
+          detailsHtml += '<td class="num">' + fmt(totalSalary) + '</td>';
+          detailsHtml += '<td class="num">' + totalRate + '</td>';
+          detailsHtml += '<td class="num">' + fmt(totalAmt) + '</td>';
+        });
+        
         detailsHtml += '</tr>';
         detailsHtml += '</tbody></table>';
       }
