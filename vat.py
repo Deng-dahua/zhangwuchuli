@@ -14,6 +14,27 @@ from database import (
     InputVATDeduction, JournalEntry, SalaryRecord, get_db
 )
 
+# VAT计算使用的科目编码常量
+VAT_ACCOUNT_CODES = {
+    "revenue_main": "6001",       # 主营业务收入
+    "revenue_other": "6051",      # 其他业务收入
+    "cost_main": "6401",          # 主营业务成本
+    "cost_other": "6402",         # 其他业务成本
+    "tax_surcharge": "6403",      # 税金及附加
+    "sales_expense": "6601",      # 销售费用
+    "admin_expense": "6602",      # 管理费用
+    "rd_expense": "6604",         # 研发费用
+    "fin_expense": "6603",        # 财务费用
+    "fin_interest": "660301",     # 财务费用-利息
+    "invest_income": "6111",      # 投资收益
+    "credit_loss": "6701",        # 信用减值损失
+    "asset_loss": "6702",         # 资产减值损失
+    "asset_disposal": "6712",     # 资产处置收益
+    "non_op_income": "6301",      # 营业外收入
+    "non_op_expense": "6711",     # 营业外支出
+    "income_tax": "6801",         # 所得税费用
+}
+
 def _end_of_month(period: str) -> str:
     """返回期间的月末日期，如 '2025-02' -> '2025-02-28'"""
     y, m = period.split("-")
@@ -88,18 +109,19 @@ def _validate_small_micro_enterprise(db: Session, company_id: int, period: str) 
         return round(dr - cr, 2) if is_debit else round(cr - dr, 2)
 
     # ---- 1. 利润总额 & 净利润（≈ 应纳税所得额基础）----
-    revenue     = _pl("6001") + _pl("6051")
-    cost        = _pl("6401", False) + _pl("6402", False)
-    tax_sur     = _pl("6403", False)
-    period_exp  = _pl("6601", False) + _pl("6602", False) + _pl("6604", False) + _pl("6603", False)
-    invest      = _pl("6111")
-    interest_in = _pl("660301")
-    credit_l    = _pl("6701", False)
-    asset_l     = _pl("6702", False)
-    disposal    = _pl("6712")
-    non_op_in   = _pl("6301")
-    non_op_out  = _pl("6711", False)
-    income_tax  = _pl("6801", False)
+    AC = VAT_ACCOUNT_CODES
+    revenue     = _pl(AC["revenue_main"]) + _pl(AC["revenue_other"])
+    cost        = _pl(AC["cost_main"], False) + _pl(AC["cost_other"], False)
+    tax_sur     = _pl(AC["tax_surcharge"], False)
+    period_exp  = _pl(AC["sales_expense"], False) + _pl(AC["admin_expense"], False) + _pl(AC["rd_expense"], False) + _pl(AC["fin_expense"], False)
+    invest      = _pl(AC["invest_income"])
+    interest_in = _pl(AC["fin_interest"])
+    credit_l    = _pl(AC["credit_loss"], False)
+    asset_l     = _pl(AC["asset_loss"], False)
+    disposal    = _pl(AC["asset_disposal"])
+    non_op_in   = _pl(AC["non_op_income"])
+    non_op_out  = _pl(AC["non_op_expense"], False)
+    income_tax  = _pl(AC["income_tax"], False)
 
     gross_profit       = round(revenue - cost - tax_sur, 2)
     operating_profit   = round(gross_profit - period_exp + invest + interest_in - credit_l - asset_l + disposal, 2)

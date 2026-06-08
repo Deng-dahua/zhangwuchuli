@@ -50,6 +50,10 @@ class Company(Base):
     supervisors = relationship("CompanySupervisor", back_populates="company", cascade="all, delete-orphan")
     finance_contacts = relationship("CompanyFinanceContact", back_populates="company", cascade="all, delete-orphan")
     bank_rules = relationship("BankRule", back_populates="company", cascade="all, delete-orphan")
+    vat_declarations = relationship("VATDeclaration", back_populates="company", cascade="all, delete-orphan")
+    social_security_declarations = relationship("SocialSecurityDeclaration", back_populates="company", cascade="all, delete-orphan")
+    housing_fund_details = relationship("HousingFundDetail", back_populates="company", cascade="all, delete-orphan")
+    housing_fund_declarations = relationship("HousingFundDeclaration", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyShareholder(Base):
@@ -481,14 +485,14 @@ class SalesInvoice(Base):
     quantity = Column(Numeric(18, 2), default=0, comment="数量")
     unit_price = Column(Numeric(18, 2), default=0, comment="单价")
     # 金额信息
-    amount = Column(Numeric(18, 2), default=0.0, comment="金额（不含税）")
-    tax_rate = Column(Numeric(18, 2), default=0.0, comment="税率（%）")
-    tax_amount = Column(Numeric(18, 2), default=0.0, comment="税额")
-    total_amount = Column(Numeric(18, 2), default=0.0, comment="价税合计")
+    amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税率（%）")
+    tax_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税额")
+    total_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="价税合计")
     # 发票属性
     invoice_source = Column(String(20), comment="发票来源")
-    invoice_category = Column(String(20), default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
-    status = Column(String(20), default="正常", comment="发票状态：正常/作废/红冲")
+    invoice_category = Column(String(20), nullable=False, default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
+    status = Column(String(20), nullable=False, default="正常", comment="发票状态：正常/作废/红冲")
     is_positive = Column(Boolean, default=True, comment="是否正数发票")
     invoice_risk_level = Column(String(10), comment="发票风险等级")
     # 其他
@@ -532,14 +536,14 @@ class PurchaseInvoice(Base):
     quantity = Column(Numeric(18, 2), default=0, comment="数量")
     unit_price = Column(Numeric(18, 2), default=0, comment="单价")
     # 金额信息
-    amount = Column(Numeric(18, 2), default=0.0, comment="金额（不含税）")
-    tax_rate = Column(Numeric(18, 2), default=0.0, comment="税率（%）")
-    tax_amount = Column(Numeric(18, 2), default=0.0, comment="税额")
-    total_amount = Column(Numeric(18, 2), default=0.0, comment="价税合计")
+    amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税率（%）")
+    tax_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税额")
+    total_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="价税合计")
     # 发票属性
     invoice_source = Column(String(20), comment="发票来源")
-    invoice_category = Column(String(20), default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
-    status = Column(String(20), default="正常", comment="发票状态：正常/作废/红冲")
+    invoice_category = Column(String(20), nullable=False, default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
+    status = Column(String(20), nullable=False, default="正常", comment="发票状态：正常/作废/红冲")
     is_positive = Column(Boolean, default=True, comment="是否正数发票")
     invoice_risk_level = Column(String(10), comment="发票风险等级")
     # 认证信息
@@ -1364,7 +1368,7 @@ def auto_generate_single_invoice(db, inv):
             contact_project=buyer,
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票", ref_id=inv.id,
+            source="销项发票", ref_id=inv.id,
         ),
         JournalEntry(
             company_id=inv.company_id,
@@ -1375,22 +1379,26 @@ def auto_generate_single_invoice(db, inv):
             contact_project="",
             spec_model=inv.spec or "", quantity=inv.quantity or 0,
             unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票", ref_id=inv.id,
-        ),
-        JournalEntry(
-            company_id=inv.company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=f"{summary}（增值税）",
-            account_code="221001001",
-            account_name=get_full_name("221001001"),
-            debit_amount=0, credit_amount=inv.tax_amount,
-            contact_project="",
-            spec_model=inv.spec or "", quantity=inv.quantity or 0,
-            unit=inv.unit or "", unit_price=inv.unit_price or 0,
-            source="开具发票", ref_id=inv.id,
+            source="销项发票", ref_id=inv.id,
         ),
     ]
+    # 仅在税额>0时生成增值税分录（避免免税发票生成零金额分录）
+    if (inv.tax_amount or 0) > 0:
+        entries.append(
+            JournalEntry(
+                company_id=inv.company_id,
+                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=f"{summary}（增值税）",
+                account_code="221001001",
+                account_name=get_full_name("221001001"),
+                debit_amount=0, credit_amount=inv.tax_amount,
+                contact_project="",
+                spec_model=inv.spec or "", quantity=inv.quantity or 0,
+                unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                source="销项发票", ref_id=inv.id,
+            )
+        )
     for e in entries:
         db.add(e)
     db.commit()
@@ -1411,14 +1419,6 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     ).first()
     if _existing:
         return 0
-
-    # 删除该期间已有的进项抵扣凭证（兜底）
-    db.query(JournalEntry).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
-        JournalEntry.source == "进项抵扣"
-    ).delete()
-    db.flush()
 
     # 汇总该期间所有进项抵扣的可抵扣税额
     if total_tax is None:
@@ -2005,7 +2005,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
-                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
+                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
             elif is_debit:
                 # 付款：借 other 贷 1002
@@ -2019,7 +2019,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag, account_code="1002", account_name="银行存款",
-                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
+                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
             else:
                 # 收款：借 1002 贷 other
@@ -2033,7 +2033,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary_tag, account_code=other_code, account_name=other_name,
-                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水",
+                    debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
             db.add(entry1)
             db.add(entry2)
@@ -2291,9 +2291,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     4. 缴纳社保公积金个人部分：借 代扣社保/公积金 / 贷 银行存款
     按 (period, source) 去重。
     """
-    savepoint = db.begin_nested()
-    try:
-
     # 查询该期间的工资记录
     records = db.query(SalaryRecord).filter(
         SalaryRecord.company_id == company_id,
@@ -2463,9 +2460,6 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
         generated += 1
 
     return {"generated": generated, "period": period}
-    except Exception:
-        savepoint.rollback()
-        raise
 
 
 def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
@@ -2474,10 +2468,6 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     贷：应付职工薪酬-住房公积金（单位部分合计）
     按 (company_id, period, source='公积金计提') 去重。
     """
-    savepoint = db.begin_nested()
-    try:
-    from datetime import datetime
-
     # 查询该期间的公积金明细
     details = db.query(HousingFundDetail).filter(
         HousingFundDetail.company_id == company_id,
@@ -2539,9 +2529,6 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     db.flush()
 
     return {"generated": 1, "voucher_no": next_voucher_no, "company_amount": round(total_company, 2)}
-    except Exception:
-        savepoint.rollback()
-        raise
 
 
 def _match_hf_payment_journals(db: Session, company_id: int):
@@ -2720,7 +2707,7 @@ class VATDeclaration(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    company = relationship("Company", backref="vat_declarations")
+    company = relationship("Company", back_populates="vat_declarations")
 
 
 # ========== 社保申报模型 ==========
@@ -2737,7 +2724,7 @@ class SocialSecurityDeclaration(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    company = relationship("Company", backref="social_security_declarations")
+    company = relationship("Company", back_populates="social_security_declarations")
     details = relationship("SocialSecurityDetail", back_populates="declaration", cascade="all, delete-orphan")
 
 
@@ -2785,7 +2772,7 @@ class HousingFundDetail(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    company = relationship("Company", backref="housing_fund_details")
+    company = relationship("Company", back_populates="housing_fund_details")
 
 
 class HousingFundDeclaration(Base):
@@ -2800,7 +2787,7 @@ class HousingFundDeclaration(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    company = relationship("Company", backref="housing_fund_declarations")
+    company = relationship("Company", back_populates="housing_fund_declarations")
 
 
 # 基础科目数据模板（中小制造业标准科目表）

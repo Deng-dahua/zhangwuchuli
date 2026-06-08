@@ -92,8 +92,10 @@ def create_detail(
 ):
     """新增一条缴存记录（自动计算缴存额）"""
     if 0 < company_ratio <= 1:
+        print(f"[公积金] 单位缴存比例自动从小数 {company_ratio} 转为百分比 {company_ratio*100}%")
         company_ratio *= 100
     if 0 < personal_ratio <= 1:
+        print(f"[公积金] 个人缴存比例自动从小数 {personal_ratio} 转为百分比 {personal_ratio*100}%")
         personal_ratio *= 100
     company_amount = round(deposit_base * company_ratio / 100, 2)
     personal_amount = round(deposit_base * personal_ratio / 100, 2)
@@ -266,6 +268,7 @@ async def import_excel(
     imported = 0
     skipped = 0
     errors = []
+    auto_corrected_ratios = 0
 
     for i, row in enumerate(rows[1:], start=2):
         name = str(row[col_map["employee_name"]] or "").strip() if "employee_name" in col_map else ""
@@ -281,8 +284,10 @@ async def import_excel(
 
             # 自动检测小数比例（如 0.1=10%），转换为百分比
             if 0 < company_ratio <= 1:
+                auto_corrected_ratios += 1
                 company_ratio *= 100
             if 0 < personal_ratio <= 1:
+                auto_corrected_ratios += 1
                 personal_ratio *= 100
 
             company_amount = round(deposit_base * company_ratio / 100, 2)
@@ -310,11 +315,15 @@ async def import_excel(
 
     db.commit()
 
+    msg = f"成功导入 {imported} 条记录"
+    if auto_corrected_ratios > 0:
+        msg += f"（已自动将 {auto_corrected_ratios} 个小数比例转为百分比）"
+
     return {
         "imported": imported,
         "skipped": skipped,
         "errors": errors[:10],
-        "message": f"成功导入 {imported} 条记录",
+        "message": msg,
     }
 
 
