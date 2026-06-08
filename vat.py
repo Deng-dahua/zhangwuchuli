@@ -1111,7 +1111,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row11_output_tax": round(output_tax, 2),      # 销项税额
         "row12_input_tax": round(input_tax, 2),         # 进项税额
         "row13_prior_credit": round(prior_credit, 2),   # 上期留抵税额
-        "row14_input_transfer_out": 0.0,                # 进项税额转出
+        "row14_input_transfer_out": round(s2.get("row13_transfer_out_total", 0), 2),  # 进项税额转出 = 附表二第13栏
         "row15_exempt_refund": 0.0,                     # 免抵退应退税额
         "row16_actual_deduct_by_item": 0.0,             # 按适用税率计算的纳税检查应补缴税额
         "row17_total_deductible": total_deduct,         # 应抵扣税额合计 =12+13-14-15+16
