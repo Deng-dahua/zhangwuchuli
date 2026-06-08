@@ -3,7 +3,7 @@ async function renderContracts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = '<div class="card" style="margin-bottom:0">' +
     '<div class="filter-bar">' +
-      '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key=='Enter')loadContracts()">' +
+      '<input id="contractKeyword" placeholder="搜索合同编号/名称/对方..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;width:260px" onkeydown="if(event.key==\'Enter\')loadContracts()">' +
       '<button class="btn btn-primary" onclick="loadContracts()">搜索</button>' +
       '<button class="btn btn-primary" onclick="showContractForm()" style="margin-left:8px">新增合同</button>' +
     '</div>' +
@@ -462,7 +462,7 @@ async function showPaymentForm(paymentId) {
   try {
     const contracts = await api('/api/contracts');
     for (const c of contracts) {
-      contractOptions += '<option value="' + c.id + '"' + (payment && payment.contract_id === c.id ? ' selected' : '') + '>' + c.contract_no + ' ' + c.name + '</option>';
+      contractOptions += '<option value="' + c.id + '"' + (payment && payment.contract_id === c.id ? ' selected' : '') + '>' + c.contract_no + ' ' + (c.contract_name || c.name || '') + '</option>';
     }
   } catch (e) {}
 
