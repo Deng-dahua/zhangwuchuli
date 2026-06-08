@@ -1123,7 +1123,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         "row23_reduction": 0.0,                         # 应纳税额减征额
         "row24_tax_payable_total": tax_payable_total,   # 应纳税额合计 =19+21-23
         # 三、税款缴纳
-        "row25_prior_unpaid": 0.0,                      # 期初未缴税额
+        "row25_prior_unpaid": round(prior_main.get("row32_end_unpaid", 0.0) if prior_vd and prior_vd.form_main else 0.0, 2),  # 期初未缴税额 = 上期第32栏
         "row26_real_paid_during": 0.0,                  # 本期已缴税额
         "row27_installment_prepaid": 0.0,               # 分次预缴税额
         "row28_export_tax_refund": 0.0,                 # 出口开具专用缴款书预缴税额
