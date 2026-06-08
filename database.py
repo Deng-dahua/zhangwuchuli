@@ -2,7 +2,7 @@
 中小制造业账务处理系统 - 数据库模型（多公司账套版本）
 """
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Float, Date, Time, DateTime,
+    create_engine, Column, Integer, String, Float, Numeric, Date, Time, DateTime,
     Text, Boolean, ForeignKey, inspect, text as TextClause, Index,
     func, distinct, or_, and_
 )
@@ -36,7 +36,7 @@ class Company(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, comment="公司全称")
     uscc = Column(String(50), comment="统一社会信用代码")
-    registered_capital = Column(Float, comment="注册资本")
+    registered_capital = Column(Numeric(18, 2), comment="注册资本")
     established_date = Column(Date, comment="成立日期")
     legal_representative = Column(String(50), comment="法定代表人")
     legal_representative_id = Column(String(30), comment="法定代表人身份证")
@@ -58,8 +58,8 @@ class CompanyShareholder(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     name = Column(String(50), nullable=False, comment="股东姓名")
     id_number = Column(String(30), comment="身份证号")
-    ratio = Column(Float, comment="持股比例(%)")
-    contribution_amount = Column(Float, comment="认缴出资额")
+    ratio = Column(Numeric(18, 2), comment="持股比例(%)")
+    contribution_amount = Column(Numeric(18, 2), comment="认缴出资额")
     company = relationship("Company", back_populates="shareholders")
 
 
@@ -119,7 +119,7 @@ class Employee(Base):
     name = Column(String(50), nullable=False, comment="姓名")
     id_card = Column(String(30), comment="身份证号")
     email = Column(String(100), comment="邮箱")
-    salary = Column(Float, default=0.0, comment="基本工资")
+    salary = Column(Numeric(18, 2), default=0.0, comment="基本工资")
     leave_date = Column(Date, comment="离职日期")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -138,7 +138,7 @@ class Customer(Base):
     contact = Column(String(50), comment="联系人")
     phone = Column(String(30), comment="联系电话")
     address = Column(String(200), comment="地址")
-    credit_limit = Column(Float, default=0.0, comment="信用额度")
+    credit_limit = Column(Numeric(18, 2), default=0.0, comment="信用额度")
     payment_terms = Column(Integer, default=30, comment="账期（天）")
     bank_name = Column(String(100), comment="开户银行")
     bank_account = Column(String(50), comment="银行账号")
@@ -185,7 +185,7 @@ class Account(Base):
     level = Column(Integer, default=1, comment="科目级次")
     parent_code = Column(String(20), nullable=True, comment="上级科目编码")
     is_active = Column(Boolean, default=True)
-    opening_balance = Column(Float, default=0.0, comment="期初金额")
+    opening_balance = Column(Numeric(18, 2), default=0.0, comment="期初金额")
     created_at = Column(DateTime, default=datetime.now)
 
 
@@ -221,11 +221,11 @@ class FixedAsset(Base):
     dept_code = Column(String(20), comment="使用部门编码")
     location = Column(String(100), comment="存放地点")
     purchase_date = Column(Date, comment="购入日期")
-    original_value = Column(Float, default=0.0, comment="原值")
-    residual_value = Column(Float, default=0.0, comment="预计净残值")
+    original_value = Column(Numeric(18, 2), default=0.0, comment="原值")
+    residual_value = Column(Numeric(18, 2), default=0.0, comment="预计净残值")
     useful_life_months = Column(Integer, default=60, comment="使用年限（月）")
-    accumulated_depreciation = Column(Float, default=0.0, comment="累计折旧")
-    monthly_depreciation = Column(Float, default=0.0, comment="月折旧额")
+    accumulated_depreciation = Column(Numeric(18, 2), default=0.0, comment="累计折旧")
+    monthly_depreciation = Column(Numeric(18, 2), default=0.0, comment="月折旧额")
     depreciation_method = Column(String(20), default="直线法", comment="折旧方法：直线法/双倍余额递减法/年数总和法")
     status = Column(String(20), default="在用", comment="状态：在用/闲置/报废/出售")
     supplier = Column(String(100), comment="供应商")
@@ -233,7 +233,7 @@ class FixedAsset(Base):
     voucher_no = Column(String(30), comment="入账凭证号")
     disposal_voucher_no = Column(String(30), comment="处置凭证号")
     disposal_date = Column(Date, comment="处置日期")
-    disposal_amount = Column(Float, default=0.0, comment="处置收入")
+    disposal_amount = Column(Numeric(18, 2), default=0.0, comment="处置收入")
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -249,10 +249,10 @@ class FixedAssetDepreciation(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     asset_id = Column(Integer, ForeignKey("fixed_assets.id"), nullable=False)
     period = Column(String(7), nullable=False, comment="折旧期间 YYYY-MM")
-    depreciation_amount = Column(Float, default=0.0, comment="本期折旧额")
-    accumulated_before = Column(Float, default=0.0, comment="折旧前累计")
-    accumulated_after = Column(Float, default=0.0, comment="折旧后累计")
-    net_value = Column(Float, default=0.0, comment="折旧后净值")
+    depreciation_amount = Column(Numeric(18, 2), default=0.0, comment="本期折旧额")
+    accumulated_before = Column(Numeric(18, 2), default=0.0, comment="折旧前累计")
+    accumulated_after = Column(Numeric(18, 2), default=0.0, comment="折旧后累计")
+    net_value = Column(Numeric(18, 2), default=0.0, comment="折旧后净值")
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
 
@@ -269,16 +269,16 @@ class IntangibleAsset(Base):
     name = Column(String(100), nullable=False, comment="资产名称")
     category = Column(String(30), nullable=False, comment="类别：专利权/商标权/著作权/土地使用权/软件/特许权/其他")
     purchase_date = Column(Date, comment="取得日期")
-    original_value = Column(Float, default=0.0, comment="原值")
+    original_value = Column(Numeric(18, 2), default=0.0, comment="原值")
     useful_life_months = Column(Integer, default=120, comment="摊销期限（月）")
-    accumulated_amortization = Column(Float, default=0.0, comment="累计摊销")
-    monthly_amortization = Column(Float, default=0.0, comment="月摊销额")
-    residual_value = Column(Float, default=0.0, comment="预计残值")
+    accumulated_amortization = Column(Numeric(18, 2), default=0.0, comment="累计摊销")
+    monthly_amortization = Column(Numeric(18, 2), default=0.0, comment="月摊销额")
+    residual_value = Column(Numeric(18, 2), default=0.0, comment="预计残值")
     status = Column(String(20), default="在用", comment="状态：在用/处置")
     voucher_no = Column(String(30), comment="入账凭证号")
     disposal_voucher_no = Column(String(30), comment="处置凭证号")
     disposal_date = Column(Date, comment="处置日期")
-    disposal_amount = Column(Float, default=0.0, comment="处置收入")
+    disposal_amount = Column(Numeric(18, 2), default=0.0, comment="处置收入")
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -291,10 +291,10 @@ class IntangibleAssetAmortization(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     asset_id = Column(Integer, ForeignKey("intangible_assets.id"), nullable=False)
     period = Column(String(7), nullable=False, comment="摊销期间")
-    amortization_amount = Column(Float, default=0.0, comment="本期摊销额")
-    accumulated_before = Column(Float, default=0.0, comment="摊销前累计")
-    accumulated_after = Column(Float, default=0.0, comment="摊销后累计")
-    net_value = Column(Float, default=0.0, comment="摊销后净值")
+    amortization_amount = Column(Numeric(18, 2), default=0.0, comment="本期摊销额")
+    accumulated_before = Column(Numeric(18, 2), default=0.0, comment="摊销前累计")
+    accumulated_after = Column(Numeric(18, 2), default=0.0, comment="摊销后累计")
+    net_value = Column(Numeric(18, 2), default=0.0, comment="摊销后净值")
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
 
@@ -313,10 +313,10 @@ class InventoryItem(Base):
     unit = Column(String(10), comment="计量单位")
     category = Column(String(30), comment="分类：原材料/半成品/产成品/周转材料/低值易耗品")
     warehouse = Column(String(50), comment="仓库")
-    safety_stock = Column(Float, default=0.0, comment="安全库存量")
-    current_stock = Column(Float, default=0.0, comment="当前库存量")
-    cost_price = Column(Float, default=0.0, comment="参考成本价")
-    sale_price = Column(Float, default=0.0, comment="参考售价")
+    safety_stock = Column(Numeric(18, 2), default=0.0, comment="安全库存量")
+    current_stock = Column(Numeric(18, 2), default=0.0, comment="当前库存量")
+    cost_price = Column(Numeric(18, 2), default=0.0, comment="参考成本价")
+    sale_price = Column(Numeric(18, 2), default=0.0, comment="参考售价")
     account_code = Column(String(20), comment="关联会计科目编码")
     is_active = Column(Boolean, default=True)
     remark = Column(String(200), comment="备注")
@@ -336,9 +336,9 @@ class InventoryTransaction(Base):
     item_code = Column(String(30), nullable=False, comment="商品编码")
     transaction_date = Column(Date, nullable=False, comment="业务日期")
     trans_type = Column(String(20), nullable=False, comment="类型：入库/出库/调拨入/调拨出/盘盈/盘亏/其他")
-    quantity = Column(Float, nullable=False, comment="数量（+入库/-出库）")
-    unit_price = Column(Float, default=0.0, comment="单价")
-    total_amount = Column(Float, default=0.0, comment="金额")
+    quantity = Column(Numeric(18, 2), nullable=False, comment="数量（+入库/-出库）")
+    unit_price = Column(Numeric(18, 2), default=0.0, comment="单价")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="金额")
     warehouse = Column(String(50), comment="仓库")
     warehouse_to = Column(String(50), comment="调入仓库（调拨用）")
     voucher_no = Column(String(30), comment="关联凭证号")
@@ -356,11 +356,11 @@ class InventoryBalance(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     item_code = Column(String(30), nullable=False, comment="商品编码")
     period = Column(String(7), nullable=False, comment="期间 YYYY-MM")
-    begin_quantity = Column(Float, default=0.0, comment="期初数量")
-    in_quantity = Column(Float, default=0.0, comment="本期入库数量")
-    out_quantity = Column(Float, default=0.0, comment="本期出库数量")
-    end_quantity = Column(Float, default=0.0, comment="期末数量")
-    total_amount = Column(Float, default=0.0, comment="期末金额")
+    begin_quantity = Column(Numeric(18, 2), default=0.0, comment="期初数量")
+    in_quantity = Column(Numeric(18, 2), default=0.0, comment="本期入库数量")
+    out_quantity = Column(Numeric(18, 2), default=0.0, comment="本期出库数量")
+    end_quantity = Column(Numeric(18, 2), default=0.0, comment="期末数量")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="期末金额")
     created_at = Column(DateTime, default=datetime.now)
 
 
@@ -380,7 +380,7 @@ class Contract(Base):
     contract_type = Column(String(20), nullable=False, comment="类型：采购/销售/服务/租赁/其他")
     party_a = Column(String(100), comment="甲方")
     party_b = Column(String(100), comment="乙方")
-    amount = Column(Float, default=0.0, comment="合同金额")
+    amount = Column(Numeric(18, 2), default=0.0, comment="合同金额")
     signing_date = Column(Date, comment="签订日期")
     effective_date = Column(Date, comment="生效日期")
     expiry_date = Column(Date, comment="到期日期")
@@ -401,10 +401,10 @@ class ContractPayment(Base):
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
     payment_no = Column(Integer, default=1, comment="期次")
     payment_type = Column(String(10), nullable=False, comment="收款/付款")
-    amount = Column(Float, nullable=False, comment="金额")
+    amount = Column(Numeric(18, 2), nullable=False, comment="金额")
     due_date = Column(Date, comment="到期日期")
     paid_date = Column(Date, comment="实际收付日期")
-    paid_amount = Column(Float, default=0.0, comment="实收/实付金额")
+    paid_amount = Column(Numeric(18, 2), default=0.0, comment="实收/实付金额")
     status = Column(String(20), default="未付", comment="状态：未付/部分已付/已付清")
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
@@ -432,7 +432,7 @@ class Payment(Base):
     supplier_name = Column(String(100), comment="供应商名称")
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True, comment="关联合同ID")
     contract_no = Column(String(50), comment="关联合同编号")
-    amount = Column(Float, nullable=False, comment="金额")
+    amount = Column(Numeric(18, 2), nullable=False, comment="金额")
     payment_method = Column(String(20), nullable=False, default="银行转账", comment="付款方式：银行转账/现金/支票/其他")
     payee = Column(String(100), comment="收款方")
     payee_account = Column(String(50), comment="收款账号")
@@ -478,13 +478,13 @@ class SalesInvoice(Base):
     goods_name = Column(String(200), comment="货物或应税劳务名称")
     spec = Column(String(100), comment="规格型号")
     unit = Column(String(10), comment="单位")
-    quantity = Column(Float, default=0, comment="数量")
-    unit_price = Column(Float, default=0, comment="单价")
+    quantity = Column(Numeric(18, 2), default=0, comment="数量")
+    unit_price = Column(Numeric(18, 2), default=0, comment="单价")
     # 金额信息
-    amount = Column(Float, default=0.0, comment="金额（不含税）")
-    tax_rate = Column(Float, default=0.0, comment="税率（%）")
-    tax_amount = Column(Float, default=0.0, comment="税额")
-    total_amount = Column(Float, default=0.0, comment="价税合计")
+    amount = Column(Numeric(18, 2), default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Numeric(18, 2), default=0.0, comment="税率（%）")
+    tax_amount = Column(Numeric(18, 2), default=0.0, comment="税额")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="价税合计")
     # 发票属性
     invoice_source = Column(String(20), comment="发票来源")
     invoice_category = Column(String(20), default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
@@ -529,13 +529,13 @@ class PurchaseInvoice(Base):
     goods_name = Column(String(200), comment="货物或应税劳务名称")
     spec = Column(String(100), comment="规格型号")
     unit = Column(String(10), comment="单位")
-    quantity = Column(Float, default=0, comment="数量")
-    unit_price = Column(Float, default=0, comment="单价")
+    quantity = Column(Numeric(18, 2), default=0, comment="数量")
+    unit_price = Column(Numeric(18, 2), default=0, comment="单价")
     # 金额信息
-    amount = Column(Float, default=0.0, comment="金额（不含税）")
-    tax_rate = Column(Float, default=0.0, comment="税率（%）")
-    tax_amount = Column(Float, default=0.0, comment="税额")
-    total_amount = Column(Float, default=0.0, comment="价税合计")
+    amount = Column(Numeric(18, 2), default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Numeric(18, 2), default=0.0, comment="税率（%）")
+    tax_amount = Column(Numeric(18, 2), default=0.0, comment="税额")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="价税合计")
     # 发票属性
     invoice_source = Column(String(20), comment="发票来源")
     invoice_category = Column(String(20), default="增值税专用发票", comment="发票票种：增值税专用发票/增值税普通发票/电子普通发票/其他")
@@ -546,7 +546,7 @@ class PurchaseInvoice(Base):
     certification_status = Column(String(20), default="未认证", comment="认证状态：未认证/已认证/已抵扣")
     certification_date = Column(Date, comment="认证日期")
     deduction_period = Column(String(7), comment="抵扣期间 YYYY-MM")
-    deduction_rate = Column(Float, default=100.0, comment="抵扣率（%），默认100=全额抵扣")
+    deduction_rate = Column(Numeric(18, 2), default=100.0, comment="抵扣率（%），默认100=全额抵扣")
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
@@ -588,9 +588,9 @@ class BankTransaction(Base):
     transaction_time = Column(Time, nullable=True, comment="交易时间")
     application_date = Column(Date, nullable=True, comment="申请日期")
     voucher_no = Column(String(30), comment="凭证号")
-    debit_amount = Column(Float, default=0.0, comment="借方金额")
-    credit_amount = Column(Float, default=0.0, comment="贷方金额")
-    balance = Column(Float, default=0.0, comment="余额")
+    debit_amount = Column(Numeric(18, 2), default=0.0, comment="借方金额")
+    credit_amount = Column(Numeric(18, 2), default=0.0, comment="贷方金额")
+    balance = Column(Numeric(18, 2), default=0.0, comment="余额")
     counterparty_account = Column(String(50), comment="对方账号")
     counterparty_name = Column(String(100), comment="对方户名")
     counterparty_bank = Column(String(100), comment="对方行名")
@@ -601,7 +601,7 @@ class BankTransaction(Base):
     transaction_remark = Column(Text, comment="交易附言")
     account_type = Column(String(30), comment="客户账户类型")
     # === 旧字段（保留向后兼容） ===
-    amount = Column(Float, default=0.0, comment="交易金额（旧：收入为正/支出为负）")
+    amount = Column(Numeric(18, 2), default=0.0, comment="交易金额（旧：收入为正/支出为负）")
     transaction_type = Column(String(20), default="支出", comment="类型（旧）")
     payment_method = Column(String(30), comment="结算方式（旧）")
     reference_no = Column(String(50), comment="银行流水号（旧）")
@@ -636,9 +636,9 @@ class InputVATDeduction(Base):
     invoice_date = Column(Date, comment="开票日期")
     seller_tax_id = Column(String(30), comment="销售方纳税人识别号")
     seller_name = Column(String(100), comment="销方名称")
-    amount = Column(Float, default=0.0, comment="金额（不含税）")
-    tax_amount = Column(Float, default=0.0, comment="税额")
-    deductible_tax_amount = Column(Float, default=0.0, comment="有效抵扣税额")
+    amount = Column(Numeric(18, 2), default=0.0, comment="金额（不含税）")
+    tax_amount = Column(Numeric(18, 2), default=0.0, comment="税额")
+    deductible_tax_amount = Column(Numeric(18, 2), default=0.0, comment="有效抵扣税额")
     # 票种信息
     invoice_category = Column(String(50), comment="票种，如：数电发票（增值税专用发票）")
     invoice_category_label = Column(String(30), comment="票种标签")
@@ -648,9 +648,9 @@ class InputVATDeduction(Base):
     risk_level = Column(String(20), default="正常", comment="发票风险等级：正常/疑点/异常/失控")
     # 保留字段（历史兼容）
     goods_name = Column(String(200), comment="货物名称")
-    total_amount = Column(Float, default=0.0, comment="价税合计")
-    tax_rate = Column(Float, default=0.0, comment="税率（%）")
-    deducted_tax_amount = Column(Float, default=0.0, comment="已抵扣税额")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="价税合计")
+    tax_rate = Column(Numeric(18, 2), default=0.0, comment="税率（%）")
+    deducted_tax_amount = Column(Numeric(18, 2), default=0.0, comment="已抵扣税额")
     deduction_period = Column(String(7), comment="抵扣所属期 YYYY-MM")
     deduction_status = Column(String(20), default="待抵扣", comment="抵扣状态：待认证/待抵扣/已抵扣/部分抵扣/不得抵扣")
     certification_date = Column(Date, comment="认证日期")
@@ -701,8 +701,8 @@ class JournalEntry(Base):
     summary = Column(Text, comment="摘要")
     account_code = Column(String(20), nullable=False, comment="科目编码")
     account_name = Column(String(100), comment="科目名称")
-    debit_amount = Column(Float, default=0.0, comment="借方金额")
-    credit_amount = Column(Float, default=0.0, comment="贷方金额")
+    debit_amount = Column(Numeric(18, 2), default=0.0, comment="借方金额")
+    credit_amount = Column(Numeric(18, 2), default=0.0, comment="贷方金额")
     prepared_by = Column(String(50), comment="制单人")
     reviewed_by = Column(String(50), comment="复核人")
     is_reviewed = Column(Boolean, default=False, comment="是否复核")
@@ -710,9 +710,9 @@ class JournalEntry(Base):
     remark = Column(Text, comment="备注")
     contact_project = Column(String(100), comment="往来项目")
     spec_model = Column(String(100), comment="规格型号")
-    quantity = Column(Float, default=0.0, comment="数量")
+    quantity = Column(Numeric(18, 2), default=0.0, comment="数量")
     unit = Column(String(20), comment="单位")
-    unit_price = Column(Float, default=0.0, comment="单价")
+    unit_price = Column(Numeric(18, 2), default=0.0, comment="单价")
     source = Column(String(50), default="手动录入", comment="凭证来源：手动录入/开具发票/进项抵扣/银行流水")
     ref_id = Column(Integer, comment="关联业务ID（开具发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
     created_at = Column(DateTime, default=datetime.now)
@@ -1129,7 +1129,9 @@ def auto_generate_journals(db):
     total = 0
     for comp in companies:
         invoices = db.query(SalesInvoice).filter(
-            SalesInvoice.company_id == comp.id
+            SalesInvoice.company_id == comp.id,
+            SalesInvoice.status == "正常",
+            SalesInvoice.is_positive == True
         ).order_by(SalesInvoice.invoice_date.asc()).all()
 
         for inv in invoices:
@@ -1206,7 +1208,7 @@ def auto_generate_journals(db):
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
                     summary=summary, account_code="1122",
                     account_name=get_full_name("1122"),
-                    debit_amount=inv.total_amount, credit_amount=0,
+                    debit_amount=inv.amount + (inv.tax_amount or 0), credit_amount=0,
                     contact_project=buyer,
                     spec_model=inv.spec or "", quantity=inv.quantity or 0,
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
@@ -1223,20 +1225,24 @@ def auto_generate_journals(db):
                     unit=inv.unit or "", unit_price=inv.unit_price or 0,
                     source="开具发票", ref_id=inv.id,
                 ),
-                JournalEntry(
-                    company_id=comp.id,
-                    entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                    period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=f"{summary}（增值税）",
-                    account_code="221001001",
-                    account_name=get_full_name("221001001"),
-                    debit_amount=0, credit_amount=inv.tax_amount,
-                    contact_project="",
-                    spec_model=inv.spec or "", quantity=inv.quantity or 0,
-                    unit=inv.unit or "", unit_price=inv.unit_price or 0,
-                    source="开具发票", ref_id=inv.id,
-                ),
             ]
+            # 仅在税额>0时生成增值税分录
+            if (inv.tax_amount or 0) > 0:
+                entries.append(
+                    JournalEntry(
+                        company_id=comp.id,
+                        entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                        period=period, voucher_word="记", voucher_no=next_voucher_no,
+                        summary=f"{summary}（增值税）",
+                        account_code="221001001",
+                        account_name=get_full_name("221001001"),
+                        debit_amount=0, credit_amount=inv.tax_amount,
+                        contact_project="",
+                        spec_model=inv.spec or "", quantity=inv.quantity or 0,
+                        unit=inv.unit or "", unit_price=inv.unit_price or 0,
+                        source="开具发票", ref_id=inv.id,
+                    )
+                )
             for e in entries:
                 db.add(e)
             db.flush()  # 让下一张发票能看到当前凭证号
@@ -1856,7 +1862,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
     _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
     _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
-    _ensure_account(db, company_id, "2241", "递延收益", "负债", "贷")
+    _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
     _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
     _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
     _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
@@ -2040,6 +2046,7 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
     _ensure_account(db, company_id, "660213", "社会保险费", "损益", "借")
     _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
     _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
 
     period = decl.period
     summary_tag = f"社保计提-{period}"
@@ -2090,6 +2097,26 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
         source="社保申报-计提",
     )
     db.add_all([entry1, entry2])
+
+    # 代扣分录：从工资中代扣个人社保
+    if total_personal > 0:
+        entry3 = JournalEntry(
+            company_id=company_id, entry_date=entry_date,
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag + "（个人代扣）",
+            account_code="221101", account_name="工资",
+            debit_amount=round(total_personal, 2), credit_amount=0,
+            source="社保申报-计提",
+        )
+        entry4 = JournalEntry(
+            company_id=company_id, entry_date=entry_date,
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag + "（个人代扣）",
+            account_code="222101", account_name="代扣社会保险费",
+            debit_amount=0, credit_amount=round(total_personal, 2),
+            source="社保申报-计提",
+        )
+        db.add_all([entry3, entry4])
     db.flush()
 
     return {
@@ -2368,7 +2395,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
                 company_id=company_id, entry_date=entry_date,
                 period=period, voucher_word="记", voucher_no=next_voucher_no3,
                 summary=summary_tag3,
-                account_code="221101", account_name="应付职工薪酬-工资",
+                account_code="221003", account_name="应交个人所得税",
                 debit_amount=round(total_tax, 2), credit_amount=0,
                 source="个税缴纳"
             ),
@@ -2398,17 +2425,30 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
         next_voucher_no4 = (max_no4[0] + 1) if max_no4 and max_no4[0] else 1
 
         entries4 = []
-        # 借：应付职工薪酬-工资（个人社保+公积金）
-        entries4.append(
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no4,
-                summary=summary_tag4,
-                account_code="221101", account_name="应付职工薪酬-工资",
-                debit_amount=round(total_deduct, 2), credit_amount=0,
-                source="社保公积金缴纳"
+        # 借：其他应付款-代扣社会保险费（个人社保部分）
+        if total_personal_ss > 0:
+            entries4.append(
+                JournalEntry(
+                    company_id=company_id, entry_date=entry_date,
+                    period=period, voucher_word="记", voucher_no=next_voucher_no4,
+                    summary=summary_tag4 + "（个人社保）",
+                    account_code="222101", account_name="代扣社会保险费",
+                    debit_amount=round(total_personal_ss, 2), credit_amount=0,
+                    source="社保公积金缴纳"
+                )
             )
-        )
+        # 借：应付职工薪酬-住房公积金（个人公积金部分）
+        if total_personal_hf > 0:
+            entries4.append(
+                JournalEntry(
+                    company_id=company_id, entry_date=entry_date,
+                    period=period, voucher_word="记", voucher_no=next_voucher_no4,
+                    summary=summary_tag4 + "（个人公积金）",
+                    account_code="221103", account_name="住房公积金",
+                    debit_amount=round(total_personal_hf, 2), credit_amount=0,
+                    source="社保公积金缴纳"
+                )
+            )
         # 贷：银行存款
         entries4.append(
             JournalEntry(
@@ -2447,7 +2487,7 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     total_company = sum(d.company_amount or 0 for d in details)
 
     # 确保科目存在
-    _ensure_account(db, company_id, "6602", "管理费用", "费用", "借")
+    _ensure_account(db, company_id, "660216", "住房公积金", "损益", "借")
     _ensure_account(db, company_id, "221103", "住房公积金", "负债", "贷")
 
     # 获取凭证号
@@ -2484,7 +2524,7 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
             company_id=company_id, entry_date=entry_date,
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary_tag,
-            account_code="6602", account_name="管理费用-住房公积金",
+            account_code="660216", account_name="住房公积金",
             debit_amount=round(total_company, 2), credit_amount=0,
             source="公积金计提"
         ),
@@ -2667,9 +2707,9 @@ class VATDeclaration(Base):
     reduction_start = Column(String(10))
     reduction_end = Column(String(10))
     # 附加税费
-    city_maintenance_tax = Column(Float, default=0.0)
-    education_surcharge = Column(Float, default=0.0)
-    local_education_surcharge = Column(Float, default=0.0)
+    city_maintenance_tax = Column(Numeric(18, 2), default=0.0)
+    education_surcharge = Column(Numeric(18, 2), default=0.0)
+    local_education_surcharge = Column(Numeric(18, 2), default=0.0)
     # 状态
     status = Column(String(20), default="草稿")
     submitted_at = Column(DateTime)
@@ -2716,10 +2756,10 @@ class SocialSecurityDetail(Base):
     id_number = Column(String(30), comment="证件号码")
     period_start = Column(String(7), comment="费款所属期起")
     period_end = Column(String(7), comment="费款所属期止")
-    total_amount = Column(Float, default=0.0, comment="应收金额")
-    personal_amount = Column(Float, default=0.0, comment="个人社保合计")
-    company_amount = Column(Float, default=0.0, comment="单位社保合计")
-    salary_base = Column(Float, default=0.0, comment="缴费工资")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="应收金额")
+    personal_amount = Column(Numeric(18, 2), default=0.0, comment="个人社保合计")
+    company_amount = Column(Numeric(18, 2), default=0.0, comment="单位社保合计")
+    salary_base = Column(Numeric(18, 2), default=0.0, comment="缴费工资")
     category = Column(String(20), default="在职人员", comment="人员类别：在职人员/退休人员/家属统筹人员")
     insurance_items = Column(Text, comment="JSON: 各项保险明细 [{name,rate,amount},...]")
     created_at = Column(DateTime, default=datetime.now)
@@ -2739,12 +2779,12 @@ class HousingFundDetail(Base):
     employee_id = Column(String(20), comment="工号")
     employee_name = Column(String(50), nullable=False, comment="姓名")
     id_number = Column(String(18), comment="身份证号")
-    deposit_base = Column(Float, default=0.0, comment="缴存基数")
-    company_ratio = Column(Float, default=0.0, comment="单位缴存比例(%)")
-    personal_ratio = Column(Float, default=0.0, comment="个人缴存比例(%)")
-    total_amount = Column(Float, default=0.0, comment="缴存额（月缴存额合计）")
-    company_amount = Column(Float, default=0.0, comment="单位缴存额")
-    personal_amount = Column(Float, default=0.0, comment="个人缴存额")
+    deposit_base = Column(Numeric(18, 2), default=0.0, comment="缴存基数")
+    company_ratio = Column(Numeric(18, 2), default=0.0, comment="单位缴存比例(%)")
+    personal_ratio = Column(Numeric(18, 2), default=0.0, comment="个人缴存比例(%)")
+    total_amount = Column(Numeric(18, 2), default=0.0, comment="缴存额（月缴存额合计）")
+    company_amount = Column(Numeric(18, 2), default=0.0, comment="单位缴存额")
+    personal_amount = Column(Numeric(18, 2), default=0.0, comment="个人缴存额")
     status = Column(String(20), default="正常", comment="正常/封存")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -2752,12 +2792,27 @@ class HousingFundDetail(Base):
     company = relationship("Company", backref="housing_fund_details")
 
 
+class HousingFundDeclaration(Base):
+    """公积金申报主表"""
+    __tablename__ = "housing_fund_declarations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)  # YYYY-MM
+    status = Column(String(20), default="草稿")  # 草稿/已确认
+    note = Column(String(500))
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    company = relationship("Company", backref="housing_fund_declarations")
+
+
 # 基础科目数据模板（中小制造业标准科目表）
 ACCOUNTS_TEMPLATE = [
     ("1001", "库存现金", "资产", "借", 1),
     ("1002", "银行存款", "资产", "借", 1),
     ("1122", "应收账款", "资产", "借", 1),
-    ("1123", "预收账款", "负债", "贷", 1),
+    ("1123", "预付账款", "资产", "借", 1),
     ("1221", "其他应收款", "资产", "借", 1),
     ("1401", "原材料", "资产", "借", 1),
     ("1402", "在途物资", "资产", "借", 1),
@@ -2770,9 +2825,9 @@ ACCOUNTS_TEMPLATE = [
     ("1801", "长期待摊费用", "资产", "借", 1),
     ("2001", "短期借款", "负债", "贷", 1),
     ("2202", "应付账款", "负债", "贷", 1),
-    ("2203", "预付账款", "资产", "借", 1),
+    ("2203", "预收账款", "负债", "贷", 1),
     ("2221", "其他应付款", "负债", "贷", 1),
-    ("2241", "递延收益", "负债", "贷", 1),
+    ("2241", "其他应付款", "负债", "贷", 1),
     ("2501", "长期借款", "负债", "贷", 1),
     ("2210", "应交税费", "负债", "贷", 1),
     ("221001", "应交增值税", "负债", "贷", 2, "2210"),
@@ -2820,27 +2875,28 @@ ACCOUNTS_TEMPLATE = [
     ("6051", "其他业务收入", "收入", "贷", 1),
     ("6111", "投资收益", "收入", "贷", 1),
     ("6301", "营业外收入", "收入", "贷", 1),
-    ("6401", "主营业务成本", "费用", "借", 1),
-    ("6402", "其他业务成本", "费用", "借", 1),
-    ("6403", "税金及附加", "费用", "借", 1),
-    ("6601", "销售费用", "费用", "借", 1),
-    ("6602", "管理费用", "费用", "借", 1),
-    ("660201", "办公费", "费用", "借", 2, "6602"),
-    ("660202", "差旅费", "费用", "借", 2, "6602"),
-    ("660203", "折旧费", "费用", "借", 2, "6602"),
-    ("660204", "工资", "费用", "借", 2, "6602"),
-    ("660205", "社保费", "费用", "借", 2, "6602"),
-    ("660206", "交通费", "费用", "借", 2, "6602"),
-    ("660207", "通讯费", "费用", "借", 2, "6602"),
-    ("660208", "摊销费", "费用", "借", 2, "6602"),
-    ("660209", "咨询费", "费用", "借", 2, "6602"),
-    ("660210", "培训费", "费用", "借", 2, "6602"),
-    ("660211", "维修费", "费用", "借", 2, "6602"),
-    ("660212", "社会保险费", "费用", "借", 2, "6602"),
-    ("660213", "租赁费", "费用", "借", 2, "6602"),
-    ("660214", "水电费", "费用", "借", 2, "6602"),
-    ("660215", "业务招待费", "费用", "借", 2, "6602"),
-    ("6603", "财务费用", "费用", "借", 1),
+    ("6401", "主营业务成本", "损益", "借", 1),
+    ("6402", "其他业务成本", "损益", "借", 1),
+    ("6403", "税金及附加", "损益", "借", 1),
+    ("6601", "销售费用", "损益", "借", 1),
+    ("6602", "管理费用", "损益", "借", 1),
+    ("660201", "办公费", "损益", "借", 2, "6602"),
+    ("660202", "差旅费", "损益", "借", 2, "6602"),
+    ("660203", "折旧费", "损益", "借", 2, "6602"),
+    ("660204", "工资", "损益", "借", 2, "6602"),
+    ("660205", "社保费", "损益", "借", 2, "6602"),
+    ("660206", "交通费", "损益", "借", 2, "6602"),
+    ("660207", "通讯费", "损益", "借", 2, "6602"),
+    ("660208", "摊销费", "损益", "借", 2, "6602"),
+    ("660209", "咨询费", "损益", "借", 2, "6602"),
+    ("660210", "培训费", "损益", "借", 2, "6602"),
+    ("660211", "维修费", "损益", "借", 2, "6602"),
+    ("660212", "社会保险费", "损益", "借", 2, "6602"),
+    ("660213", "租赁费", "损益", "借", 2, "6602"),
+    ("660214", "水电费", "损益", "借", 2, "6602"),
+    ("660215", "业务招待费", "损益", "借", 2, "6602"),
+    ("660216", "住房公积金", "损益", "借", 2, "6602"),
+    ("6603", "财务费用", "损益", "借", 1),
     ("660301", "手续费", "费用", "借", 2, "6603"),
     ("6711", "营业外支出", "费用", "借", 1),
     ("6801", "所得税费用", "费用", "借", 1),
@@ -2935,53 +2991,53 @@ class SalaryRecord(Base):
     income_type = Column(String(50), default="正常工资薪金")  # 所得项目
 
     # 本期扣除
-    current_income = Column(Float, default=0.0)       # 本期收入
-    tax_free_income = Column(Float, default=0.0)       # 免税收入
-    basic_deduction = Column(Float, default=5000.0)    # 基本减除费用
+    current_income = Column(Numeric(18, 2), default=0.0)       # 本期收入
+    tax_free_income = Column(Numeric(18, 2), default=0.0)       # 免税收入
+    basic_deduction = Column(Numeric(18, 2), default=5000.0)    # 基本减除费用
 
     # 专项扣除（本月）
-    pension_insurance = Column(Float, default=0.0)      # 基本养老保险
-    medical_insurance = Column(Float, default=0.0)     # 基本医疗保险
-    unemployment_insurance = Column(Float, default=0.0) # 失业保险
-    housing_fund = Column(Float, default=0.0)           # 住房公积金
-    enterprise_annuity = Column(Float, default=0.0)    # 企业年金
-    commercial_health = Column(Float, default=0.0)     # 商业健康保险
-    tax_deferred_pension = Column(Float, default=0.0)  # 税延养老保险
-    other_special_deduction = Column(Float, default=0.0) # 其他专项扣除
+    pension_insurance = Column(Numeric(18, 2), default=0.0)      # 基本养老保险
+    medical_insurance = Column(Numeric(18, 2), default=0.0)     # 基本医疗保险
+    unemployment_insurance = Column(Numeric(18, 2), default=0.0) # 失业保险
+    housing_fund = Column(Numeric(18, 2), default=0.0)           # 住房公积金
+    enterprise_annuity = Column(Numeric(18, 2), default=0.0)    # 企业年金
+    commercial_health = Column(Numeric(18, 2), default=0.0)     # 商业健康保险
+    tax_deferred_pension = Column(Numeric(18, 2), default=0.0)  # 税延养老保险
+    other_special_deduction = Column(Numeric(18, 2), default=0.0) # 其他专项扣除
 
     # 专项附加扣除（本月）
-    child_education = Column(Float, default=0.0)        # 子女教育
-    continuing_education = Column(Float, default=0.0)   # 继续教育
-    housing_loan_interest = Column(Float, default=0.0)  # 住房贷款利息
-    housing_rent = Column(Float, default=0.0)            # 住房租金
-    elderly_support = Column(Float, default=0.0)        # 赡养老人
-    infant_care = Column(Float, default=0.0)            # 3岁以下婴幼儿照护
-    major_medical = Column(Float, default=0.0)           # 大病医疗
-    other_additional_deduction = Column(Float, default=0.0) # 其他附加扣除
+    child_education = Column(Numeric(18, 2), default=0.0)        # 子女教育
+    continuing_education = Column(Numeric(18, 2), default=0.0)   # 继续教育
+    housing_loan_interest = Column(Numeric(18, 2), default=0.0)  # 住房贷款利息
+    housing_rent = Column(Numeric(18, 2), default=0.0)            # 住房租金
+    elderly_support = Column(Numeric(18, 2), default=0.0)        # 赡养老人
+    infant_care = Column(Numeric(18, 2), default=0.0)            # 3岁以下婴幼儿照护
+    major_medical = Column(Numeric(18, 2), default=0.0)           # 大病医疗
+    other_additional_deduction = Column(Numeric(18, 2), default=0.0) # 其他附加扣除
 
     # 累计数据
-    cumulative_income = Column(Float, default=0.0)           # 累计收入额
-    cumulative_tax_free = Column(Float, default=0.0)         # 累计免税收入
-    cumulative_deduction = Column(Float, default=0.0)        # 累计减除费用
-    cumulative_special = Column(Float, default=0.0)          # 累计专项扣除
-    cumulative_additional = Column(Float, default=0.0)       # 累计专项附加扣除
-    cumulative_other = Column(Float, default=0.0)            # 累计其他扣除
-    cumulative_tax_withheld = Column(Float, default=0.0)    # 累计已预扣预缴税额
+    cumulative_income = Column(Numeric(18, 2), default=0.0)           # 累计收入额
+    cumulative_tax_free = Column(Numeric(18, 2), default=0.0)         # 累计免税收入
+    cumulative_deduction = Column(Numeric(18, 2), default=0.0)        # 累计减除费用
+    cumulative_special = Column(Numeric(18, 2), default=0.0)          # 累计专项扣除
+    cumulative_additional = Column(Numeric(18, 2), default=0.0)       # 累计专项附加扣除
+    cumulative_other = Column(Numeric(18, 2), default=0.0)            # 累计其他扣除
+    cumulative_tax_withheld = Column(Numeric(18, 2), default=0.0)    # 累计已预扣预缴税额
 
     # 本期其他扣除
-    other_deduction = Column(Float, default=0.0)             # 本期其他扣除
+    other_deduction = Column(Numeric(18, 2), default=0.0)             # 本期其他扣除
 
     # 税额计算
-    taxable_income = Column(Float, default=0.0)      # 应纳税所得额
-    tax_rate = Column(Float, default=0.0)            # 税率
-    quick_deduction = Column(Float, default=0.0)     # 速算扣除数
-    tax_payable = Column(Float, default=0.0)         # 累计应预扣预缴税额
-    tax_already_withheld = Column(Float, default=0.0) # 本期已预扣预缴税额
-    tax_to_pay = Column(Float, default=0.0)          # 本期应预扣预缴税额（实际应缴）
-    tax_refund = Column(Float, default=0.0)          # 应补(退)税额
+    taxable_income = Column(Numeric(18, 2), default=0.0)      # 应纳税所得额
+    tax_rate = Column(Numeric(18, 2), default=0.0)            # 税率
+    quick_deduction = Column(Numeric(18, 2), default=0.0)     # 速算扣除数
+    tax_payable = Column(Numeric(18, 2), default=0.0)         # 累计应预扣预缴税额
+    tax_already_withheld = Column(Numeric(18, 2), default=0.0) # 本期已预扣预缴税额
+    tax_to_pay = Column(Numeric(18, 2), default=0.0)          # 本期应预扣预缴税额（实际应缴）
+    tax_refund = Column(Numeric(18, 2), default=0.0)          # 应补(退)税额
 
     # 实发工资
-    net_salary = Column(Float, default=0.0)           # 实发工资
+    net_salary = Column(Numeric(18, 2), default=0.0)           # 实发工资
 
     # 原始行数据（JSON，保留导入时的完整列）
     raw_data = Column(Text)  # JSON string，存储Excel原始行

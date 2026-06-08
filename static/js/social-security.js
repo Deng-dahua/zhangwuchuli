@@ -173,7 +173,7 @@ async function handleSSImportFile(event) {
     const res = await fetch('/api/social-security/import', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '导入失败');
-    showToast('导入成功：' + (data.message || ''));
+    toast('导入成功：' + (data.message || ''), 'success');
     await loadSSDeclarationList();
   } catch (e) { handleError(e, '导入社保Excel'); }
   event.target.value = '';
@@ -181,30 +181,30 @@ async function handleSSImportFile(event) {
 
 // ==================== 生成凭证 ====================
 async function generateSSVoucher() {
-  if (!currentCompanyId) { showToast('请先选择公司'); return; }
+  if (!currentCompanyId) { toast('请先选择公司', 'error'); return; }
   const period = ssFilterPeriod || currentPeriod || '2025-10';
   try {
     // 先尝试生成计提凭证
     const decls = await api('/api/social-security/declarations?period=' + encodeURIComponent(period));
-    if (!decls || decls.length === 0) { showToast('当前期间暂无申报记录'); return; }
+    if (!decls || decls.length === 0) { toast('当前期间暂无申报记录', 'warning'); return; }
     // 生成缴纳凭证
     const payRes = await api('/api/social-security/generate-payment-journals?company_id=' + currentCompanyId, { method: 'POST' });
-    showToast('凭证生成成功：' + (payRes.message || JSON.stringify(payRes)));
+    toast('凭证生成成功：' + (payRes.message || JSON.stringify(payRes)), 'success');
     await loadSSDeclarationList();
   } catch (e) { handleError(e, '生成社保凭证'); }
 }
 
 // ==================== 删除报表 ====================
 async function deleteSSDeclaration() {
-  if (!ssFilterPeriod) { showToast('请先选择期间'); return; }
+  if (!ssFilterPeriod) { toast('请先选择期间', 'error'); return; }
   if (!confirm('确定删除 ' + ssFilterPeriod + ' 期间的社保申报记录吗？此操作不可恢复！')) return;
   try {
     const list = await api('/api/social-security/declarations?period=' + encodeURIComponent(ssFilterPeriod));
-    if (!list || list.length === 0) { showToast('该期间无申报记录'); return; }
+    if (!list || list.length === 0) { toast('该期间无申报记录', 'warning'); return; }
     for (const decl of list) {
       await api('/api/social-security/declarations/' + decl.id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
     }
-    showToast('删除成功');
+    toast('删除成功', 'success');
     ssFilterPeriod = '';
     const yearSel = document.getElementById('ss-filter-year');
     const monthSel = document.getElementById('ss-filter-month');

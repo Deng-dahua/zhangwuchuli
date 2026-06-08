@@ -505,7 +505,7 @@ async function batchCertifyIVD() {
       String(cb.dataset.id).split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
     }
   });
-  if (!confirm('确认认证选中的 ' + ids.length + ' 条记录？认证后将标记为STATUS.CHECKED并设置勾选时间。')) return;
+  if (!confirm('确认认证选中的 ' + ids.length + ' 条记录？认证后将标记为"已勾选"并设置勾选时间。')) return;
   try {
     const result = await api('/api/input-vat-deductions/batch-certify', {
       method: 'POST',
@@ -523,7 +523,7 @@ function showVATDeductionForm(id) {
   const modal = createModal(title, `
     <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="form-group"><label>勾选状态</label><select id="ivdf-check-status" class="form-input">
-        <option value=STATUS.UNCHECKED>未勾选</option><option value=STATUS.CHECKED>已勾选</option>
+        <option value="${STATUS.UNCHECKED}">未勾选</option><option value="${STATUS.CHECKED}">已勾选</option>
       </select></div>
       <div class="form-group"><label>发票来源</label><input id="ivdf-source" class="form-input" placeholder="勾选平台/扫描认证/手工录入"></div>
       <div class="form-group"><label>转内销证明编号</label><input id="ivdf-domestic-cert" class="form-input"></div>

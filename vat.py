@@ -353,11 +353,13 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     def _is_exempt(inv):
         """判断是否免税：税率为0且有免税标志，或invoice_category含'免税'"""
-        return (inv.tax_rate or 0) == 0 or "免税" in (inv.invoice_category or "")
+        rt = inv.tax_rate
+        return (rt is not None and rt == 0) or "免税" in (inv.invoice_category or "")
 
     def _is_simple(inv):
-        """判断是否简易计税：征收率3%、5%等"""
-        return (inv.tax_rate or 0) in (0.03, 0.05, 3, 5)
+        """判断是否简易计税：征收率3%、5%等（税率存储为百分比，如3=3%）"""
+        rt = inv.tax_rate
+        return rt is not None and rt in (3, 5)
 
     # 按类别+税率分类汇总
     category_sales = {}   # (category, tax_rate) -> amount

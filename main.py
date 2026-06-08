@@ -4188,7 +4188,7 @@ def _build_bs_side(balances, side):
         lt_deferred = _bs_net(b, "1801")
         def_tax_asset = _bs_net(b, "1811")
         other_nc_a = _bs_net(b, "1901")
-        total_nc = round(debt_inv + other_debt_inv + lt_recv + lt_equity + other_equity + other_nc_fin + invest_prop + fixed_asset + accum_depr + cip + bio_asset + oil_gas + rou_asset + intangible + dev_exp + goodwill + lt_deferred + def_tax_asset + other_nc_a, 2)
+        total_nc = round(debt_inv + other_debt_inv + lt_recv + lt_equity + other_equity + other_nc_fin + invest_prop + (fixed_asset - accum_depr) + cip + bio_asset + oil_gas + rou_asset + intangible + dev_exp + goodwill + lt_deferred + def_tax_asset + other_nc_a, 2)
         total_assets = round(total_current + total_nc, 2)
         return [
             r("流动资产：", bold=True),
@@ -4204,7 +4204,7 @@ def _build_bs_side(balances, side):
             r("  长期应收款", lt_recv, indent=1), r("  长期股权投资", lt_equity, indent=1),
             r("  其他权益工具投资", other_equity, indent=1), r("  其他非流动金融资产", other_nc_fin, indent=1),
             r("  投资性房地产", invest_prop, indent=1),
-            r("  固定资产", round(fixed_asset + accum_depr, 2) if fixed_asset else 0.0, indent=1),
+            r("  固定资产", round(fixed_asset - accum_depr, 2) if fixed_asset else 0.0, indent=1),
             r("  在建工程", cip, indent=1), r("  生产性生物资产", bio_asset, indent=1),
             r("  使用权资产", rou_asset, indent=1), r("  无形资产", intangible, indent=1),
             r("  开发支出", dev_exp, indent=1), r("  商誉", goodwill, indent=1),
@@ -4223,7 +4223,7 @@ def _build_bs_side(balances, side):
         advance_rcv = _bs_net(b, "2203", False)
         contract_liab = _bs_net(b, "2204", False)
         payroll = _bs_net(b, "2211", False)
-        taxes = _bs_net(b, "2221", False)
+        taxes = _bs_net(b, "2210", False)
         other_pay = _bs_net(b, "2241", False)
         held_for_sale_l = _bs_net(b, "2242", False)
         nc_due_1y_l = _bs_net(b, "2243", False)
@@ -4248,7 +4248,7 @@ def _build_bs_side(balances, side):
         oci = _bs_net(b, "4005", False)
         special_reserve = _bs_net(b, "4101", False)
         surplus = _bs_net(b, "4103", False)
-        retained = _bs_net(b, "4104", False)
+        retained = round(_bs_net(b, "4104", False) + _bs_net(b, "4103", False), 2)
         total_equity = round(paid_in + other_equity_instr + capital_surplus - treasury_stock + oci + special_reserve + surplus + retained, 2)
         total_right = round(total_liab + total_equity, 2)
         return [
@@ -5675,7 +5675,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         s = str(val).strip().replace(",", "").replace("%", "").replace("￥", "").replace("¥", "").replace("元", "").replace(" ", "")
                         try:
                             return float(s)
-                        except:
+                        except (ValueError, TypeError):
                             return None if nullable else default
 
                     amt = safe_float(mapped.get("amount"))
@@ -5860,13 +5860,13 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
 
                     amt = mapped.get("amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
                     try: amt = float(amt) if amt else 0.0
-                    except: amt = 0.0
+                    except (ValueError, TypeError): amt = 0.0
                     tax_amt = mapped.get("tax_amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
                     try: tax_amt = float(tax_amt) if tax_amt else 0.0
-                    except: tax_amt = 0.0
+                    except (ValueError, TypeError): tax_amt = 0.0
                     deductible = mapped.get("deductible_tax_amount", "0").replace(",", "").replace("￥", "").replace("¥", "")
                     try: deductible = float(deductible) if deductible else 0.0
-                    except: deductible = 0.0
+                    except (ValueError, TypeError): deductible = 0.0
 
                     # 全行指纹去重
                     ivd_fp_values = (
