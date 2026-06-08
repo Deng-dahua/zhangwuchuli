@@ -3,20 +3,6 @@ var ssDeclarations = [];
 var ssFilterPeriod = '';
 var ssImportData = null;  // 导入预览数据
 var ssCurrentDeclaration = null;  // 当前查看的申报表
-// 全局错误捕获：有任何JS错误直接显示在页面上
-window.addEventListener('error', function(e) {
-  var el = document.getElementById('content-area');
-  if (el) {
-    el.innerHTML = '<div style="color:red;padding:20px">' +
-      '<h3>⚠️ 社保页面JS错误</h3>' +
-      '<p><b>错误信息：</b>' + (e.message || e.error || '未知错误') + '</p>' +
-      '<p><b>文件名：</b>' + (e.filename || '未知') + '</p>' +
-      '<p><b>行号：</b>' + (e.lineno || '未知') + '</p>' +
-      '<pre style="background:#f5f5f5;padding:10px;margin-top:10px;font-size:12px">' +
-      (e.error && e.error.stack ? e.error.stack : '') +
-      '</pre></div>';
-  }
-});
 
 
 // 险种定义（按Excel模板顺序：1-15个险种，每个险种含缴费工资+费率+应缴费额）
