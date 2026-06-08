@@ -254,6 +254,8 @@ async function generateSalaryVouchers() {
             method: 'POST'
         });
         alert(`生成成功！共生成 ${result.generated} 张凭证\n` + (result.message || ''));
+        // 刷新工资页面
+        loadSalaryData();
         // 刷新序时账（如果用户正在看）
         if (typeof loadJePage === 'function') loadJePage(1);
     } catch (e) {

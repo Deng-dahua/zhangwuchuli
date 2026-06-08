@@ -640,6 +640,8 @@ async function generateHfVouchers() {
         // 2. 匹配缴纳凭证
         const result2 = await api('POST', `/api/housing-fund/match-payment?company_id=${currentCompanyId}`);
         alert(`生成成功！\n计提凭证：${result1.generated || 0} 张\n缴纳凭证：${result2.generated || 0} 张`);
+        // 刷新公积金页面
+        hfRefresh();
         // 刷新序时账（如果用户正在看）
         if (typeof loadJePage === 'function') loadJePage(1);
     } catch (e) {
