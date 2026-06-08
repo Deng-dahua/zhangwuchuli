@@ -140,6 +140,7 @@ async function renderSalesInvoices(container) {
     el.innerHTML = html;
   }
   } catch (e) {
+    console.error('[InvoiceRender]', e);
     toast(e.message, 'error');
   }
 }
@@ -318,9 +319,11 @@ async function deleteSalesInvoice(id) {
   try {
     const result = await api('/api/sales-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
-    renderSalesInvoices();
+    await renderSalesInvoices();
   } catch (e) {
     toast(e.message, 'error');
+    // 渲染失败时兜底重新导航，防止白屏
+    try { navigateTo('sales-invoices'); } catch (_) {}
   }
 }
 
@@ -379,9 +382,10 @@ async function batchDeleteSalesInvoices() {
       body: JSON.stringify(ids)
     });
     toast(result.message, 'success');
-    renderSalesInvoices();
+    await renderSalesInvoices();
   } catch (e) {
     toast(e.message, 'error');
+    try { navigateTo('sales-invoices'); } catch (_) {}
   }
 }
 
@@ -604,6 +608,7 @@ async function renderPurchaseInvoices(container) {
     el.innerHTML = html;
   }
   } catch (e) {
+    console.error('[InvoiceRender]', e);
     toast(e.message, 'error');
   }
 }
@@ -613,9 +618,11 @@ async function deletePurchaseInvoice(id) {
   try {
     const result = await api('/api/purchase-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
-    renderPurchaseInvoices();
+    await renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
+    // 渲染失败时兜底重新导航，防止白屏
+    try { navigateTo('purchase-invoices'); } catch (_) {}
   }
 }
 
@@ -677,9 +684,10 @@ async function batchDeletePurchaseInvoices() {
       body: JSON.stringify(ids)
     });
     toast(result.message, 'success');
-    renderPurchaseInvoices();
+    await renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
+    try { navigateTo('purchase-invoices'); } catch (_) {}
   }
 }
 
