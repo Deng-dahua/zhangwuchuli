@@ -11,6 +11,9 @@ let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  if (!el) { console.error('[InvoiceRender] 容器不存在'); return; }
+  // 确保容器可见（批量删除/编辑后直接调用 renderSalesInvoices() 时不依赖 navigateTo）
+  if (el.style.display === 'none') el.style.display = '';
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -480,6 +483,8 @@ let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' }
 
 async function renderPurchaseInvoices(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
+  if (!el) { console.error('[InvoiceRender] 容器不存在'); return; }
+  if (el.style.display === 'none') el.style.display = '';
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -616,6 +621,11 @@ async function renderPurchaseInvoices(container) {
   } catch (e) {
     console.error('[InvoiceRender]', e);
     toast(e.message, 'error');
+    if (el) {
+      el.innerHTML = '<div style="padding:40px;text-align:center;color:#6b7280">'
+        + '<p style="margin-bottom:16px">页面加载异常：' + escapeHtml(e.message) + '</p>'
+        + '<button class="btn btn-primary" onclick="renderPurchaseInvoices()">重新加载</button></div>';
+    }
   }
 }
 
