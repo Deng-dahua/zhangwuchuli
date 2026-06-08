@@ -1011,23 +1011,20 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     input_tax = s2.get("total_deductible", 0)
     
     # ===== 主表第21栏：简易计税办法计算的应纳税额 =====
-    simple_tax_part1 = round(
-        s1.get("row8_simple_6_total_tax", 0) +
-        s1.get("row9a_simple_5a_total_tax", 0) +
-        s1.get("row10_simple_4_total_tax", 0) +
-        s1.get("row11_simple_3a_total_tax", 0) -
-        s1.get("row14_refund_simple_total_tax", 0),
+    # 官方公式：第21栏 = 附表一（第10列第8、9a、10、11行之和 - 第10列第14行）+（第14列第9b、12、13a、13b行之和 - 第14列第15行）
+    # 注意：当前系统简化计算，仅计算第10列（合计销项税额），未实现第14列（扣除后销项税额）
+    simple_tax = round(
+        s1.get("row8_6_simple_total_tax", 0) +
+        s1.get("row9a_5_goods_simple_total_tax", 0) +
+        s1.get("row10_4_simple_total_tax", 0) +
+        s1.get("row11_3_goods_simple_total_tax", 0) +
+        s1.get("row12_3_service_simple_total_tax", 0) +
+        s1.get("row13a_prepay_total_tax", 0) +
+        s1.get("row13b_prepay_2_total_tax", 0) -
+        s1.get("row14_refund_simple_total_tax", 0) -
+        s1.get("row15_refund_simple_total_tax", 0),
         2
     )
-    simple_tax_part2 = round(
-        s1.get("row9b_simple_5b_after_deduction_tax", 0) +
-        s1.get("row12_simple_3b_after_deduction_tax", 0) +
-        s1.get("row13a_prepay_after_deduction_tax", 0) +
-        s1.get("row13b_prepay_2_after_deduction_tax", 0) -
-        s1.get("row15_refund_simple_after_deduction_tax", 0),
-        2
-    )
-    simple_tax = round(simple_tax_part1 + simple_tax_part2, 2)
     
     # 主表计算链（按填表说明公式）
     input_transfer_out = 0.0
