@@ -126,7 +126,7 @@ function renderJeTable(data) {
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
       html += '<td style="font-family:monospace;font-size:12px">' + (r.account_code || '-') + '</td>';
       var accFull = (r.account_full_name || r.account_name || '-');
-      var accDisplay = accFull.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' &gt; ');
+      var accDisplay = accFull.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' / ');
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(accFull) + '">' + escapeHtml(accDisplay) + '</td>';
       html += '<td>' + (showContact ? (r.contact_project || '-') : '-') + '</td>';
       html += '<td>' + (r.spec_model || '-') + '</td>';
