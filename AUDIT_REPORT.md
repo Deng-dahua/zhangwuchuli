@@ -183,8 +183,8 @@
 | CRITICAL | 13 | 13 | 0 | 100% |
 | HIGH | 28 | 30 | 0 | 100% |
 | MEDIUM | 31 | 31 | 0 | 100% |
-| LOW | 22 | 8 | 14 | 36% |
-| **总计** | **94** | **82** | **14** | **87%** |
+| LOW | 22 | 15 | 7 | 68% |
+| **总计** | **94** | **89** | **7** | **95%** |
 
 ### 6 轮提交记录
 | 提交 | 修复内容 |
@@ -198,9 +198,10 @@
 | *(本轮R7)* | M12-M14 迁移死代码注释、M18确认无重复函数、M28确认已正确使用660216、LOW: script标签添加defer、修复 accounts 批量插入缺少 flush、修复 journal_entries(source,ref_id) UNIQUE约束冲突 |
 | *(本轮R8)* | M9-M10: chat代码提取到chat.py独立模块(~750行)、M30: 现金流量表按对方科目精细分类（收入/成本/薪酬/税费）、M31: 权益变动表未分配利润直接取科目余额表、修复Float→Numeric迁移导致的Decimal类型兼容问题 |
 | *(本轮R9)* | H3-H6: 裸dict→Pydantic模型(vat/social_security/housing_fund/main)、M11: intent_from_text评分制匹配、LOW: esc()冗余清理、死代码移除(64行)、摘要括号统一、DDL f-string安全注释 |
+| *(本轮R10)* | LOW: 24个模型Company relationship补全（双向back_populates） |
 
-### 待修复（剩14项）
+### 待修复（剩7项）
 **HIGH（0项）**：已完成
 **MEDIUM（0项）**：已完成
-**LOW（14项）**：Company relationship缺失(24模型)、部分注释补充、代码风格微调
+**LOW（7项）**：代码注释补充、代码风格微调
 
