@@ -463,223 +463,243 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # 第24栏 应纳税额合计 = 第19栏+第21栏-第23栏
     tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
 
-    form_main = {
-        "period": period,
-        "taxpayer_name": vd.taxpayer_name,
-        # 一、销售额
-        "row1_sales": round(sales_total, 2),         # 按适用税率计税销售额
-        "row2_other_invoice": 0.0,                     # 其中：开具其他发票
-        "row3_no_invoice": 0.0,                        # 未开具发票
-        "row4_tax_check": 0.0,                         # 纳税检查调整
-        "row5_simple_method": 0.0,                     # （二）按简易办法计税销售额
-        "row6_exempt_sales": 0.0,                      # 免税销售额
-        "row7_export_exempt": 0.0,                     # 出口免税销售额
-        "row8_tax_free": 0.0,                          # 其中：免税劳务
-        "row9_exempt_goods": 0.0,                      # 免税货物销售额
-        "row10_exempt_service": 0.0,                   # 免税劳务销售额
-        # 二、税款计算
-        "row11_output_tax": round(output_tax, 2),      # 销项税额
-        "row12_input_tax": round(input_tax, 2),         # 进项税额
-        "row13_prior_credit": round(prior_credit, 2),   # 上期留抵税额
-        "row14_input_transfer_out": 0.0,                # 进项税额转出
-        "row15_exempt_refund": 0.0,                     # 免抵退应退税额
-        "row16_actual_deduct_by_item": 0.0,             # 按适用税率计算的纳税检查应补缴税额
-        "row17_total_deductible": total_deduct,         # 应抵扣税额合计 =12+13-14-15+16
-        "row18_actual_deduct": round(actual_deduct, 2), # 实际抵扣税额
-        "row19_tax_payable": round(tax_payable, 2),     # 应纳税额 =11-18
-        "row20_end_credit": round(end_credit, 2),       # 期末留抵税额 =17-18
-        "row21_simple_tax": 0.0,                        # 简易计税办法计算的应纳税额
-        "row22_simple_tax_reduction": 0.0,              # 按简易计税办法计算的纳税检查应补缴税额
-        "row23_reduction": 0.0,                         # 应纳税额减征额
-        "row24_tax_payable_total": tax_payable_total,   # 应纳税额合计 =19+21-23
-        # 三、税款缴纳
-        "row25_prior_unpaid": 0.0,                      # 期初未缴税额
-        "row26_real_paid_during": 0.0,                  # 本期已缴税额
-        "row27_installment_prepaid": 0.0,               # 分次预缴税额
-        "row28_export_tax_refund": 0.0,                 # 出口开具专用缴款书预缴税额
-        "row29_remote_prepaid": 0.0,                    # 本期缴纳上期应纳税额
-        "row30_already_paid_total": 0.0,                # 本期缴纳欠缴税额
-        "row31_should_pay_refund": 0.0,                 # 期末未缴税额
-        "row32_check_tax_should": 0.0,                  # 其中：欠缴税额
-        "row33_check_prepaid": 0.0,                     # 本期入库查补税额
-        "row34_should_check": 0.0,                      # 期末未缴查补税额
-        "row36_prior_unpaid_check": 0.0,                # 期初未缴查补税额
-        "row37_check_paid": 0.0,                        # 本期入库查补税额
-        "row38_end_check": 0.0,                         # 期末未缴查补税额
-        # 四、附加税费
-        "row39_city_maintenance_tax": city_tax,          # 城市维护建设税
-        "row40_education_surcharge": edu_surcharge,      # 教育费附加
-        "row41_local_education_surcharge": local_edu,    # 地方教育附加
-        # 合计
-        "city_maintenance_tax": city_tax,
-        "education_surcharge": edu_surcharge,
-        "local_education_surcharge": local_edu,
-        "total_surcharge": round(city_tax + edu_surcharge + local_edu, 2),
-    }
-
-    # 本年累计(YTD) —— 注入 form_main
-    _ytd_keys = [
-        "row1_sales", "row2_other_invoice", "row3_no_invoice", "row4_tax_check",
-        "row5_simple_method", "row6_exempt_sales", "row7_export_exempt",
-        "row8_tax_free", "row9_exempt_goods", "row10_exempt_service",
-        "row11_output_tax", "row12_input_tax", "row13_prior_credit",
-        "row14_input_transfer_out", "row15_exempt_refund", "row16_actual_deduct_by_item",
-        "row17_total_deductible", "row18_actual_deduct", "row19_tax_payable",
-        "row20_end_credit", "row21_simple_tax", "row22_simple_tax_reduction",
-        "row23_reduction", "row24_tax_payable_total",
-        "row25_prior_unpaid", "row26_real_paid_during", "row27_installment_prepaid",
-        "row28_export_tax_refund", "row29_remote_prepaid", "row30_already_paid_total",
-        "row31_should_pay_refund", "row32_check_tax_should", "row33_check_prepaid",
-        "row34_should_check", "row36_prior_unpaid_check", "row37_check_paid",
-        "row38_end_check",
-        "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge"
-    ]
-    for _k in _ytd_keys:
-        # 本年累计 = 历史各月累计 + 本月发生额
-        this_month = form_main.get(_k, 0.0)
-        form_main[_k + "_ytd"] = round(ytd_sums.get(_k, 0.0) + this_month, 2)
-        # 即征即退项目（当前系统不涉及，默认0）
-        form_main[_k + "_refund"] = 0.0
-        form_main[_k + "_refund_ytd"] = 0.0
-
-    vd.form_main = json.dumps(form_main, ensure_ascii=False)
 
     # ====== 附列资料（一）：本期销售情况明细 ======
-    # 按税率分类汇总
+    # 按官方填写说明重新设计：区分"货物及加工修理修配劳务"和"服务、不动产和无形资产"
+    # 第1行：13%税率的货物及加工修理修配劳务
+    # 第2行：13%税率的服务、不动产和无形资产
+    # 第3行：9%税率的货物及加工修理修配劳务
+    # 第4行：9%税率的服务、不动产和无形资产
+    # 第5行：6%税率（服务、不动产和无形资产）
+    # 第6行：即征即退货物及加工修理修配劳务
+    # 第7行：即征即退服务、不动产和无形资产
+    # 第8行：简易计税 6%征收率
+    # 第9a行：简易计税 5%征收率（货物）
+    # 第9b行：简易计税 5%征收率（服务）
+    # 第10行：简易计税 4%征收率
+    # 第11行：简易计税 3%征收率（货物）
+    # 第12行：简易计税 3%征收率（服务）
+    
+    # 按税率和发票类型分类汇总
     sales_by_rate = {}
     for inv in sales_invoices:
         rate = int(inv.tax_rate or 13)
-        key = f"rate_{rate}"
+        inv_type = (inv.invoice_type or "").strip()
+        # 判断是货物劳务还是服务不动产
+        # 根据发票内容判断（这里简化处理，实际应根据商品名称判断）
+        is_service = "服务" in (inv.goods_name or "") or "不动产" in (inv.goods_name or "") or "无形资产" in (inv.goods_name or "")
+        
+        key = f"rate_{rate}_{'service' if is_service else 'goods'}"
         if key not in sales_by_rate:
-            sales_by_rate[key] = {"amount": 0, "tax": 0}
+            sales_by_rate[key] = {"amount": 0, "tax": 0, "inclusive": 0}
         sales_by_rate[key]["amount"] += inv.amount or 0
         sales_by_rate[key]["tax"] += inv.tax_amount or 0
-
+        sales_by_rate[key]["inclusive"] += inv.total_amount or 0
+    
     def _sr(rate_key):
         """安全取税率汇总数据"""
-        return sales_by_rate.get(rate_key, {"amount": 0, "tax": 0})
-
+        return sales_by_rate.get(rate_key, {"amount": 0, "tax": 0, "inclusive": 0})
+    
+    # 计算各行数据（第1-12列）
+    # 第1列：开具增值税专用发票
+    # 第2列：开具增值税专用发票销项税额
+    # 第3列：开具其他发票销售额
+    # 第4列：开具其他发票销项税额
+    # 第5列：未开具发票销售额
+    # 第6列：未开具发票销项税额
+    # 第7列：纳税检查调整销售额
+    # 第8列：纳税检查调整销项税额
+    # 第9列：合计销售额
+    # 第10列：合计销项税额
+    # 第11列：合计价税合计额
+    # 第12列：服务、不动产和无形资产扣除项目本期实际扣除金额
+    # 第13列：扣除后含税(免税)销售额
+    # 第14列：扣除后销项(应纳)税额
+    
+    # 简化处理：当前系统所有数据都填入"开具增值税专用发票"列
+    # 后续可扩展：根据发票类型分别填入不同列
+    
     form_sales = {
         "period": period,
-        # 全部征税项目：4种发票 + 合计
-        # --- 13%税率的货物及加工修理修配劳务 ---
-        "row1_13_special_sales": round(_sr("rate_13")["amount"], 2),
-        "row1_13_special_tax": round(_sr("rate_13")["tax"], 2),
-        "row1_13_other_sales": 0.0, "row1_13_other_tax": 0.0,
-        "row1_13_no_invoice_sales": 0.0, "row1_13_no_invoice_tax": 0.0,
-        "row1_13_check_sales": 0.0, "row1_13_check_tax": 0.0,
-        "row1_13_total_sales": round(_sr("rate_13")["amount"], 2),
-        "row1_13_total_tax": round(_sr("rate_13")["tax"], 2),
-        # --- 13%税率的服务、不动产和无形资产 ---
-        "row2_13_service_special_sales": 0.0, "row2_13_service_special_tax": 0.0,
+        # 第1行：13%税率的货物及加工修理修配劳务
+        "row1_13_goods_special_sales": round(_sr("rate_13_goods")["amount"], 2),
+        "row1_13_goods_special_tax": round(_sr("rate_13_goods")["tax"], 2),
+        "row1_13_goods_other_sales": 0.0, "row1_13_goods_other_tax": 0.0,
+        "row1_13_goods_no_invoice_sales": 0.0, "row1_13_goods_no_invoice_tax": 0.0,
+        "row1_13_goods_check_sales": 0.0, "row1_13_goods_check_tax": 0.0,
+        "row1_13_goods_total_sales": round(_sr("rate_13_goods")["amount"], 2),
+        "row1_13_goods_total_tax": round(_sr("rate_13_goods")["tax"], 2),
+        
+        # 第2行：13%税率的服务、不动产和无形资产
+        "row2_13_service_special_sales": round(_sr("rate_13_service")["amount"], 2),
+        "row2_13_service_special_tax": round(_sr("rate_13_service")["tax"], 2),
         "row2_13_service_other_sales": 0.0, "row2_13_service_other_tax": 0.0,
         "row2_13_service_no_invoice_sales": 0.0, "row2_13_service_no_invoice_tax": 0.0,
         "row2_13_service_check_sales": 0.0, "row2_13_service_check_tax": 0.0,
-        "row2_13_service_total_sales": 0.0, "row2_13_service_total_tax": 0.0,
-        # --- 9%税率 ---
-        "row3_9_special_sales": round(_sr("rate_9")["amount"], 2),
-        "row3_9_special_tax": round(_sr("rate_9")["tax"], 2),
-        "row3_9_other_sales": 0.0, "row3_9_other_tax": 0.0,
-        "row3_9_no_invoice_sales": 0.0, "row3_9_no_invoice_tax": 0.0,
-        "row3_9_check_sales": 0.0, "row3_9_check_tax": 0.0,
-        "row3_9_total_sales": round(_sr("rate_9")["amount"], 2),
-        "row3_9_total_tax": round(_sr("rate_9")["tax"], 2),
-        # --- 6%税率（行次5）---
-        "row5_6_special_sales": round(_sr("rate_6")["amount"], 2),
-        "row5_6_special_tax": round(_sr("rate_6")["tax"], 2),
-        "row5_6_other_sales": 0.0, "row5_6_other_tax": 0.0,
-        "row5_6_no_invoice_sales": 0.0, "row5_6_no_invoice_tax": 0.0,
-        "row5_6_check_sales": 0.0, "row5_6_check_tax": 0.0,
-        "row5_6_total_sales": round(_sr("rate_6")["amount"], 2),
-        "row5_6_total_tax": round(_sr("rate_6")["tax"], 2),
-        # --- 5%征收率（行次9a/9b，由下方 row9a_5_goods_* / row9b_5_service_* 正确生成）---
-        # 6%征收率（行次8）
-        "row8_6_collect_sales": 0.0, "row8_6_collect_tax": 0.0,
-        "row8_6_collect_other_sales": 0.0, "row8_6_collect_other_tax": 0.0,
-        "row8_6_collect_no_invoice_sales": 0.0, "row8_6_collect_no_invoice_tax": 0.0,
-        "row8_6_collect_check_sales": 0.0, "row8_6_collect_check_tax": 0.0,
-        "row8_6_collect_total_sales": 0.0, "row8_6_collect_total_tax": 0.0,
-        # 9%税率服务（行次4）
-        "row4_9_service_sales": 0.0, "row4_9_service_tax": 0.0,
+        "row2_13_service_total_sales": round(_sr("rate_13_service")["amount"], 2),
+        "row2_13_service_total_tax": round(_sr("rate_13_service")["tax"], 2),
+        
+        # 第3行：9%税率的货物及加工修理修配劳务
+        "row3_9_goods_special_sales": round(_sr("rate_9_goods")["amount"], 2),
+        "row3_9_goods_special_tax": round(_sr("rate_9_goods")["tax"], 2),
+        "row3_9_goods_other_sales": 0.0, "row3_9_goods_other_tax": 0.0,
+        "row3_9_goods_no_invoice_sales": 0.0, "row3_9_goods_no_invoice_tax": 0.0,
+        "row3_9_goods_check_sales": 0.0, "row3_9_goods_check_tax": 0.0,
+        "row3_9_goods_total_sales": round(_sr("rate_9_goods")["amount"], 2),
+        "row3_9_goods_total_tax": round(_sr("rate_9_goods")["tax"], 2),
+        
+        # 第4行：9%税率的服务、不动产和无形资产
+        "row4_9_service_special_sales": round(_sr("rate_9_service")["amount"], 2),
+        "row4_9_service_special_tax": round(_sr("rate_9_service")["tax"], 2),
         "row4_9_service_other_sales": 0.0, "row4_9_service_other_tax": 0.0,
         "row4_9_service_no_invoice_sales": 0.0, "row4_9_service_no_invoice_tax": 0.0,
         "row4_9_service_check_sales": 0.0, "row4_9_service_check_tax": 0.0,
-        "row4_9_service_total_sales": 0.0, "row4_9_service_total_tax": 0.0,
-        # 5%征收率货物(9a)
-        "row9a_5_goods_sales": 0.0, "row9a_5_goods_tax": 0.0,
-        "row9a_5_goods_other_sales": 0.0, "row9a_5_goods_other_tax": 0.0,
-        "row9a_5_goods_no_invoice_sales": 0.0, "row9a_5_goods_no_invoice_tax": 0.0,
-        "row9a_5_goods_check_sales": 0.0, "row9a_5_goods_check_tax": 0.0,
-        "row9a_5_goods_total_sales": 0.0, "row9a_5_goods_total_tax": 0.0,
-        # 5%征收率服务(9b)
-        "row9b_5_service_sales": 0.0, "row9b_5_service_tax": 0.0,
-        "row9b_5_service_other_sales": 0.0, "row9b_5_service_other_tax": 0.0,
-        "row9b_5_service_no_invoice_sales": 0.0, "row9b_5_service_no_invoice_tax": 0.0,
-        "row9b_5_service_check_sales": 0.0, "row9b_5_service_check_tax": 0.0,
-        "row9b_5_service_total_sales": 0.0, "row9b_5_service_total_tax": 0.0,
-        # 4%征收率
-        "row10_4_collect_sales": 0.0, "row10_4_collect_tax": 0.0,
-        "row10_4_collect_other_sales": 0.0, "row10_4_collect_other_tax": 0.0,
-        "row10_4_collect_no_invoice_sales": 0.0, "row10_4_collect_no_invoice_tax": 0.0,
-        "row10_4_collect_check_sales": 0.0, "row10_4_collect_check_tax": 0.0,
-        "row10_4_collect_total_sales": 0.0, "row10_4_collect_total_tax": 0.0,
-        # 3%征收率货物(11)
-        "row11_3_goods_sales": round(_sr("rate_3")["amount"], 2), "row11_3_goods_tax": round(_sr("rate_3")["tax"], 2),
-        "row11_3_goods_other_sales": 0.0, "row11_3_goods_other_tax": 0.0,
-        "row11_3_goods_no_invoice_sales": 0.0, "row11_3_goods_no_invoice_tax": 0.0,
-        "row11_3_goods_check_sales": 0.0, "row11_3_goods_check_tax": 0.0,
-        "row11_3_goods_total_sales": round(_sr("rate_3")["amount"], 2), "row11_3_goods_total_tax": round(_sr("rate_3")["tax"], 2),
-        # 3%征收率服务(12)
-        "row12_3_service_sales": 0.0, "row12_3_service_tax": 0.0,
-        "row12_3_service_other_sales": 0.0, "row12_3_service_other_tax": 0.0,
-        "row12_3_service_no_invoice_sales": 0.0, "row12_3_service_no_invoice_tax": 0.0,
-        "row12_3_service_check_sales": 0.0, "row12_3_service_check_tax": 0.0,
-        "row12_3_service_total_sales": 0.0, "row12_3_service_total_tax": 0.0,
-        # --- 免抵退税 ---
-        "row8_export_sales": 0.0, "row8_export_tax": 0.0,
-        # --- 免税 ---
-        "row9_exempt_sales": 0.0, "row9_exempt_tax": 0.0,
-        # 合计
-        "total_sales": round(sales_total, 2),
-        "total_output_tax": round(output_tax, 2),
+        "row4_9_service_total_sales": round(_sr("rate_9_service")["amount"], 2),
+        "row4_9_service_total_tax": round(_sr("rate_9_service")["tax"], 2),
+        
+        # 第5行：6%税率（服务、不动产和无形资产）
+        "row5_6_service_special_sales": round(_sr("rate_6_service")["amount"], 2),
+        "row5_6_service_special_tax": round(_sr("rate_6_service")["tax"], 2),
+        "row5_6_service_other_sales": 0.0, "row5_6_service_other_tax": 0.0,
+        "row5_6_service_no_invoice_sales": 0.0, "row5_6_service_no_invoice_tax": 0.0,
+        "row5_6_service_check_sales": 0.0, "row5_6_service_check_tax": 0.0,
+        "row5_6_service_total_sales": round(_sr("rate_6_service")["amount"], 2),
+        "row5_6_service_total_tax": round(_sr("rate_6_service")["tax"], 2),
+        
+        # 第6行：即征即退货物及加工修理修配劳务（当前无数据）
+        "row6_refund_goods_special_sales": 0.0, "row6_refund_goods_special_tax": 0.0,
+        "row6_refund_goods_other_sales": 0.0, "row6_refund_goods_other_tax": 0.0,
+        "row6_refund_goods_no_invoice_sales": 0.0, "row6_refund_goods_no_invoice_tax": 0.0,
+        "row6_refund_goods_check_sales": 0.0, "row6_refund_goods_check_tax": 0.0,
+        "row6_refund_goods_total_sales": 0.0, "row6_refund_goods_total_tax": 0.0,
+        
+        # 第7行：即征即退服务、不动产和无形资产（当前无数据）
+        "row7_refund_service_special_sales": 0.0, "row7_refund_service_special_tax": 0.0,
+        "row7_refund_service_other_sales": 0.0, "row7_refund_service_other_tax": 0.0,
+        "row7_refund_service_no_invoice_sales": 0.0, "row7_refund_service_no_invoice_tax": 0.0,
+        "row7_refund_service_check_sales": 0.0, "row7_refund_service_check_tax": 0.0,
+        "row7_refund_service_total_sales": 0.0, "row7_refund_service_total_tax": 0.0,
+        
+        # 第8行：简易计税 6%征收率（当前无数据）
+        "row8_6_simple_special_sales": 0.0, "row8_6_simple_special_tax": 0.0,
+        "row8_6_simple_other_sales": 0.0, "row8_6_simple_other_tax": 0.0,
+        "row8_6_simple_no_invoice_sales": 0.0, "row8_6_simple_no_invoice_tax": 0.0,
+        "row8_6_simple_check_sales": 0.0, "row8_6_simple_check_tax": 0.0,
+        "row8_6_simple_total_sales": 0.0, "row8_6_simple_total_tax": 0.0,
+        
+        # 第9a行：简易计税 5%征收率（货物）（当前无数据）
+        "row9a_5_goods_simple_special_sales": 0.0, "row9a_5_goods_simple_special_tax": 0.0,
+        "row9a_5_goods_simple_other_sales": 0.0, "row9a_5_goods_simple_other_tax": 0.0,
+        "row9a_5_goods_simple_no_invoice_sales": 0.0, "row9a_5_goods_simple_no_invoice_tax": 0.0,
+        "row9a_5_goods_simple_check_sales": 0.0, "row9a_5_goods_simple_check_tax": 0.0,
+        "row9a_5_goods_simple_total_sales": 0.0, "row9a_5_goods_simple_total_tax": 0.0,
+        
+        # 第9b行：简易计税 5%征收率（服务）（当前无数据）
+        "row9b_5_service_simple_special_sales": 0.0, "row9b_5_service_simple_special_tax": 0.0,
+        "row9b_5_service_simple_other_sales": 0.0, "row9b_5_service_simple_other_tax": 0.0,
+        "row9b_5_service_simple_no_invoice_sales": 0.0, "row9b_5_service_simple_no_invoice_tax": 0.0,
+        "row9b_5_service_simple_check_sales": 0.0, "row9b_5_service_simple_check_tax": 0.0,
+        "row9b_5_service_simple_total_sales": 0.0, "row9b_5_service_simple_total_tax": 0.0,
+        
+        # 第10行：简易计税 4%征收率（当前无数据）
+        "row10_4_simple_special_sales": 0.0, "row10_4_simple_special_tax": 0.0,
+        "row10_4_simple_other_sales": 0.0, "row10_4_simple_other_tax": 0.0,
+        "row10_4_simple_no_invoice_sales": 0.0, "row10_4_simple_no_invoice_tax": 0.0,
+        "row10_4_simple_check_sales": 0.0, "row10_4_simple_check_tax": 0.0,
+        "row10_4_simple_total_sales": 0.0, "row10_4_simple_total_tax": 0.0,
+        
+        # 第11行：简易计税 3%征收率（货物）（当前无数据）
+        "row11_3_goods_simple_special_sales": 0.0, "row11_3_goods_simple_special_tax": 0.0,
+        "row11_3_goods_simple_other_sales": 0.0, "row11_3_goods_simple_other_tax": 0.0,
+        "row11_3_goods_simple_no_invoice_sales": 0.0, "row11_3_goods_simple_no_invoice_tax": 0.0,
+        "row11_3_goods_simple_check_sales": 0.0, "row11_3_goods_simple_check_tax": 0.0,
+        "row11_3_goods_simple_total_sales": 0.0, "row11_3_goods_simple_total_tax": 0.0,
+        
+        # 第12行：简易计税 3%征收率（服务）（当前无数据）
+        "row12_3_service_simple_special_sales": 0.0, "row12_3_service_simple_special_tax": 0.0,
+        "row12_3_service_simple_other_sales": 0.0, "row12_3_service_simple_other_tax": 0.0,
+        "row12_3_service_simple_no_invoice_sales": 0.0, "row12_3_service_simple_no_invoice_tax": 0.0,
+        "row12_3_service_simple_check_sales": 0.0, "row12_3_service_simple_check_tax": 0.0,
+        "row12_3_service_simple_total_sales": 0.0, "row12_3_service_simple_total_tax": 0.0,
     }
     # 附表一：计算所有税率行的合计
-    # 第13行 合计 = 第1行+第2行+第3行+第4行+第5行+第6行+第7行+第8行+第9行+第10行+第11行+第12行
-    s13_special_sales = round(
-        form_sales.get("row1_13_special_sales", 0) + form_sales.get("row2_13_service_special_sales", 0) +
-        form_sales.get("row3_9_special_sales", 0) + form_sales.get("row4_9_service_special_sales", 0) +
-        form_sales.get("row5_6_special_sales", 0) + form_sales.get("row8_6_collect_special_sales", 0) +
-        form_sales.get("row9a_5_goods_special_sales", 0) + form_sales.get("row9b_5_service_special_sales", 0) +
-        form_sales.get("row10_4_collect_special_sales", 0) + form_sales.get("row11_3_goods_special_sales", 0) +
-        form_sales.get("row12_3_service_special_sales", 0), 2)
-    s13_special_tax = round(
-        form_sales.get("row1_13_special_tax", 0) + form_sales.get("row2_13_service_special_tax", 0) +
-        form_sales.get("row3_9_special_tax", 0) + form_sales.get("row4_9_service_special_tax", 0) +
-        form_sales.get("row5_6_special_tax", 0) + form_sales.get("row8_6_collect_special_tax", 0) +
-        form_sales.get("row9a_5_goods_special_tax", 0) + form_sales.get("row9b_5_service_special_tax", 0) +
-        form_sales.get("row10_4_collect_special_tax", 0) + form_sales.get("row11_3_goods_special_tax", 0) +
-        form_sales.get("row12_3_service_special_tax", 0), 2)
-    # 第14行 服务、不动产和无形资产
-    s14_special_sales = round(
-        form_sales.get("row2_13_service_special_sales", 0) + form_sales.get("row4_9_service_special_sales", 0) +
-        form_sales.get("row5_6_special_sales", 0), 2)
-    s14_special_tax = round(
-        form_sales.get("row2_13_service_special_tax", 0) + form_sales.get("row4_9_service_special_tax", 0) +
-        form_sales.get("row5_6_special_tax", 0), 2)
-    form_sales["row13_total_special_sales"] = s13_special_sales
-    form_sales["row13_total_special_tax"] = s13_special_tax
-    form_sales["row14_service_special_sales"] = s14_special_sales
-    form_sales["row14_service_special_tax"] = s14_special_tax
-    # 合计
-    form_sales["total_sales"] = s13_special_sales
-    form_sales["total_output_tax"] = s13_special_tax
-
+    # 第13行 合计 = 第1行+第2行+第3行+第4行+第5行+第6行+第7行+    }
+    
+    # 附表一：计算所有税率行的第9列（合计销售额）和第10列（合计销项税额）
+    # 第9列 = 第1列 + 第3列 + 第5列 + 第7列
+    # 第10列 = 第2列 + 第4列 + 第6列 + 第8列
+    # 第11列 = 第9列 + 第10列（价税合计额）
+    
+    # 第1行：13%税率的货物及加工修理修配劳务
+    form_sales["row1_13_goods_total_sales"] = round(
+        form_sales["row1_13_goods_special_sales"] + form_sales["row1_13_goods_other_sales"] + 
+        form_sales["row1_13_goods_no_invoice_sales"] + form_sales["row1_13_goods_check_sales"], 2)
+    form_sales["row1_13_goods_total_tax"] = round(
+        form_sales["row1_13_goods_special_tax"] + form_sales["row1_13_goods_other_tax"] + 
+        form_sales["row1_13_goods_no_invoice_tax"] + form_sales["row1_13_goods_check_tax"], 2)
+    
+    # 第2行：13%税率的服务、不动产和无形资产
+    form_sales["row2_13_service_total_sales"] = round(
+        form_sales["row2_13_service_special_sales"] + form_sales["row2_13_service_other_sales"] + 
+        form_sales["row2_13_service_no_invoice_sales"] + form_sales["row2_13_service_check_sales"], 2)
+    form_sales["row2_13_service_total_tax"] = round(
+        form_sales["row2_13_service_special_tax"] + form_sales["row2_13_service_other_tax"] + 
+        form_sales["row2_13_service_no_invoice_tax"] + form_sales["row2_13_service_check_tax"], 2)
+    
+    # 第3行：9%税率的货物及加工修理修配劳务
+    form_sales["row3_9_goods_total_sales"] = round(
+        form_sales["row3_9_goods_special_sales"] + form_sales["row3_9_goods_other_sales"] + 
+        form_sales["row3_9_goods_no_invoice_sales"] + form_sales["row3_9_goods_check_sales"], 2)
+    form_sales["row3_9_goods_total_tax"] = round(
+        form_sales["row3_9_goods_special_tax"] + form_sales["row3_9_goods_other_tax"] + 
+        form_sales["row3_9_goods_no_invoice_tax"] + form_sales["row3_9_goods_check_tax"], 2)
+    
+    # 第4行：9%税率的服务、不动产和无形资产
+    form_sales["row4_9_service_total_sales"] = round(
+        form_sales["row4_9_service_special_sales"] + form_sales["row4_9_service_other_sales"] + 
+        form_sales["row4_9_service_no_invoice_sales"] + form_sales["row4_9_service_check_sales"], 2)
+    form_sales["row4_9_service_total_tax"] = round(
+        form_sales["row4_9_service_special_tax"] + form_sales["row4_9_service_other_tax"] + 
+        form_sales["row4_9_service_no_invoice_tax"] + form_sales["row4_9_service_check_tax"], 2)
+    
+    # 第5行：6%税率（服务、不动产和无形资产）
+    form_sales["row5_6_service_total_sales"] = round(
+        form_sales["row5_6_service_special_sales"] + form_sales["row5_6_service_other_sales"] + 
+        form_sales["row5_6_service_no_invoice_sales"] + form_sales["row5_6_service_check_sales"], 2)
+    form_sales["row5_6_service_total_tax"] = round(
+        form_sales["row5_6_service_special_tax"] + form_sales["row5_6_service_other_tax"] + 
+        form_sales["row5_6_service_no_invoice_tax"] + form_sales["row5_6_service_check_tax"], 2)
+    
+    # 计算第13行合计（一般计税方法计税 - 全部征税项目）
+    # 第13行第9列 = 第1行 + 第2行 + 第3行 + 第4行 + 第5行
+    row13_col9 = round(
+        form_sales["row1_13_goods_total_sales"] + form_sales["row2_13_service_total_sales"] + 
+        form_sales["row3_9_goods_total_sales"] + form_sales["row4_9_service_total_sales"] + 
+        form_sales["row5_6_service_total_sales"], 2)
+    row13_col10 = round(
+        form_sales["row1_13_goods_total_tax"] + form_sales["row2_13_service_total_tax"] + 
+        form_sales["row3_9_goods_total_tax"] + form_sales["row4_9_service_total_tax"] + 
+        form_sales["row5_6_service_total_tax"], 2)
+    
+    form_sales["row13_total_special_sales"] = row13_col9
+    form_sales["row13_total_special_tax"] = row13_col10
+    
+    # 计算第14行（即征即退项目）
+    # 第14行第9列 = 第6行 + 第7行
+    # 当前无数据，暂为0
+    form_sales["row14_refund_special_sales"] = 0.0
+    form_sales["row14_refund_special_tax"] = 0.0
+    
+    # 主表第1栏 = 第13行第9列 - 第14行第9列
+    sales_total = round(row13_col9 - form_sales["row14_refund_special_sales"], 2)
+    # 主表第11栏 = 第13行第10列 - 第14行第10列
+    output_tax = round(row13_col10 - form_sales["row14_refund_special_tax"], 2)
+    
     vd.form_sales = json.dumps(form_sales, ensure_ascii=False)
-
-    # 主表第1栏「按适用税率计税销售额」= 附表一第13行第1列（所有征税项目合计销售额）
-    # 覆盖上面临时计算的 sales_total
-    sales_total = s13_special_sales
-    output_tax = s13_special_tax  # 销项税额也用附表一合计口径
+    
+    # 主表第1栏「按适用税率计税销售额」= 附表一第13行第9列 - 第14行第9列
+    # 覆盖之前临时计算的 sales_total
+    # sales_total 和 output_tax 已经在上面计算了
 
     # ====== 附列资料（二）：本期进项税额明细 ======
     # 数据源：进项抵扣表 InputVATDeduction，按「抵扣所属期」取数
@@ -934,35 +954,167 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     }
     vd.form_reduction = json.dumps(form_reduction, ensure_ascii=False)
 
-    # ====== 主表覆盖更新：用附表汇总数据替换主表关键栏次 ======
-    # 主表应在附表后计算，但当前代码结构是先算主表。此处用附表数据覆盖主表。
-    # 解析已计算的主表
-    main = json.loads(vd.form_main) if isinstance(vd.form_main, str) else vd.form_main
-    # 附表一第13行第1列 = 主表第1栏
+    # ===== 主表计算（按官方填写说明公式）=====
+    # 按正确顺序：先计算所有附表，再根据附表计算主表
+    
+    # 取上期留抵：从同公司上期申报表取期末留抵
+    prev_year = period_date.year
+    prev_month = period_date.month - 1
+    if prev_month == 0:
+        prev_year -= 1
+        prev_month = 12
+    prev_period = f"{prev_year}-{prev_month:02d}"
+    prior_vd = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period == prev_period
+    ).first()
+    prior_credit = 0.0
+    if prior_vd and prior_vd.form_main:
+        prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
+        prior_credit = prior_main.get("row20_end_credit", 0.0)
+    
+    # 主表第1栏 = 附表一第13行第9列 - 第14行第9列
     s1 = json.loads(vd.form_sales) if isinstance(vd.form_sales, str) else (vd.form_sales or {})
-    main["row1_sales"] = s1.get("row13_total_special_sales", main.get("row1_sales", 0))
-    main["row11_output_tax"] = s1.get("row13_total_special_tax", main.get("row11_output_tax", 0))
-    # 附表二第12栏第3列 = 主表第12栏
+    sales_total = s1.get("row13_total_special_sales", 0)
+    if s1.get("row14_refund_special_sales"):
+        sales_total = round(sales_total - s1.get("row14_refund_special_sales", 0), 2)
+    
+    # 主表第11栏 = 附表一第13行第10列 - 第14行第10列
+    output_tax = s1.get("row13_total_special_tax", 0)
+    if s1.get("row14_refund_special_tax"):
+        output_tax = round(output_tax - s1.get("row14_refund_special_tax", 0), 2)
+    
+    # 主表第12栏 = 附表二第12栏
     s2 = json.loads(vd.form_input) if isinstance(vd.form_input, str) else (vd.form_input or {})
-    main["row12_input_tax"] = s2.get("total_deductible", main.get("row12_input_tax", 0))
-    # 重新计算主表第17-24栏
-    input_tax = main["row12_input_tax"]
-    output_tax = main["row11_output_tax"]
-    prior_credit = main.get("row13_prior_credit", 0)
-    input_transfer_out = main.get("row14_input_transfer_out", 0)
-    exempt_refund = main.get("row15_exempt_refund", 0)
-    tax_check = main.get("row16_actual_deduct_by_item", 0)
+    input_tax = s2.get("total_deductible", 0)
+    
+    # 主表计算链（按填表说明公式）
+    # 第17栏 应抵扣税额合计 = 第12栏+第13栏-第14栏-第15栏+第16栏
+    input_transfer_out = 0.0    # 第14栏 进项税额转出（当前无数据）
+    exempt_refund = 0.0         # 第15栏 免、抵、退应退税额（当前无数据）
+    tax_check = 0.0             # 第16栏 按适用税率计算的纳税检查应补缴税额（当前无数据）
     total_deduct = round(input_tax + prior_credit - input_transfer_out - exempt_refund + tax_check, 2)
+    
+    # 第18栏 实际抵扣税额 = min(第17栏, 第11栏)（不考虑加计抵减）
     actual_deduct = min(total_deduct, output_tax)
-    actual_reduction = main.get("row18_actual_deduct", 0)  # 实际抵减额（加计抵减）
+    
+    # 第19栏 应纳税额 = 第11栏 - 第18栏 - 实际抵减额（无加计抵减时为0）
+    actual_reduction = 0.0  # 实际抵减额（当前不适用加计抵减政策）
     tax_payable = max(0, round(output_tax - actual_deduct - actual_reduction, 2))
+    
+    # 第20栏 期末留抵税额 = 第17栏 - 第18栏
     end_credit = round(total_deduct - actual_deduct, 2)
-    simple_tax = main.get("row21_simple_tax", 0)
-    reduction = main.get("row23_reduction", 0)
+    
+    # 第21栏 简易计税办法计算的应纳税额
+    # = 《附列资料（一）》（第10列第8、9a、10、11行之和 - 第10列第14行）+（第14列第9b、12、13a、13b行之和 - 第14列第15行）
+    # 当前无简易计税数据，暂为0
+    simple_tax = 0.0
+    
+    # 第23栏 应纳税额减征额（当前无数据）
+    reduction = 0.0
+    
+    # 第24栏 应纳税额合计 = 第19栏+第21栏-第23栏
     tax_payable_total = round(tax_payable + simple_tax - reduction, 2)
-    main["row17_total_deductible"] = total_deduct
-    main["row18_actual_deduct"] = round(actual_deduct, 2)
-    main["row19_tax_payable"] = round(tax_payable, 2)
-    main["row20_end_credit"] = round(end_credit, 2)
-    main["row24_tax_payable_total"] = tax_payable_total
-    vd.form_main = json.dumps(main, ensure_ascii=False)
+    
+    # 计算本年累计(YTD)
+    # 取本年1月至当前月所有申报表，汇总各栏次数值
+    year_str = period[:4]
+    ytd_periods = [f"{year_str}-{m:02d}" for m in range(1, period_date.month + 1)]
+    
+    # 查询本年所有已保存申报表（不含当前正在计算的本条，因为 form_main 尚未入库）
+    ytd_declarations = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period.in_(ytd_periods),
+        VATDeclaration.id != vd.id,
+    ).all()
+    
+    # 需要累计的字段列表（主表所有数字栏次）
+    ytd_fields = [
+        "row1_sales", "row2_other_invoice", "row3_no_invoice", "row4_tax_check",
+        "row5_simple_method", "row6_exempt_sales", "row7_export_exempt",
+        "row8_tax_free", "row9_exempt_goods", "row10_exempt_service",
+        "row11_output_tax", "row12_input_tax", "row13_prior_credit",
+        "row14_input_transfer_out", "row15_exempt_refund", "row16_actual_deduct_by_item",
+        "row17_total_deductible", "row18_actual_deduct", "row19_tax_payable",
+        "row20_end_credit", "row21_simple_tax", "row22_simple_tax_reduction",
+        "row23_reduction", "row24_tax_payable_total",
+        "row25_prior_unpaid", "row26_real_paid_during", "row27_installment_prepaid",
+        "row28_export_tax_refund", "row29_remote_prepaid", "row30_already_paid_total",
+        "row31_should_pay_refund", "row32_check_tax_should", "row33_check_prepaid",
+        "row34_should_check", "row36_prior_unpaid_check", "row37_check_paid",
+        "row38_end_check",
+        "row39_city_maintenance_tax", "row40_education_surcharge", "row41_local_education_surcharge",
+    ]
+    
+    # 累加历史各月数据
+    ytd_sums = {f: 0.0 for f in ytd_fields}
+    for d in ytd_declarations:
+        m = json.loads(d.form_main) if isinstance(d.form_main, str) else (d.form_main or {})
+        for f in ytd_fields:
+            ytd_sums[f] += m.get(f, 0.0)
+    
+    # 构建主表数据
+    form_main = {
+        "period": period,
+        "taxpayer_name": vd.taxpayer_name,
+        # 一、销售额
+        "row1_sales": round(sales_total, 2),         # 按适用税率计税销售额
+        "row2_other_invoice": 0.0,                     # 其中：开具其他发票
+        "row3_no_invoice": 0.0,                        # 未开具发票
+        "row4_tax_check": 0.0,                         # 纳税检查调整
+        "row5_simple_method": 0.0,                     # （二）按简易办法计税销售额
+        "row6_exempt_sales": 0.0,                      # 免税销售额
+        "row7_export_exempt": 0.0,                     # 出口免税销售额
+        "row8_tax_free": 0.0,                          # 其中：免税劳务
+        "row9_exempt_goods": 0.0,                      # 免税货物销售额
+        "row10_exempt_service": 0.0,                   # 免税劳务销售额
+        # 二、税款计算
+        "row11_output_tax": round(output_tax, 2),      # 销项税额
+        "row12_input_tax": round(input_tax, 2),         # 进项税额
+        "row13_prior_credit": round(prior_credit, 2),   # 上期留抵税额
+        "row14_input_transfer_out": 0.0,                # 进项税额转出
+        "row15_exempt_refund": 0.0,                     # 免抵退应退税额
+        "row16_actual_deduct_by_item": 0.0,             # 按适用税率计算的纳税检查应补缴税额
+        "row17_total_deductible": total_deduct,         # 应抵扣税额合计 =12+13-14-15+16
+        "row18_actual_deduct": round(actual_deduct, 2), # 实际抵扣税额
+        "row19_tax_payable": round(tax_payable, 2),     # 应纳税额 =11-18
+        "row20_end_credit": round(end_credit, 2),       # 期末留抵税额 =17-18
+        "row21_simple_tax": simple_tax,                        # 简易计税办法计算的应纳税额
+        "row22_simple_tax_reduction": 0.0,              # 按简易计税办法计算的纳税检查应补缴税额
+        "row23_reduction": 0.0,                         # 应纳税额减征额
+        "row24_tax_payable_total": tax_payable_total,   # 应纳税额合计 =19+21-23
+        # 三、税款缴纳
+        "row25_prior_unpaid": 0.0,                      # 期初未缴税额
+        "row26_real_paid_during": 0.0,                  # 本期已缴税额
+        "row27_installment_prepaid": 0.0,               # 分次预缴税额
+        "row28_export_tax_refund": 0.0,                 # 出口开具专用缴款书预缴税额
+        "row29_remote_prepaid": 0.0,                    # 本期缴纳上期应纳税额
+        "row30_already_paid_total": 0.0,                # 本期缴纳欠缴税额
+        "row31_should_pay_refund": 0.0,                 # 期末未缴税额
+        "row32_check_tax_should": 0.0,                  # 其中：欠缴税额
+        "row33_check_prepaid": 0.0,                     # 本期入库查补税额
+        "row34_should_check": 0.0,                      # 期末未缴查补税额
+        "row36_prior_unpaid_check": 0.0,                # 期初未缴查补税额
+        "row37_check_paid": 0.0,                        # 本期入库查补税额
+        "row38_end_check": 0.0,                         # 期末未缴查补税额
+        # 四、附加税费
+        "row39_city_maintenance_tax": city_tax,          # 城市维护建设税
+        "row40_education_surcharge": edu_surcharge,      # 教育费附加
+        "row41_local_education_surcharge": local_edu,    # 地方教育附加
+        # 合计
+        "city_maintenance_tax": city_tax,
+        "education_surcharge": edu_surcharge,
+        "local_education_surcharge": local_edu,
+        "total_surcharge": round(city_tax + edu_surcharge + local_edu, 2),
+    }
+    
+    # 本年累计(YTD) —— 注入 form_main
+    for _k in ytd_fields:
+        # 本年累计 = 历史各月累计 + 本月发生额
+        this_month = form_main.get(_k, 0.0)
+        form_main[_k + "_ytd"] = round(ytd_sums.get(_k, 0.0) + this_month, 2)
+        # 即征即退项目（当前系统不涉及，默认0）
+        form_main[_k + "_refund"] = 0.0
+        form_main[_k + "_refund_ytd"] = 0.0
+    
+    vd.form_main = json.dumps(form_main, ensure_ascii=False)
