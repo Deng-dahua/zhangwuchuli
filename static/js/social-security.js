@@ -53,7 +53,6 @@ async function renderSocialSecurity(container) {
           + '</div>'
         + '</div>'
       + '</div>'
-'
     + '</div>'
     + '<div id="ss-list-table"></div>'
     + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1500px"></div></div>';
