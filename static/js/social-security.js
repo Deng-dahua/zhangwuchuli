@@ -84,9 +84,19 @@ async function renderSocialSecurity(container) {
     yearOpts += '<option value="' + y + '"' + (y === defYear ? ' selected' : '') + '>' + y + '年</option>';
   }
 
+  // 构建保险项表头（15个险种 × 2列 = 费率+应缴费额）
+  var insHeaderRow1 = '';
+  var insHeaderRow2 = '';
+  for (var k = 0; k < SS_INSURANCE_LIST.length; k++) {
+    insHeaderRow1 += '<th colspan="2">' + SS_INSURANCE_LIST[k].name + '</th>';
+    insHeaderRow2 += '<th>费率</th><th>应缴费额</th>';
+  }
+
+  // 总列数 = 9个基本信息列 + 30个保险列 + 1个操作列 = 40
+  // 基本信息列: 序号/姓名/证件号码/所属期起/所属期止/应收金额/个人社保/单位社保/缴费工资
   container.innerHTML =
     '<div class="module-page">'
-    + '<div class="stats-row" id="ss-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;"></div>'
+    + '<div class="stats-row" id="ss-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;"></div>'
     + '<div class="toolbar">'
       + '<div class="toolbar-left" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
         + '<div class="period-selector-bar" style="display:inline-flex">'
@@ -128,17 +138,23 @@ async function renderSocialSecurity(container) {
       + '</div>'
     + '</div>'
     + '<div class="table-wrap" style="max-height:calc(100vh - 260px);overflow:auto;">'
-    + '<table class="data-table" id="ss-table">'
-      + '<thead><tr>'
-        + '<th>姓名</th>'
-        + '<th>身份证号</th>'
-        + '<th>人员类别</th>'
-        + '<th>缴费工资</th>'
-        + '<th>个人社保合计</th>'
-        + '<th>单位社保合计</th>'
-        + '<th>应收合计</th>'
-        + '<th>操作</th>'
-      + '</tr></thead>'
+    + '<table class="data-table" id="ss-table" style="font-size:12px;white-space:nowrap">'
+      + '<thead>'
+      + '<tr>'
+        + '<th rowspan="2" style="min-width:50px">序号</th>'
+        + '<th rowspan="2" style="min-width:70px">姓名</th>'
+        + '<th rowspan="2" style="min-width:160px">证件号码</th>'
+        + '<th rowspan="2" style="min-width:90px">费款所属期起</th>'
+        + '<th rowspan="2" style="min-width:90px">费款所属期止</th>'
+        + '<th rowspan="2" style="min-width:90px">应收金额</th>'
+        + '<th rowspan="2" style="min-width:90px">个人社保合计</th>'
+        + '<th rowspan="2" style="min-width:90px">单位社保合计</th>'
+        + '<th rowspan="2" style="min-width:80px">缴费工资</th>'
+        + insHeaderRow1
+        + '<th rowspan="2" style="min-width:80px">操作</th>'
+      + '</tr>'
+      + '<tr>' + insHeaderRow2 + '</tr>'
+      + '</thead>'
       + '<tbody id="ss-tbody"></tbody>'
     + '</table>'
     + '</div>'
@@ -203,48 +219,150 @@ function ssRenderStats(stats) {
     { label: '单位缴纳合计', value: '\u00a5' + (stats.total_company_amount || 0).toLocaleString() },
     { label: '个人缴纳合计', value: '\u00a5' + (stats.total_personal_amount || 0).toLocaleString() },
     { label: '应收合计', value: '\u00a5' + (stats.total_amount || 0).toLocaleString() },
+    { label: '缴费工资合计', value: '\u00a5' + (stats.total_salary_base || 0).toLocaleString() },
   ];
   el.innerHTML = cards.map(function(c) {
     return '<div class="stat-card"><div class="stat-label">' + c.label + '</div><div class="stat-value">' + c.value + '</div></div>';
   }).join('');
 }
 
-// ============ 扁平表格 ============
+// ============ Excel模板风格表格 ============
+// 总列数: 序号/姓名/证件号码/所属期起/所属期止/应收金额/个人社保/单位社保/缴费工资 + 15*2保险列 + 操作列
+var SS_TOTAL_COLS = 9 + SS_INSURANCE_LIST.length * 2 + 1;
+
 function ssRenderTable(items) {
   var tbody = document.getElementById('ss-tbody');
   if (!tbody) return;
   if (!items || items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + SS_TOTAL_COLS + '" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>';
     return;
   }
 
-  tbody.innerHTML = items.map(function(item) {
-    // 计算个人/单位/应收合计
-    var insMap = {};
-    (item.insurance_items || []).forEach(function(i) { insMap[i.code || i.name] = i; });
-    var personalAmount = 0, companyAmount = 0;
-    SS_INSURANCE_LIST.forEach(function(ins) {
-      var it = insMap[ins.code] || insMap[ins.name];
-      var amt = it ? (it.amount || 0) : 0;
-      if (ins.type === 'unit') companyAmount += amt;
-      else personalAmount += amt;
-    });
-    var totalAmount = personalAmount + companyAmount;
+  // 按类别分组
+  var catOrder = ['在职人员', '退休人员', '家属统筹人员'];
+  var groups = {};
+  catOrder.forEach(function(c) { groups[c] = []; });
+  items.forEach(function(item) {
+    var cat = item.category || '在职人员';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(item);
+  });
 
-    return '<tr>'
-      + '<td>' + escapeHtml(item.employee_name || '-') + '</td>'
-      + '<td>' + escapeHtml(item.id_number || '-') + '</td>'
-      + '<td>' + escapeHtml(item.category || '在职人员') + '</td>'
-      + '<td class="num">' + (item.salary_base || 0).toLocaleString() + '</td>'
-      + '<td class="num" style="color:#d97706">' + personalAmount.toLocaleString() + '</td>'
-      + '<td class="num" style="color:#db2777">' + companyAmount.toLocaleString() + '</td>'
-      + '<td class="num" style="font-weight:600;color:#059669">' + totalAmount.toLocaleString() + '</td>'
-      + '<td>'
+  // 构建每个item的保险映射（预计算提速）
+  items.forEach(function(item) {
+    var im = {};
+    (item.insurance_items || []).forEach(function(i) { im[i.code || i.name] = i; });
+    item._insMap = im;
+  });
+
+  // === 辅助：渲染一行 ===
+  function renderRow(item, seq, showActions) {
+    var im = item._insMap || {};
+    var row = '<tr>';
+    row += '<td class="num">' + (seq || '') + '</td>';
+    row += '<td>' + escapeHtml(item.employee_name || '-') + '</td>';
+    row += '<td>' + escapeHtml(item.id_number || '-') + '</td>';
+    row += '<td>' + escapeHtml(item.period_start || '-') + '</td>';
+    row += '<td>' + escapeHtml(item.period_end || '-') + '</td>';
+    row += '<td class="num" style="font-weight:600">' + (item.total_amount || 0).toLocaleString() + '</td>';
+    row += '<td class="num" style="color:#d97706">' + (item.personal_amount || 0).toLocaleString() + '</td>';
+    row += '<td class="num" style="color:#db2777">' + (item.company_amount || 0).toLocaleString() + '</td>';
+    row += '<td class="num">' + (item.salary_base || 0).toLocaleString() + '</td>';
+    // 15个险种
+    SS_INSURANCE_LIST.forEach(function(ins) {
+      var it = im[ins.code] || im[ins.name] || {};
+      row += '<td class="num" style="color:#6b7280;font-size:11px">' + (it.rate || '') + '</td>';
+      row += '<td class="num">' + ((it.amount || 0) > 0 ? (it.amount || 0).toLocaleString() : '') + '</td>';
+    });
+    // 操作列
+    if (showActions) {
+      row += '<td>'
         + '<button class="btn btn-sm btn-outline" onclick="ssShowDetail(' + item.id + ',' + item._declaration_id + ')">查看</button>'
         + '<button class="btn btn-sm btn-danger" onclick="ssDelete(' + item.id + ')">删除</button>'
-      + '</td>'
-      + '</tr>';
-  }).join('');
+        + '</td>';
+    } else {
+      row += '<td></td>';
+    }
+    row += '</tr>';
+    return row;
+  }
+
+  // === 辅助：计算小计 ===
+  function calcSubtotal(itemList) {
+    var sub = { total: 0, personal: 0, company: 0, salary: 0, insAmounts: [] };
+    SS_INSURANCE_LIST.forEach(function() { sub.insAmounts.push(0); });
+    itemList.forEach(function(item) {
+      sub.total += item.total_amount || 0;
+      sub.personal += item.personal_amount || 0;
+      sub.company += item.company_amount || 0;
+      sub.salary += item.salary_base || 0;
+      var im = item._insMap || {};
+      SS_INSURANCE_LIST.forEach(function(ins, idx) {
+        var it = im[ins.code] || im[ins.name] || {};
+        sub.insAmounts[idx] += it.amount || 0;
+      });
+    });
+    return sub;
+  }
+
+  // === 辅助：渲染小计/合计行 ===
+  function renderSubtotal(label, sub, className) {
+    var cls = className || 'ss-subtotal';
+    var row = '<tr class="' + cls + '">';
+    row += '<td></td><td style="font-weight:700">' + label + '</td>';
+    row += '<td></td><td></td><td></td>';
+    row += '<td class="num" style="font-weight:700">' + sub.total.toLocaleString() + '</td>';
+    row += '<td class="num" style="font-weight:700;color:#d97706">' + sub.personal.toLocaleString() + '</td>';
+    row += '<td class="num" style="font-weight:700;color:#db2777">' + sub.company.toLocaleString() + '</td>';
+    row += '<td class="num" style="font-weight:700">' + sub.salary.toLocaleString() + '</td>';
+    sub.insAmounts.forEach(function(a) {
+      row += '<td class="num" style="color:#6b7280"></td>';
+      row += '<td class="num" style="font-weight:700">' + (a > 0 ? a.toLocaleString() : '') + '</td>';
+    });
+    row += '<td></td></tr>';
+    return row;
+  }
+
+  // === 构建表格 ===
+  var html = '';
+  var seq = 0;
+  var grandSub = null;
+
+  catOrder.forEach(function(cat) {
+    var list = groups[cat] || [];
+    if (list.length === 0) return;
+    // 类别标题行
+    html += '<tr class="ss-cat-header"><td colspan="' + SS_TOTAL_COLS + '" style="font-weight:700;background:#eef2ff;padding:8px 12px">' + cat + '</td></tr>';
+    // 数据行
+    var catSub = calcSubtotal(list);
+    if (!grandSub) {
+      grandSub = { total: 0, personal: 0, company: 0, salary: 0, insAmounts: [] };
+      SS_INSURANCE_LIST.forEach(function() { grandSub.insAmounts.push(0); });
+    }
+    list.forEach(function(item) {
+      seq++;
+      html += renderRow(item, seq, true);
+      // 累加到大合计
+      grandSub.total += item.total_amount || 0;
+      grandSub.personal += item.personal_amount || 0;
+      grandSub.company += item.company_amount || 0;
+      grandSub.salary += item.salary_base || 0;
+      var im = item._insMap || {};
+      SS_INSURANCE_LIST.forEach(function(ins, idx) {
+        var it = im[ins.code] || im[ins.name] || {};
+        grandSub.insAmounts[idx] += it.amount || 0;
+      });
+    });
+    // 小计行
+    html += renderSubtotal('小计', catSub, 'ss-subtotal');
+  });
+
+  // 合计行
+  if (grandSub) {
+    html += renderSubtotal('合计', grandSub, 'ss-grand-total');
+  }
+
+  tbody.innerHTML = html;
 }
 
 // ============ 查看/编辑明细弹窗（按 Excel 模板展示险种）============

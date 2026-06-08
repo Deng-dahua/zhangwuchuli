@@ -255,6 +255,7 @@ def get_stats(company_id: int, period: str = Query(None), db: Session = Depends(
     declarations = q.all()
     total_company = 0.0
     total_personal = 0.0
+    total_salary_base = 0.0
     detail_count = 0
     for decl in declarations:
         details = db.query(SocialSecurityDetail).filter(
@@ -262,8 +263,9 @@ def get_stats(company_id: int, period: str = Query(None), db: Session = Depends(
         ).all()
         detail_count += len(details)
         for d in details:
-            total_company += d.company_amount or 0
-            total_personal += d.personal_amount or 0
+            total_company += float(d.company_amount or 0)
+            total_personal += float(d.personal_amount or 0)
+            total_salary_base += float(d.salary_base or 0)
 
     return {
         "total_declarations": len(declarations),
@@ -271,6 +273,7 @@ def get_stats(company_id: int, period: str = Query(None), db: Session = Depends(
         "total_company_amount": round(total_company, 2),
         "total_personal_amount": round(total_personal, 2),
         "total_amount": round(total_company + total_personal, 2),
+        "total_salary_base": round(total_salary_base, 2),
     }
 
 

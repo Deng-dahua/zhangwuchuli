@@ -513,4 +513,12 @@
     .file-upload-zone .upload-hint { font-size: 11px; color: var(--gray-400); }
     .file-upload-zone.has-file { border-color: var(--success); background: #f0fdf4; }
     .file-upload-zone.has-file .upload-icon { color: var(--success); }
+
+    /* 社会保险费表格 — Excel模板风格 */
+    .ss-cat-header td { font-weight: 700; background: #eef2ff; padding: 8px 12px; font-size: 13px; }
+    .ss-subtotal td { font-weight: 600; background: #fef3c7; border-top: 2px solid #f59e0b; }
+    .ss-subtotal td:first-child { border-top: none; }
+    .ss-grand-total td { font-weight: 700; background: #fde8e8; border-top: 2px solid #e02424; }
+    .ss-grand-total td:first-child { border-top: none; }
+    #ss-table thead th { background: #f8fafc; position: sticky; top: 0; z-index: 1; text-align: center; vertical-align: middle; }
   
