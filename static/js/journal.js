@@ -125,7 +125,9 @@ function renderJeTable(data) {
       html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
       html += '<td style="font-family:monospace;font-size:12px">' + (r.account_code || '-') + '</td>';
-      html += '<td>' + (r.account_name || '-') + '</td>';
+      var accFull = (r.account_full_name || r.account_name || '-');
+      var accDisplay = accFull.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' &gt; ');
+      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(accFull) + '">' + escapeHtml(accDisplay) + '</td>';
       html += '<td>' + (showContact ? (r.contact_project || '-') : '-') + '</td>';
       html += '<td>' + (r.spec_model || '-') + '</td>';
       html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';

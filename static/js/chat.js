@@ -243,7 +243,9 @@ async function showVoucherDetail(voucherStr) {
       html += '<td style="color:var(--gray-400)">' + (idx + 1) + '</td>';
       html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e.summary || '') + '">' + escapeHtml(e.summary || '-') + '</td>';
       html += '<td>' + e.account_code + '</td>';
-      html += '<td>' + e.account_name + '</td>';
+      var afn = (e.account_full_name || e.account_name || '-');
+      var afd = afn.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' &gt; ');
+      html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(afn) + '">' + escapeHtml(afd) + '</td>';
       html += '<td style="text-align:right;color:#e02424;font-weight:600">' + (e.debit_amount > 0 ? '¥' + e.debit_amount.toLocaleString() : '') + '</td>';
       html += '<td style="text-align:right;color:#0e9f6e;font-weight:600">' + (e.credit_amount > 0 ? '¥' + e.credit_amount.toLocaleString() : '') + '</td>';
       html += '</tr>';

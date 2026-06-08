@@ -4617,6 +4617,7 @@ def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(.
     first = entries[0]
     total_debit = sum(e.debit_amount or 0 for e in entries)
     total_credit = sum(e.credit_amount or 0 for e in entries)
+    hierarchy = _build_account_hierarchy(db, company_id)
     return {
         "voucher_word": voucher_word,
         "voucher_no": voucher_no,
@@ -4634,6 +4635,7 @@ def get_voucher_detail(voucher_word: str = Query(...), voucher_no: int = Query(.
                 "summary": e.summary or "",
                 "account_code": e.account_code,
                 "account_name": e.account_name or "",
+                "account_full_name": hierarchy.get(e.account_code, e.account_name or ""),
                 "debit_amount": e.debit_amount or 0,
                 "credit_amount": e.credit_amount or 0,
             }
