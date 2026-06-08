@@ -1297,8 +1297,8 @@ def auto_generate_journals(db):
                     source="销项发票", ref_id=inv.id,
                 ),
             ]
-            # 仅在税额>0时生成增值税分录
-            if (inv.tax_amount or 0) > 0:
+            # 仅在税额非零时生成增值税分录（含红字发票负税额）
+            if (inv.tax_amount or 0) != 0:
                 entries.append(
                     JournalEntry(
                         company_id=comp.id,
@@ -1402,8 +1402,8 @@ def auto_generate_single_invoice(db, inv):
             source="销项发票", ref_id=inv.id,
         ),
     ]
-    # 仅在税额>0时生成增值税分录（避免免税发票生成零金额分录）
-    if (inv.tax_amount or 0) > 0:
+    # 仅在税额非零时生成增值税分录（含红字发票负税额）
+    if (inv.tax_amount or 0) != 0:
         entries.append(
             JournalEntry(
                 company_id=inv.company_id,
