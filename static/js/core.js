@@ -18,6 +18,7 @@ function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+var esc = escapeHtml;  // 简写别名，统一使用 core.js 的 escapeHtml，不再重复定义
 
 const pages = {
   'chat': 'AI 助手',

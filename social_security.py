@@ -3,6 +3,7 @@
 使用 FastAPI APIRouter，在 main.py 中 include_router 加载。
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
@@ -409,10 +410,20 @@ async def import_excel(
     }
 
 
+class SocialSecurityDetailCreate(BaseModel):
+    employee_name: str = ""
+    id_number: str = ""
+    period_start: str = ""
+    period_end: str = ""
+    salary_base: float = 0
+    category: str = "在职人员"
+    insurance_items: list = []
+
+
 # ========== 生成凭证 ==========
 
 @router.post("/declarations/{declaration_id}/details")
-def add_detail(declaration_id: int, company_id: int, payload: dict, db: Session = Depends(get_db)):
+def add_detail(declaration_id: int, company_id: int, payload: SocialSecurityDetailCreate, db: Session = Depends(get_db)):
     """新增参保人员明细"""
     decl = db.query(SocialSecurityDeclaration).filter(
         SocialSecurityDeclaration.id == declaration_id,
@@ -422,7 +433,7 @@ def add_detail(declaration_id: int, company_id: int, payload: dict, db: Session 
         raise HTTPException(404, "申报记录不存在")
 
     # 计算总金额、个人合计、单位合计
-    insurance_items = payload.get("insurance_items", [])
+    insurance_items = payload.insurance_items
     personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
     company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
     total_amount = personal_amount + company_amount
@@ -435,15 +446,15 @@ def add_detail(declaration_id: int, company_id: int, payload: dict, db: Session 
     detail = SocialSecurityDetail(
         declaration_id=declaration_id,
         seq=max_seq + 1,
-        employee_name=payload.get("employee_name", ""),
-        id_number=payload.get("id_number", ""),
-        period_start=payload.get("period_start", decl.period),
-        period_end=payload.get("period_end", decl.period),
+        employee_name=payload.employee_name,
+        id_number=payload.id_number,
+        period_start=payload.period_start or decl.period,
+        period_end=payload.period_end or decl.period,
         total_amount=total_amount,
         personal_amount=personal_amount,
         company_amount=company_amount,
-        salary_base=payload.get("salary_base", 0),
-        category=payload.get("category", "在职人员"),
+        salary_base=payload.salary_base,
+        category=payload.category,
         insurance_items=json.dumps(insurance_items, ensure_ascii=False),
     )
     db.add(detail)
@@ -453,8 +464,18 @@ def add_detail(declaration_id: int, company_id: int, payload: dict, db: Session 
     return {"id": detail.id, "message": "新增成功"}
 
 
+class SocialSecurityDetailUpdate(BaseModel):
+    employee_name: str = ""
+    id_number: str = ""
+    period_start: str = ""
+    period_end: str = ""
+    salary_base: float = 0
+    category: str = "在职人员"
+    insurance_items: list = []
+
+
 @router.put("/details/{detail_id}")
-def update_detail(detail_id: int, company_id: int, payload: dict, db: Session = Depends(get_db)):
+def update_detail(detail_id: int, company_id: int, payload: SocialSecurityDetailUpdate, db: Session = Depends(get_db)):
     """更新参保人员明细"""
     detail = db.query(SocialSecurityDetail).filter(
         SocialSecurityDetail.id == detail_id
@@ -470,20 +491,20 @@ def update_detail(detail_id: int, company_id: int, payload: dict, db: Session = 
     if not decl:
         raise HTTPException(403, "无权限操作此记录")
 
-    insurance_items = payload.get("insurance_items", [])
+    insurance_items = payload.insurance_items
     personal_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "personal")
     company_amount = sum(i.get("amount", 0) for i in insurance_items if i.get("type") == "unit")
     total_amount = personal_amount + company_amount
 
-    detail.employee_name = payload.get("employee_name", detail.employee_name)
-    detail.id_number = payload.get("id_number", detail.id_number)
-    detail.period_start = payload.get("period_start", detail.period_start)
-    detail.period_end = payload.get("period_end", detail.period_end)
+    detail.employee_name = payload.employee_name or detail.employee_name
+    detail.id_number = payload.id_number or detail.id_number
+    detail.period_start = payload.period_start or detail.period_start
+    detail.period_end = payload.period_end or detail.period_end
     detail.total_amount = total_amount
     detail.personal_amount = personal_amount
     detail.company_amount = company_amount
-    detail.salary_base = payload.get("salary_base", detail.salary_base)
-    detail.category = payload.get("category", detail.category)
+    detail.salary_base = payload.salary_base or detail.salary_base
+    detail.category = payload.category or detail.category
     detail.insurance_items = json.dumps(insurance_items, ensure_ascii=False)
     decl.updated_at = datetime.now()
     db.commit()

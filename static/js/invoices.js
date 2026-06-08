@@ -608,42 +608,6 @@ async function renderPurchaseInvoices(container) {
   }
 }
 
-/*
-async function generateFromPurchaseGroup(idStr) {
-  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认为该组 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
-  try {
-    let res = await api('/api/purchase-invoices/batch-to-journal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: ids })
-    });
-    toast(res.message, 'success');
-    renderPurchaseInvoices();
-  } catch (e) {
-    handleError(e, '生成凭证');
-  }
-}
-*/
-
-/*
-async function deletePurchaseGroup(idStr) {
-  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认删除该组 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
-  try {
-    let result = await api('/api/purchase-invoices/batch-delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids)
-    });
-    toast(result.message, 'success');
-    renderPurchaseInvoices();
-  } catch (e) {
-    toast(e.message, 'error');
-  }
-}
-*/
-
 async function deletePurchaseInvoice(id) {
   if (!confirm('确认删除该取得发票？')) return;
   try {

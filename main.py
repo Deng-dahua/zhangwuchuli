@@ -1222,19 +1222,41 @@ def list_accounts(
     ]
 
 
+class AccountCreate(BaseModel):
+    code: str
+    name: str
+    category: str = ""
+    balance_direction: str = ""
+    level: int = 1
+    parent_code: str = ""
+    opening_balance: float = 0.0
+
+
+class AccountUpdate(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    category: Optional[str] = None
+    balance_direction: Optional[str] = None
+    level: Optional[int] = None
+    parent_code: Optional[str] = None
+    opening_balance: Optional[float] = None
+    password: str = ""
+    is_active: Optional[bool] = None
+
+
 @app.post("/api/accounts")
-def create_account(data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
-    code = data.get("code")
-    name = data.get("name")
-    category = data.get("category")
-    balance_direction = data.get("balance_direction")
-    level = data.get("level", 1)
-    parent_code = data.get("parent_code")
+def create_account(data: AccountCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    code = data.code
+    name = data.name
+    category = data.category
+    balance_direction = data.balance_direction
+    level = data.level
+    parent_code = data.parent_code
     if not code or not name:
         raise HTTPException(400, detail="科目编码和名称不能为空")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code,
-                  opening_balance=data.get("opening_balance", 0.0))
+                  opening_balance=data.opening_balance)
     db.add(acc)
     db.commit()
     db.refresh(acc)
@@ -1262,30 +1284,27 @@ def _account_needs_password(db, company_id, account_id):
     return False, acc, ""
 
 @app.put("/api/accounts/{account_id}")
-def update_account(account_id: int, data: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
+def update_account(account_id: int, data: AccountUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     needs_pwd, acc, msg = _account_needs_password(db, company_id, account_id)
     if needs_pwd:
-        pwd = data.get("password", "")
+        pwd = data.password
         if pwd != ACCOUNT_PWD:
             raise HTTPException(403, detail=f"{msg}，请输入正确密码")
     if not acc:
         raise HTTPException(404, detail="科目不存在")
-    if "name" in data and data["name"] is not None:
-        acc.name = data["name"]
-    if "is_active" in data and data["is_active"] is not None:
-        acc.is_active = data["is_active"]
-    if "opening_balance" in data and data["opening_balance"] is not None:
-        acc.opening_balance = data["opening_balance"]
+    if data.name is not None:
+        acc.name = data.name
+    if data.is_active is not None:
+        acc.is_active = data.is_active
+    if data.opening_balance is not None:
+        acc.opening_balance = data.opening_balance
     db.commit()
     return {"message": "更新成功"}
 
 
 @app.delete("/api/accounts/{account_id}")
-def delete_account(account_id: int, company_id: int = Query(...), db: Session = Depends(get_db), data: dict = None):
-    # 从 query 或 body 获取密码
-    pwd = ""
-    if data and isinstance(data, dict):
-        pwd = data.get("password", "")
+def delete_account(account_id: int, company_id: int = Query(...), db: Session = Depends(get_db), password: str = Body("")):
+    pwd = password
     needs_pwd, acc, msg = _account_needs_password(db, company_id, account_id)
     if needs_pwd:
         if pwd != ACCOUNT_PWD:

@@ -189,11 +189,7 @@ async function sendChat() {
   document.getElementById('chat-input').focus();
 }
 
-// HTML 转义
-function esc(str) {
-  if (!str) return '';
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
+// esc() 已统一迁移到 core.js 作为 escapeHtml() 别名，此处不再重复定义
 function showModal(html) {
   closeModal(); // P1-17: 先关闭已有弹窗，防止堆叠
   const overlay = document.createElement('div');

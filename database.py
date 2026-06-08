@@ -981,6 +981,7 @@ def migrate_schema(db):
         ]:
             if col_name not in je_cols:
                 try:
+                    # safe: col_name/col_def 来自硬编码列表，无注入风险
                     db.execute(TextClause(f"ALTER TABLE journal_entries ADD COLUMN {col_name} {col_def}"))
                     db.commit()
                     print(f"  [OK] 已添加 journal_entries.{col_name}")
@@ -1967,13 +1968,13 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 entry1 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
+                    summary=summary_tag + "（内部转账）", account_code="1002", account_name="银行存款",
                     debit_amount=amount, credit_amount=0, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
                 entry2 = JournalEntry(
                     company_id=company_id, entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag + "(内部转账)", account_code="1002", account_name="银行存款",
+                    summary=summary_tag + "（内部转账）", account_code="1002", account_name="银行存款",
                     debit_amount=0, credit_amount=amount, contact_project=cp, source="银行流水", ref_id=tx.id,
                 )
             elif is_debit:
@@ -2217,7 +2218,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
             company_id=company_id,
             entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "(缴纳社保)",
+            summary=summary_tag + "（缴纳社保）",
             account_code="221102", account_name="应付职工薪酬-社会保险费",
             debit_amount=round(total_company, 2), credit_amount=0,
             source="社保申报-缴纳",
@@ -2228,7 +2229,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 company_id=company_id,
                 entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag + "(缴纳社保-代扣个人)",
+                summary=summary_tag + "（缴纳社保-代扣个人）",
                 account_code="222101", account_name="代扣社会保险费",
                 debit_amount=round(total_personal, 2), credit_amount=0,
                 source="社保申报-缴纳",
@@ -2238,7 +2239,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
             company_id=company_id,
             entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "(缴纳社保)",
+            summary=summary_tag + "（缴纳社保）",
             account_code="1002", account_name="银行存款",
             debit_amount=0, credit_amount=round(total_company + total_personal, 2),
             source="社保申报-缴纳",
@@ -2590,7 +2591,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
             company_id=company_id,
             entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "(缴纳公积金)",
+            summary=summary_tag + "（缴纳公积金）",
             account_code="221103", account_name="应付职工薪酬-住房公积金",
             debit_amount=round(total_company + total_personal, 2), credit_amount=0,
             source="公积金缴纳"
@@ -2600,7 +2601,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
             company_id=company_id,
             entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
             period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "(缴纳公积金)",
+            summary=summary_tag + "（缴纳公积金）",
             account_code="1002", account_name="银行存款",
             debit_amount=0, credit_amount=round(total_company + total_personal, 2),
             source="公积金缴纳"

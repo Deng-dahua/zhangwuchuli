@@ -40,58 +40,112 @@ def get_session(sid: str):
 # ==================== 意图识别与文本提取 ====================
 
 def intent_from_text(msg: str) -> str:
-    """从消息中识别意图"""
+    """从消息中识别意图 — 基于关键词优先级得分匹配，返回置信度最高的意图"""
     msg_lower = msg.strip().lower()
 
     # 文件上传 — 最高优先级，先于所有其他意图
     if msg_lower.startswith("[上传文件]"):
         return "file_upload"
 
-    # 凭证类
-    if re.search(r"录[入记]凭证|做[一笔]?[账分]?[录项]|记账|填制凭证|nova.*voucher", msg_lower):
-        return "create_voucher"
-    if re.search(r"查[看询]?凭证|凭证列[表出]|voucher.*list", msg_lower):
-        return "list_vouchers"
-    # 客户
-    if re.search(r"新[增添加][客]|录入客户|添加客户|new.*customer|create.*customer", msg_lower):
-        return "create_customer"
-    if re.search(r"查[看询]?客户|客户列[表出]", msg_lower):
-        return "list_customers"
-    # 供应商
-    if re.search(r"新[增添加]供应商|录入供应商|添加供应商|new.*supplier", msg_lower):
-        return "create_supplier"
-    if re.search(r"查[看询]?供应商|供应商列[表出]", msg_lower):
-        return "list_suppliers"
-    # 人员员工
-    if re.search(r"新[增添加](员工|人员|职员)|录入(员工|人员)|添加(员工|人员)|new.*employee", msg_lower):
-        return "create_employee"
-    if re.search(r"查[看询]?(员工|人员|职员)|(员工|人员)列[表出]", msg_lower):
-        return "list_employees"
-    # 报表
-    if re.search(r"利润表|损益表|profit|loss", msg_lower):
-        return "query_profit_loss"
-    if re.search(r"资产负债表|balance.*sheet", msg_lower):
-        return "query_balance_sheet"
-    if re.search(r"总账|general.*ledger", msg_lower):
-        return "query_general_ledger"
-    if re.search(r"明细账|detail.*ledger", msg_lower):
-        return "query_detail_ledger"
-    # 公司
-    if re.search(r"(公司|企业)信息|设置公司|录入公司", msg_lower):
-        return "company_info"
-    # 科目
-    if re.search(r"科[目录]|account.*list", msg_lower):
-        return "list_accounts"
-    # 看板
-    if re.search(r"看板|dashboard|数据概览|统计", msg_lower):
-        return "dashboard"
-    # 帮助
-    if re.search(r"帮助|help|能做什么|会什么|功能|指令|命令", msg_lower):
-        return "help"
-    # 取消
-    if re.search(r"取消|退出|算了|不要了|返回", msg_lower):
-        return "cancel"
-    return None
+    # 意图关键词库：(intent_name, [(pattern_regex, score), ...])
+    # score 越高越优先；正则基于 msg_lower 匹配
+    INTENTS = [
+        ("create_voucher", [
+            (r"\b(录[入记]凭证|制[单证]|做[一]?[笔张]?(账|分录|凭证)|填制凭证|记[账一]笔|录入分录)\b", 20),
+            (r"(添加|新增|录入).{0,4}(凭证|分录)", 15),
+            (r"nova.*voucher", 10),
+        ]),
+        ("list_vouchers", [
+            (r"\b(查[看询]?凭证|凭证列[表出]|序时账|日记账|会计分录)\b", 20),
+            (r"voucher.*list", 10),
+            (r"(查|看|显示).{0,4}(凭证|分录)", 10),
+        ]),
+        ("create_customer", [
+            (r"\b(新[增添加][客]户|录入客户|添加客户|建档.*客户|客户.*建档)\b", 20),
+            (r"new.*customer|create.*customer", 10),
+            (r"(添加|新增|录入).{0,4}客户", 15),
+        ]),
+        ("list_customers", [
+            (r"\b(查[看询]?客户|客户列[表出]|客户管理)\b", 20),
+            (r"(查|看).{0,4}客户", 10),
+        ]),
+        ("create_supplier", [
+            (r"\b(新[增添加]供应商|录入供应商|添加供应商|建档.*供应商|供应商.*建档)\b", 20),
+            (r"new.*supplier|create.*supplier", 10),
+            (r"(添加|新增|录入).{0,4}供应商", 15),
+        ]),
+        ("list_suppliers", [
+            (r"\b(查[看询]?供应商|供应商列[表出]|供应商管理)\b", 20),
+            (r"(查|看).{0,4}供应商", 10),
+        ]),
+        ("create_employee", [
+            (r"\b(新[增添加](员工|人员|职员)|录入(员工|人员)|添加(员工|人员))\b", 20),
+            (r"new.*employee|create.*employee", 10),
+            (r"(添加|新增|录入|建档).{0,4}(员工|人员|职员)", 15),
+        ]),
+        ("list_employees", [
+            (r"\b(查[看询]?(员工|人员|职员)|(员工|人员|职员)列[表出])\b", 20),
+            (r"(查|看).{0,4}(员工|人员|职员)", 10),
+        ]),
+        ("query_profit_loss", [
+            (r"\b(利润表|损益表|利润报表|损益报表)\b", 20),
+            (r"\bprofit.*loss|loss.*profit\b", 10),
+            (r"(查|看|生成).{0,4}(利润|损益)", 12),
+        ]),
+        ("query_balance_sheet", [
+            (r"\b(资产负债表|资产负债|balance\s*sheet)\b", 20),
+            (r"(查|看|生成).{0,4}(资产|负债).{0,4}表", 12),
+        ]),
+        ("query_general_ledger", [
+            (r"\b(总账|总分类账|general\s*ledger)\b", 20),
+            (r"(查|看).{0,4}总账", 15),
+        ]),
+        ("query_detail_ledger", [
+            (r"\b(明细账|明细分类账|detail\s*ledger)\b", 20),
+            (r"(查|看).{0,4}明细", 12),
+        ]),
+        ("company_info", [
+            (r"\b((公司|企业)信息|设置公司|录入公司|公司设置)\b", 20),
+            (r"(修改|编辑|查看).{0,4}(公司|企业)", 12),
+        ]),
+        ("list_accounts", [
+            (r"\b(科目表|科目列表|会计科目|chart\s*of\s*account)\b", 20),
+            (r"(查|看|浏览).{0,4}科目", 12),
+        ]),
+        ("dashboard", [
+            (r"\b(看板|dashboard|数据概览|统计看板|首页)\b", 20),
+            (r"(看|打开).{0,4}(看板|概览|面板)", 12),
+        ]),
+        ("help", [
+            (r"\b(帮助|help|能做什么|会什么|功能|指令|命令|怎么用)\b", 20),
+        ]),
+        ("cancel", [
+            (r"\b(取消|退出|算了|不要了|返回|撤销)\b", 20),
+        ]),
+    ]
+
+    # 得分制匹配：计算每个意图的总分，选最高分
+    best_intent = None
+    best_score = 0
+    for intent_name, patterns in INTENTS:
+        score = 0
+        for pattern_regex, pattern_score in patterns:
+            if re.search(pattern_regex, msg_lower):
+                score += pattern_score
+        if score > best_score:
+            best_score = score
+            best_intent = intent_name
+
+    # 智能问询：如果没有任何匹配，尝试自然语言判断
+    if best_score == 0:
+        # 问报表
+        if re.search(r"(看|查|显示).{0,4}(报表|报告)", msg_lower):
+            return "query_general_ledger"
+        # 问数据
+        if re.search(r"(多少|几个|哪些|什么)", msg_lower):
+            return "query_general_ledger"
+
+    return best_intent
 
 
 def extract_date(text: str) -> Optional[str]:

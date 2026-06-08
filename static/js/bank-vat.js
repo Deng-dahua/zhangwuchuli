@@ -692,40 +692,6 @@ async function generateFromIVD(id) {
   } catch (e) { toast(e.message || '生成失败', 'error'); }
 }
 
-// 分组生成凭证（已废弃，改为每行独立）
-/*
-async function generateFromIVDGroup(idStr) {
-  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认为该组 ' + ids.length + ' 条认证记录生成进项抵扣凭证？')) return;
-  try {
-    for (var j = 0; j < ids.length; j++) {
-      await api('/api/input-vat-deductions/' + ids[j] + '/to-journal', { method: 'POST' });
-    }
-    toast('已为 ' + ids.length + ' 条记录生成凭证', 'success');
-    renderInputVATDeductions();
-  } catch (e) {
-    handleError(e, '生成凭证');
-  }
-}
-*/
-
-// 分组删除（已废弃，改为每行独立）
-/*
-async function deleteIVDGroup(idStr) {
-  let ids = idStr.split(',').map(function(id) { return parseInt(id); }).filter(Boolean);
-  if (!confirm('确认删除该组 ' + ids.length + ' 条认证记录？此操作不可恢复。')) return;
-  try {
-    const result = await api('/api/input-vat-deductions/batch-delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids)
-    });
-    toast(result.message, 'success');
-    renderInputVATDeductions();
-  } catch (e) { toast(e.message, 'error'); }
-}
-*/
-
 // 批量生成进项抵扣凭证（每行独立勾选）
 async function batchGenerateIVDVouchers() {
   // 收集选中的进项抵扣ID

@@ -3,6 +3,7 @@
 使用 FastAPI APIRouter，在 main.py 中 include_router 加载。
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from datetime import datetime
@@ -195,17 +196,28 @@ def check_micro_enterprise(company_id: int = Query(), period: str = Query(), db:
     return _validate_small_micro_enterprise(db, company_id, period)
 
 
+class VATDeclarationCreate(BaseModel):
+    period: str = ""
+    taxpayer_name: str = ""
+    industry: str = ""
+    register_type: str = ""
+    bank_account: str = ""
+    phone: str = ""
+    micro_enterprise: bool = False
+    six_tax_reduction: bool = False
+
+
 @router.post("/declarations")
-def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = Depends(get_db)):
-    period = data.get("period", "")
+def create_vat_declaration(data: VATDeclarationCreate, company_id: int = Query(), db: Session = Depends(get_db)):
+    period = data.period
     if not period:
         raise HTTPException(400, detail="税款所属期不能为空")
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(404, detail="公司不存在")
 
-    micro = data.get("micro_enterprise", False)
-    six_tax = data.get("six_tax_reduction", False)
+    micro = data.micro_enterprise
+    six_tax = data.six_tax_reduction
 
     # ===== 自动校验小型微利企业三大指标 =====
     validation = _validate_small_micro_enterprise(db, company_id, period)
@@ -226,14 +238,14 @@ def create_vat_declaration(data: dict, company_id: int = Query(), db: Session = 
 
     vd = VATDeclaration(
         company_id=company_id, period=period,
-        taxpayer_name=data.get("taxpayer_name") or company.name,
+        taxpayer_name=data.taxpayer_name or company.name,
         taxpayer_id=company.uscc or "",
-        industry=data.get("industry", ""),
-        register_type=data.get("register_type", ""),
+        industry=data.industry,
+        register_type=data.register_type,
         legal_representative=company.legal_representative or "",
         address=company.address or "",
-        bank_account=data.get("bank_account", ""),
-        phone=data.get("phone", ""),
+        bank_account=data.bank_account,
+        phone=data.phone,
         micro_enterprise=micro,
         six_tax_reduction=six_tax,
         reduction_start=reduction_start,

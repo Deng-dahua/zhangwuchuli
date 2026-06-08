@@ -2,6 +2,7 @@
 公积金缴存 API 路由
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
 import openpyxl
@@ -189,11 +190,15 @@ def delete_detail(detail_id: int, company_id: int, db: Session = Depends(get_db)
     return {"message": "删除成功"}
 
 
+class BatchDeleteRequest(BaseModel):
+    ids: List[int]
+
+
 @router.post("/details/batch-delete")
-def batch_delete(ids: List[int], company_id: int, db: Session = Depends(get_db)):
+def batch_delete(data: BatchDeleteRequest, company_id: int, db: Session = Depends(get_db)):
     """批量删除"""
     deleted = db.query(HousingFundDetail).filter(
-        HousingFundDetail.id.in_(ids),
+        HousingFundDetail.id.in_(data.ids),
         HousingFundDetail.company_id == company_id
     ).delete(synchronize_session=False)
     db.commit()
