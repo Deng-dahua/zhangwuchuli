@@ -10,10 +10,14 @@ let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderSalesInvoices(container) {
+  // 核武器级防白屏：确保容器必定存在且在DOM中可见
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
-  if (!el) { console.error('[InvoiceRender] 容器不存在'); return; }
-  // 确保容器可见（批量删除/编辑后直接调用 renderSalesInvoices() 时不依赖 navigateTo）
-  if (el.style.display === 'none') el.style.display = '';
+  if (!el || !el.isConnected) {
+    el = document.getElementById('content-area');
+    if (!el) { console.error('[InvoiceRender] content-area 不存在，放弃渲染'); return; }
+  }
+  el.style.display = '';
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:#9ca3af">加载中…</div>';
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -317,7 +321,7 @@ async function saveSalesInvoice(id) {
     }
     toast(result.message || '保存成功', 'success');
     closeModal();
-    renderSalesInvoices();
+    navigateTo('sales-invoices');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -328,12 +332,11 @@ async function deleteSalesInvoice(id) {
   try {
     const result = await api('/api/sales-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
-    await renderSalesInvoices();
   } catch (e) {
     toast(e.message, 'error');
-    // 渲染失败时兜底重新导航，防止白屏
-    try { navigateTo('sales-invoices'); } catch (_) {}
   }
+  // 始终通过 navigateTo 重新渲染（保证容器生命周期正确）
+  navigateTo('sales-invoices');
 }
 
 // 单条开具发票生成凭证
@@ -346,7 +349,7 @@ async function generateFromSalesInvoice(id) {
       body: JSON.stringify({ ids: [id] })
     });
     toast(res.message, 'success');
-    renderSalesInvoices();
+    navigateTo('sales-invoices');
   } catch (e) {
     handleError(e, '生成凭证');
   }
@@ -391,11 +394,11 @@ async function batchDeleteSalesInvoices() {
       body: JSON.stringify(ids)
     });
     toast(result.message, 'success');
-    await renderSalesInvoices();
   } catch (e) {
     toast(e.message, 'error');
-    try { navigateTo('sales-invoices'); } catch (_) {}
   }
+  // 始终通过 navigateTo 重新渲染（保证容器生命周期正确）
+  navigateTo('sales-invoices');
 }
 
 async function showSalesDetail(id) {
@@ -482,9 +485,14 @@ let piTab = 'all'; // all / zpt / ppt / tlp (专票/普票/铁路票)
 let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
+  // 核武器级防白屏：确保容器必定存在且在DOM中可见
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
-  if (!el) { console.error('[InvoiceRender] 容器不存在'); return; }
-  if (el.style.display === 'none') el.style.display = '';
+  if (!el || !el.isConnected) {
+    el = document.getElementById('content-area');
+    if (!el) { console.error('[InvoiceRender] content-area 不存在，放弃渲染'); return; }
+  }
+  el.style.display = '';
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:#9ca3af">加载中…</div>';
   // 全局期间联动
   // dateFrom/dateTo 保持空，不自动填充期间
   try {
@@ -634,12 +642,10 @@ async function deletePurchaseInvoice(id) {
   try {
     const result = await api('/api/purchase-invoices/' + id, { method: 'DELETE' });
     toast(result.message, 'success');
-    await renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
-    // 渲染失败时兜底重新导航，防止白屏
-    try { navigateTo('purchase-invoices'); } catch (_) {}
   }
+  navigateTo('purchase-invoices');
 }
 
 // 单条取得发票生成凭证
@@ -652,7 +658,7 @@ async function generateFromPurchase(id) {
       body: JSON.stringify({ ids: [id] })
     });
     toast(res.message, 'success');
-    renderPurchaseInvoices();
+    navigateTo('purchase-invoices');
   } catch (e) {
     handleError(e, '生成凭证');
   }
@@ -700,11 +706,10 @@ async function batchDeletePurchaseInvoices() {
       body: JSON.stringify(ids)
     });
     toast(result.message, 'success');
-    await renderPurchaseInvoices();
   } catch (e) {
     toast(e.message, 'error');
-    try { navigateTo('purchase-invoices'); } catch (_) {}
   }
+  navigateTo('purchase-invoices');
 }
 
 // 一键生成取得发票的进项抵扣凭证
@@ -723,7 +728,7 @@ async function batchGeneratePurchaseVouchers() {
       body: JSON.stringify({ ids: ids })
     });
     toast(res.message, 'success');
-    renderPurchaseInvoices();
+    navigateTo('purchase-invoices');
     // 重置序时账缓存
     let jel = document.getElementById('page-journal');
     if (jel) delete jel.dataset.rendered;
@@ -1003,7 +1008,7 @@ async function savePurchaseInvoice(id) {
     }
     toast(result.message || '保存成功', 'success');
     closeModal();
-    renderPurchaseInvoices();
+    navigateTo('purchase-invoices');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -1026,7 +1031,7 @@ async function batchGenerateVouchers(clickedBtn) {
       body: JSON.stringify({ ids: ids })
     });
     toast(res.message, 'success');
-    renderSalesInvoices();
+    navigateTo('sales-invoices');
     // 重置序时账缓存，确保切换后刷新
     let jel = document.getElementById('page-journal');
     if (jel) delete jel.dataset.rendered;
