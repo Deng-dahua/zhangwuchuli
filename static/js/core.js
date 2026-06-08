@@ -267,6 +267,12 @@ function onPeriodSelectChange() {
       if (em) em.value = m;
     });
   });
+  // 同步文化事业建设费
+  try { ccfFilterPeriod = newPeriod; ccfCurrentData = null; } catch(e) {}
+  let ccfY = document.getElementById('ccf-detail-year');
+  let ccfM = document.getElementById('ccf-detail-month');
+  if (ccfY) ccfY.value = y;
+  if (ccfM) ccfM.value = m;
   try { siFilter.dateFrom = ''; siFilter.dateTo = ''; } catch(e) {}
   try { piFilter.dateFrom = ''; piFilter.dateTo = ''; } catch(e) {}
   try { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; } catch(e) {}
@@ -286,6 +292,7 @@ function globalPeriodConfirm() {
   try { currentSalaryPeriod = newPeriod; } catch(e) {}
   try { vatFilterPeriod = newPeriod; vatSelectedId = null; vatCurrentData = null; } catch(e) {}
   try { ssFilterPeriod = newPeriod; } catch(e) {}
+  try { ccfFilterPeriod = newPeriod; ccfCurrentData = null; } catch(e) {}
 
   // ===== DOM 直接同步（已渲染但当前未激活的页面，下次切换过去时生效） =====
   // 1. 序时账/总账/明细账/报表 (from-to)
@@ -324,7 +331,13 @@ function globalPeriodConfirm() {
   let ssPeriod = document.getElementById('ss-filter-period');
   if (ssPeriod) ssPeriod.value = newPeriod;
 
-  // 6. 发票/抵扣筛选器
+  // 6. 文化事业建设费 DOM
+  let ccfY = document.getElementById('ccf-detail-year');
+  let ccfM = document.getElementById('ccf-detail-month');
+  if (ccfY) ccfY.value = y;
+  if (ccfM) ccfM.value = m;
+
+  // 7. 发票/抵扣筛选器
   try { siFilter.dateFrom = ''; siFilter.dateTo = ''; } catch(e) {}
   try { piFilter.dateFrom = ''; piFilter.dateTo = ''; } catch(e) {}
   try { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; } catch(e) {}
