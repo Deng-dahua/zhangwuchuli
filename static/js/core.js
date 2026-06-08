@@ -435,7 +435,7 @@ function navigateTo(page) {
     case 'salary': showSalaryPage(container); break;
     case 'social-security': renderSocialSecurity(container); break;
     case 'housing-fund': renderHousingFund(container); break;
-    case 'cultural-construction-fee': renderCulturalConstructionFee(container); break;
+    case '文化事业建设费': renderCulturalConstructionFee(container); break;
   }
 }
 

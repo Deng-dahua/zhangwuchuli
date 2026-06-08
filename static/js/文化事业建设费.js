@@ -153,7 +153,7 @@ function renderCCFPeriodEmpty(period) {
 
 async function renderCulturalConstructionFee(container) {
   ccfInlineDisplayId = null;
-  var el = container || document.getElementById('page-cultural-construction-fee') || document.getElementById('content-area');
+  var el = container || document.getElementById('page-文化事业建设费') || document.getElementById('content-area');
   el.innerHTML = '<div id="ccf-stats-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px"></div>'
     + '<div id="ccf-forms-inline" style="display:none;margin-top:20px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px"></div>'
     + '<div id="ccf-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCCFModal()"><div class="modal modal-lg" id="ccf-modal-inner"></div></div>';
