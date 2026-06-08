@@ -3,7 +3,7 @@ async function renderGeneralLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card card-fill">
-      <div class="filter-bar" style="gap:8px;align-items:center;">
+      <div class="filter-bar" style="align-items:center;">
         <div id="gl-period-bar" style="display:flex;align-items:center;gap:4px"></div>
       </div>
       <div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px" id="gl-table"></div>
@@ -78,7 +78,7 @@ async function renderDetailLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');
   el.innerHTML = '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">' +
+      '<div class="filter-bar" style="align-items:center;flex-wrap:wrap;flex-shrink:0;">' +
         '<select class="form-control" id="dl-account" style="width:240px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">' +
           '<option value="">-- 选择科目 --</option>' + accountOptions +
         '</select>' +
@@ -345,7 +345,7 @@ async function renderProfitLoss(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<div class="filter-bar" style="flex-wrap:wrap;align-items:center;">' +
         '<div id="pl-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
       '<div id="pl-table" style="flex:1;overflow:auto"></div>' +
@@ -383,7 +383,7 @@ async function renderBalanceSheet(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<div class="filter-bar" style="flex-wrap:wrap;align-items:center;">' +
         '<div id="bs-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
       '<div id="bs-table" style="flex:1;overflow:auto"></div>' +
@@ -428,7 +428,7 @@ async function renderCashFlow(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<div class="filter-bar" style="flex-wrap:wrap;align-items:center;">' +
         '<div id="cf-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
       '<div id="cf-table" style="flex:1;overflow:auto"></div>' +
@@ -464,7 +464,7 @@ async function renderEquityChanges(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card card-fill">' +
-      '<div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<div class="filter-bar" style="flex-wrap:wrap;align-items:center;">' +
         '<div id="ec-period-bar" style="display:flex;align-items:center;gap:4px"></div>' +
       '</div>' +
       '<div id="ec-table" style="flex:1;overflow:auto"></div>' +
@@ -502,7 +502,7 @@ async function renderAccountBalance(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
     <div class="card card-fill">
-      <div class="filter-bar" style="gap:8px;flex-wrap:wrap;align-items:center;">
+      <div class="filter-bar" style="flex-wrap:wrap;align-items:center;">
         <div id="tb-period-bar" style="display:flex;align-items:center;gap:4px"></div>
       </div>
       <div id="tb-table"></div>

@@ -631,7 +631,7 @@ function _fmtDash(v) {
 
 // ==================== VAT 工具栏（时间栏+按钮） ====================
 function renderVATToolbar(yearOpts, monthOpts) {
-  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
     + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
     + '<div class="period-stepper">'
     + '<select id="vat-detail-year" class="period-selector-year" onchange="onVATDetailPeriodChange()">'

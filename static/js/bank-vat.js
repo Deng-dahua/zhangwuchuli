@@ -44,8 +44,8 @@ async function renderBankTransactions(container) {
   html += '</div>';
 
   // 工具栏
-  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
-  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
+  html += '<div class="toolbar" style="flex-wrap:wrap;">';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;">';
   html += bankSelectHtml;
   html += '<button class="btn-toolbar" onclick="showUploadModal(\'bank-transaction\')">导入文件</button>';
   html += '<button class="btn-toolbar" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">生成凭证</button>';
@@ -364,8 +364,8 @@ async function renderInputVATDeductions(container) {
   html += '</div>';
 
   // 工具栏
-  html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
-  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">';
+  html += '<div class="toolbar" style="flex-wrap:wrap;">';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;">';
   html += '<button class="btn-toolbar" onclick="showUploadModal(\'input-vat-deduction\')">导入文件</button>';
   html += '<button class="btn-toolbar" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">生成凭证</button>';
   html += '<button class="btn-toolbar-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">批量删除</button>';

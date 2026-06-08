@@ -114,7 +114,7 @@ async function renderHousingFund(container) {
     <div class="module-page">
       <div class="stats-row" id="hf-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;"></div>
       <div class="toolbar">
-        <div class="toolbar-left" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="toolbar-left" style="display:flex;align-items:center;flex-wrap:wrap">
           <div class="period-selector-bar" style="display:inline-flex">
             <div class="period-stepper">
               <select id="hf-year" class="period-selector-year">${yearOpts}</select>

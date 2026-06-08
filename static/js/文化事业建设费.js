@@ -313,7 +313,7 @@ function switchCCFPageInline(pageId, id) {
 // ==================== 工具栏 ====================
 
 function renderCCFToolbar(yearOpts, monthOpts) {
-  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
     + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
     + '<div class="period-stepper">'
     + '<select id="ccf-detail-year" class="period-selector-year" onchange="onCCFDetailPeriodChange()">'

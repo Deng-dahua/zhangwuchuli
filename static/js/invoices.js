@@ -37,7 +37,7 @@ async function renderSalesInvoices(container) {
     html += '</div>';
 
     // 工具栏
-    html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+    html += '<div class="toolbar" style="flex-wrap:wrap;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'sales-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="siBatchGenBtn" onclick="batchGenerateVouchers()">生成凭证</button>';
@@ -511,7 +511,7 @@ async function renderPurchaseInvoices(container) {
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">可抵扣税额</div></div>';
     html += '</div>';
 
-    html += '<div class="toolbar" style="flex-wrap:wrap;gap:8px;">';
+    html += '<div class="toolbar" style="flex-wrap:wrap;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;">';
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">生成凭证</button>';

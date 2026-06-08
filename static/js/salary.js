@@ -176,7 +176,7 @@ function renderSalaryPage(container) {
         <div class="page-header">
             <div></div>
             <div class="page-actions">
-                <div id="salary-period-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
+                <div id="salary-period-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"></div>
             </div>
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;padding-bottom:4px">
