@@ -29,13 +29,173 @@ async function renderSocialSecurity(container) {
   if (!el) return;
   // 自动同步顶格栏期间
   if (currentPeriod && currentPeriod !== ssFilterPeriod) ssFilterPeriod = currentPeriod;
+  const [fy, fm] = (ssFilterPeriod || currentPeriod || '2025-01').split('-');
+  const selYear = fy || '2025';
+  const selMonth = fm || '01';
+
   el.innerHTML = '<div id="ss-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>'
-    + '<div class="toolbar" style="display:flex;justify-content:flex-start;gap:8px;margin-bottom:12px">'
-    + '<input type="month" class="form-control" id="ss-filter-period" value="' + ssFilterPeriod + '" onchange="ssFilterPeriod=this.value;loadSSDeclarationList()" style="width:160px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px">'
+    // 工具栏：时间栏（与顶栏同款样式）+ 按钮组
+    + '<div class="toolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+      // 时间栏 —— 复用顶栏 period-selector-bar 样式
+      + '<div class="period-selector-bar">'
+        + '<div class="period-stepper">'
+          + '<select id="ss-filter-year" class="period-selector-year" onchange="onSSPeriodChange()">' + _buildSSYearOptions(selYear) + '</select>'
+          + '<div class="stepper-arrows">'
+            + '<button class="stepper-btn stepper-up" onclick="stepSSPeriodYear(1)" title="下一年">▲</button>'
+            + '<button class="stepper-btn stepper-down" onclick="stepSSPeriodYear(-1)" title="上一年">▼</button>'
+          + '</div>'
+        + '</div>'
+        + '<div class="period-stepper">'
+          + '<select id="ss-filter-month" class="period-selector-month" onchange="onSSPeriodChange()">' + _buildSSMonthOptions(selMonth) + '</select>'
+          + '<div class="stepper-arrows">'
+            + '<button class="stepper-btn stepper-up" onclick="stepSSPeriodMonth(1)" title="下一月">▲</button>'
+            + '<button class="stepper-btn stepper-down" onclick="stepSSPeriodMonth(-1)" title="上一月">▼</button>'
+          + '</div>'
+        + '</div>'
+      + '</div>'
+      // 功能按钮
+      + '<button class="btn btn-confirm-period" onclick="loadSSDeclarationList()" title="按当前期间查询">查询</button>'
+      + '<button class="btn btn-secondary" onclick="clearSSFilter()" title="清除期间条件">清除</button>'
+      + '<button class="btn btn-secondary" onclick="triggerSSImport()" title="从Excel导入申报明细">📥 导入文件</button>'
+      + '<button class="btn btn-success" onclick="generateSSVoucher()" title="生成社保相关凭证">⚡ 生成凭证</button>'
+      + '<button class="btn btn-danger" onclick="deleteSSDeclaration()" title="删除当前期间申报记录">🗑️ 删除报表</button>'
+      // 隐藏的文件输入
+      + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
     + '</div>'
     + '<div id="ss-list-table"></div>'
     + '<div id="ss-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSSModal()"><div class="modal modal-xl" id="ss-modal-inner" style="max-width:1500px"></div></div>';
   await loadSSDeclarationList();
+}
+
+// ==================== 时间栏辅助函数 ====================
+function _buildSSYearOptions(selected) {
+  let html = '<option value="">年</option>';
+  const thisYear = new Date().getFullYear();
+  for (let y = thisYear + 1; y >= thisYear - 10; y--) {
+    const v = String(y);
+    html += '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + v + '年</option>';
+  }
+  return html;
+}
+
+function _buildSSMonthOptions(selected) {
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  let html = '<option value="">月</option>';
+  months.forEach(m => {
+    html += '<option value="' + m + '"' + (m === selected ? ' selected' : '') + '>' + m + '月</option>';
+  });
+  return html;
+}
+
+function onSSPeriodChange() {
+  const y = document.getElementById('ss-filter-year')?.value || '';
+  const m = document.getElementById('ss-filter-month')?.value || '';
+  if (y && m) {
+    ssFilterPeriod = y + '-' + m;
+  } else if (y) {
+    ssFilterPeriod = y + '-01';
+  } else {
+    ssFilterPeriod = '';
+  }
+}
+
+function stepSSPeriodYear(dir) {
+  const sel = document.getElementById('ss-filter-year');
+  if (!sel) return;
+  const cur = parseInt(sel.value) || new Date().getFullYear();
+  const next = cur + dir;
+  if (next >= 2000 && next <= 2100) {
+    sel.value = String(next);
+    onSSPeriodChange();
+  }
+}
+
+function stepSSPeriodMonth(dir) {
+  const yearSel = document.getElementById('ss-filter-year');
+  const monthSel = document.getElementById('ss-filter-month');
+  if (!yearSel || !monthSel) return;
+  let y = parseInt(yearSel.value) || new Date().getFullYear();
+  let m = parseInt(monthSel.value) || 1;
+  m += dir;
+  if (m > 12) { m = 1; y++; }
+  if (m < 1) { m = 12; y--; }
+  yearSel.value = String(y);
+  monthSel.value = String(m).padStart(2, '0');
+  onSSPeriodChange();
+}
+
+function clearSSFilter() {
+  ssFilterPeriod = '';
+  const yearSel = document.getElementById('ss-filter-year');
+  const monthSel = document.getElementById('ss-filter-month');
+  if (yearSel) yearSel.value = '';
+  if (monthSel) monthSel.value = '';
+  loadSSDeclarationList();
+}
+
+// ==================== 导入文件 ====================
+function triggerSSImport() {
+  document.getElementById('ss-import-file')?.click();
+}
+
+async function handleSSImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const period = ssFilterPeriod || currentPeriod || '2025-10';
+  // 找到当前选中的申报记录ID（如有）
+  let declId = null;
+  try {
+    const list = await api('/api/social-security/declarations?period=' + encodeURIComponent(period));
+    if (list && list.length > 0) declId = list[0].id;
+  } catch(e) {}
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('company_id', currentCompanyId);
+  fd.append('period', period);
+  if (declId) fd.append('declaration_id', declId);
+  try {
+    const res = await fetch('/api/social-security/import', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '导入失败');
+    showToast('导入成功：' + (data.message || ''));
+    await loadSSDeclarationList();
+  } catch (e) { handleError(e, '导入社保Excel'); }
+  event.target.value = '';
+}
+
+// ==================== 生成凭证 ====================
+async function generateSSVoucher() {
+  if (!currentCompanyId) { showToast('请先选择公司'); return; }
+  const period = ssFilterPeriod || currentPeriod || '2025-10';
+  try {
+    // 先尝试生成计提凭证
+    const decls = await api('/api/social-security/declarations?period=' + encodeURIComponent(period));
+    if (!decls || decls.length === 0) { showToast('当前期间暂无申报记录'); return; }
+    // 生成缴纳凭证
+    const payRes = await api('/api/social-security/generate-payment-journals?company_id=' + currentCompanyId, { method: 'POST' });
+    showToast('凭证生成成功：' + (payRes.message || JSON.stringify(payRes)));
+    await loadSSDeclarationList();
+  } catch (e) { handleError(e, '生成社保凭证'); }
+}
+
+// ==================== 删除报表 ====================
+async function deleteSSDeclaration() {
+  if (!ssFilterPeriod) { showToast('请先选择期间'); return; }
+  if (!confirm('确定删除 ' + ssFilterPeriod + ' 期间的社保申报记录吗？此操作不可恢复！')) return;
+  try {
+    const list = await api('/api/social-security/declarations?period=' + encodeURIComponent(ssFilterPeriod));
+    if (!list || list.length === 0) { showToast('该期间无申报记录'); return; }
+    for (const decl of list) {
+      await api('/api/social-security/declarations/' + decl.id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
+    }
+    showToast('删除成功');
+    ssFilterPeriod = '';
+    const yearSel = document.getElementById('ss-filter-year');
+    const monthSel = document.getElementById('ss-filter-month');
+    if (yearSel) yearSel.value = '';
+    if (monthSel) monthSel.value = '';
+    await loadSSDeclarationList();
+  } catch (e) { handleError(e, '删除社保申报'); }
 }
 
 // ==================== 列表加载 ====================
