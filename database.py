@@ -54,6 +54,30 @@ class Company(Base):
     social_security_declarations = relationship("SocialSecurityDeclaration", back_populates="company", cascade="all, delete-orphan")
     housing_fund_details = relationship("HousingFundDetail", back_populates="company", cascade="all, delete-orphan")
     housing_fund_declarations = relationship("HousingFundDeclaration", back_populates="company", cascade="all, delete-orphan")
+    departments = relationship("Department", back_populates="company", cascade="all, delete-orphan")
+    employees = relationship("Employee", back_populates="company", cascade="all, delete-orphan")
+    customers = relationship("Customer", back_populates="company", cascade="all, delete-orphan")
+    suppliers = relationship("Supplier", back_populates="company", cascade="all, delete-orphan")
+    accounts = relationship("Account", back_populates="company", cascade="all, delete-orphan")
+    periods = relationship("Period", back_populates="company")
+    fixed_assets = relationship("FixedAsset", back_populates="company", cascade="all, delete-orphan")
+    fixed_asset_depreciations = relationship("FixedAssetDepreciation", back_populates="company")
+    intangible_assets = relationship("IntangibleAsset", back_populates="company", cascade="all, delete-orphan")
+    intangible_asset_amortizations = relationship("IntangibleAssetAmortization", back_populates="company")
+    inventory_items = relationship("InventoryItem", back_populates="company", cascade="all, delete-orphan")
+    inventory_transactions = relationship("InventoryTransaction", back_populates="company")
+    inventory_balances = relationship("InventoryBalance", back_populates="company")
+    contracts = relationship("Contract", back_populates="company", cascade="all, delete-orphan")
+    contract_payments = relationship("ContractPayment", back_populates="company")
+    payments = relationship("Payment", back_populates="company")
+    sales_invoices = relationship("SalesInvoice", back_populates="company")
+    purchase_invoices = relationship("PurchaseInvoice", back_populates="company")
+    bank_configs = relationship("BankConfig", back_populates="company", cascade="all, delete-orphan")
+    bank_transactions = relationship("BankTransaction", back_populates="company")
+    input_vat_deductions = relationship("InputVATDeduction", back_populates="company")
+    column_templates = relationship("ColumnTemplate", back_populates="company", cascade="all, delete-orphan")
+    journal_entries = relationship("JournalEntry", back_populates="company")
+    salary_records = relationship("SalaryRecord", back_populates="company", cascade="all, delete-orphan")
 
 
 class CompanyShareholder(Base):
@@ -110,6 +134,7 @@ class Department(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="departments")
 
 
 # ==================== 人员档案 ====================
@@ -127,6 +152,7 @@ class Employee(Base):
     leave_date = Column(Date, comment="离职日期")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="employees")
 
 
 # ==================== 客户档案 ====================
@@ -152,6 +178,7 @@ class Customer(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="customers")
 
 
 # ==================== 供应商档案 ====================
@@ -172,6 +199,7 @@ class Supplier(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="suppliers")
 
 
 # ==================== 会计科目 ====================
@@ -191,6 +219,7 @@ class Account(Base):
     is_active = Column(Boolean, default=True)
     opening_balance = Column(Numeric(18, 2), default=0.0, comment="期初金额")
     created_at = Column(DateTime, default=datetime.now)
+    company = relationship("Company", back_populates="accounts")
 
 
 # ==================== 会计期间 ====================
@@ -204,6 +233,7 @@ class Period(Base):
     period = Column(String(7), nullable=False, comment="YYYY-MM")
     status = Column(String(20), default="开放", comment="开放/已结账")
     closed_at = Column(DateTime, nullable=True)
+    company = relationship("Company", back_populates="periods")
 
 
 # ==================== 固定资产 ====================
@@ -241,6 +271,7 @@ class FixedAsset(Base):
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="fixed_assets")
 
 
 class FixedAssetDepreciation(Base):
@@ -259,6 +290,7 @@ class FixedAssetDepreciation(Base):
     net_value = Column(Numeric(18, 2), default=0.0, comment="折旧后净值")
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
+    company = relationship("Company", back_populates="fixed_asset_depreciations")
 
 
 # ==================== 无形资产 ====================
@@ -286,6 +318,7 @@ class IntangibleAsset(Base):
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="intangible_assets")
 
 
 class IntangibleAssetAmortization(Base):
@@ -301,6 +334,7 @@ class IntangibleAssetAmortization(Base):
     net_value = Column(Numeric(18, 2), default=0.0, comment="摊销后净值")
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
+    company = relationship("Company", back_populates="intangible_asset_amortizations")
 
 
 # ==================== 库存管理 ====================
@@ -326,6 +360,7 @@ class InventoryItem(Base):
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="inventory_items")
 
 
 class InventoryTransaction(Base):
@@ -350,6 +385,7 @@ class InventoryTransaction(Base):
     operator = Column(String(50), comment="操作人")
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
+    company = relationship("Company", back_populates="inventory_transactions")
 
 
 class InventoryBalance(Base):
@@ -366,6 +402,7 @@ class InventoryBalance(Base):
     end_quantity = Column(Numeric(18, 2), default=0.0, comment="期末数量")
     total_amount = Column(Numeric(18, 2), default=0.0, comment="期末金额")
     created_at = Column(DateTime, default=datetime.now)
+    company = relationship("Company", back_populates="inventory_balances")
 
 
 # ==================== 合同管理 ====================
@@ -395,6 +432,7 @@ class Contract(Base):
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="contracts")
 
 
 class ContractPayment(Base):
@@ -413,6 +451,7 @@ class ContractPayment(Base):
     remark = Column(String(200), comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="contract_payments")
 
 
 # ==================== 付款管理 ====================
@@ -450,6 +489,7 @@ class Payment(Base):
     remark = Column(Text, comment="备注")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="payments")
 
 
 # ==================== 开具发票（销售发票）====================
@@ -502,6 +542,7 @@ class SalesInvoice(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="sales_invoices")
 
 # ==================== 取得发票（采购发票）====================
 
@@ -558,6 +599,7 @@ class PurchaseInvoice(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="purchase_invoices")
 
 # ==================== 银行配置（不同银行不同列映射）====================
 
@@ -573,6 +615,7 @@ class BankConfig(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="bank_configs")
 
 
 # ==================== 银行流水 ====================
@@ -615,6 +658,7 @@ class BankTransaction(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="bank_transactions")
 
 
 # ==================== 进项抵扣 ====================
@@ -667,6 +711,7 @@ class InputVATDeduction(Base):
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="input_vat_deductions")
 
 
 # ==================== 列映射模板（动态表头）====================
@@ -685,6 +730,7 @@ class ColumnTemplate(Base):
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="column_templates")
 
 
 class JournalEntry(Base):
@@ -721,6 +767,7 @@ class JournalEntry(Base):
     ref_id = Column(Integer, comment="关联业务ID（销项发票=SalesInvoice.id, 进项抵扣=InputVATDeduction.id）")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="journal_entries")
 
 
 # ==================== 数据库迁移与初始化 ====================
@@ -3002,6 +3049,7 @@ class SalaryRecord(Base):
     __table_args__ = (
         Index('idx_salary_company_period', 'company_id', 'period'),
     )
+    company = relationship("Company", back_populates="salary_records")
 def init_db():
     """初始化数据库：建表 → 迁移 → 初始化已有公司的种子数据
 
