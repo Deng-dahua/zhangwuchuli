@@ -334,6 +334,7 @@ function renderCCFToolbar(yearOpts, monthOpts) {
     + '</div></div></div>'
     + '<button style="' + btnStyle + '" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
     + '<button style="' + btnStyle + '" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
+    + '<button style="' + btnStyle + '" onclick="showCCFEditModal()" title="编辑申报表基本信息">编辑</button>'
     + '<button style="' + primaryBtnStyle + '" onclick="ccfSaveCurrent()" title="保存当前申报表">保存</button>'
     + '<button style="' + btnStyle + '" onclick="ccfAutoCalculate()" title="自动计算各栏次">自动计算</button>'
     + '<button style="' + dangerBtnStyle + '" onclick="ccfDeleteCurrent()" title="删除当前申报表">删除报表</button>'
@@ -563,9 +564,9 @@ async function ccfSaveCurrent() {
   try {
     var result;
     if (ccfCurrentData.id) {
-      result = await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '?company_id=' + currentCompanyId, { method: 'PUT', body: JSON.stringify(payload) });
+      result = await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id, { method: 'PUT', body: JSON.stringify(payload) });
     } else {
-      result = await api('/api/cultural-construction-fee/declarations?company_id=' + currentCompanyId, { method: 'POST', body: JSON.stringify(payload) });
+      result = await api('/api/cultural-construction-fee/declarations', { method: 'POST', body: JSON.stringify(payload) });
       if (result.id) ccfCurrentData.id = result.id;
     }
     toast('保存成功');
@@ -580,7 +581,7 @@ async function ccfDeleteCurrent() {
   }
   if (!confirm('确定删除「' + ccfCurrentData.period + '」的申报表吗？')) return;
   try {
-    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
+    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id, { method: 'DELETE' });
     toast('删除成功');
     ccfCurrentData = null;
     ccfSelectedId = null;
@@ -596,7 +597,7 @@ async function ccfAutoCalculate() {
     return;
   }
   try {
-    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '/auto-calculate?company_id=' + currentCompanyId, { method: 'POST' });
+    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '/auto-calculate', { method: 'POST' });
     toast('自动计算完成');
     // 重新加载
     var data = await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id);
@@ -637,7 +638,7 @@ async function createCCFDeclaration() {
   var note = document.getElementById('ccf-modal-note').value;
   if (!period) { toast('请选择税款所属期', 'warning'); return; }
   try {
-    var resp = await api('/api/cultural-construction-fee/declarations?company_id=' + currentCompanyId, {
+    var resp = await api('/api/cultural-construction-fee/declarations', {
       method: 'POST',
       body: JSON.stringify({ period: period, taxpayer_name: taxpayer, note: note }),
     });
@@ -673,7 +674,7 @@ async function updateCCFDeclaration() {
   var taxpayer = document.getElementById('ccf-edit-taxpayer').value;
   var status = document.getElementById('ccf-edit-status').value;
   try {
-    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '?company_id=' + currentCompanyId, {
+    await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id, {
       method: 'PUT',
       body: JSON.stringify({ period: period, taxpayer_name: taxpayer, status: status }),
     });

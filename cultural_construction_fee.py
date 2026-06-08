@@ -20,6 +20,32 @@ from database import (
 router = APIRouter(prefix="/api/cultural-construction-fee", tags=["文化事业建设费"])
 
 
+# ==================== 工具函数 ====================
+
+def _ccf_build_form_main_from_db(decl):
+    """从 ORM 列构建 form_main dict（JSON 为空时的 fallback）"""
+    row_keys = [
+        "row1_taxable_income", "row2_tax_exempt_income",
+        "row3_deduction_beginning", "row4_deduction_current_period",
+        "row5_taxable_income_deduction", "row6_tax_exempt_deduction",
+        "row7_deduction_ending_balance", "row8_taxable_sales",
+        "row9_fee_rate",
+        "row10_payable_fee", "row11_unpaid_beginning",
+        "row12_paid_current_period", "row13_prepaid",
+        "row14_paid_last_period", "row15_paid_arrears",
+        "row16_unpaid_ending", "row17_arrears",
+        "row18_fill_refund", "row19_inspected_supplement",
+    ]
+    result = {}
+    for key in row_keys:
+        if key == "row9_fee_rate":
+            result["row9_fee_rate"] = float(getattr(decl, "row9_fee_rate", 0.03) or 0.03)
+        else:
+            result[key + "_current"] = float(getattr(decl, key + "_current", 0) or 0)
+            result[key + "_ytd"] = float(getattr(decl, key + "_ytd", 0) or 0)
+    return result
+
+
 # ==================== Pydantic 模型 ====================
 
 class DeductionItem(BaseModel):
@@ -161,6 +187,7 @@ def get_declaration(declaration_id: int, company_id: int = Query(), db: Session 
         CulturalConstructionFeeDeduction.declaration_id == declaration_id
     ).order_by(CulturalConstructionFeeDeduction.seq).all()
 
+    # 从 JSON 读取，若为空则从 DB 列合成
     form_main = {}
     form_deduction = {}
     try:
@@ -168,6 +195,8 @@ def get_declaration(declaration_id: int, company_id: int = Query(), db: Session 
             form_main = json.loads(decl.form_main) if isinstance(decl.form_main, str) else decl.form_main
     except Exception:
         form_main = {}
+    if not form_main:
+        form_main = _ccf_build_form_main_from_db(decl)
     try:
         if decl.form_deduction:
             form_deduction = json.loads(decl.form_deduction) if isinstance(decl.form_deduction, str) else decl.form_deduction
