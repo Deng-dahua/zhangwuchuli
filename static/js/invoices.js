@@ -142,6 +142,12 @@ async function renderSalesInvoices(container) {
   } catch (e) {
     console.error('[InvoiceRender]', e);
     toast(e.message, 'error');
+    // 兜底：防止白屏，始终渲染一个可恢复的状态
+    if (el) {
+      el.innerHTML = '<div style="padding:40px;text-align:center;color:#6b7280">'
+        + '<p style="margin-bottom:16px">页面加载异常：' + escapeHtml(e.message) + '</p>'
+        + '<button class="btn btn-primary" onclick="renderSalesInvoices()">重新加载</button></div>';
+    }
   }
 }
 

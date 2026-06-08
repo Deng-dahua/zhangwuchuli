@@ -361,12 +361,13 @@ function renderCCFMainForm(data, main) {
   h += '填表日期：' + escapeHtml(data.fill_date || '') + '&nbsp;&nbsp;状态：<span class="badge badge-info">' + escapeHtml(data.status || '草稿') + '</span>';
   h += '</div></div>';
 
-  // 主表 19 行 × 3 列（栏次/本月数/本年累计）
+  // 主表 19 行 × 4 列（项目/栏次/本月数/本年累计）
   h += '<table class="vat-form-table" style="font-size:12px;width:100%">';
-  h += '<colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>';
+  h += '<colgroup><col style="width:38%"><col style="width:7%"><col style="width:27.5%"><col style="width:27.5%"></colgroup>';
   h += '<thead>';
   h += '<tr style="background:#d9e2f3">';
   h += '<th style="padding:6px 8px">项　　目</th>';
+  h += '<th style="padding:6px 8px;text-align:center">栏次</th>';
   h += '<th style="padding:6px 8px;text-align:center">本月（期）数</th>';
   h += '<th style="padding:6px 8px;text-align:center">本年累计</th>';
   h += '</tr>';
@@ -380,10 +381,13 @@ function renderCCFMainForm(data, main) {
     var isCalc = !!row.calc;
 
     h += '<tr style="' + bg + '">';
+    // 项目
     h += '<td style="padding:5px 8px;font-size:11px">';
-    h += '<span style="font-weight:600">' + rn + '.</span> ' + row.label;
+    h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
     h += '</td>';
+    // 栏次
+    h += '<td style="padding:5px 4px;text-align:center;font-size:11px;font-weight:600">' + rn + '</td>';
     // 本月数
     var curVal = _ccfGetVal(main, row.key + '_current');
     h += '<td style="padding:4px 6px;text-align:right">';
