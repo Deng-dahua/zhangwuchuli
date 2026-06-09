@@ -789,17 +789,18 @@ async function _loadContactDetail(apiPrefix, name) {
     html += '<table><thead><tr>' +
       '<th>日期</th><th>凭证号</th><th>摘要</th><th>科目</th>' +
       '<th class="num">借方</th><th class="num">贷方</th>' +
-      '<th class="num">余额</th>' +
+      '<th style="text-align:center">余额方向</th><th class="num">余额</th>' +
       '</tr></thead><tbody>';
     // 期初行
     let obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
     html += '<tr style="background:#f8fafc">' +
       '<td></td><td></td><td style="color:#6b7280;font-style:italic">上期结转</td><td></td>' +
       '<td class="num"></td><td class="num"></td>' +
-      '<td class="num" style="font-weight:600">' + obDir + ' ' + obFmt + '</td>' +
+      '<td style="text-align:center;font-weight:600">' + obDir + '</td>' +
+      '<td class="num" style="font-weight:600">' + obFmt + '</td>' +
       '</tr>';
     if (data.rows.length === 0) {
-      html += '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:30px">该期间无往来明细记录</td></tr>';
+      html += '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:30px">该期间无往来明细记录</td></tr>';
     } else {
       let totalDr = 0, totalCr = 0;
       data.rows.forEach(function(r) {
@@ -814,7 +815,8 @@ async function _loadContactDetail(apiPrefix, name) {
           '<td>' + r.account_code + ' ' + r.account_name + '</td>' +
           '<td class="num">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '') + '</td>' +
           '<td class="num">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '') + '</td>' +
-          '<td class="num" style="font-weight:600">' + balDir + ' ' + balHtml + '</td>' +
+          '<td style="text-align:center;font-weight:600">' + balDir + '</td>' +
+          '<td class="num" style="font-weight:600">' + balHtml + '</td>' +
           '</tr>';
       });
       // 本页合计行
@@ -822,10 +824,11 @@ async function _loadContactDetail(apiPrefix, name) {
       let endDir = endBal === 0 ? '平' : (endBal > 0 ? '借' : '贷');
       let endFmt = endBal === 0 ? '¥0.00' : (endBal >= 0 ? '¥' + fmt(endBal) : '<span style="color:var(--danger)">-¥' + fmt(-endBal) + '</span>');
       html += '<tr style="background:#f0f9ff;font-weight:600">' +
-        '<td colspan="4" style="text-align:right;color:#6b7280">本页合计</td>' +
+        '<td colspan="5" style="text-align:right;color:#6b7280">本页合计</td>' +
         '<td class="num">¥' + fmt(totalDr) + '</td>' +
         '<td class="num">¥' + fmt(totalCr) + '</td>' +
-        '<td class="num">' + endDir + ' ' + endFmt + '</td>' +
+        '<td style="text-align:center">' + endDir + '</td>' +
+        '<td class="num">' + endFmt + '</td>' +
         '</tr>';
     }
     html += '</tbody></table>';
