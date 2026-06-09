@@ -434,7 +434,9 @@ function rebuildContactDropdown(accountCode) {
   let showCust = false, showSupp = false, showEmp = false;
   const code4 = accountCode.substring(0, 4);
   if (code4 === '1221') {
+    // 其他应收款：人员(工资/借款/备用金) + 供应商(押金/保证金)
     showEmp = true;
+    showSupp = true;
   } else if (code4 === '1122' || code4 === '2203') {
     showCust = true;
   } else if (code4 === '1123' || code4 === '2202') {
