@@ -350,6 +350,8 @@ function buildSSGrandTotal(allItems) {
     html += '<td class="num" style="font-weight:700;font-size:13px">' + (a > 0 ? a.toLocaleString() : '') + '</td>';
   });
   html += '<td></td><td></td></tr>'; // 凭证号 + 操作（合计行）
+  html += '</tbody></table></div></div>';
+  return html;
 }
 
 // ============ 主渲染表格（三独立表格）============
