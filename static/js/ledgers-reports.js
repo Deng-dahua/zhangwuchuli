@@ -786,15 +786,15 @@ async function _loadContactDetail(apiPrefix, name) {
       '<span style="font-size:13px;color:#6b7280">期初余额：' + obFmt + '</span>' +
       '<span style="font-size:13px;color:#6b7280">期间：<b style="color:var(--gray-800)">' + from + ' ~ ' + to + '</b></span>' +
       '</div>';
-    html += '<table><thead><tr>' +
-      '<th>日期</th><th>凭证号</th><th>摘要</th><th>科目</th>' +
-      '<th class="num">借方</th><th class="num">贷方</th>' +
-      '<th style="text-align:center">余额方向</th><th class="num">余额</th>' +
+    html += '<table style="table-layout:auto"><thead><tr>' +
+      '<th style="width:80px">日期</th><th style="width:56px">凭证号</th><th style="min-width:160px">摘要</th><th style="min-width:120px">科目</th>' +
+      '<th style="width:90px" class="num">借方</th><th style="width:90px" class="num">贷方</th>' +
+      '<th style="width:56px;text-align:center">余额方向</th><th style="width:100px" class="num">余额</th>' +
       '</tr></thead><tbody>';
     // 期初行
     let obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
     html += '<tr style="background:#f8fafc">' +
-      '<td></td><td></td><td style="color:#6b7280;font-style:italic">上期结转</td><td></td>' +
+      '<td></td><td></td><td style="color:#6b7280;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">上期结转</td><td></td>' +
       '<td class="num"></td><td class="num"></td>' +
       '<td style="text-align:center;font-weight:600">' + obDir + '</td>' +
       '<td class="num" style="font-weight:600">' + obFmt + '</td>' +
@@ -809,10 +809,10 @@ async function _loadContactDetail(apiPrefix, name) {
         let balDir = r.balance === 0 ? '平' : (r.balance > 0 ? '借' : '贷');
         let balHtml = r.balance === 0 ? '¥0.00' : (r.balance >= 0 ? '¥' + fmt(r.balance) : '<span style="color:var(--danger)">-¥' + fmt(-r.balance) + '</span>');
         html += '<tr>' +
-          '<td>' + r.voucher_date + '</td>' +
-          '<td>' + r.voucher_no + '</td>' +
-          '<td>' + (r.summary || '') + '</td>' +
-          '<td>' + r.account_code + ' ' + r.account_name + '</td>' +
+          '<td style="white-space:nowrap">' + r.voucher_date + '</td>' +
+          '<td style="white-space:nowrap">' + r.voucher_no + '</td>' +
+          '<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px" title="' + escapeHtml(r.summary||'') + '">' + escapeHtml(r.summary || '') + '</td>' +
+          '<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">' + r.account_code + ' ' + r.account_name + '</td>' +
           '<td class="num">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '') + '</td>' +
           '<td class="num">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '') + '</td>' +
           '<td style="text-align:center;font-weight:600">' + balDir + '</td>' +
@@ -824,7 +824,7 @@ async function _loadContactDetail(apiPrefix, name) {
       let endDir = endBal === 0 ? '平' : (endBal > 0 ? '借' : '贷');
       let endFmt = endBal === 0 ? '¥0.00' : (endBal >= 0 ? '¥' + fmt(endBal) : '<span style="color:var(--danger)">-¥' + fmt(-endBal) + '</span>');
       html += '<tr style="background:#f0f9ff;font-weight:600">' +
-        '<td colspan="5" style="text-align:right;color:#6b7280">本页合计</td>' +
+        '<td colspan="4" style="text-align:right;color:#6b7280">本页合计</td>' +
         '<td class="num">¥' + fmt(totalDr) + '</td>' +
         '<td class="num">¥' + fmt(totalCr) + '</td>' +
         '<td style="text-align:center">' + endDir + '</td>' +
