@@ -108,9 +108,9 @@ function renderJeTable(data) {
     return;
   }
 
-  let html = '<table><thead><tr>';
-  html += '<th style="width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
-  html += '<th>期间</th><th>凭证号</th><th>摘要</th><th>科目编码</th><th>科目名称</th><th>往来项目</th><th>规格型号</th><th>数量</th><th>单位</th><th style="text-align:right">单价</th><th style="text-align:right">借方金额</th><th style="text-align:right">贷方金额</th><th>来源</th><th>操作</th>';
+  let html = '<table style="table-layout:auto;width:auto;min-width:100%"><thead><tr>';
+  html += '<th style="width:36px;min-width:36px"><input type="checkbox" id="je-select-all" onchange="jeToggleAll(this)" title="全选"></th>';
+  html += '<th style="white-space:nowrap">期间</th><th style="white-space:nowrap">凭证号</th><th style="min-width:120px">摘要</th><th style="white-space:nowrap;min-width:80px">科目编码</th><th style="min-width:120px">科目名称</th><th style="white-space:nowrap">往来项目</th><th style="white-space:nowrap">规格型号</th><th style="white-space:nowrap">数量</th><th style="white-space:nowrap">单位</th><th style="text-align:right;white-space:nowrap">单价</th><th style="text-align:right;white-space:nowrap">借方金额</th><th style="text-align:right;white-space:nowrap">贷方金额</th><th style="white-space:nowrap">来源</th><th style="white-space:nowrap;min-width:100px">操作</th>';
   html += '</tr></thead><tbody>';
 
   // 按凭证号分组
@@ -131,23 +131,23 @@ function renderJeTable(data) {
       var showContact = isContactAccount(r.account_code);
       html += '<tr>';
       html += '<td style="text-align:center;vertical-align:middle">' + (idx === 0 ? '<input type="checkbox" class="je-row-check" data-id="' + r.id + '" data-all-ids="' + allIds + '" onchange="jeOnCheck()">' : '') + '</td>';
-      html += '<td>' + r.period + '</td>';
-      html += '<td style="text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
-      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
-      html += '<td style="font-family:monospace;font-size:12px">' + (r.account_code || '-') + '</td>';
+      html += '<td style="white-space:nowrap">' + r.period + '</td>';
+      html += '<td style="white-space:nowrap;text-align:center">' + (r.voucher_word || '记') + '-' + String(r.voucher_no).padStart(4, '0') + '</td>';
+      html += '<td style="min-width:100px" title="' + escapeHtml(r.summary || '') + '">' + (r.summary || '-') + '</td>';
+      html += '<td style="font-family:monospace;font-size:12px;white-space:nowrap">' + (r.account_code || '-') + '</td>';
       var accFull = (r.account_full_name || r.account_name || '-');
       var accDisplay = accFull.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' / ');
-      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(accFull) + '">' + escapeHtml(accDisplay) + '</td>';
-      html += '<td>' + (showContact ? (r.contact_project || '-') : '-') + '</td>';
-      html += '<td>' + (r.spec_model || '-') + '</td>';
-      html += '<td style="text-align:right">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
-      html += '<td>' + (r.unit || '-') + '</td>';
-      html += '<td style="text-align:right">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
-      html += '<td style="text-align:right">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
-      html += '<td style="text-align:right">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
+      html += '<td style="min-width:100px" title="' + escapeHtml(accFull) + '">' + escapeHtml(accDisplay) + '</td>';
+      html += '<td style="white-space:nowrap">' + (showContact ? (r.contact_project || '-') : '-') + '</td>';
+      html += '<td style="white-space:nowrap">' + (r.spec_model || '-') + '</td>';
+      html += '<td style="text-align:right;white-space:nowrap">' + (r.quantity !== 0 ? r.quantity : '-') + '</td>';
+      html += '<td style="white-space:nowrap">' + (r.unit || '-') + '</td>';
+      html += '<td style="text-align:right;white-space:nowrap">' + (r.unit_price !== 0 ? '¥' + fmt(r.unit_price) : '-') + '</td>';
+      html += '<td style="text-align:right;white-space:nowrap">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '-') + '</td>';
+      html += '<td style="text-align:right;white-space:nowrap">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '-') + '</td>';
       const src = r.source || '手动录入';
       const srcColors = { '销项发票': '#1d4ed8', '进项抵扣': '#7c3aed', '手动录入': '#6b7280' };
-      html += '<td><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '销项发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
+      html += '<td style="white-space:nowrap"><span style="font-size:12px;color:' + (srcColors[src] || '#6b7280') + ';background:' + (src !== '手动录入' ? (src === '销项发票' ? '#dbeafe' : '#ede9fe') : '#f3f4f6') + ';padding:2px 8px;border-radius:10px;white-space:nowrap">' + src + '</span></td>';
       html += '<td style="white-space:nowrap">';
       html += '<button class="btn btn-sm btn-secondary" onclick="editJeEntry(' + r.id + ')">编辑</button>';
       html += '<button class="btn btn-sm btn-danger" onclick="deleteJeEntry(' + r.id + ')">删除</button>';

@@ -1259,6 +1259,16 @@ def create_account(data: AccountCreate, company_id: int = Query(...), db: Sessio
     parent_code = data.parent_code
     if not code or not name:
         raise HTTPException(400, detail="科目编码和名称不能为空")
+    # 一级科目限制：仅6个往来科目可作为一级科目，其他必须设二级
+    ALLOWED_L1_CODES = {'1122', '2202', '2203', '1123', '1221', '2241'}
+    if level == 1:
+        code_root = code[:4]
+        if code_root not in ALLOWED_L1_CODES:
+            raise HTTPException(400,
+                detail="该科目不可作为一级科目使用。仅以下6个往来科目允许设置一级科目："
+                       "应收账款(1122)、应付账款(2202)、预收账款(2203)、"
+                       "预付账款(1123)、其他应收款(1221)、其他应付款(2241)。"
+                       "请选择2级（含）以上级次。")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code,
                   opening_balance=data.opening_balance)

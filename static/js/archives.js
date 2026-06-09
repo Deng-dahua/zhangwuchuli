@@ -12,6 +12,17 @@ function _nextArchiveCode(prefix, list) {
 }
 
 // ==================== 会计科目 ====================
+// 允许作为一级科目使用的6个往来科目（其他科目必须设置二级）
+const CONTACT_ACCOUNTS_L1 = [
+  { code: '1122', name: '应收账款' },
+  { code: '2202', name: '应付账款' },
+  { code: '2203', name: '预收账款' },
+  { code: '1123', name: '预付账款' },
+  { code: '1221', name: '其他应收款' },
+  { code: '2241', name: '其他应付款' }
+];
+const CONTACT_CODES_L1 = CONTACT_ACCOUNTS_L1.map(function(a) { return a.code; });
+const CONTACT_NAMES_L1 = CONTACT_ACCOUNTS_L1.map(function(a) { return a.name; }).join('、');
 async function renderAccounts(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML = `
@@ -147,6 +158,32 @@ function onAccLevelChange() {
   }
 
   computeNextAccCode();
+  // 显示一级科目限制提示
+  showL1RestrictionTip();
+}
+
+function showL1RestrictionTip() {
+  const level = parseInt(document.getElementById('na-level')?.value || '1');
+  let tipEl = document.getElementById('na-l1-tip');
+  if (level === 1) {
+    const codeEl = document.getElementById('na-code');
+    const codeRoot = codeEl?.value?.substring(0, 4) || '';
+    const isAllowed = CONTACT_CODES_L1.includes(codeRoot);
+    if (!isAllowed) {
+      if (!tipEl) {
+        tipEl = document.createElement('div');
+        tipEl.id = 'na-l1-tip';
+        tipEl.style.cssText = 'color:#dc2626;font-size:12px;margin-top:4px;padding:6px 10px;background:#fef2f2;border-radius:4px;border:1px solid #fecaca';
+        const formGrid = document.querySelector('.modal .form-grid');
+        if (formGrid) formGrid.after(tipEl);
+      }
+      tipEl.innerHTML = '⚠️ 该科目不可作为一级科目。仅' + CONTACT_NAMES_L1 + '（6个往来科目）允许一级，其他科目必须设置2级及以上。';
+    } else {
+      if (tipEl) tipEl.remove();
+    }
+  } else {
+    if (tipEl) tipEl.remove();
+  }
 }
 
 function computeNextAccCode() {
@@ -267,6 +304,14 @@ async function saveNewAccount() {
   const parent_code = document.getElementById('na-parent').value || null;
   const opening_balance = parseFloat(document.getElementById('na-ob').value) || 0;
   if (!code || !name) { toast('请填写科目编码和名称', 'error'); return; }
+  // 一级科目限制：仅6个往来科目可作为一级科目，其他必须设二级
+  if (level === 1) {
+    const codeRoot = code.substring(0, 4);
+    if (!CONTACT_CODES_L1.includes(codeRoot)) {
+      toast('该科目不可作为一级科目使用。\n\n仅以下6个往来科目允许设置一级科目：\n' + CONTACT_NAMES_L1 + '\n\n请选择2级（含）以上级次，并指定上级科目。', 'error');
+      return;
+    }
+  }
   try {
     await api('/api/accounts', { method: 'POST', body: JSON.stringify({ code, name, category, balance_direction, level, parent_code, opening_balance }) });
     toast('科目创建成功', 'success');
