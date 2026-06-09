@@ -241,13 +241,15 @@ async function showVoucherDetail(voucherStr) {
     data.entries.forEach((e, idx) => {
       html += '<tr>';
       html += '<td style="color:var(--gray-400)">' + (idx + 1) + '</td>';
-      html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e.summary || '') + '">' + escapeHtml(e.summary || '-') + '</td>';
+      html += '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e.summary || '') + '">' + escapeHtml(e.summary || '-') + '</td>';
       html += '<td>' + e.account_code + '</td>';
       var afn = (e.account_full_name || e.account_name || '-');
       var afd = afn.split(' / ').map(function(s) { var m = s.match(/^\d+\s+(.*)/); return m ? m[1] : s; }).join(' / ');
-      html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(afn) + '">' + escapeHtml(afd) + '</td>';
-      html += '<td style="text-align:right;color:#e02424;font-weight:600">' + (e.debit_amount > 0 ? '¥' + e.debit_amount.toLocaleString() : '') + '</td>';
-      html += '<td style="text-align:right;color:#0e9f6e;font-weight:600">' + (e.credit_amount > 0 ? '¥' + e.credit_amount.toLocaleString() : '') + '</td>';
+      html += '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis" title="' + escapeHtml(afn) + '">' + escapeHtml(afd) + '</td>';
+      var deb = e.debit_amount || 0;
+      var cred = e.credit_amount || 0;
+      html += '<td style="text-align:right;color:#e02424;font-weight:600">' + (deb !== 0 ? '¥' + deb.toLocaleString() : '') + '</td>';
+      html += '<td style="text-align:right;color:#0e9f6e;font-weight:600">' + (cred !== 0 ? '¥' + cred.toLocaleString() : '') + '</td>';
       html += '</tr>';
     });
     // 合计行
@@ -262,7 +264,7 @@ async function showVoucherDetail(voucherStr) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'modal-overlay';
-    overlay.innerHTML = '<div class="modal modal-lg" style="max-width:680px;padding:20px"><button class="modal-close" onclick="closeModal()">&times;</button>' + html + '</div>';
+    overlay.innerHTML = '<div class="modal modal-lg" style="max-width:900px;padding:20px"><button class="modal-close" onclick="closeModal()">&times;</button>' + html + '</div>';
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
     document.body.appendChild(overlay);
   } catch (e) {
