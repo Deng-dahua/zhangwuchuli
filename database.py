@@ -1410,11 +1410,49 @@ def auto_generate_journals(db):
     companies = db.query(Company).order_by(Company.id).all()
     total = 0
     for comp in companies:
+        # ── 确保关键科目存在（销项发票进序时账必需的科目） ──
+        _ensure_account(db, comp.id, "1122", "应收账款", "资产", "借")
+        _ensure_account(db, comp.id, "2210", "应交税费", "负债", "贷")
+        _ensure_account(db, comp.id, "221001", "应交增值税", "负债", "贷")
+        _ensure_account(db, comp.id, "221001001", "销项税额", "负债", "贷")
+        _ensure_account(db, comp.id, "6001", "主营业务收入", "收入", "贷")
+
         invoices = db.query(SalesInvoice).filter(
             SalesInvoice.company_id == comp.id,
             SalesInvoice.status == "正常",
             SalesInvoice.is_positive == True
         ).order_by(SalesInvoice.invoice_date.asc()).all()
+
+        # 公司级别预加载科目解析器（所有发票共用）
+        get_full_name, account_map = _build_account_name_resolver(db, comp.id)
+
+        def ensure_revenue_sub(gn):
+            """确保主营业务收入下存在对应货物的子科目"""
+            if not gn:
+                return ("6001", get_full_name("6001"))
+            ext = db.query(Account).filter(
+                Account.company_id == comp.id,
+                Account.parent_code == "6001",
+                Account.name == gn
+            ).first()
+            if ext:
+                return (ext.code, get_full_name(ext.code))
+            max_sub = db.query(Account.code).filter(
+                Account.company_id == comp.id,
+                Account.parent_code == "6001"
+            ).order_by(Account.code.desc()).first()
+            next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+            # 科目编码规则：6001 下级为 600101/600102/...（每张发票唯一货物子科目）
+            new_code = f"6001{next_num:02d}"
+            new_acc = Account(
+                company_id=comp.id, code=new_code, name=gn,
+                category="收入", balance_direction="贷",
+                level=2, parent_code="6001",
+            )
+            db.add(new_acc)
+            db.flush()
+            account_map[new_code] = new_acc
+            return (new_code, get_full_name(new_code))
 
         for inv in invoices:
             # 幂等检查：该发票已生成过凭证则跳过
@@ -1428,36 +1466,6 @@ def auto_generate_journals(db):
             buyer = inv.buyer_name or "客户"
             goods = inv.goods_name or ""
             summary = f"销售{goods or '货物'}给{buyer}"
-
-            get_full_name, account_map = _build_account_name_resolver(db, comp.id)
-
-            def ensure_revenue_sub(gn):
-                """确保主营业务收入下存在对应货物的子科目"""
-                if not gn:
-                    return ("6001", get_full_name("6001"))
-                ext = db.query(Account).filter(
-                    Account.company_id == comp.id,
-                    Account.parent_code == "6001",
-                    Account.name == gn
-                ).first()
-                if ext:
-                    return (ext.code, get_full_name(ext.code))
-                max_sub = db.query(Account.code).filter(
-                    Account.company_id == comp.id,
-                    Account.parent_code == "6001"
-                ).order_by(Account.code.desc()).first()
-                next_num = int(max_sub[0][4:7]) + 1 if (max_sub and max_sub[0] and len(max_sub[0]) >= 6) else 1
-                # 科目编码规则：6001 下级为 600101/600102/...（6位，2位序号）
-                new_code = f"6001{next_num:02d}"
-                new_acc = Account(
-                    company_id=comp.id, code=new_code, name=gn,
-                    category="收入", balance_direction="贷",
-                    level=2, parent_code="6001",
-                )
-                db.add(new_acc)
-                db.flush()
-                account_map[new_code] = new_acc
-                return (new_code, get_full_name(new_code))
 
             period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
             date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
@@ -1537,6 +1545,13 @@ def auto_generate_single_invoice(db, inv):
     if existing:
         return
 
+    # ── 确保关键科目存在 ──
+    _ensure_account(db, inv.company_id, "1122", "应收账款", "资产", "借")
+    _ensure_account(db, inv.company_id, "2210", "应交税费", "负债", "贷")
+    _ensure_account(db, inv.company_id, "221001", "应交增值税", "负债", "贷")
+    _ensure_account(db, inv.company_id, "221001001", "销项税额", "负债", "贷")
+    _ensure_account(db, inv.company_id, "6001", "主营业务收入", "收入", "贷")
+
     get_full_name, account_map = _build_account_name_resolver(db, inv.company_id)
 
     def ensure_revenue_sub(gn):
@@ -1554,7 +1569,7 @@ def auto_generate_single_invoice(db, inv):
             Account.parent_code == "6001"
         ).order_by(Account.code.desc()).first()
         next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
-        new_code = f"6001{next_num:03d}"
+        new_code = f"6001{next_num:02d}"
         new_acc = Account(
             company_id=inv.company_id, code=new_code, name=gn,
             category="收入", balance_direction="贷",
@@ -2082,6 +2097,9 @@ def _ensure_account(db, company_id, code, name, category, direction, parent_code
                 "6603": None, "660301": "6603",
                 "2241": None,
                 "1221": None,
+                "1122": None,
+                "1002": None,
+                "6001": None,
             }
             parent_code = parent_map.get(code)
         level = 1
