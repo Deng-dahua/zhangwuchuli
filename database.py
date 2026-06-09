@@ -509,16 +509,16 @@ class SalesInvoice(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_no = Column(String(30), nullable=True, comment="发票号码")
+    invoice_no = Column(String(30), comment="发票号码")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
     # 销方信息
     seller_tax_no = Column(String(50), comment="销方识别号")
-    seller_name = Column(String(100), comment="销方名称")
+    seller_name = Column(String(100), nullable=False, comment="销方名称")
     # 购方信息
     buyer_tax_no = Column(String(50), comment="购方识别号")
-    buyer_name = Column(String(100), comment="购买方名称")
+    buyer_name = Column(String(100), nullable=False, comment="购买方名称")
     # 发票日期与分类
-    invoice_date = Column(Date, nullable=True, comment="开票日期")
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
     tax_category_code = Column(String(30), comment="税收分类编码")
     specific_business_type = Column(String(50), comment="特定业务类型")
     # 货物明细
@@ -560,16 +560,16 @@ class PurchaseInvoice(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_no = Column(String(30), nullable=True, comment="发票号码")
+    invoice_no = Column(String(30), comment="发票号码")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
     # 销方信息
     seller_tax_no = Column(String(50), comment="销方识别号")
-    seller_name = Column(String(100), comment="销方名称")
+    seller_name = Column(String(100), nullable=False, comment="销方名称")
     # 购方信息
     buyer_tax_no = Column(String(50), comment="购方识别号")
-    buyer_name = Column(String(100), comment="购买方名称")
+    buyer_name = Column(String(100), nullable=False, comment="购买方名称")
     # 发票日期与分类
-    invoice_date = Column(Date, nullable=True, comment="开票日期")
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
     tax_category_code = Column(String(30), comment="税收分类编码")
     specific_business_type = Column(String(50), comment="特定业务类型")
     # 货物明细
@@ -610,16 +610,16 @@ class BookkeepingInvoice(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
     # 发票基本信息
     invoice_code = Column(String(30), comment="发票代码")
-    invoice_no = Column(String(30), nullable=True, comment="发票号码")
+    invoice_no = Column(String(30), comment="发票号码")
     digital_invoice_no = Column(String(50), comment="数电发票号码")
     # 销方信息
     seller_tax_no = Column(String(50), comment="销方识别号")
-    seller_name = Column(String(100), comment="销方名称")
+    seller_name = Column(String(100), nullable=False, comment="销方名称")
     # 购方信息
     buyer_tax_no = Column(String(50), comment="购方识别号")
-    buyer_name = Column(String(100), comment="购买方名称")
+    buyer_name = Column(String(100), nullable=False, comment="购买方名称")
     # 发票日期与分类
-    invoice_date = Column(Date, nullable=True, comment="开票日期")
+    invoice_date = Column(Date, nullable=False, comment="开票日期")
     tax_category_code = Column(String(30), comment="税收分类编码")
     specific_business_type = Column(String(50), comment="特定业务类型")
     # 货物明细
@@ -1323,6 +1323,62 @@ def migrate_schema(db):
             db.commit()
         except Exception:
             db.rollback()
+
+
+    # ── 20. 发票表关键字段 NOT NULL 约束迁移 ──
+    # SQLite 不支持 ALTER COLUMN，需要重建表
+    _not_null_migrations = [
+        ("sales_invoices", "invoice_date", "DATE", "2000-01-01"),
+        ("sales_invoices", "seller_name", "VARCHAR(100)", "未知销方"),
+        ("sales_invoices", "buyer_name", "VARCHAR(100)", "未知购方"),
+        ("purchase_invoices", "invoice_date", "DATE", "2000-01-01"),
+        ("purchase_invoices", "seller_name", "VARCHAR(100)", "未知销方"),
+        ("purchase_invoices", "buyer_name", "VARCHAR(100)", "未知购方"),
+        ("bookkeeping_invoices", "invoice_date", "DATE", "2000-01-01"),
+        ("bookkeeping_invoices", "seller_name", "VARCHAR(100)", "未知销方"),
+        ("bookkeeping_invoices", "buyer_name", "VARCHAR(100)", "未知购方"),
+    ]
+    for tbl, col, col_type, default_val in _not_null_migrations:
+        if tbl not in inspector.get_table_names():
+            continue
+        existing_cols = {c["name"] for c in inspector.get_columns(tbl)}
+        if col not in existing_cols:
+            continue
+        col_info = {c["name"]: c for c in inspector.get_columns(tbl)}[col]
+        if not col_info.get("nullable", True):
+            continue  # 已经 NOT NULL
+        # Step1: 将 NULL 值更新为默认值
+        try:
+            db.execute(TextClause(f"UPDATE {tbl} SET {col} = :v WHERE {col} IS NULL"), {"v": default_val})
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"  [X] {tbl}.{col} NULL值更新失败: {e}")
+            continue
+        # Step2: 重建表以添加 NOT NULL 约束（SQLite 必须）
+        try:
+            db.execute(TextClause(f"ALTER TABLE {tbl} RENAME TO _bk_{tbl}"))
+            db.commit()
+            if tbl == "sales_invoices":
+                SalesInvoice.__table__.create(bind=engine, checkfirst=True)
+            elif tbl == "purchase_invoices":
+                PurchaseInvoice.__table__.create(bind=engine, checkfirst=True)
+            elif tbl == "bookkeeping_invoices":
+                BookkeepingInvoice.__table__.create(bind=engine, checkfirst=True)
+            db.execute(TextClause(f"INSERT INTO {tbl} SELECT * FROM _bk_{tbl}"))
+            db.commit()
+            db.execute(TextClause(f"DROP TABLE _bk_{tbl}"))
+            db.commit()
+            print(f"  [OK] {tbl}.{col} NOT NULL 约束已添加")
+        except Exception as e:
+            db.rollback()
+            try:
+                db.execute(TextClause(f"DROP TABLE IF EXISTS {tbl}"))
+                db.execute(TextClause(f"ALTER TABLE _bk_{tbl} RENAME TO {tbl}"))
+                db.commit()
+            except Exception:
+                pass
+            print(f"  [X] {tbl}.{col} NOT NULL 迁移失败（已回滚）: {e}")
 
 
 def _build_account_name_resolver(db, company_id):

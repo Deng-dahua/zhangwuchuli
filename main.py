@@ -2455,9 +2455,9 @@ def sales_invoice_stats(company_id: int = Query(...), status: str = Query(None),
     if status:
         base = base.filter(SalesInvoice.status.like(f"%{status}%"))
     total_count = base.count()
-    total_amt = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.amount).all())
-    total_amount = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.total_amount).all())
-    total_tax = sum(a[0] or 0 for a in base.with_entities(SalesInvoice.tax_amount).all())
+    total_amt = base.with_entities(func.sum(func.coalesce(SalesInvoice.amount, 0))).scalar() or 0
+    total_amount = base.with_entities(func.sum(func.coalesce(SalesInvoice.total_amount, 0))).scalar() or 0
+    total_tax = base.with_entities(func.sum(func.coalesce(SalesInvoice.tax_amount, 0))).scalar() or 0
     normal_count = base.filter(SalesInvoice.status == "正常").count() if not status else 0
     void_count = base.filter(SalesInvoice.status.like("%作废%")).count() if not status else 0
     red_count = base.filter(SalesInvoice.status.like("%红冲%")).count() if not status else 0
@@ -2724,9 +2724,9 @@ def purchase_invoice_stats(company_id: int = Query(...), tab: str = Query("all")
     elif tab == "tlp":
         base = base.filter(PurchaseInvoice.invoice_category.contains("铁路"))
     total_count = base.count()
-    total_amt = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.amount).all())
-    total_amount = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.total_amount).all())
-    total_raw_tax = sum(a[0] or 0 for a in base.with_entities(PurchaseInvoice.tax_amount).all())
+    total_amt = base.with_entities(func.sum(func.coalesce(PurchaseInvoice.amount, 0))).scalar() or 0
+    total_amount = base.with_entities(func.sum(func.coalesce(PurchaseInvoice.total_amount, 0))).scalar() or 0
+    total_raw_tax = base.with_entities(func.sum(func.coalesce(PurchaseInvoice.tax_amount, 0))).scalar() or 0
     # 可抵扣税额：专票/铁路票 = 税额合计，普票 = 0
     if tab == "ppt":
         total_tax = 0.0
@@ -2743,7 +2743,7 @@ def purchase_invoice_stats(company_id: int = Query(...), tab: str = Query("all")
             deduct_q = deduct_q.filter(
                 or_(PurchaseInvoice.invoice_category.contains("专用发票"),
                      PurchaseInvoice.invoice_category.contains("铁路")))
-        total_tax = round(sum(a[0] or 0 for a in deduct_q.with_entities(PurchaseInvoice.tax_amount).all()), 2)
+        total_tax = round(deduct_q.with_entities(func.sum(func.coalesce(PurchaseInvoice.tax_amount, 0))).scalar() or 0, 2)
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
@@ -3101,9 +3101,9 @@ def bookkeeping_invoice_stats(company_id: int = Query(...), tab: str = Query("al
     elif tab == "ppt":
         base = base.filter(BookkeepingInvoice.invoice_category.contains("普通发票"))
     total_count = base.count()
-    total_amt = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.amount).all())
-    total_amount = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.total_amount).all())
-    total_raw_tax = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.tax_amount).all())
+    total_amt = base.with_entities(func.sum(func.coalesce(BookkeepingInvoice.amount, 0))).scalar() or 0
+    total_amount = base.with_entities(func.sum(func.coalesce(BookkeepingInvoice.total_amount, 0))).scalar() or 0
+    total_raw_tax = base.with_entities(func.sum(func.coalesce(BookkeepingInvoice.tax_amount, 0))).scalar() or 0
     normal_count = base.filter(BookkeepingInvoice.status == "正常").count()
     void_count = base.filter(BookkeepingInvoice.status.like("%作废%")).count()
     red_count = base.filter(BookkeepingInvoice.status.like("%红冲%")).count()
@@ -4609,58 +4609,85 @@ def _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db,
 
 
 def _cf_op_classified(company_id, period_from, period_to, cash_codes, activity_codes, db, is_inflow=True):
-    """按对方科目对经营现金流分类（用于经营活动明细）"""
-    entries = db.query(JournalEntry).filter(
+    """按对方科目对经营现金流分类（SQL优化版）"""
+    cash_cond = or_(*[JournalEntry.account_code.startswith(c) for c in cash_codes])
+    activity_cond = or_(*[JournalEntry.account_code.startswith(a) for a in activity_codes])
+
+    cash_vnos = db.query(JournalEntry.voucher_no).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period >= period_from,
         JournalEntry.period <= period_to,
-    ).all()
-    vouchers = {}
-    for e in entries:
-        vouchers.setdefault(e.voucher_no, []).append(e)
-    matched_vnos = set()
-    for vno, lines in vouchers.items():
-        has_cash = any(l.account_code and any(l.account_code.startswith(c) for c in cash_codes) for l in lines)
-        has_target = any(l.account_code and any(l.account_code.startswith(a) for a in activity_codes) for l in lines)
-        if has_cash and has_target:
-            matched_vnos.add(vno)
-    total = 0.0
-    for vno in matched_vnos:
-        for l in vouchers[vno]:
-            if l.account_code and any(l.account_code.startswith(c) for c in cash_codes):
-                if is_inflow:
-                    total += (l.credit_amount or 0)
-                else:
-                    total += (l.debit_amount or 0)
-    return round(total, 2)
+        cash_cond
+    ).distinct().subquery()
+
+    activity_vnos = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to,
+        activity_cond
+    ).distinct().subquery()
+
+    target_vnos = db.query(cash_vnos.c.voucher_no).join(
+        activity_vnos, cash_vnos.c.voucher_no == activity_vnos.c.voucher_no
+    ).subquery()
+
+    if is_inflow:
+        amt = func.coalesce(JournalEntry.credit_amount, 0)
+    else:
+        amt = func.coalesce(JournalEntry.debit_amount, 0)
+
+    total = db.query(func.coalesce(func.sum(amt), 0)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to,
+        JournalEntry.voucher_no.in_(db.query(target_vnos.c.voucher_no)),
+        cash_cond
+    ).scalar()
+
+    return round(total or 0, 2)
 
 
 def _cf_activity(company_id, period_from, period_to, cash_codes, activity_codes, db, is_inflow=True):
-    """按对方科目分类计算特定活动的现金流量
+    """按对方科目分类计算特定活动的现金流量（SQL优化版）
     activity_codes: 对方科目前缀列表（如投资活动的固定资产科目）
     is_inflow: True=流入, False=流出
     """
-    entries = db.query(JournalEntry).filter(
+    cash_cond = or_(*[JournalEntry.account_code.startswith(c) for c in cash_codes])
+    activity_cond = or_(*[JournalEntry.account_code.startswith(a) for a in activity_codes])
+
+    # 子查询：同时涉及现金科目和活动科目的凭证号
+    cash_vnos = db.query(JournalEntry.voucher_no).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period >= period_from,
         JournalEntry.period <= period_to,
-    ).all()
-    vouchers = {}
-    for e in entries:
-        vouchers.setdefault(e.voucher_no, []).append(e)
-    total = 0.0
-    for vno, lines in vouchers.items():
-        has_cash = any(l.account_code and any(l.account_code.startswith(c) for c in cash_codes) for l in lines)
-        has_activity = any(l.account_code and any(l.account_code.startswith(a) for a in activity_codes) for l in lines)
-        if not (has_cash and has_activity):
-            continue
-        for l in lines:
-            if l.account_code and any(l.account_code.startswith(c) for c in cash_codes):
-                if is_inflow:
-                    total += (l.credit_amount or 0)
-                else:
-                    total += (l.debit_amount or 0)
-    return round(total, 2)
+        cash_cond
+    ).distinct().subquery()
+
+    activity_vnos = db.query(JournalEntry.voucher_no).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to,
+        activity_cond
+    ).distinct().subquery()
+
+    target_vnos = db.query(cash_vnos.c.voucher_no).join(
+        activity_vnos, cash_vnos.c.voucher_no == activity_vnos.c.voucher_no
+    ).subquery()
+
+    if is_inflow:
+        amt = func.coalesce(JournalEntry.credit_amount, 0)
+    else:
+        amt = func.coalesce(JournalEntry.debit_amount, 0)
+
+    total = db.query(func.coalesce(func.sum(amt), 0)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= period_from,
+        JournalEntry.period <= period_to,
+        JournalEntry.voucher_no.in_(db.query(target_vnos.c.voucher_no)),
+        cash_cond
+    ).scalar()
+
+    return round(total or 0, 2)
 
 
 @app.get("/api/reports/cash-flow")

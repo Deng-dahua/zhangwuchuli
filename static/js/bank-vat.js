@@ -146,7 +146,7 @@ async function batchDeleteBankTx() {
       body: JSON.stringify({ids: ids})
     });
     toast(result.message, 'success');
-    loadBankTxList();
+    renderBankTransactions();
   } catch (e) { toast(e.message, 'error'); }
 }
 
