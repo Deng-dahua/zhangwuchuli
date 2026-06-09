@@ -35,7 +35,7 @@ async function showCompanyManager(container) {
     if (!c || !c.company_name) { el.innerHTML = '<div class="empty-state">暂无公司信息</div>'; return; }
 
     let html = '';
-    html += '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
+    html += '<div style="display:flex;justify-content:flex-start;margin-bottom:12px">';
     html += '<button class="btn btn-primary" onclick="showCompanyEditForm()">编辑公司信息</button>';
     html += '</div>';
 
