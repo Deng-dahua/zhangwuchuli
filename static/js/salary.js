@@ -228,11 +228,12 @@ function renderSalaryPage(container) {
                         <th style="text-align:right">已缴税额</th>
                         <th style="text-align:right">应补(退)税额</th>
                         <th style="text-align:right">实发工资</th>
+                        <th>凭证号</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="salary-tbody">
-                    <tr><td colspan="45" style="text-align:center;color:#999">加载中...</td></tr>
+                    <tr><td colspan="46" style="text-align:center;color:#999">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -282,7 +283,7 @@ function loadSalaryData() {
         renderSalaryTable(data);
     }).catch(err => {
         document.getElementById('salary-tbody').innerHTML =
-            '<tr><td colspan="45" style="text-align:center;color:#f44">加载失败：' + (err.message || '') + '</td></tr>';
+            '<tr><td colspan="46" style="text-align:center;color:#f44">加载失败：' + (err.message || '') + '</td></tr>';
     });
 }
 
@@ -301,7 +302,7 @@ function renderSalaryStats(stats) {
 function renderSalaryTable(records) {
     const tbody = document.getElementById('salary-tbody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="45" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="46" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
         return;
     }
     tbody.innerHTML = records.map(r => `
@@ -351,6 +352,7 @@ function renderSalaryTable(records) {
             <td style="text-align:right">${(r.tax_already_withheld || 0).toFixed(2)}</td>
             <td style="text-align:right">${(r.tax_refund || 0).toFixed(2)}</td>
             <td style="text-align:right;color:#27ae60;font-weight:bold">${(r.net_salary || 0).toFixed(2)}</td>
+            <td style="text-align:center">${r.voucher_no || '-'}</td>
             <td style="white-space:nowrap">
                 <button class="btn btn-sm btn-secondary" onclick="showSalaryEditModal(${r.id})">编辑</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>

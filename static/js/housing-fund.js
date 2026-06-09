@@ -167,6 +167,7 @@ async function renderHousingFund(container) {
               <th>单位缴存额</th>
               <th>个人缴存额</th>
               <th>状态</th>
+              <th>凭证号</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -232,7 +233,7 @@ function hfRenderTable(items) {
   if (!tbody) return;
   hfSelectedIds.clear();
   tbody.innerHTML = items.length === 0
-    ? '<tr><td colspan="12" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
+    ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
     : items.map(item => `
       <tr>
         <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)" /></td>
@@ -246,6 +247,7 @@ function hfRenderTable(items) {
         <td class="num">${(item.company_amount || 0).toLocaleString()}</td>
         <td class="num">${(item.personal_amount || 0).toLocaleString()}</td>
         <td><span class="tag tag-green">${escapeHtml(item.status || '正常')}</span></td>
+        <td style="text-align:center">${item.voucher_no || '-'}</td>
         <td>
           <button class="btn btn-sm btn-outline" onclick="hfShowEdit(${item.id})">编辑</button>
           <button class="btn btn-sm btn-danger" onclick="hfDelete(${item.id})">删除</button>

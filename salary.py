@@ -21,6 +21,7 @@ import json
 from database import (
     get_db, SessionLocal,
     SalaryRecord, Company, Employee,
+    JournalEntry,
 )
 
 router = APIRouter(prefix="/api/salary", tags=["工资薪金"])
@@ -262,6 +263,18 @@ def list_salary_records(
             SalaryRecord.id_number.contains(keyword)
         ))
     items = q.order_by(SalaryRecord.id.asc()).all()
+
+    # 查工资计提凭证号（同期间所有记录共享一张凭证）
+    voucher_no = ""
+    if period:
+        je = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "工资计提",
+            JournalEntry.period == period,
+        ).first()
+        if je:
+            voucher_no = f"{je.voucher_word}-{je.voucher_no}"
+
     return [
         {
             "id": r.id,
@@ -322,6 +335,7 @@ def list_salary_records(
             "net_salary": r.net_salary,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "voucher_no": voucher_no,
         }
         for r in items
     ]

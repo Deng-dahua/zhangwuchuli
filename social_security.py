@@ -14,6 +14,7 @@ from typing import Optional, List
 from database import (
     SocialSecurityDeclaration, SocialSecurityDetail, Company, get_db,
     _generate_ss_accrual_journals, _match_ss_payment_journals,
+    JournalEntry,
 )
 
 router = APIRouter(prefix="/api/social-security", tags=["社保申报"])
@@ -129,12 +130,23 @@ def get_declaration(declaration_id: int, company_id: int, db: Session = Depends(
         SocialSecurityDetail.declaration_id == declaration_id
     ).order_by(SocialSecurityDetail.seq).all()
 
+    # 查社保计提凭证号
+    voucher_no = ""
+    je = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "社保计提",
+        JournalEntry.period == decl.period,
+    ).first()
+    if je:
+        voucher_no = f"{je.voucher_word}-{je.voucher_no}"
+
     return {
         "id": decl.id,
         "company_id": decl.company_id,
         "period": decl.period,
         "status": decl.status,
         "note": decl.note,
+        "voucher_no": voucher_no,
         "created_at": decl.created_at.isoformat() if decl.created_at else None,
         "details": [{
             "id": d.id,

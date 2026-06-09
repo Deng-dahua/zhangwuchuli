@@ -184,8 +184,8 @@ async function ssRefresh() {
       try {
         var full = await api('/api/social-security/declarations/' + decls[i].id);
         var details = full.details || [];
-        // 附上 declaration_id
-        details.forEach(function(d) { d._declaration_id = decls[i].id; });
+        // 附上 declaration_id 和凭证号
+        details.forEach(function(d) { d._declaration_id = decls[i].id; d._voucher_no = full.voucher_no || ''; });
         allDetails = allDetails.concat(details);
       } catch(e) {}
     }
@@ -213,7 +213,7 @@ function ssRenderStats(stats) {
 
 // ============ Excel模板风格表格 ============
 // 总列数: 序号/姓名/证件号码/所属期起/所属期止/应收金额/个人社保/单位社保/缴费工资 + 15*2保险列 + 操作列
-var SS_TOTAL_COLS = 9 + SS_INSURANCE_LIST.length * 2 + 1;
+var SS_TOTAL_COLS = 9 + SS_INSURANCE_LIST.length * 2 + 2;
 
 // 构建双层表头HTML（复用）
 function buildSSHeaderRows() {
@@ -232,7 +232,7 @@ function buildSSHeaderRows() {
     + '<th rowspan="2" style="min-width:90px">个人社保合计</th>'
     + '<th rowspan="2" style="min-width:90px">单位社保合计</th>'
     + '<th rowspan="2" style="min-width:80px">缴费工资</th>';
-  var headerRow1 = '<tr>' + fixedHeaders + h1 + '<th rowspan="2" style="min-width:80px">操作</th></tr>';
+  var headerRow1 = '<tr>' + fixedHeaders + h1 + '<th rowspan="2" style="min-width:70px">凭证号</th><th rowspan="2" style="min-width:80px">操作</th></tr>';
   var headerRow2 = '<tr>' + h2 + '</tr>';
   return { row1: headerRow1, row2: headerRow2 };
 }
@@ -276,6 +276,7 @@ function buildSSCategoryTable(category, items, showSubtotal) {
         html += '<td class="num" style="color:#6b7280;font-size:11px">' + escapeHtml(String(it.rate || '')) + '</td>';
         html += '<td class="num">' + ((it.amount || 0) > 0 ? (it.amount || 0).toLocaleString() : '') + '</td>';
       });
+      html += '<td style="text-align:center">' + (item._voucher_no || '-') + '</td>';
       html += '<td>'
         + '<button class="btn btn-sm btn-outline" onclick="ssShowEdit(' + item.id + ',' + item._declaration_id + ')">编辑</button> '
         + '<button class="btn btn-sm btn-danger" onclick="ssDelete(' + item.id + ')">删除</button>'
@@ -309,7 +310,7 @@ function buildSSCategoryTable(category, items, showSubtotal) {
         html += '<td style="color:#6b7280"></td>';
         html += '<td class="num" style="font-weight:700">' + (a > 0 ? a.toLocaleString() : '') + '</td>';
       });
-      html += '<td></td></tr>';
+      html += '<td></td><td></td></tr>';  // 凭证号 + 操作
     }
   }
 
@@ -348,9 +349,7 @@ function buildSSGrandTotal(allItems) {
     html += '<td style="color:#6b7280"></td>';
     html += '<td class="num" style="font-weight:700;font-size:13px">' + (a > 0 ? a.toLocaleString() : '') + '</td>';
   });
-  html += '<td></td></tr>';
-  html += '</tbody></table></div></div>';
-  return html;
+  html += '<td></td><td></td></tr>'; // 凭证号 + 操作（合计行）
 }
 
 // ============ 主渲染表格（三独立表格）============

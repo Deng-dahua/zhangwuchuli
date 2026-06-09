@@ -10,7 +10,7 @@ import io
 import logging
 from typing import Optional, List
 
-from database import HousingFundDetail, Company, get_db, _generate_hf_accrual_journals, _match_hf_payment_journals
+from database import HousingFundDetail, Company, get_db, _generate_hf_accrual_journals, _match_hf_payment_journals, JournalEntry
 
 router = APIRouter(prefix="/api/housing-fund", tags=["公积金缴存"])
 
@@ -30,6 +30,18 @@ def list_details(
     if period:
         q = q.filter(HousingFundDetail.period == period)
     items = q.order_by(HousingFundDetail.id).all()
+
+    # 查公积金计提凭证号（同期间所有记录共享一张凭证）
+    voucher_no = ""
+    if period:
+        je = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "公积金计提",
+            JournalEntry.period == period,
+        ).first()
+        if je:
+            voucher_no = f"{je.voucher_word}-{je.voucher_no}"
+
     result = []
     for item in items:
         result.append({
@@ -46,6 +58,7 @@ def list_details(
             "company_amount": item.company_amount,
             "personal_amount": item.personal_amount,
             "status": item.status,
+            "voucher_no": voucher_no,
             "created_at": item.created_at.isoformat() if item.created_at else None,
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         })
