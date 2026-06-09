@@ -20,6 +20,7 @@ from database import SalaryRecord, SocialSecurityDetail, HousingFundDetail
 from database import CulturalConstructionFeeDeclaration
 from database import FixedAsset, IntangibleAsset
 from database import Customer, Supplier, Employee, Contract, Payment
+from database import InventoryTransaction, InventoryBalance, InventoryItem
 from database import SocialSecurityDeclaration, HousingFundDeclaration
 
 router = APIRouter(prefix="/api/tax-risk", tags=["涉税风险分析"])
@@ -154,6 +155,17 @@ def get_tax_risk_report(
     _analyze_business_credit(db, company_id, period_start, period_end, results)
     _analyze_industry_specific(db, company_id, period_start, period_end, results)
     _analyze_good_practices(db, company_id, period_start, period_end, results)
+    # ── 经营实质深度分析（稽查级）──
+    _analyze_long_term_loss(db, company_id, period_start, period_end, results)
+    _analyze_business_premise(db, company_id, period_start, period_end, results)
+    _analyze_inventory_substance(db, company_id, period_start, period_end, results)
+    _analyze_utility_expense(db, company_id, period_start, period_end, results)
+    _analyze_staffing_substance(db, company_id, period_start, period_end, results)
+    _analyze_fund_flow_invoice_match(db, company_id, period_start, period_end, results)
+    _analyze_scrap_revenue(db, company_id, period_start, period_end, results)
+    _analyze_deemed_sales(db, company_id, period_start, period_end, results)
+    _analyze_cash_overstock(db, company_id, period_start, period_end, results)
+    _analyze_related_party_pricing(db, company_id, period_start, period_end, results)
 
     results.sort(key=lambda x: (x.get("risk_score", 0)), reverse=True)
 
@@ -188,6 +200,7 @@ def get_tax_risk_report(
             "gross_margin_pct": round((revenue_debit - cost_debit) / revenue_debit * 100, 2) if revenue_debit > 0 else 0,
             "vat_payable": round(vat_total, 2),
         },
+        "required_evidence_summary": _build_evidence_summary(results),
         "results": results
     }
 
@@ -1768,3 +1781,697 @@ def _analyze_good_practices(db, company_id, ps, pe, results):
             "detail": "已申报社会保险费和住房公积金，五险一金缴存体系已建立。",
             "suggestion": "继续保持按期全员足额缴存。"
         })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十四、经营实质深度分析——长期亏损风险（稽查级）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_long_term_loss(db, company_id, ps, pe, results):
+    """连续多期亏损但持续经营——隐匿利润或虚增成本嫌疑（稽查重点）"""
+    periods = _get_periods_between(ps, pe)
+    if len(periods) < 6:
+        return  # 至少需要6个月数据
+
+    # 按季度汇总利润
+    profit_by_quarter = {}
+    for p in periods:
+        y, m = int(p[:4]), int(p[5:7])
+        q = f"{y}Q{(m-1)//3+1}"
+        rev = _get_account_sum(db, company_id, "6001", p, p, "credit")
+        cost = _get_account_sum(db, company_id, "6401", p, p, "debit")
+        exps = (_get_account_sum(db, company_id, "6601", p, p, "debit") +
+                _get_account_sum(db, company_id, "6602", p, p, "debit") +
+                _get_account_sum(db, company_id, "6603", p, p, "debit"))
+        profit = rev - cost - exps
+        profit_by_quarter[q] = profit_by_quarter.get(q, 0) + profit
+
+    quarters = sorted(profit_by_quarter.keys())
+    loss_quarters = [q for q in quarters if profit_by_quarter[q] < 0]
+    loss_ratio = len(loss_quarters) / len(quarters) if quarters else 0
+
+    if loss_ratio >= 0.75 and len(quarters) >= 4:
+        loss_detail = "；".join([f"{q}:{profit_by_quarter[q]:,.0f}元" for q in loss_quarters])
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"连续亏损（{len(loss_quarters)}/{len(quarters)}期）",
+            "detail": f"企业在 {len(quarters)} 个季度中有 {len(loss_quarters)} 个季度亏损（亏损面{loss_ratio*100:.0f}%），但持续经营不注销。稽查视角：长期亏损但持续经营，存在隐匿利润、虚增成本或关联交易转移利润的重大嫌疑。\n亏损明细：{loss_detail}",
+            "suggestion": "（稽查应对）准备以下佐证材料：①各期成本费用明细及合法凭证；②关联交易定价政策及可比非受控价格；③库存盘点表及存货真实性说明；④银行流水与收入成本匹配说明；⑤持续经营的商业合理性说明（如市场开拓计划、研发投人等）。",
+            "required_evidence": [
+                "各期成本费用明细表及合法原始凭证（发票、合同、付款凭证）",
+                "关联交易定价原则说明及可比非受控价格分析",
+                "库存商品盘点表（含监盘记录）及存货真实性声明",
+                "银行流水对账单（所有对公账户）与收入成本匹配分析说明",
+                "持续经营商业计划书（说明亏损但不注销的商业合理性）",
+                "员工工资表及社保缴纳证明（证明实际经营活动存在）"
+            ]
+        })
+    elif loss_ratio >= 0.5 and len(quarters) >= 4:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"阶段性亏损（{len(loss_quarters)}/{len(quarters)}期）",
+            "detail": f"企业在 {len(quarters)} 个季度中有 {len(loss_quarters)} 个季度亏损（亏损面{loss_ratio*100:.0f}%）。需关注成本费用核算是否真实、完整。",
+            "suggestion": "梳理亏损原因，准备成本费用真实性证明材料。如为季节性亏损或初创期亏损，准备相关说明。",
+            "required_evidence": [
+                "亏损原因说明及后续盈利计划",
+                "成本费用明细及主要凭证复印件",
+                "库存盘点表"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十五、经营场所实质风险（稽查级）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_business_premise(db, company_id, ps, pe, results):
+    """无租赁费/水电费/物业费，但宣称有经营场所——空壳嫌疑"""
+    # 检查序时账中是否有租赁费、水电费、物业费
+    expense_accounts = ["660214", "660215", "660216"]  # 租赁费、水电费、物业费（按系统实际科目编码调整）
+    has_rent = _get_account_sum(db, company_id, "660214", ps, pe, "debit") > 0
+    has_utility = _get_account_sum(db, company_id, "660215", ps, pe, "debit") > 0
+    has_property_fee = _get_account_sum(db, company_id, "660216", ps, pe, "debit") > 0
+
+    # 同时检查银行流水摘要中是否包含租赁、水电等关键词
+    from sqlalchemy import or_
+    bf_rent = db.query(func.count(BankTransaction.id)).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps + "-01",
+        BankTransaction.transaction_date <= pe + "-31",
+        or_(
+            BankTransaction.counterparty_name.contains("租"),
+            BankTransaction.counterparty_name.contains("物业"),
+            BankTransaction.counterparty_name.contains("电力"),
+            BankTransaction.counterparty_name.contains("水务"),
+            BankTransaction.summary.contains("租"),
+            BankTransaction.summary.contains("水电"),
+        )
+    ).scalar() or 0
+
+    # 检查是否有租赁合同
+    has_lease_contract = db.query(func.count(Contract.id)).filter(
+        Contract.company_id == company_id,
+        Contract.contract_type == "租赁"
+    ).scalar() or 0
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    biz_scope = (company.business_scope or "") if company else ""
+
+    # 有经营范围但无经营场所费用 → 高风险
+    if biz_scope and not has_rent and not has_utility and bf_rent == 0 and has_lease_contract == 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "无经营场所费用但宣称有经营",
+            "detail": f"企业经营范围包含经营活动，但序时账中未发现租赁费（660214）、水电费（660215）等经营场所必要支出，银行流水也未发现相关支付记录，且无租赁合同备案。稽查视角：可能存在空壳公司、虚开发票或隐瞒实际经营场所的问题。",
+            "suggestion": "（稽查应对）立即准备以下佐证材料：①经营场所租赁合同及租金支付凭证；②水电费缴纳凭证及发票；③经营场所照片（含门牌、办公/生产区域）；④物业缴费通知及支付记录；⑤如为家庭经营，提供房屋产权证明或租赁协议。",
+            "required_evidence": [
+                "经营场所不动产权证书或租赁合同（原件备查）",
+                "租金支付凭证（银行回单+发票）",
+                "水、电、燃气费缴纳凭证（至少3个月）",
+                "经营场所实地照片（含门牌、内部场景）",
+                "物业费缴纳凭证",
+                "如为共用场所，提供共用协议及费用分摊说明"
+            ]
+        })
+    elif not has_rent and not has_utility:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "经营场所费用记录不完整",
+            "detail": "序时账中未发现租赁费和水电费记录。如企业确有经营场所，应补充相关费用凭证。",
+            "suggestion": "补录租赁费、水电费等经营必要支出凭证，并确保发票抬头为企业名称。",
+            "required_evidence": [
+                "经营场所租赁合同",
+                "租金及水电费支付凭证"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十六、存货与经营规模匹配风险（稽查级）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_inventory_substance(db, company_id, ps, pe, results):
+    """原材料进得多、销得少，但仓库/产能不匹配——虚增库存或隐瞒销售收入嫌疑"""
+    # 统计存货进销存
+    in_qty = db.query(func.sum(InventoryTransaction.quantity)).filter(
+        InventoryTransaction.company_id == company_id,
+        InventoryTransaction.trans_type.in_(["入库", "盘盈", "调拨入"]),
+        InventoryTransaction.transaction_date >= ps + "-01",
+        InventoryTransaction.transaction_date <= pe + "-31"
+    ).scalar() or 0
+
+    out_qty = db.query(func.sum(InventoryTransaction.quantity)).filter(
+        InventoryTransaction.company_id == company_id,
+        InventoryTransaction.trans_type.in_(["出库", "盘亏", "调拨出"]),
+        InventoryTransaction.transaction_date >= ps + "-01",
+        InventoryTransaction.transaction_date <= pe + "-31"
+    ).scalar() or 0
+
+    end_stock = db.query(func.sum(InventoryBalance.end_quantity)).filter(
+        InventoryBalance.company_id == company_id,
+        InventoryBalance.period == pe
+    ).scalar() or 0
+
+    # 计算进销比
+    if out_qty > 0:
+        in_out_ratio = abs(in_qty) / abs(out_qty)
+    else:
+        in_out_ratio = 999 if in_qty > 0 else 0
+
+    # 检查是否有仓库租赁合同
+    warehouse_contract = db.query(func.count(Contract.id)).filter(
+        Contract.company_id == company_id,
+        Contract.contract_type == "租赁",
+        or_(Contract.name.contains("仓库"), Contract.name.contains("仓储"))
+    ).scalar() or 0
+
+    # 稽查视角：进销比异常 + 无仓库 = 高风险
+    if in_out_ratio > 3 and warehouse_contract == 0 and end_stock > 100:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"存货进销比异常（{in_out_ratio:.1f}:1）且无仓库租赁",
+            "detail": f"分析期内入库数量 {in_qty:,.0f}，出库数量 {out_qty:,.0f}，进销比 {in_out_ratio:.1f}:1（正常应接近1:1）。期末库存 {end_stock:,.0f}，但系统中无仓库租赁合同。稽查视角：大量原材料购入但销售数量极少，且无仓库存储，存在虚增库存（虚开发票 counterpart）或隐瞒销售收入（账外销售）的重大嫌疑。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①库存商品盘点表（含监盘记录、照片）；②原材料采购合同、发票、入库单、付款凭证（三单匹配）；③销售合同、发货单、销售发票、收款凭证（验证销售真实性）；④仓库租赁合同及仓储费支付凭证；⑤运输发票及物流单据；⑥生产成本计算单（BOM表）及投入产出比分析。",
+            "required_evidence": [
+                "库存商品全面盘点表（含监盘人签字、盘点照片）",
+                "原材料采购三单匹配：采购合同+进项发票+入库单+付款凭证",
+                "销售收入四流合一：销售合同+销项发票+出库单+银行收款回单",
+                "仓库租赁合同+仓储费支付凭证+仓储费发票",
+                "物流运输单据及运输费发票（验证货物实际流动）",
+                "生产成本投入产出比分析说明（工业企业的关键证据）",
+                "如为委托加工，提供委托加工合同及加工费支付凭证"
+            ]
+        })
+    elif in_out_ratio > 2:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存货进销比偏高（{in_out_ratio:.1f}:1）",
+            "detail": f"入库数量 {in_qty:,.0f}，出库数量 {out_qty:,.0f}，进销比 {in_out_ratio:.1f}:1。如为生产型企业，应核查投入产出比是否合理；如为贸易型企业，应核查库存周转率为何偏低。",
+            "suggestion": "提供库存周转分析说明，如确有合理原因（如季节性备货、战略囤货），准备相关说明材料。",
+            "required_evidence": [
+                "库存商品盘点表",
+                "采购及销售合同（说明进销不匹配的商业理由）",
+                "如为季节性备货，提供历史销售数据对比分析"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十七、水电费与产能匹配分析（稽查级·生产企业专用）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_utility_expense(db, company_id, ps, pe, results):
+    """生产企业水电费与产量不匹配——产能造假或隐瞒生产嫌疑"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    biz = (company.business_scope or "") + " " + (company.company_type or "")
+    if "制造" not in biz and "生产" not in biz and "加工" not in biz:
+        return  # 非生产企业，不分析
+
+    # 水电费
+    elec_amt = _get_account_sum(db, company_id, "660215", ps, pe, "debit")
+    water_amt = _get_account_sum(db, company_id, "660215", ps, pe, "debit")  # 同一科目，需通过摘要区分
+
+    # 更精确：从银行流水或序时账摘要中匹配
+    from sqlalchemy import or_
+    elec_keywords = ["电费", "电力", "供电", "能源"]
+    water_keywords = ["水费", "水务", "供水", "水费"]
+
+    elec_entries = db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(*[JournalEntry.summary.contains(kw) for kw in elec_keywords])
+    ).scalar() or 0
+
+    # 产量 proxies：销项发票数量（生产企业以销售发票货物数量近似）
+    sales_qty = db.query(func.sum(SalesInvoice.quantity)).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps + "-01",
+        SalesInvoice.invoice_date <= pe + "-31",
+        SalesInvoice.status == "正常"
+    ).scalar() or 0
+
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+
+    # 电费收入比
+    elec_to_revenue = elec_entries / revenue * 100 if revenue > 0 else 0
+
+    if elec_entries > 0 and revenue > 0 and elec_to_revenue < 0.5:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"电费占收入比异常偏低（{elec_to_revenue:.2f}%）",
+            "detail": f"生产企业电费 {elec_entries:,.0f} 元，营业收入 {revenue:,.0f} 元，电费占收入比仅 {elec_to_revenue:.2f}%（制造企业正常应 2%~8%）。稽查视角：电费与产量严重不匹配，存在隐瞒生产规模、账外销售或虚列成本的嫌疑。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①电力公司出具的全期电费缴纳清单及发票；②生产日报表/车间产量记录（每日记录）；③原材料投入产出比计算表（BOM）；④设备清单及设备功率清单；⑤如部分为外包生产，提供委托加工合同及加工费发票。",
+            "required_evidence": [
+                "电力公司出具的正式电费缴纳清单（覆盖分析期各月）",
+                "电费支付凭证（银行回单）及增值税专用发票",
+                "生产车间日报表/产量逐日记录（生产部门出具）",
+                "原材料投入产出比分析表（含标准耗电量定额说明）",
+                "生产设备清单（含功率、运行时长说明）",
+                "如存在免税产品/在建工程用电，提供电费分摊计算说明"
+            ]
+        })
+    elif elec_entries == 0 and "制造" in biz:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "生产企业无电费记录",
+            "detail": "企业经营范围包含生产制造，但序时账中未发现电费支出记录。生产企业必然消耗电力，无电费记录不符合经营实质。",
+            "suggestion": "补录电费支出凭证，如由出租方代缴，提供代缴协议及代缴凭证。",
+            "required_evidence": [
+                "电费缴纳凭证或代缴协议",
+                "如为租用厂房含电费，提供租赁合同相关条款及出租方出具的电费分割单"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十八、人员与经营规模匹配（稽查级）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_staffing_substance(db, company_id, ps, pe, results):
+    """员工人数与收入规模不匹配——空壳或隐瞒用工嫌疑"""
+    emp_count = db.query(func.count(Employee.id)).filter(
+        Employee.company_id == company_id,
+        or_(Employee.leave_date == None, Employee.leave_date >= ps + "-01")
+    ).scalar() or 0
+
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    avg_revenue_per_emp = revenue / emp_count if emp_count > 0 else 0
+
+    # 社保参保人数（从参保明细统计，按员工姓名去重）
+    ss_count = db.query(func.count(func.distinct(SocialSecurityDetail.employee_name))).join(
+        SocialSecurityDeclaration, SocialSecurityDetail.declaration_id == SocialSecurityDeclaration.id
+    ).filter(
+        SocialSecurityDeclaration.company_id == company_id
+    ).scalar() or 0
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    reg_capital = company.registered_capital or 0
+
+    # 稽查视角：有收入但无员工 = 空壳嫌疑
+    if revenue > 100000 and emp_count == 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "有营业收入但无员工记录",
+            "detail": f"企业营业收入 {revenue:,.0f} 元（≥10万元），但系统中无员工档案记录。稽查视角：有经营收入但无从业人员，存在空壳公司、虚开发票或用工不申报（劳务外包/灵活用工未申报）的重大嫌疑。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①全体员工花名册（含入职时间、岗位、薪酬）；②工资支付凭证（银行代发工资回单）；③社保缴纳证明（证明用工真实性）；④如为劳务外包，提供外包合同及外包发票；⑤如为灵活用工，提供灵活用工平台协议及发票。",
+            "required_evidence": [
+                "全体员工花名册（盖章）及员工劳动合同",
+                "工资表及银行代发工资回单（覆盖分析期）",
+                "社会保险费缴纳证明（社保局出具）",
+                "如为劳务外包，提供外包合同及劳务费发票（6%专票）",
+                "如为灵活用工，提供灵活用工平台合作协议及发票",
+                "如为劳务派遣，提供派遣协议及派遣人员工资支付凭证"
+            ]
+        })
+    elif emp_count > 0 and ss_count == 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "有员工但未申报社保",
+            "detail": f"系统中有 {emp_count} 名员工，但未发现社保申报记录。存在被认定未用工申报、逃避社保义务的风险，也是稽查关注点。",
+            "suggestion": "补录社保申报记录，如确有部分人员不需缴纳社保（如退休返聘、实习生），准备相关说明材料。",
+            "required_evidence": [
+                "社保申报表（覆盖分析期）",
+                "如存在退休返聘/实习生，提供相关劳动合同及说明"
+            ]
+        })
+    elif 0 < emp_count < 5 and revenue > 5000000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"人员极少但收入规模较大（{emp_count}人/{revenue:,.0f}元）",
+            "detail": f"企业仅有 {emp_count} 名员工，但营业收入达 {revenue:,.0f} 元（人均产值 {avg_revenue_per_emp:,.0f} 元/人）。如非贸易型/互联网型轻资产企业，人员规模与收入不匹配可能引起稽查关注。",
+            "suggestion": "如为贸易企业或互联网企业，属合理情况。如为生产/服务型企业，准备人员组织架构图及岗位说明，解释人均产值合理性。",
+            "required_evidence": [
+                "企业组织架构图及岗位职责说明",
+                "如为贸易/互联网企业，提供商业模式说明"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  二十九、资金流与票据流匹配（稽查级·虚开发票嫌疑）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_fund_flow_invoice_match(db, company_id, ps, pe, results):
+    """有发票但无银行收款记录——虚开发票嫌疑（稽查头号风险）"""
+    # 销项发票（开票方=本企业）
+    sales = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps + "-01",
+        SalesInvoice.invoice_date <= pe + "-31",
+        SalesInvoice.status == "正常"
+    ).all()
+
+    if not sales:
+        return
+
+    mismatch_count = 0
+    mismatch_invoices = []
+    from sqlalchemy import or_
+
+    for inv in sales:
+        # 提取发票号码（兼容数电发票）
+        inv_no = ""
+        if getattr(inv, 'digital_invoice_no', None):
+            inv_no = inv.digital_invoice_no
+        elif inv.invoice_code or inv.invoice_no:
+            inv_no = (inv.invoice_code or "") + (inv.invoice_no or "")
+
+        # 在银行流水中查找该发票号码或对应金额
+        if inv_no:
+            bt = db.query(BankTransaction).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction.transaction_date >= inv.invoice_date,
+                BankTransaction.transaction_date <= (inv.invoice_date.replace(month=inv.invoice_date.month+1, day=1) if inv.invoice_date.month < 12 else inv.invoice_date.replace(year=inv.invoice_date.year+1, month=1, day=1)),
+                BankTransaction.credit_amount == inv.total_amount
+            ).first()
+            if not bt:
+                mismatch_count += 1
+                if len(mismatch_invoices) < 5:
+                    mismatch_invoices.append(inv_no)
+        else:
+            mismatch_count += 1
+
+    mismatch_rate = mismatch_count / len(sales) * 100 if sales else 0
+
+    if mismatch_rate > 30:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"发票与银行收款匹配率偏低（{mismatch_rate:.0f}%）",
+            "detail": f"分析期内共有 {len(sales)} 张销项发票，其中 {mismatch_count} 张未在银行流水中找到对应收款记录（匹配率仅 {100-mismatch_rate:.0f}%）。稽查视角：开票但无资金回流，是虚开发票的最典型特征（特别是无真实交易背景下开票）。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①全部销项发票对应的销售合同；②发货单/运输单据（证明货物真实发出）；③银行收款回单（如为分期收款，提供收款计划及实际收款记录）；④如为抵债/易货交易，提供抵债协议或易货合同；⑤如为代销，提供代销合同及委托代销清单。",
+            "required_evidence": [
+                "所有不匹配发票对应的销售合同（原件备查）",
+                "销售发票+发货单+运输单据（三流合一证据链）",
+                "银行收款回单（核对发票金额与收款金额是否一致）",
+                "如为分期收款，提供分期收款协议及实际收款记录",
+                "如为抵债/易货，提供抵债/易货协议及入账凭证",
+                "客户验收单或确认收货证明"
+            ]
+        })
+    elif mismatch_rate > 10:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"部分发票与银行收款未匹配（{mismatch_rate:.0f}%）",
+            "detail": f"有 {mismatch_count}/{len(sales)} 张发票未在银行流水中找到对应收款记录。可能是 timing difference（开票与收款跨期），也可能是存在问题。",
+            "suggestion": "核查未匹配发票的收款状态，补充银行收款凭证。如为跨期收款，在报告中说明。",
+            "required_evidence": [
+                "未匹配发票清单及收款计划说明",
+                "已收款的银行回单"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  三十、边角料/报废收入未申报风险（稽查级·生产企业）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_scrap_revenue(db, company_id, ps, pe, results):
+    """生产企业边角料/报废收入未申报增值税——隐瞒收入嫌疑"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    biz = (company.business_scope or "") + " " + (company.company_type or "")
+    if "制造" not in biz and "生产" not in biz:
+        return
+
+    # 检查是否有边角料/报废收入的增值税申报
+    # 边角料销售一般开普通发票或不开票（未开票收入）
+    # 检查 "其他业务收入" 或 "营业外收入" 中是否包含边角料/报废
+    from sqlalchemy import or_
+    scrap_entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.summary.contains("边角"),
+            JournalEntry.summary.contains("废"),
+            JournalEntry.summary.contains("下脚"),
+            JournalEntry.summary.contains("残次"),
+            JournalEntry.summary.contains("报废"),
+        ),
+        JournalEntry.credit_amount > 0
+    ).all()
+
+    # 检查是否有边角料销售的销项发票
+    scrap_invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps + "-01",
+        SalesInvoice.invoice_date <= pe + "-31",
+        or_(
+            SalesInvoice.goods_name.contains("边角"),
+            SalesInvoice.goods_name.contains("废"),
+            SalesInvoice.goods_name.contains("下脚"),
+        ),
+        SalesInvoice.status == "正常"
+    ).all()
+
+    # 生产企业应有边角料收入但未发现
+    # 这是一个 "应存在但未发现" 的风险提示（基于行业常识）
+    has_scrap = len(scrap_entries) > 0 or len(scrap_invoices) > 0
+
+    # 从银行存款借方（收款）中查找是否有零星空交易（疑似边角料销售未开票）
+    unidentified_credits = db.query(func.count(BankTransaction.id)).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps + "-01",
+        BankTransaction.transaction_date <= pe + "-31",
+        BankTransaction.credit_amount > 0,
+        or_(
+            BankTransaction.counterparty_name == None,
+            BankTransaction.counterparty_name == "",
+            BankTransaction.summary == None,
+            BankTransaction.summary == ""
+        )
+    ).scalar() or 0
+
+    if not has_scrap and "制造" in biz and unidentified_credits > 3:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "生产企业边角料/报废收入申报不全",
+            "detail": f"企业为生产企业，但序时账中未发现边角料/报废收入记录，且银行流水中有 {unidentified_credits} 笔对手方不明的收款。稽查视角：生产企业必然产生边角料/残次品，如未申报增值税销售额，属于隐瞒收入行为。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①边角料/报废品销售记录及发票；②如已入账未开票，提供未开票收入申报说明；③边角料/报废品出库单及收款凭证；④如边角料无偿赠送或自用，说明具体情况。",
+            "required_evidence": [
+                "边角料/报废品销售合同及销售发票",
+                "边角料出库单及收款凭证",
+                "如为未开票收入，提供未开票收入明细表及增值税申报表（未开票栏次）",
+                "如边角料用于无偿赠送，提供视同销售增值税申报说明"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  三十一、视同销售未处理风险（稽查级）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_deemed_sales(db, company_id, ps, pe, results):
+    """视同销售未申报——无偿赠送/员工福利/对外投资未缴纳增值税（稽查重点）"""
+    # 检查序时账中是否有视同销售业务处理
+    from sqlalchemy import or_
+    deemed_keywords = ["赠送", "福利", "员工福利", "招待", "视同销售", "对外投资", "非货币性资产"]
+    deemed_entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(*[JournalEntry.summary.contains(kw) for kw in deemed_keywords])
+    ).all()
+
+    # 检查 InventoryTransaction 中是否有 "出库" 但对应 SalesInvoice 中没有的记录（可能是无偿赠送）
+    free_out = db.query(InventoryTransaction).filter(
+        InventoryTransaction.company_id == company_id,
+        InventoryTransaction.trans_type == "出库",
+        InventoryTransaction.transaction_date >= ps + "-01",
+        InventoryTransaction.transaction_date <= pe + "-31"
+    ).all()
+
+    # 简易判断：有出库记录但销项发票中没有对应记录
+    sales_inv_nos = set()
+    for inv in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps + "-01",
+        SalesInvoice.invoice_date <= pe + "-31"
+    ).all():
+        no = getattr(inv, 'digital_invoice_no', None) or (inv.invoice_code or "") + (inv.invoice_no or "")
+        if no:
+            sales_inv_nos.add(no)
+
+    # 这是一个提醒型风险：系统无法完全判断，但可提示用户自查
+    if len(deemed_entries) == 0 and len(free_out) > 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "可能存在视同销售未申报情形",
+            "detail": f"系统中有 {len(free_out)} 条出库记录，但未发现「视同销售」相关账务处理。根据增值税法规，无偿赠送货物、将自产产品用于员工福利、对外投资等，均需视同销售缴纳增值税。",
+            "suggestion": "自查以下事项并准备佐证材料：①是否有无偿赠送客户货物（如促销赠品）；②是否有将自产产品作为员工福利发放；③是否有将货物用于非应税项目；④如有，是否已按公允价值申报视同销售增值税。",
+            "required_evidence": [
+                "视同销售自查清单（按增值税法规逐一核对）",
+                "如已处理：视同销售增值税申报表及账务处理凭证",
+                "如未处理：补税说明及更正申报表",
+                "赠送协议或员工福利发放记录（证明视同销售事实）"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  三十二、库存现金过大风险（稽查级·坐支嫌疑）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_cash_overstock(db, company_id, ps, pe, results):
+    """库存现金余额过大——坐支、账外循环、隐瞒收入嫌疑"""
+    # 库存现金科目（1001）期末余额
+    cash_balance = _get_account_balance(db, company_id, "1001")
+
+    if cash_balance > 10000:
+        # 检查是否有大额现金收支
+        cash_entries = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            JournalEntry.account_code.like("1001%")
+        ).count()
+
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"库存现金余额过大（{cash_balance:,.0f}元）",
+            "detail": f"库存现金科目期末余额 {cash_balance:,.0f} 元（超过1万元）。稽查视角：库存现金过大，可能存在现金坐支（收入不入账直接支付支出）、账外资金循环或隐瞒现金销售收入的风险。根据现金管理暂行条例，企业应与银行核对现金账目，不允许坐支。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①库存现金盘点表（盘点日至报表日调节表）；②现金日记账（逐笔记录）；③大额现金收支的审批单及原始凭证；④如为零售企业现金收款，提供现金收款台账及银行存款缴款单（现金送存银行凭证）。",
+            "required_evidence": [
+                "库存现金盘点表（含盘点日至报表日的现金调节表）",
+                "现金日记账（逐笔登记，与银行对账单核对）",
+                "大额现金收支的原始凭证（合同、发票、审批单）",
+                "如为现金销售，提供现金收款台账及现金送存银行缴款单",
+                "现金管理制度及执行情况说明"
+            ]
+        })
+    elif cash_balance < 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"库存现金余额为负（{cash_balance:,.0f}元）",
+            "detail": "库存现金科目出现负数余额，说明账务处理存在严重错误（可能是未做凭证但已支付现金），或者存在账外现金循环。",
+            "suggestion": "立即核查现金日记账，找出余额为负的根本原因并更正凭证。",
+            "required_evidence": [
+                "现金日记账全面核查说明",
+                "更正凭证及审批记录"
+            ]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  三十三、关联交易定价公允性（稽查级·转移利润嫌疑）
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_related_party_pricing(db, company_id, ps, pe, results):
+    """关联交易定价不公允——转移利润嫌疑（稽查重点·跨国/跨地区）"""
+    # 查找股东、董事、监事关联的企业（同一法定代表人或控股股东）
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+
+    # 从进项发票中查找与股东/关联方交易的发票
+    # 关联方认定：同一法定代表人、控股股东、实际控制人
+    legal_rep = company.legal_representative or ""
+
+    # 查找供应商/客户中是否包含本企业股东或法定代表人
+    related_suppliers = db.query(Supplier).filter(
+        Supplier.company_id == company_id,
+        or_(
+            Supplier.name.contains(legal_rep),
+            Supplier.tax_no == company.uscc
+        ) if legal_rep else False
+    ).all()
+
+    related_customers = db.query(Customer).filter(
+        Customer.company_id == company_id,
+        or_(
+            Customer.name.contains(legal_rep),
+            Customer.tax_no == company.uscc
+        ) if legal_rep else False
+    ).all()
+
+    # 从进项发票查找定价异常（关联方向本企业开票，价格是否公允无法从系统判断，但可提示风险）
+    related_inv_count = 0
+    if legal_rep:
+        related_inv_count = db.query(func.count(PurchaseInvoice.id)).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.invoice_date >= ps + "-01",
+            PurchaseInvoice.invoice_date <= pe + "-31",
+            PurchaseInvoice.seller_name.contains(legal_rep)
+        ).scalar() or 0
+
+    if related_inv_count > 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在关联交易（{related_inv_count}张关联方发票）",
+            "detail": f"发现 {related_inv_count} 张进项发票的开票方名称包含本企业法定代表人/控股股东姓名，属于关联交易。稽查视角：关联交易定价如不公允（高价采购、低价销售），可能被认定为转移利润、逃避税收，需准备转让定价同期资料。",
+            "suggestion": "（稽查应对）准备以下佐证材料：①关联交易所涉完整合同及定价说明；②可比非受控价格（CUP）分析；③再销售价格法或成本加成法分析（证明定价公允性）；④如为跨国关联交易，准备同期资料（主体文档、本地文档）。",
+            "required_evidence": [
+                "关联交易清单（含交易类型、金额、定价方法）",
+                "关联交易定价政策说明及可比非受控价格分析",
+                "关联交易所涉合同及发票",
+                "如为跨国关联交易，准备同期资料（主体文档+本地文档）",
+                "董事会/股东会关于关联交易的决议（如金额较大）"
+            ]
+        })
+    elif len(related_suppliers) > 0 or len(related_customers) > 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 3, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "建议",
+            "item": "已识别关联方（供应商/客户）",
+            "detail": f"系统中有 {len(related_suppliers)} 家疑似关联方供应商、{len(related_customers)} 家疑似关联方客户。关联交易需确保定价公允，并准备转让定价资料。",
+            "suggestion": "建立关联交易管理制度，确保定价公允，并按规定准备同期资料。",
+            "required_evidence": [
+                "关联交易所涉合同",
+                "定价公允性说明"
+            ]
+        })
+
+    # 检查是否存在 "对开增值税专票"（即我开给你、你开给我，金额相近）——循环经济走私嫌疑
+    # 简化版：检查是否有同一对手方既出现在 SalesInvoice 又出现在 PurchaseInvoice
+    if company:
+        counterparties = set()
+        for inv in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
+            counterparties.add(inv.buyer_name)
+        for inv in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
+            counterparties.add(inv.seller_name)
+
+        # 如有重叠，提示风险
+        # （完整实现需要更复杂的匹配逻辑，此处简化为提示）
+        pass
+
+
+# ═══════════════════════════════════════════════════════════
+#  辅助函数：佐证材料清单汇总
+# ═══════════════════════════════════════════════════════════
+
+def _build_evidence_summary(results):
+    """汇总所有风险项中需要提供的佐证材料清单（去重）"""
+    seen = set()
+    evidence_list = []
+    for r in results:
+        required = r.get("required_evidence", [])
+        if not required:
+            continue
+        for item in required:
+            key = item.strip().lower()
+            if key not in seen:
+                seen.add(key)
+                evidence_list.append({
+                    "item": item.strip(),
+                    "related_dimension": r.get("item", ""),
+                    "risk_level": r.get("risk_level", "")
+                })
+    return evidence_list

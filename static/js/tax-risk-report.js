@@ -1,8 +1,10 @@
-// ==================== 涉税风险分析报告 V2 ====================
-// 23 个分析维度：账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 /
+// ==================== 涉税风险分析报告 V3 ====================
+// 33 个分析维度：账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 /
 // 配比弹性 / 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
 // 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
-// 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践
+// 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践 /
+// 经营实质（稽查级）：长期亏损 / 经营场所 / 存货匹配 / 水电费产能 / 人员规模 /
+// 资金票据匹配 / 边角料 / 视同销售 / 库存现金 / 关联交易
 
 var taxRiskReportData = null;
 var taxRiskLoading = false;
@@ -14,7 +16,7 @@ function renderTaxRiskReport(container) {
     + '<div class="risk-report-container">'
     + '<div class="risk-report-header">'
     + '<h2>🛡️ 涉税风险分析报告</h2>'
-    + '<p class="risk-report-subtitle">23个维度综合分析：账务·发票·成本·财税票比对·弹性配比·隐匿虚增·税负·城建税·房产税·个税·印花税·纳税调整·收入时点·政策·资金·薪酬·客户·供应商·财务·信用·行业</p>'
+    + '<p class="risk-report-subtitle">33个维度综合分析：涵盖账务发票合规、财税票四维比对、弹性配比、隐匿虚增、个税印花税城建税房产税、纳税调整、收入时点、经营实质深度排查（长期亏损/经营场所/存货匹配/水电费产能/人员规模/资金票据匹配/边角料/视同销售/库存现金/关联交易）等</p>'
     + '<div class="risk-report-actions">'
     + '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
     + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
@@ -74,6 +76,11 @@ function renderTaxRiskReportData(data) {
   // 汇总卡片 + 财务指标
   renderSummaryCards(data.summary, data.period_start, data.period_end, data.metrics);
 
+  // 佐证材料汇总（如有）
+  if (data.required_evidence_summary && data.required_evidence_summary.length > 0) {
+    renderEvidenceSummary(data.required_evidence_summary);
+  }
+
   // 分类渲染
   var body = document.getElementById('risk-report-body');
   var categories = {};
@@ -84,8 +91,9 @@ function renderTaxRiskReportData(data) {
     categories[cat].push(r);
   }
 
-  // 完整23个分类排序
+  // 完整33个分类排序（经营实质稽查级排最前）
   var catOrder = [
+    '经营实质',
     '良好实践',
     '财税票比对', '配比弹性', '隐匿虚增', '纳税调整', '收入时点',
     '账务数据', '发票合规', '发票深度', '成本结构',
@@ -208,7 +216,48 @@ function renderRiskItem(r, idx) {
     + '<div class="risk-item-suggestion">'
     + '<span class="suggestion-label">💡 建议：</span>' + escapeHtml(r.suggestion)
     + '</div>'
+    + (r.required_evidence && r.required_evidence.length > 0 ? renderEvidenceList(r.required_evidence, r.risk_level) : '')
     + '</div>';
+}
+
+function renderEvidenceList(evidence, level) {
+  var cls = '';
+  if (level === '高风险') cls = 'evidence-urgent';
+  else if (level === '中风险') cls = 'evidence-warn';
+  else cls = 'evidence-info';
+  var html = '<div class="evidence-box ' + cls + '">'
+    + '<div class="evidence-title">📋 需提供的佐证材料（税务稽查应对）：</div>'
+    + '<ol class="evidence-list">';
+  for (var i = 0; i < evidence.length; i++) {
+    html += '<li>' + escapeHtml(evidence[i]) + '</li>';
+  }
+  html += '</ol></div>';
+  return html;
+}
+
+function renderEvidenceSummary(summaryItems) {
+  var body = document.getElementById('risk-report-body');
+  var html = '<div class="risk-category evidence-summary-category">'
+    + '<div class="risk-category-header">'
+    + '<span class="risk-cat-icon">📋</span> 佐证材料清单汇总'
+    + ' <span class="risk-cat-count">' + summaryItems.length + '项</span>'
+    + '<span style="font-size:11px;color:#f59e0b;margin-left:8px">（税务稽查应对必备）</span>'
+    + '</div>'
+    + '<div class="evidence-summary-list">';
+  for (var i = 0; i < summaryItems.length; i++) {
+    var item = summaryItems[i];
+    var levelClass = '';
+    if (item.risk_level === '高风险') levelClass = 'evidence-urgent-tag';
+    else if (item.risk_level === '中风险') levelClass = 'evidence-warn-tag';
+    else levelClass = 'evidence-info-tag';
+    html += '<div class="evidence-summary-item">'
+      + '<span class="evidence-seq">' + (i + 1) + '</span>'
+      + '<span class="evidence-desc">' + escapeHtml(item.item) + '</span>'
+      + '<span class="evidence-related ' + levelClass + '">' + escapeHtml(item.related_dimension) + '</span>'
+      + '</div>';
+  }
+  html += '</div></div>';
+  body.innerHTML = html + (body.innerHTML || '');
 }
 
 function escapeHtml(str) {

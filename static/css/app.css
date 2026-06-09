@@ -575,6 +575,27 @@
     .risk-item-title { font-size: 14px; font-weight: 600; color: var(--gray-800); flex: 1; min-width: 150px; }
     .risk-item-detail { font-size: 13px; color: var(--gray-500); line-height: 1.7; margin-bottom: 8px; padding-left: 4px; }
     .risk-item-suggestion { font-size: 13px; color: var(--gray-600); background: var(--primary-light); padding: 10px 14px; border-radius: 8px; line-height: 1.7; }
+
+    /* 佐证材料清单样式（稽查级） */
+    .evidence-box { margin: 8px 10px 14px; padding: 12px 14px; border-radius: 8px; border-left: 4px solid; }
+    .evidence-box.evidence-urgent { background: #fef2f2; border-color: #dc2626; }
+    .evidence-box.evidence-warn { background: #fffbeb; border-color: #f59e0b; }
+    .evidence-box.evidence-info { background: #eff6ff; border-color: #3b82f6; }
+    .evidence-title { font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+    .evidence-list { margin: 0; padding-left: 22px; font-size: 12px; color: var(--gray-600); line-height: 1.9; }
+    .evidence-list li { margin-bottom: 2px; }
+
+    /* 佐证材料汇总样式 */
+    .evidence-summary-category { border: 2px solid #f59e0b !important; background: #fffbf5; }
+    .evidence-summary-list { padding: 8px 0; }
+    .evidence-summary-item { display: flex; align-items: flex-start; gap: 12px; padding: 8px 14px; border-bottom: 1px solid #fef3c7; }
+    .evidence-summary-item:last-child { border-bottom: none; }
+    .evidence-seq { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 50%; background: #f59e0b; color: #fff; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .evidence-desc { flex: 1; font-size: 13px; color: var(--gray-700); line-height: 1.6; }
+    .evidence-related { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f3f4f6; color: var(--gray-500); flex-shrink: 0; white-space: nowrap; }
+    .evidence-related.evidence-urgent-tag { background: #fef2f2; color: #dc2626; }
+    .evidence-related.evidence-warn-tag { background: #fffbeb; color: #d97706; }
+    .evidence-related.evidence-info-tag { background: #eff6ff; color: #2563eb; }
     .suggestion-label { font-weight: 700; color: var(--primary-dark); }
 
     /* 紧急度徽章 */
