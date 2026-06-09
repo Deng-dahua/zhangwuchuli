@@ -160,6 +160,7 @@ async function renderHousingFund(container) {
               <th>工号</th>
               <th>姓名</th>
               <th>身份证号</th>
+              <th>缴存月份</th>
               <th>缴存基数</th>
               <th>单位比例(%)</th>
               <th>个人比例(%)</th>
@@ -233,13 +234,14 @@ function hfRenderTable(items) {
   if (!tbody) return;
   hfSelectedIds.clear();
   tbody.innerHTML = items.length === 0
-    ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
+    ? '<tr><td colspan="14" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
     : items.map(item => `
       <tr>
         <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)" /></td>
         <td>${escapeHtml(item.employee_id || '-')}</td>
         <td>${escapeHtml(item.employee_name)}</td>
         <td>${escapeHtml(item.id_number || '-')}</td>
+        <td>${item.period || '-'}</td>
         <td class="num">${(item.deposit_base || 0).toLocaleString()}</td>
         <td class="num">${item.company_ratio || 0}%</td>
         <td class="num">${item.personal_ratio || 0}%</td>
@@ -593,7 +595,7 @@ function hfShowImport() {
           <input type="file" id="hf-import-file" accept=".xls,.xlsx" style="display:none" onchange="hfHandleFileSelected(this)">
         </div>
         <div style="font-size:12px;color:#888;margin-top:8px;">
-          表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额
+          表头要求：工号、姓名、身份证号、缴存基数、单位缴存比例、个人缴存比例、缴存额、单位缴存额、个人缴存额（缴存月份由导入时的期间选择器决定，无需在文件中体现）
         </div>
       </div>
       <div class="modal-footer">

@@ -459,7 +459,7 @@ async def import_excel(
         "total": len(details),
         "declaration_id": decl.id,
         "errors": errors[:10],
-        "message": f"成功导入 {len(details)} 条记录",
+        "message": f"成功导入 {len(details)} 条记录，已自动生成{result.get('generated', 0)}张计提凭证",
         "journal": result
     }
 

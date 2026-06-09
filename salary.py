@@ -22,6 +22,7 @@ from database import (
     get_db, SessionLocal,
     SalaryRecord, Company, Employee,
     JournalEntry,
+    _generate_salary_journals,
 )
 
 router = APIRouter(prefix="/api/salary", tags=["工资薪金"])
@@ -672,7 +673,19 @@ def import_salary_excel(
         _auto_create_employee(db, company_id, str(name).strip(), id_number)
 
     db.commit()
-    return {"msg": f"成功导入{created}条工资记录", "count": created}
+
+    # 自动生成工资计提凭证
+    msg = f"成功导入{created}条工资记录"
+    journal_result = None
+    try:
+        journal_result = _generate_salary_journals(db, company_id, period)
+        db.commit()
+        msg += f"，已自动生成{journal_result.get('generated', 0)}张计提凭证"
+    except Exception as e:
+        journal_result = {"error": str(e)}
+        msg += f"，凭证生成失败: {str(e)}"
+
+    return {"msg": msg, "count": created, "journal": journal_result}
 
 
 @router.get("/stats")

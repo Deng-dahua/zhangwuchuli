@@ -340,11 +340,22 @@ async def import_excel(
     if auto_corrected_ratios > 0:
         msg += f"（已自动将 {auto_corrected_ratios} 个小数比例转为百分比）"
 
+    # 自动生成公积金计提凭证
+    journal_result = None
+    try:
+        journal_result = _generate_hf_accrual_journals(db, company_id, period)
+        db.commit()
+        msg += f"，已自动生成{journal_result.get('generated', 0)}张计提凭证"
+    except Exception as e:
+        journal_result = {"error": str(e)}
+        msg += f"，凭证生成失败: {str(e)}"
+
     return {
         "imported": imported,
         "skipped": skipped,
         "errors": errors[:10],
         "message": msg,
+        "journal": journal_result,
     }
 
 
