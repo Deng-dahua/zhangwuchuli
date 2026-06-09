@@ -372,7 +372,8 @@ function renderSalaryTable(records) {
                 ${delBtn}
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // ========== 新增/编辑 ==========
