@@ -599,11 +599,9 @@ async function ssBatchDelete() {
   if (ssSelectedIds.size === 0) return alert('请先勾选要删除的记录');
   if (!confirm('确认删除选中的 ' + ssSelectedIds.size + ' 条记录？此操作不可恢复！')) return;
   try {
-    var res = await api('/api/social-security/details/batch-delete?company_id=' + currentCompanyId, {
-      method: 'POST',
-      body: JSON.stringify({ ids: [...ssSelectedIds] })
-    });
+    var res = await api('POST', '/api/social-security/details/batch-delete?company_id=' + currentCompanyId, { ids: [...ssSelectedIds] });
     toast('成功删除 ' + (res.deleted || 0) + ' 条记录', 'success');
+    ssSelectedIds.clear();
     ssRefresh();
   } catch (e) { handleError(e, '批量删除'); }
 }

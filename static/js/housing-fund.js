@@ -281,7 +281,9 @@ function updateBatchBtn() {
 async function hfBatchDelete() {
   if (hfSelectedIds.size === 0) return alert('请先勾选要删除的记录');
   if (!confirm(`确认删除选中的 ${hfSelectedIds.size} 条记录？`)) return;
-  await api('POST', `/api/housing-fund/details/batch-delete?company_id=${currentCompanyId}`, [...hfSelectedIds]);
+  var res = await api('POST', `/api/housing-fund/details/batch-delete?company_id=${currentCompanyId}`, { ids: [...hfSelectedIds] });
+  toast('成功删除 ' + (res.deleted || 0) + ' 条记录', 'success');
+  hfSelectedIds.clear();
   hfRefresh();
 }
 
