@@ -353,11 +353,11 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     # ===== 销项税额 =====
     # 优先从序时账取数（贷方 2221 应交增值税-销项税额）
-    output_tax = sum(
+    output_tax = float(sum(
         e.credit_amount or 0
         for e in entries
         if e.account_code and "2221" in e.account_code and "销项" in (e.account_name or "")
-    )
+    ))
 
     # 销项发票：按税收分类编码前两位自动分类，填入主表各栏
     # 税收分类编码规则：10=货物，11=矿产品，12=电力，20=加工修理修配劳务，
@@ -417,41 +417,41 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     for inv in sales_invoices:
         if _is_exempt(inv):
-            exempt_sales += inv.amount or 0
+            exempt_sales += float(inv.amount or 0)
             continue
         if _is_simple(inv):
-            simple_sales += inv.amount or 0
-            simple_tax += inv.tax_amount or 0
+            simple_sales += float(inv.amount or 0)
+            simple_tax += float(inv.tax_amount or 0)
             continue
         cat = _inv_category(inv)
         rate = inv.tax_rate or 0
         key = (cat, rate)
-        category_sales[key] = category_sales.get(key, 0) + (inv.amount or 0)
-        category_tax[key] = category_tax.get(key, 0) + (inv.tax_amount or 0)
+        category_sales[key] = category_sales.get(key, 0) + float(inv.amount or 0)
+        category_tax[key] = category_tax.get(key, 0) + float(inv.tax_amount or 0)
         if cat == "goods":
-            goods_sales += inv.amount or 0
-            goods_tax += inv.tax_amount or 0
+            goods_sales += float(inv.amount or 0)
+            goods_tax += float(inv.tax_amount or 0)
         elif cat == "labor":
-            labor_sales += inv.amount or 0
-            labor_tax += inv.tax_amount or 0
+            labor_sales += float(inv.amount or 0)
+            labor_tax += float(inv.tax_amount or 0)
         elif cat in ("service", "realestate", "intangible"):
-            service_sales += inv.amount or 0
-            service_tax += inv.tax_amount or 0
+            service_sales += float(inv.amount or 0)
+            service_tax += float(inv.tax_amount or 0)
 
     # 销售额 = 不含税金额（amount），不是价税合计（total_amount）
-    sales_total = sum(i.amount or 0 for i in sales_invoices)
-    sales_total_inclusive = sum(i.total_amount or 0 for i in sales_invoices)
+    sales_total = sum(float(i.amount or 0) for i in sales_invoices)
+    sales_total_inclusive = sum(float(i.total_amount or 0) for i in sales_invoices)
     # 销项税额：优先序时账，兜底发票
     if output_tax == 0:
-        output_tax = sum(i.tax_amount or 0 for i in sales_invoices)
+        output_tax = sum(float(i.tax_amount or 0) for i in sales_invoices)
 
     # ===== 进项税额 =====
     # 优先从序时账取数（借方 2221 应交增值税-进项税额）
-    input_tax_journal = sum(
+    input_tax_journal = float(sum(
         e.debit_amount or 0
         for e in entries
         if e.account_code and "2221" in e.account_code and "进项" in (e.account_name or "")
-    )
+    ))
     # 进项抵扣表：按抵扣所属期取数，仅正常发票
     # 抵扣所属期为空时，fallback 到开票日期（invoice_date）的年月
     input_deductions = db.query(InputVATDeduction).filter(
@@ -465,7 +465,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         ),
         InputVATDeduction.invoice_status == "正常",
     ).all()
-    input_tax = sum(d.deductible_tax_amount or 0 for d in input_deductions)
+    input_tax = sum(float(d.deductible_tax_amount or 0) for d in input_deductions)
     if input_tax_journal > 0:
         input_tax = input_tax_journal
 
@@ -562,11 +562,11 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # 第3栏 应税劳务销售额（税收编码前两位20）
     row3_labor = round(labor_sales, 2)
     # 第4栏 纳税检查调整的销售额（从序时账"纳税检查"关键词提取）
-    row4_tax_check = round(
+    row4_tax_check = round(float(
         sum(e.credit_amount or 0 for e in entries
              if e.account_code and "2221" in e.account_code
              and "销项" in (e.account_name or "")
-             and "检查" in (e.description or "")), 2
+             and "检查" in (e.summary or ""))), 2
     )
     # 第5栏 简易计税销售额
     row5_simple = round(simple_sales, 2)
@@ -578,7 +578,7 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     row8_exempt = round(exempt_sales, 2)
     # 第9栏 免税货物销售额（从免税销售额中再分货物）
     row9_exempt_goods = round(
-        sum(i.amount or 0 for i in sales_invoices
+        sum(float(i.amount or 0) for i in sales_invoices
              if _is_exempt(i) and _inv_category(i) == "goods"), 2
     )
     # 第10栏 免税劳务销售额
@@ -597,14 +597,14 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # 从进项发票中筛选进项税额转出的记录（红字或标注"转出"）
     # 第14栏 进项税额转出：从序时账取"进项税额转出"类分录
     # 会计科目2221下的贷方发生额，或摘要含"转出"、"进项转出"、"免税项目"、"集体福利"等
-    input_transfer_out = round(
+    input_transfer_out = round(float(
         sum(e.credit_amount or 0 for e in entries
              if e.account_code and "2221" in e.account_code
-             and e.entry_type == "贷"
-             and any(k in (e.description or "") + " " + (e.account_name or "")
+             and (e.credit_amount or 0) > 0
+             and any(k in (e.summary or "") + " " + (e.account_name or "")
                      for k in ["转出", "进项转出", "免税项目", "集体福利", "个人消费", "非正常损失"])) +
         sum(d.deductible_tax_amount or 0 for d in input_deductions
-             if "转出" in (d.remark or "") or (d.invoice_status or "") == "红字"),
+             if "转出" in (d.remark or "") or (d.invoice_status or "") == "红字")),
         2
     )
     # 第15栏 免、抵、退应退税额（从出口退税模块取，无则为0）
@@ -641,23 +641,23 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
 
     # 第26-31栏 本期已缴税额（从银行流水取数）
     # 第26栏 本期已缴税额（本期缴纳前期应纳税额）
-    row26_paid_prior = round(
+    row26_paid_prior = round(float(
         sum(e.debit_amount or 0 for e in entries
              if e.account_code and "2221" in e.account_code
-             and "已缴" in (e.description or "")
-             and "前期" in (e.description or "")), 2
+             and "已缴" in (e.summary or "")
+             and "前期" in (e.summary or ""))), 2
     )
     # 第27栏 本期已缴税额（本期预缴税额）
-    row27_prepay = round(
+    row27_prepay = round(float(
         sum(e.debit_amount or 0 for e in entries
              if e.account_code and "2221" in e.account_code
-             and "预缴" in (e.description or "")), 2
+             and "预缴" in (e.summary or ""))), 2
     )
     # 第28栏 本期已缴税额（本期缴纳查补税额）
-    row28_paid_check = round(
+    row28_paid_check = round(float(
         sum(e.debit_amount or 0 for e in entries
              if e.account_code and "2221" in e.account_code
-             and "查补" in (e.description or "")), 2
+             and "查补" in (e.summary or ""))), 2
     )
     # 第30栏 本期已缴税额合计 = 第26+第27+第28
     row30_paid_total = round(row26_paid_prior + row27_prepay + row28_paid_check, 2)
@@ -703,9 +703,9 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
         key = f"rate_{rate}_{'service' if is_service else 'goods'}"
         if key not in sales_by_rate:
             sales_by_rate[key] = {"amount": 0, "tax": 0, "inclusive": 0}
-        sales_by_rate[key]["amount"] += inv.amount or 0
-        sales_by_rate[key]["tax"] += inv.tax_amount or 0
-        sales_by_rate[key]["inclusive"] += inv.total_amount or 0
+        sales_by_rate[key]["amount"] += float(inv.amount or 0)
+        sales_by_rate[key]["tax"] += float(inv.tax_amount or 0)
+        sales_by_rate[key]["inclusive"] += float(inv.total_amount or 0)
     
     def _sr(rate_key):
         """安全取税率汇总数据"""
@@ -925,8 +925,8 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
             ded_list = [d for d in ded_list if (d.invoice_category or "") == cat_filter]
         return (
             len(ded_list),
-            sum((d.amount or 0) for d in ded_list),
-            sum((d.deductible_tax_amount or 0) for d in ded_list),
+            sum(float(d.amount or 0) for d in ded_list),
+            sum(float(d.deductible_tax_amount or 0) for d in ded_list),
         )
 
     # 增值税专用发票类（默认票种）

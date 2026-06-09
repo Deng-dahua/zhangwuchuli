@@ -2,6 +2,7 @@
 let _jePage = 1;
 let _jeTotal = 0;
 let _jePageSize = 100;
+let _jeSkips = [0];  // page-1 → DB skip 值，支持同凭证不跨页的正确偏移
 
 // 6个往来科目：应收账款/应付账款/其他应收款/其他应付款/预收账款/预付账款
 function isContactAccount(code) {
@@ -47,9 +48,14 @@ async function renderJournal(container) {
 }
 
 async function loadJePage(page) {
+  // 加载第一页时重置 skip 缓存
+  if (page === 1) _jeSkips = [0];
+
   var from = getJePeriod('from');
   var to = getJePeriod('to');
-  var params = { skip: (page - 1) * _jePageSize, limit: _jePageSize };
+  // 使用缓存的 skip 值（支持同凭证不跨页的正确偏移）
+  var skip = _jeSkips[page - 1] !== undefined ? _jeSkips[page - 1] : (page - 1) * _jePageSize;
+  var params = { skip: skip, limit: _jePageSize };
   if (from) params.period_from = from;
   if (to) params.period_to = to;
 
@@ -57,6 +63,10 @@ async function loadJePage(page) {
     var res = await api('/api/journal-entries', params);
     _jePage = page;
     _jeTotal = res.total || 0;
+    // 保存下一页的 skip（来自后端的 next_skip，考虑了同凭证不跨页调整）
+    if (res.next_skip !== undefined && res.next_skip !== null) {
+      _jeSkips[page] = res.next_skip;
+    }
     renderJeTable(res.items || []);
     renderJePagination();
     updateJeBatchBtn();

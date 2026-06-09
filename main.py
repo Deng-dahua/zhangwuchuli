@@ -3587,10 +3587,62 @@ def list_journal_entries(
             JournalEntry.account_code.contains(keyword),
         ))
     total = q.count()
+
+    # 辅助：判断是否同凭证
+    def _same_voucher(a, b):
+        return a.period == b.period and a.voucher_word == b.voucher_word and a.voucher_no == b.voucher_no
+
+    def _same_voucher_filter(v):
+        return and_(
+            JournalEntry.period == v.period,
+            JournalEntry.voucher_word == v.voucher_word,
+            JournalEntry.voucher_no == v.voucher_no,
+        )
+
     entries = q.order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).offset(skip).limit(limit).all()
+    effective_consumed = limit  # 本页在 DB 中实际消耗了多少条记录
+
+    if entries:
+        # --- 处理开头：如果首页分录的凭证从前一页延续过来，补全该凭证全部前置分录 ---
+        if skip > 0:
+            first = entries[0]
+            prior_count = q.filter(
+                _same_voucher_filter(first),
+                JournalEntry.id < first.id,
+            ).count()
+            if prior_count > 0:
+                prior_entries = q.filter(
+                    _same_voucher_filter(first),
+                    JournalEntry.id < first.id,
+                ).order_by(JournalEntry.id.asc()).all()
+                entries = prior_entries + entries
+
+        # --- 处理末尾：如果末尾凭证还有分录在下一页 ---
+        last = entries[-1]
+        in_batch = sum(1 for e in entries if _same_voucher(e, last))
+        total_same_voucher = q.filter(_same_voucher_filter(last)).count()
+        remaining = total_same_voucher - in_batch
+
+        if remaining > 0:
+            if total_same_voucher > limit:
+                # 大凭证（分录数 > 单页上限）：取剩余分录补全到本页
+                remaining_entries = q.filter(
+                    _same_voucher_filter(last),
+                    JournalEntry.id > last.id,
+                ).order_by(JournalEntry.id.asc()).all()
+                entries = entries + remaining_entries
+                effective_consumed = limit + len(remaining_entries)
+            else:
+                # 小凭证：排除该凭证全部分录，推到下一页
+                entries = [e for e in entries if not _same_voucher(e, last)]
+                effective_consumed = limit - in_batch
+
+    next_skip = skip + effective_consumed
+
     hierarchy = _build_account_hierarchy(db, company_id)
     return {
         "total": total,
+        "next_skip": next_skip,
         "items": [{
             "id": e.id, "entry_date": str(e.entry_date), "period": e.period,
             "voucher_word": e.voucher_word, "voucher_no": e.voucher_no,
