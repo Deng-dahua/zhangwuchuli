@@ -181,6 +181,49 @@ async function exitCompany() {
   showCompanyPick(companies);
 }
 
+// ==================== 全局 AI 自动处理 ====================
+async function globalAIAutoProcess() {
+  const btn = document.querySelector('.btn-ai-auto');
+  if (!currentCompanyId) { toast('请先选择账套', 'warning'); return; }
+  if (!window.currentModule) { toast('请先进入一个功能模块', 'warning'); return; }
+
+  const module = window.currentModule;
+  const moduleFuncMap = {
+    '文化事业建设费': 'ccfAIAutoFill',
+    '增值税': 'vatAIAutoFill',
+    '工资薪金': 'salaryAIAutoFill',
+    '社会保险费': 'ssAIAutoFill',
+    '住房公积金': 'hfAIAutoFill',
+    '销项发票': 'siAIAutoFill',
+    '进项发票': 'piAIAutoFill',
+    '银行流水': 'bankAIAutoFill',
+  };
+
+  const funcName = moduleFuncMap[module];
+  if (!funcName) {
+    toast('当前模块【' + module + '】暂不支持 AI 自动处理', 'info');
+    return;
+  }
+
+  if (!window[funcName]) {
+    toast('当前模块【' + module + '】的 AI 处理函数尚未实现', 'info');
+    return;
+  }
+
+  // 禁用按钮，防止重复点击
+  if (btn) { btn.disabled = true; btn.textContent = '🤖 AI 处理中...'; }
+
+  try {
+    toast('正在对【' + module + '】执行 AI 自动处理...', 'info');
+    await window[funcName]();
+  } catch (err) {
+    console.error('AI 自动处理失败:', err);
+    toast('AI 自动处理失败：' + (err.message || err), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AI 自动处理'; }
+  }
+}
+
 async function handleCompanyRegister(e) {
   e.preventDefault();
   const btn = document.getElementById('reg-submit-btn');

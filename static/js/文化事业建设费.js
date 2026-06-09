@@ -331,7 +331,6 @@ function renderCCFToolbar(yearOpts, monthOpts) {
     + '<button class="stepper-btn stepper-down" onclick="stepCCFPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div>'
     + '<button class="btn-toolbar" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
-    + '<button class="btn-toolbar" onclick="ccfAIAutoFill()" title="AI 自动填列报表、生成凭证、更新档案" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;font-weight:700">🤖 AI 自动处理</button>'
     + '<button class="btn-toolbar" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
     + '<button class="btn-toolbar" onclick="ccfImportFile()" title="导入文化事业建设费申报数据">导入文件</button>'
     + '<button class="btn-toolbar" onclick="ccfGenerateVoucher()" title="生成文化事业建设费相关凭证">生成凭证</button>'
