@@ -5845,6 +5845,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
     bank_config_id: Optional[int] = Form(None),
     column_mapping: str = Form(...),  # JSON: {标准字段: 文件列名}
     company_id: int = Form(...),
+    force: str = Form("false"),
     db: Session = Depends(get_db)
 ):
     """根据列映射导入文件数据"""
@@ -5857,6 +5858,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
         if len(content_bytes) > MAX_UPLOAD_SIZE:
             raise HTTPException(400, f"文件过大（{len(content_bytes)/1024/1024:.1f}MB），上限10MB")
         mapping = json.loads(column_mapping)
+        force_dup = (force == "true")
 
         # 读取数据行
         rows_data = []
@@ -5992,7 +5994,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         BankTransaction.company_id == company_id,
                         BankTransaction._fingerprint == bt_fp
                     ).first()
-                    if existing_bt:
+                    if existing_bt and not force_dup:
                         errors.append(f"第{i+2}行: 数据重复，已跳过")
                         continue
 
@@ -6099,7 +6101,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             SalesInvoice.company_id == company_id,
                             SalesInvoice._fingerprint == fp
                         ).first()
-                        if existing:
+                        if existing and not force_dup:
                             errors.append(f"第{i+2}行: 数据重复，已跳过")
                             continue
                         inv = SalesInvoice(
@@ -6163,7 +6165,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             PurchaseInvoice.company_id == company_id,
                             PurchaseInvoice._fingerprint == pi_fp
                         ).first()
-                        if existing_pi:
+                        if existing_pi and not force_dup:
                             errors.append(f"第{i+2}行: 数据重复，已跳过")
                             continue
                         inv = PurchaseInvoice(
@@ -6223,7 +6225,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         BookkeepingInvoice.company_id == company_id,
                         BookkeepingInvoice._fingerprint == bi_fp
                     ).first()
-                    if existing_bi:
+                    if existing_bi and not force_dup:
                         errors.append(f"第{i+2}行: 数据重复，已跳过")
                         continue
                     inv = BookkeepingInvoice(
@@ -6314,7 +6316,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         InputVATDeduction.company_id == company_id,
                         InputVATDeduction._fingerprint == ivd_fp
                     ).first()
-                    if existing_ivd:
+                    if existing_ivd and not force_dup:
                         errors.append(f"第{i+2}行: 数据重复，已跳过")
                         continue
 
@@ -6420,7 +6422,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         Customer.company_id == company_id,
                         Customer._fingerprint == fp
                     ).first()
-                    if existing:
+                    if existing and not force_dup:
                         errors.append(f"第{i+2}行: 数据重复，已跳过")
                         continue
                     cust = Customer(
