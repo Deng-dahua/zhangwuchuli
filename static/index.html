@@ -8,6 +8,24 @@
   <meta http-equiv="Expires" content="0">
   <title>财税风险防控系统 - 中小企业版</title>
   <link rel="stylesheet" href="/static/css/app.css?v=202606091425">
+  <style>
+    /* 档案表文字单行显示 */
+    .single-line-table td.single-line {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 180px;
+    }
+    .single-line-table {
+      table-layout: auto;
+      width: 100%;
+    }
+    /* 科目余额表纵向滚动 */
+    #tb-table .table-wrap {
+      max-height: calc(100vh - 260px);
+      overflow-y: auto;
+    }
+  </style>
 </head>
 <body>
 

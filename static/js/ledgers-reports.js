@@ -505,7 +505,7 @@ async function renderAccountBalance(container) {
       <div class="filter-bar" style="flex-wrap:wrap;align-items:center;">
         <div id="tb-period-bar" style="display:flex;align-items:center;gap:4px"></div>
       </div>
-      <div id="tb-table"></div>
+      <div id="tb-table" class="tb-table-scroll"></div>
     </div>
   `;
   _buildStandardPeriodBar('tb-', { onQuery: loadAccountBalance, onClear: () => clearFilters('tb') });
@@ -530,7 +530,7 @@ async function loadAccountBalance() {
     const totalEndCredit = l1.reduce((s, r) => s + r.end_credit, 0);
 
     let html = '';
-    html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:4px"><table>';
+    html += '<div class="table-wrap" style="flex:1;padding-bottom:4px"><table>';
     html += '<thead><tr>';
     html += '<th>科目编码</th><th>科目名称</th><th style="text-align:center">方向</th>';
     html += '<th class="num">期初借方</th><th class="num">期初贷方</th>';
