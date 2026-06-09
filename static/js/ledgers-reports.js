@@ -594,7 +594,7 @@ function _contactPageHTML(title, apiPrefix) {
     '<div id="' + apiPrefix + '-period-bar" class="period-selector-bar" style="margin-bottom:12px;flex-shrink:0"></div>' +
     '<div style="display:flex;flex:1;gap:12px;overflow:hidden;min-height:0">' +
       '<div id="' + apiPrefix + '-list" style="width:260px;min-width:200px;overflow-y:auto;border-right:1px solid var(--gray-200);padding-right:8px"></div>' +
-      '<div id="' + apiPrefix + '-table" style="flex:1;overflow-y:auto;padding-bottom:4px;min-height:0"></div>' +
+      '<div id="' + apiPrefix + '-table" style="flex:1;overflow:auto;padding-bottom:4px;min-height:0"></div>' +
     '</div>' +
   '</div>';
 }
@@ -787,14 +787,14 @@ async function _loadContactDetail(apiPrefix, name) {
       '<span style="font-size:13px;color:#6b7280">期间：<b style="color:var(--gray-800)">' + from + ' ~ ' + to + '</b></span>' +
       '</div>';
     html += '<table style="table-layout:auto"><thead><tr>' +
-      '<th style="width:80px">日期</th><th style="width:56px">凭证号</th><th style="min-width:160px">摘要</th><th style="min-width:120px">科目</th>' +
+      '<th>日期</th><th>凭证号</th><th>摘要</th><th>科目</th>' +
       '<th style="width:90px" class="num">借方</th><th style="width:90px" class="num">贷方</th>' +
       '<th style="width:56px;text-align:center">余额方向</th><th style="width:100px" class="num">余额</th>' +
       '</tr></thead><tbody>';
     // 期初行
     let obDir = ob === 0 ? '平' : (ob > 0 ? '借' : '贷');
     html += '<tr style="background:#f8fafc">' +
-      '<td></td><td></td><td style="color:#6b7280;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">上期结转</td><td></td>' +
+      '<td></td><td></td><td style="color:#6b7280;font-style:italic;white-space:nowrap">上期结转</td><td></td>' +
       '<td class="num"></td><td class="num"></td>' +
       '<td style="text-align:center;font-weight:600">' + obDir + '</td>' +
       '<td class="num" style="font-weight:600">' + obFmt + '</td>' +
@@ -811,7 +811,7 @@ async function _loadContactDetail(apiPrefix, name) {
         html += '<tr>' +
           '<td style="white-space:nowrap">' + r.voucher_date + '</td>' +
           '<td style="white-space:nowrap">' + r.voucher_no + '</td>' +
-          '<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px" title="' + escapeHtml(r.summary||'') + '">' + escapeHtml(r.summary || '') + '</td>' +
+          '<td style="white-space:nowrap">' + escapeHtml(r.summary || '') + '</td>' +
           '<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">' + r.account_code + ' ' + r.account_name + '</td>' +
           '<td class="num">' + (r.debit_amount !== 0 ? '¥' + fmt(r.debit_amount) : '') + '</td>' +
           '<td class="num">' + (r.credit_amount !== 0 ? '¥' + fmt(r.credit_amount) : '') + '</td>' +
