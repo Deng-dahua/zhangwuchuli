@@ -18,27 +18,27 @@ const CCF_PAGES = [
   { id: 'deduction', label: '应税服务扣除项目清单' },
 ];
 
-// 主表行定义（19 行，对应 PDF 模板）
+// 主表行定义（19 行，对应 A06340 模板，含分类标题行）
 const CCF_ROWS = [
-  { key: 'row1_taxable_income',              label: '应征收入',                        calc: null },
-  { key: 'row2_tax_exempt_income',           label: '免征收入',                        calc: null },
-  { key: 'row3_deduction_beginning',         label: '减除项目期初金额',                 calc: null },
-  { key: 'row4_deduction_current_period',    label: '减除项目本期发生额',               calc: null },
-  { key: 'row5_taxable_income_deduction',    label: '应征收入减除额',                   calc: null },
-  { key: 'row6_tax_exempt_deduction',        label: '免征收入减除额',                   calc: null },
-  { key: 'row7_deduction_ending_balance',     label: '减除项目期末余额',                 calc: '3+4-5-6' },
-  { key: 'row8_taxable_sales',               label: '计费销售额',                       calc: '1-5' },
-  { key: 'row9_fee_rate',                    label: '费率',                            calc: null },
-  { key: 'row10_payable_fee',                label: '应缴费额',                        calc: '8×9' },
-  { key: 'row11_unpaid_beginning',           label: '期初未缴费额',                     calc: null },
-  { key: 'row12_paid_current_period',         label: '本期已缴费额',                     calc: '13+14+15' },
-  { key: 'row13_prepaid',                    label: '其中：本期预缴费额',               calc: null },
-  { key: 'row14_paid_last_period',           label: '本期缴纳上期费额',                 calc: null },
-  { key: 'row15_paid_arrears',               label: '本期缴纳欠费额',                   calc: null },
-  { key: 'row16_unpaid_ending',              label: '期末未缴费额',                     calc: '10+11-12' },
-  { key: 'row17_arrears',                    label: '其中：欠缴费额',                   calc: '11-14-15' },
-  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               calc: '10-13' },
-  { key: 'row19_inspected_supplement',       label: '本期检查已补缴费额',               calc: null },
+  { key: 'row1_taxable_income',              label: '应征收入',                        category: '计费收入',   calc: null },
+  { key: 'row2_tax_exempt_income',           label: '免征收入',                        category: '计费收入',   calc: null },
+  { key: 'row3_deduction_beginning',         label: '减除项目期初金额',                 category: '费额计算',   calc: null },
+  { key: 'row4_deduction_current_period',    label: '减除项目本期发生额',               category: '费额计算',   calc: null },
+  { key: 'row5_taxable_income_deduction',    label: '应征收入减除额',                   category: '费额计算',   calc: null },
+  { key: 'row6_tax_exempt_deduction',        label: '免征收入减除额',                   category: '费额计算',   calc: null },
+  { key: 'row7_deduction_ending_balance',     label: '减除项目期末余额',                 category: '费额计算',   calc: '3+4-5-6' },
+  { key: 'row8_taxable_sales',               label: '计费销售额',                       category: '费额计算',   calc: '1-5' },
+  { key: 'row9_fee_rate',                    label: '费率',                            category: '费额计算',   calc: null },
+  { key: 'row10_payable_fee',                label: '应缴费额',                        category: '费额计算',   calc: '8×9' },
+  { key: 'row11_unpaid_beginning',           label: '期初未缴费额（多缴为负）',          category: '费额缴纳',   calc: null },
+  { key: 'row12_paid_current_period',         label: '本期已缴费额',                     category: '费额缴纳',   calc: '13+14+15' },
+  { key: 'row13_prepaid',                    label: '其中：本期预缴费额',               category: '费额缴纳',   calc: null },
+  { key: 'row14_paid_last_period',           label: '本期缴纳上期费额',                 category: '费额缴纳',   calc: null },
+  { key: 'row15_paid_arrears',               label: '本期缴纳欠费额',                   category: '费额缴纳',   calc: null },
+  { key: 'row16_unpaid_ending',              label: '期末未缴费额（多缴为负）',          category: '费额缴纳',   calc: '10+11-12' },
+  { key: 'row17_arrears',                    label: '其中：欠缴费额（≥0）',            category: '费额缴纳',   calc: '11-14-15' },
+  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               category: '费额缴纳',   calc: '10-13' },
+  { key: 'row19_inspected_supplement',       label: '本期检查已补缴费额',               category: '费额缴纳',   calc: null },
 ];
 
 // ==================== 期间步进 ====================
@@ -371,15 +371,24 @@ function renderCCFMainForm(data, main) {
   h += '</thead>';
   h += '<tbody>';
 
+  var lastCategory = '';
   for (var i = 0; i < CCF_ROWS.length; i++) {
     var row = CCF_ROWS[i];
     var rn = i + 1;
     var bg = i % 2 === 1 ? 'background:#f9fafb' : '';
     var isCalc = !!row.calc;
 
+    // 分类标题行
+    if (row.category && row.category !== lastCategory) {
+      lastCategory = row.category;
+      h += '<tr style="background:#e8ecf4">';
+      h += '<td colspan="4" style="padding:5px 8px;font-size:12px;font-weight:700;color:#1e40af">' + escapeHtml(row.category) + '</td>';
+      h += '</tr>';
+    }
+
     h += '<tr style="' + bg + '">';
     // 项目
-    h += '<td style="padding:5px 8px;font-size:11px">';
+    h += '<td style="padding:5px 8px;font-size:11px;text-indent:1em">';
     h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
     h += '</td>';

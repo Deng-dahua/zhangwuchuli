@@ -513,10 +513,9 @@ function renderVATTemplateViewInline(data) {
   } catch (e) { formHtml = '<div style="padding:20px;color:#ef4444">渲染错误: ' + e.message + '</div>'; }
   container.innerHTML = html + '<div style="overflow-x:auto;padding:12px 0">' + formHtml + '</div>';
 
-  // 切换到不同记录或首次渲染时才滚动到表单区域
+  // 记录当前展示的记录 ID（用于切换到不同记录时刷新）
   if (vatInlineDisplayId !== data.id) {
     vatInlineDisplayId = data.id;
-    setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   }
 }
 
