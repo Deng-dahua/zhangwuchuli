@@ -41,6 +41,7 @@ from database import (
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals,
+    auto_generate_purchase_journal,
 )
 
 from vat import router as vat_router
@@ -2944,10 +2945,13 @@ def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(...), d
 
     db.flush()
 
+    # 生成采购入账凭证（借：库存商品 / 贷：应付账款）
+    purchase_count = auto_generate_purchase_journal(db, company_id, invoice_id)
+
     # 按月汇总生成进项抵扣凭证
-    count = auto_generate_input_vat_for_period(db, company_id, period)
+    vat_count = auto_generate_input_vat_for_period(db, company_id, period)
     db.commit()
-    return {"message": f"已为 {period} 生成进项抵扣凭证 ({count} 条)", "period": period}
+    return {"message": f"已为 {period} 生成采购凭证 {purchase_count} 张、进项抵扣凭证 {vat_count} 条", "period": period}
 
 
 @app.post("/api/purchase-invoices/batch-to-journal")
@@ -3023,6 +3027,9 @@ def purchase_invoice_batch_to_journal(
         except Exception as e:
             errors.append(f"生成期间{period}凭证失败: {str(e)}")
 
+
+    # 生成采购入账凭证（借：库存商品 / 贷：应付账款）
+    purchase_count = auto_generate_purchase_journal(db, company_id)
     db.commit()
     msg = f"批量生成完成：{generated} 张发票 → {voucher_count} 笔凭证"
     if skipped > 0:

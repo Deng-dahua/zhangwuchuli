@@ -1726,6 +1726,203 @@ def auto_generate_input_vat_for_period(db, company_id, period, total_tax=None):
     return 1  # 返回生成的凭证数（1号 = 2条分录）
 
 
+def _match_supplier(db, company_id, seller_name=None, seller_account=None):
+    """综合供应商档案 + 银行流水，匹配取得发票中的供应商。
+    
+    匹配优先级：
+      1. 供应商档案（name 精确 / _fingerprint 模糊）
+      2. 银行流水付款方（counterparty_name）
+    返回 (supplier_id, supplier_name) 或 (None, seller_name)。
+    """
+    if not seller_name:
+        return None, None
+
+    norm = _normalize_customer_name(seller_name)
+
+    # 1. 供应商档案精确匹配
+    for supp in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        if supp.name and _normalize_customer_name(supp.name) == norm:
+            return supp.id, supp.name
+        if supp._fingerprint and supp._fingerprint == norm:
+            return supp.id, supp.name
+
+    # 2. 银行流水：查找相似付款方
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0
+    ).all():
+        if tx.counterparty_name and _normalize_customer_name(tx.counterparty_name) == norm:
+            # 找到银行流水中的付款记录，确认是供应商
+            return None, tx.counterparty_name
+
+    return None, seller_name
+
+
+def _find_matching_payment(db, company_id, inv):
+    """查找与取得发票对应的银行付款记录。
+    
+    匹配规则（按优先级）：
+      1. 金额相等（允许 ±0.5 元误差）+ 对方户名相似
+      2. 金额相等 + 日期在 ±7 天内
+    返回 BankTransaction 对象或 None。
+    """
+    if not inv.invoice_date:
+        return None
+
+    seller_norm = _normalize_customer_name(inv.seller_name or "")
+    from datetime import timedelta
+
+    best, best_score = None, 999
+
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0,
+    ).all():
+        # 金额匹配（允许 ±0.5 元误差）
+        if abs(tx.debit_amount - (inv.total_amount or 0)) > 0.5:
+            continue
+        # 对方户名相似度
+        if tx.counterparty_name:
+            tx_norm = _normalize_customer_name(tx.counterparty_name)
+            if tx_norm == seller_norm:
+                return tx  # 精确匹配，直接返回
+            if seller_norm in tx_norm or tx_norm in seller_norm:
+                return tx  # 包含关系也算匹配
+        # 日期在 ±7 天内
+        if tx.transaction_date:
+            try:
+                delta = abs((tx.transaction_date - inv.invoice_date).days)
+                if delta <= 7 and delta < best_score:
+                    best = tx
+                    best_score = delta
+            except Exception:
+                pass
+
+    return best
+
+
+def auto_generate_purchase_journal(db, company_id, invoice_id=None):
+    """为取得发票生成采购入账凭证。
+
+    借：1405 库存商品 = 不含税金额
+    贷：2202 应付账款 / 供应商 = 不含税金额
+    （若银行流水有对应付款，则贷方用 1002 银行存款）
+
+    若 invoice_id 为 None，则为所有未取得凭证的取得发票生成凭证。
+    若 invoice_id 不为 None，则仅为指定发票生成凭证。
+    """
+    get_full_name, account_map = _build_account_name_resolver(db, company_id)
+
+    # 确保 2202 应付账款 科目存在
+    acc_2202 = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == "2202"
+    ).first()
+    if not acc_2202:
+        acc_2202 = Account(
+            company_id=company_id, code="2202", name="应付账款",
+            category="负债", balance_direction="贷", level=1,
+        )
+        db.add(acc_2202)
+        db.flush()
+        account_map["2202"] = acc_2202
+
+    # 确保 1002 银行存款 科目存在
+    acc_1002 = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == "1002"
+    ).first()
+    if not acc_1002:
+        acc_1002 = Account(
+            company_id=company_id, code="1002", name="银行存款",
+            category="资产", balance_direction="借", level=1,
+        )
+        db.add(acc_1002)
+        db.flush()
+        account_map["1002"] = acc_1002
+
+    # 确保 1405 库存商品 科目存在
+    acc_1405 = db.query(Account).filter(
+        Account.company_id == company_id, Account.code == "1405"
+    ).first()
+    if not acc_1405:
+        acc_1405 = Account(
+            company_id=company_id, code="1405", name="库存商品",
+            category="资产", balance_direction="借", level=1,
+        )
+        db.add(acc_1405)
+        db.flush()
+        account_map["1405"] = acc_1405
+
+    # 查询需要生成凭证的发票
+    query = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id
+    )
+    if invoice_id is not None:
+        query = query.filter(PurchaseInvoice.id == invoice_id)
+
+    invoices = query.all()
+    total = 0
+
+    for inv in invoices:
+        # 幂等检查：该发票已生成过凭证则跳过
+        _existing = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "取得发票",
+            JournalEntry.ref_id == inv.id
+        ).first()
+        if _existing:
+            continue
+
+        seller = inv.seller_name or "供应商"
+        goods = inv.goods_name or ""
+        summary = f"向{seller}采购{goods or '货物'}"
+
+        period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
+        date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
+
+        next_voucher_no = _next_voucher_no(db, company_id, period, "记")
+
+        # 借：库存商品/费用（默认 1405 库存商品）
+        debit_code = "1405"
+        debit_name = get_full_name("1405") or "库存商品"
+
+        # 贷：应付账款 或 银行存款（查银行流水是否有对应付款）
+        credit_code, credit_name = "2202", get_full_name("2202") or "应付账款"
+        tx = _find_matching_payment(db, company_id, inv)
+        if tx:
+            credit_code, credit_name = "1002", get_full_name("1002") or "银行存款"
+
+        entries = [
+            JournalEntry(
+                company_id=company_id,
+                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=summary, account_code=debit_code, account_name=debit_name,
+                debit_amount=inv.amount, credit_amount=0,
+                contact_project=seller,
+                source="取得发票", ref_id=inv.id,
+            ),
+            JournalEntry(
+                company_id=company_id,
+                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=summary, account_code=credit_code, account_name=credit_name,
+                debit_amount=0, credit_amount=inv.amount,
+                contact_project=seller,
+                source="取得发票", ref_id=inv.id,
+            ),
+        ]
+
+        for e in entries:
+            db.add(e)
+        db.flush()
+        total += 1
+
+    if total > 0:
+        db.commit()
+
+    return total
+
+
 def auto_generate_input_vat_journals(db):
     """为所有进项抵扣记录按月汇总生成凭证
     period 优先用 deduction_period，为空则用 invoice_date 的年月
