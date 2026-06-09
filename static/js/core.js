@@ -29,7 +29,7 @@ const pages = {
   'customers': '客户档案',
   'suppliers': '供应商档案',
   'general-ledger': '总账',
-  'detail-ledger': '明细账',
+  'detail-ledger': '科目明细账',
   'employee-ledger': '人员明细账',
   'customer-ledger': '客户明细账',
   'supplier-ledger': '供应商明细账',

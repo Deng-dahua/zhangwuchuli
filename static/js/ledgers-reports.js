@@ -73,7 +73,7 @@ function goDetailLedger(code) {
   }, 100);
 }
 
-// ==================== 明细账 ====================
+// ==================== 科目明细账 ====================
 async function renderDetailLedger(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   const accountOptions = allAccounts.map(a => '<option value="' + a.code + '">' + a.code + ' ' + a.name + '</option>').join('');

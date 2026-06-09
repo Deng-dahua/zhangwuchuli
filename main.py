@@ -4140,10 +4140,10 @@ def detail_ledger(
     ).order_by(JournalEntry.entry_date, JournalEntry.voucher_no, JournalEntry.id).all()
 
     rows = []
-    balance = opening_balance
+    balance = float(opening_balance)
     for e in entries:
-        dr = e.debit_amount or 0
-        cr = e.credit_amount or 0
+        dr = float(e.debit_amount or 0)
+        cr = float(e.credit_amount or 0)
         if account.balance_direction == "借":
             balance += dr - cr
         else:
@@ -4193,7 +4193,7 @@ def _sub_ledger_by_contact(company_id: int, account_codes: list, contact_name: s
     opening_balance = 0.0
     for e in entries_all:
         if e.period < period_from:
-            opening_balance += (e.debit_amount or 0) - (e.credit_amount or 0)
+            opening_balance += float(e.debit_amount or 0) - float(e.credit_amount or 0)
 
     # 本期明细
     rows = []
@@ -4201,8 +4201,8 @@ def _sub_ledger_by_contact(company_id: int, account_codes: list, contact_name: s
     for e in entries_all:
         if e.period < period_from:
             continue
-        dr = e.debit_amount or 0
-        cr = e.credit_amount or 0
+        dr = float(e.debit_amount or 0)
+        cr = float(e.credit_amount or 0)
         balance += dr - cr
         rows.append({
             "voucher_date": str(e.entry_date) if e.entry_date else "",
