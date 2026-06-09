@@ -1870,30 +1870,73 @@ def _next_voucher_no(db, company_id, period, voucher_word="记"):
     return (max_no[0] + 1) if max_no and max_no[0] else 1
 
 
-def _ensure_account(db, company_id, code, name, category, direction):
+def _ensure_account(db, company_id, code, name, category, direction, parent_code=None):
     """确保科目存在，不存在则创建"""
     if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
-        # 确定 parent_code
-        parent_map = {
-            "2211": "2211", "221101": "2211", "221102": "2211", "221103": "2211",
-            "2221": "2221", "222101": "2221",
-            "2210": "2210", "221001": "2210", "221001001": "221001", "221001002": "221001", "221001003": "221001",
-            "221002": "2210", "221003": "2210", "221004": "2210", "221005": "2210",
-            "221006": "2210", "221007": "2210", "221008": "2210",
-            "6602": "6602", "660201": "6602", "660202": "6602", "660203": "6602",
-            "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
-            "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
-            "660213": "6602", "660214": "6602", "660215": "6602", "660216": "6602",
-            "6603": "6603", "660301": "6603",
-            "2241": "2241",
-        }
-        parent = parent_map.get(code, "1")
+        if parent_code is None:
+            # 确定 parent_code（静态映射）
+            parent_map = {
+                "2211": None, "221101": "2211", "221102": "2211", "221103": "2211",
+                "2221": None, "222101": "2221",
+                "2210": None, "221001": "2210", "221001001": "221001", "221001002": "221001", "221001003": "221001",
+                "221002": "2210", "221003": "2210", "221004": "2210", "221005": "2210",
+                "221006": "2210", "221007": "2210", "221008": "2210",
+                "6602": None, "660201": "6602", "660202": "6602", "660203": "6602",
+                "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
+                "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
+                "660213": "6602", "660214": "6602", "660215": "6602", "660216": "6602",
+                "6603": None, "660301": "6603",
+                "2241": None,
+                "1221": None,
+            }
+            parent_code = parent_map.get(code)
+        level = 1
+        if parent_code:
+            parent_acc = db.query(Account).filter(Account.company_id == company_id, Account.code == parent_code).first()
+            level = (parent_acc.level + 1) if parent_acc else 2
         db.add(Account(
             company_id=company_id, code=code, name=name,
             category=category, balance_direction=direction,
-            level=len(code) // 2, parent_code=parent,
+            level=level, parent_code=parent_code,
         ))
         db.flush()
+
+
+def _ensure_personal_ar_account(db, company_id, employee_name: str) -> str:
+    """为员工在其他应收款(1221)下建立个人子科目，返回科目编码。
+    编码规则：1221 下级为 122101/122102/...（6位，01起）
+    科目名称就是员工姓名。
+    """
+    # 先确保父科目存在
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
+
+    # 查找已存在的个人子科目（按姓名）
+    existing = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.parent_code == "1221",
+        Account.name == employee_name
+    ).first()
+    if existing:
+        return existing.code
+
+    # 生成新编码：取1221下最大子编码+1
+    from sqlalchemy import func as sqlfunc
+    max_sub = db.query(Account.code).filter(
+        Account.company_id == company_id,
+        Account.parent_code == "1221"
+    ).order_by(Account.code.desc()).first()
+    if max_sub and max_sub[0] and len(max_sub[0]) >= 6:
+        next_num = int(max_sub[0][4:6]) + 1
+    else:
+        next_num = 1
+    new_code = f"1221{next_num:02d}"
+    db.add(Account(
+        company_id=company_id, code=new_code, name=employee_name,
+        category="资产", balance_direction="借",
+        level=2, parent_code="1221",
+    ))
+    db.flush()
+    return new_code
 
 
 def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[int]] = None):
@@ -2065,10 +2108,12 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
 # ========== 社保申报 — 序时账自动生成 ==========
 
 def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: int):
-    """社保计提凭证：根据社保申报明细生成计提分录。
-    借：管理费用-社会保险费（单位部分合计）
-    贷：应付职工薪酬-社会保险费（单位部分合计）
-    按 (declaration_id, source='社保申报-计提') 去重，重新生成时先删旧。
+    """社保计提凭证（新逻辑）：
+    公司承担部分：借 管理费用/社会保险费
+    个人承担部分：借 其他应收款/<员工姓名>（每人一行）
+    贷：应付职工薪酬/社会保险费（公司+个人合计）
+
+    都从公司直接付，人员承担部分先挂其他应收款，工资发放时扣回。
     """
 
     decl = db.query(SocialSecurityDeclaration).filter(
@@ -2084,103 +2129,94 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
     if not details:
         return {"generated": 0, "message": "无明细数据"}
 
-    # 汇总单位部分和个人部分
-    total_company = sum(d.company_amount or 0 for d in details)
-    total_personal = sum(d.personal_amount or 0 for d in details)
-
-    # 确保科目
-    _ensure_account(db, company_id, "660213", "社会保险费", "损益", "借")
-    _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
-    _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
-    _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
-
     period = decl.period
     summary_tag = f"社保计提-{period}"
 
-    # 去重：按 (company_id, summary, account_code='660213', source='社保申报-计提') 判重
+    # 去重：已存在则删除旧凭证重新生成
     existing = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.summary == summary_tag,
-        JournalEntry.account_code == "660213",
-        JournalEntry.source == "社保申报-计提"
+        JournalEntry.source == "社保计提",
     ).first()
     if existing:
-        # 删除旧凭证组（同一voucher_no的所有分录）
-        old_voucher = existing.voucher_no
         db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
+            JournalEntry.voucher_no == existing.voucher_no,
             JournalEntry.period == period,
-            JournalEntry.voucher_no == old_voucher,
-            JournalEntry.source == "社保申报-计提"
+            JournalEntry.source == "社保计提",
         ).delete()
         db.flush()
 
-    # 获取凭证号
-    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
+    # 确保父科目
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    _ensure_account(db, company_id, "660212", "社会保险费", "损益", "借")
+    _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
+    _ensure_account(db, company_id, "221102", "社会保险费", "负债", "贷")
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
 
-    # 计提分录：单位部分计入管理费用
-    # 借：管理费用-社会保险费
-    # 贷：应付职工薪酬-社会保险费
+    total_company = round(sum(d.company_amount or 0 for d in details), 2)
+    total_personal = round(sum(d.personal_amount or 0 for d in details), 2)
+    total_all = round(total_company + total_personal, 2)
+
     entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
+    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
+    entries = []
 
-    entry1 = JournalEntry(
+    # 借：管理费用/社会保险费（公司部分）
+    entries.append(JournalEntry(
         company_id=company_id, entry_date=entry_date,
         period=period, voucher_word="记", voucher_no=next_voucher_no,
-        summary=summary_tag, account_code="660213", account_name="社会保险费",
-        debit_amount=round(total_company, 2), credit_amount=0,
-        source="社保申报-计提",
-    )
-    entry2 = JournalEntry(
+        summary=summary_tag, account_code="660212", account_name="社会保险费",
+        debit_amount=total_company, credit_amount=0, source="社保计提",
+    ))
+
+    # 借：其他应收款/<员工姓名>（每人个人社保部分）
+    for d in details:
+        personal = round(d.personal_amount or 0, 2)
+        if personal == 0:
+            continue
+        emp_code = _ensure_personal_ar_account(db, company_id, d.employee_name)
+        emp_acc = db.query(Account).filter(
+            Account.company_id == company_id, Account.code == emp_code
+        ).first()
+        entries.append(JournalEntry(
+            company_id=company_id, entry_date=entry_date,
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag, account_code=emp_code,
+            account_name=f"其他应收款/{d.employee_name}",
+            debit_amount=personal, credit_amount=0, source="社保计提",
+        ))
+
+    # 贷：应付职工薪酬/社会保险费（公司+个人合计）
+    entries.append(JournalEntry(
         company_id=company_id, entry_date=entry_date,
         period=period, voucher_word="记", voucher_no=next_voucher_no,
         summary=summary_tag, account_code="221102", account_name="社会保险费",
-        debit_amount=0, credit_amount=round(total_company, 2),
-        source="社保申报-计提",
-    )
-    db.add_all([entry1, entry2])
+        debit_amount=0, credit_amount=total_all, source="社保计提",
+    ))
 
-    # 代扣分录：从工资中代扣个人社保
-    if total_personal > 0:
-        entry3 = JournalEntry(
-            company_id=company_id, entry_date=entry_date,
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（个人代扣）",
-            account_code="221101", account_name="工资",
-            debit_amount=round(total_personal, 2), credit_amount=0,
-            source="社保申报-计提",
-        )
-        entry4 = JournalEntry(
-            company_id=company_id, entry_date=entry_date,
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（个人代扣）",
-            account_code="222101", account_name="代扣社会保险费",
-            debit_amount=0, credit_amount=round(total_personal, 2),
-            source="社保申报-计提",
-        )
-        db.add_all([entry3, entry4])
+    db.add_all(entries)
     db.flush()
-
     return {
         "generated": 1,
         "voucher_no": next_voucher_no,
-        "company_amount": round(total_company, 2),
-        "personal_amount": round(total_personal, 2),
+        "company_amount": total_company,
+        "personal_amount": total_personal,
     }
 
 
 def _match_ss_payment_journals(db: Session, company_id: int):
-    """社保缴纳凭证：匹配银行流水与社保申报，生成缴纳分录。
-    匹配条件：
-      1. 银行流水经 _classify_bank_tx 分类为 social_security
-      2. 或银行流水期间/金额与社保申报匹配
-    生成分录：
-      借：应付职工薪酬-社会保险费（单位部分）
-      借：其他应付款-代扣社会保险费（个人部分）
-      贷：银行存款（合计=单位+个人）
-    返回 {"matched": int, "generated": int}
+    """社保缴纳凭证（新逻辑）：
+    匹配银行流水中支付社保的记录，生成：
+    借：应付职工薪酬/社会保险费（应付科目对冲，公司+个人合计）
+    贷：银行存款
+
+    社保都从公司直接付（含员工个人部分），所以应付职工薪酬/社会保险费
+    在计提时已经包含了公司+个人合计，此处全额冲销。
+
+    匹配关键词：税务、社会保险、社保
     """
 
-    # 查找所有已有的社保流水
     txs = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id
     ).all()
@@ -2193,103 +2229,55 @@ def _match_ss_payment_journals(db: Session, company_id: int):
         summary = tx.summary or ""
         tx_period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else ""
 
-        # 分类
+        # 判断是否社保相关：关键词匹配（税务征收 / 社保 / 社会保险）
+        full_text = (cp + " " + summary).lower()
         result = _classify_bank_tx(db, company_id, tx)
-        if result is None:
+        is_ss = (result and result[2] == "social_security") or \
+                any(kw in full_text for kw in ["社保", "社会保险", "社会保险费"])
+        if not is_ss:
             continue
-        _, _, match_type = result
 
-        if match_type != "social_security":
-            # 额外检查：对方户名/摘要是否包含社保相关关键词
-            full_text = cp + " " + summary
-            if not any(kw in full_text for kw in ["社保", "社会保险", "社会保险费"]):
-                continue  # 不是社保相关
-
-        # 确定支付金额（银行支出）
+        # 只处理支出（借方>0 表示银行账户减少即付款）
         is_debit = tx.debit_amount and tx.debit_amount > 0
         payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
-
-        # 尝试匹配社保申报
-        declarations = db.query(SocialSecurityDeclaration).filter(
-            SocialSecurityDeclaration.company_id == company_id,
-        ).all()
-
-        matched_decl = None
-        for decl in declarations:
-            # 同期匹配优先
-            details = db.query(SocialSecurityDetail).filter(
-                SocialSecurityDetail.declaration_id == decl.id
-            ).all()
-            total_all = sum((d.company_amount or 0) + (d.personal_amount or 0) for d in details)
-            # 金额容差5%或期间相同
-            if abs(payment_amount - total_all) / max(total_all, 1) < 0.05:
-                matched_decl = decl
-                break
-            if tx_period and decl.period == tx_period:
-                matched_decl = decl
-                break
+        if payment_amount <= 0:
+            continue
 
         # 去重
-        cp_tag = cp or summary or "社保"
-        summary_tag = f"银行流水-#{tx.id}-{cp_tag}"
+        summary_tag = f"社保缴纳-#{tx.id}"
         existing = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.summary == summary_tag,
-            JournalEntry.account_code == "1002",
+            JournalEntry.source == "社保缴纳",
         ).first()
         if existing:
             continue
 
         matched += 1
-
-        if matched_decl:
-            # 有匹配申报 → 精确分拆单位和个人的缴纳
-            details = db.query(SocialSecurityDetail).filter(
-                SocialSecurityDetail.declaration_id == matched_decl.id
-            ).all()
-            total_company = sum(d.company_amount or 0 for d in details)
-            total_personal = sum(d.personal_amount or 0 for d in details)
-        else:
-            total_company = payment_amount
-            total_personal = 0
-
         period = tx_period or datetime.now().strftime("%Y-%m")
         next_voucher_no = _next_voucher_no(db, company_id, period, "记")
         date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
-        entries = []
-        # 借：应付职工薪酬-社会保险费（单位部分）
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（缴纳社保）",
-            account_code="221102", account_name="应付职工薪酬-社会保险费",
-            debit_amount=round(total_company, 2), credit_amount=0,
-            source="社保申报-缴纳",
-        ))
-        # 借：其他应付款-代扣社会保险费（个人部分）
-        if total_personal > 0:
-            entries.append(JournalEntry(
+        # 借：应付职工薪酬/社会保险费
+        # 贷：银行存款
+        db.add_all([
+            JournalEntry(
                 company_id=company_id,
                 entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag + "（缴纳社保-代扣个人）",
-                account_code="222101", account_name="代扣社会保险费",
-                debit_amount=round(total_personal, 2), credit_amount=0,
-                source="社保申报-缴纳",
-            ))
-        # 贷：银行存款
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（缴纳社保）",
-            account_code="1002", account_name="银行存款",
-            debit_amount=0, credit_amount=round(total_company + total_personal, 2),
-            source="社保申报-缴纳",
-        ))
-        db.add_all(entries)
+                summary=summary_tag, account_code="221102", account_name="社会保险费",
+                debit_amount=round(payment_amount, 2), credit_amount=0,
+                source="社保缴纳",
+            ),
+            JournalEntry(
+                company_id=company_id,
+                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=summary_tag, account_code="1002", account_name="银行存款",
+                debit_amount=0, credit_amount=round(payment_amount, 2),
+                source="社保缴纳",
+            ),
+        ])
         db.flush()
         generated += 1
 
@@ -2299,14 +2287,14 @@ def _match_ss_payment_journals(db: Session, company_id: int):
 # ========== 工资薪金 — 序时账自动生成 ==========
 
 def _generate_salary_journals(db: Session, company_id: int, period: str):
-    """工资发放凭证：根据工资记录生成4笔分录。
-    1. 计提工资：借 管理费用-工资 / 贷 应付职工薪酬-工资
-    2. 发放工资：借 应付职工薪酬-工资 / 贷 银行存款（实发）
-    3. 缴纳个税：借 应交个人所得税 / 贷 银行存款
-    4. 缴纳社保公积金个人部分：借 代扣社保/公积金 / 贷 银行存款
-    按 (period, source) 去重。
+    """工资计提凭证（新逻辑）：
+    实发工资 = 应发工资 - 个人社保 - 个人公积金 - 个税
+
+    借：管理费用/工资（应发合计）
+    贷：其他应收款/<员工>（每人：个人社保+个人公积金，冲原来社保/公积金计提时产生的其他应收款）
+    贷：应交税费/应交个人所得税（个税合计）
+    贷：应付职工薪酬/工资（实发合计，待发放）
     """
-    # 查询该期间的工资记录
     records = db.query(SalaryRecord).filter(
         SalaryRecord.company_id == company_id,
         SalaryRecord.period == period
@@ -2314,176 +2302,115 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
     if not records:
         return {"generated": 0, "message": "无工资记录"}
 
-    # 幂等检查：任意一种工资凭证已存在且未删除，跳过整个生成
-    for _src in ["工资计提", "工资发放", "个税缴纳", "社保公积金缴纳"]:
-        if db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.source == _src
-        ).first():
-            return {"generated": 0, "message": f"凭证已存在（{_src}），跳过"}
+    # 幂等检查
+    existing = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period == period,
+        JournalEntry.source == "工资计提",
+    ).first()
+    if existing:
+        return {"generated": 0, "message": "工资计提凭证已存在，跳过"}
 
-    # 确保科目存在
+    # 确保科目
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
     _ensure_account(db, company_id, "660204", "工资", "损益", "借")
+    _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
     _ensure_account(db, company_id, "221101", "工资", "负债", "贷")
+    _ensure_account(db, company_id, "2210", "应交税费", "负债", "贷")
     _ensure_account(db, company_id, "221003", "应交个人所得税", "负债", "贷")
-    _ensure_account(db, company_id, "222101", "代扣社会保险费", "负债", "贷")
-    _ensure_account(db, company_id, "1002", "银行存款", "资产", "借")
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
 
-    # 汇总数据
-    total_income = sum(r.current_income or 0 for r in records)  # 本期收入
-    total_tax = sum(r.tax_to_pay or 0 for r in records)  # 本期应预扣预缴税额
-    total_personal_ss = sum(
-        (r.pension_insurance or 0) + (r.medical_insurance or 0) + (r.unemployment_insurance or 0)
-        for r in records
-    )  # 个人社保合计
-    total_personal_hf = sum((r.housing_fund or 0) for r in records)  # 个人公积金合计
+    # 汇总
+    total_income = round(sum(r.current_income or 0 for r in records), 2)
+    total_tax = round(sum(r.tax_to_pay or 0 for r in records), 2)
+    total_net = round(sum(r.net_salary or 0 for r in records), 2)
 
-    # 实发工资 = 本期收入 - 个税 - 个人社保 - 个人公积金
-    total_net = sum(r.net_salary or 0 for r in records)
-    if total_net == 0:
-        total_net = total_income - total_tax - total_personal_ss - total_personal_hf
+    # 每人：个人社保+个人公积金（需要从其他应收款冲回）
+    emp_personal = {}  # name → {ss, hf, code}
+    for r in records:
+        ss_amt = round((r.pension_insurance or 0) + (r.medical_insurance or 0) + (r.unemployment_insurance or 0), 2)
+        hf_amt = round(r.housing_fund or 0, 2)
+        emp_personal[r.employee_name] = {
+            "ss": ss_amt,
+            "hf": hf_amt,
+            "total": round(ss_amt + hf_amt, 2),
+        }
+    total_deduct = round(sum(v["total"] for v in emp_personal.values()), 2)
 
-    generated = 0
     entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
-
-    # 1. 计提工资凭证
-    summary_tag = f"工资计提-{period}"
     next_voucher_no = _next_voucher_no(db, company_id, period, "记")
+    summary_tag = f"工资计提-{period}"
+    entries = []
 
-    if total_income > 0:
-        entries = [
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag,
-                account_code="660204", account_name="管理费用-工资",
-                debit_amount=round(total_income, 2), credit_amount=0,
-                source="工资计提"
-            ),
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag,
-                account_code="221101", account_name="应付职工薪酬-工资",
-                debit_amount=0, credit_amount=round(total_income, 2),
-                source="工资计提"
-            )
-        ]
-        db.add_all(entries)
-        db.flush()
-        generated += 1
+    # 借：管理费用/工资（应发合计）
+    entries.append(JournalEntry(
+        company_id=company_id, entry_date=entry_date,
+        period=period, voucher_word="记", voucher_no=next_voucher_no,
+        summary=summary_tag, account_code="660204", account_name="工资",
+        debit_amount=total_income, credit_amount=0, source="工资计提",
+    ))
 
-    # 2. 发放工资凭证（实发）
-    if total_net > 0:
-        summary_tag2 = f"工资发放-{period}"
-        next_voucher_no += 1
+    # 贷：其他应收款/<员工>（每人个人社保+公积金合计，冲社保/公积金计提时的应收款）
+    for emp_name, data in emp_personal.items():
+        if data["total"] == 0:
+            continue
+        emp_code = _ensure_personal_ar_account(db, company_id, emp_name)
+        entries.append(JournalEntry(
+            company_id=company_id, entry_date=entry_date,
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag, account_code=emp_code,
+            account_name=f"其他应收款/{emp_name}",
+            debit_amount=0, credit_amount=data["total"], source="工资计提",
+        ))
 
-        entries2 = [
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag2,
-                account_code="221101", account_name="应付职工薪酬-工资",
-                debit_amount=round(total_net, 2), credit_amount=0,
-                source="工资发放"
-            ),
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag2,
-                account_code="1002", account_name="银行存款",
-                debit_amount=0, credit_amount=round(total_net, 2),
-                source="工资发放"
-            )
-        ]
-        db.add_all(entries2)
-        db.flush()
-        generated += 1
+    # 贷：应交税费/应交个人所得税
+    if total_tax != 0:
+        entries.append(JournalEntry(
+            company_id=company_id, entry_date=entry_date,
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag, account_code="221003", account_name="应交个人所得税",
+            debit_amount=0, credit_amount=total_tax, source="工资计提",
+        ))
 
-    # 3. 缴纳个税凭证
-    if total_tax > 0:
-        summary_tag3 = f"缴纳个税-{period}"
-        next_voucher_no += 1
+    # 贷：应付职工薪酬/工资（实发工资，待发放）
+    # 实发 = 应发 - 个人社保 - 个人公积金 - 个税（始终推算，不依赖net_salary字段）
+    # net_salary字段含退税等复杂逻辑，会导致借贷不平
+    total_net = round(total_income - total_deduct - total_tax, 2)
+    if total_net < 0:
+        total_net = 0
+    entries.append(JournalEntry(
+        company_id=company_id, entry_date=entry_date,
+        period=period, voucher_word="记", voucher_no=next_voucher_no,
+        summary=summary_tag, account_code="221101", account_name="工资",
+        debit_amount=0, credit_amount=total_net, source="工资计提",
+    ))
 
-        entries3 = [
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag3,
-                account_code="221003", account_name="应交个人所得税",
-                debit_amount=round(total_tax, 2), credit_amount=0,
-                source="个税缴纳"
-            ),
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag3,
-                account_code="1002", account_name="银行存款",
-                debit_amount=0, credit_amount=round(total_tax, 2),
-                source="个税缴纳"
-            )
-        ]
-        db.add_all(entries3)
-        db.flush()
-        generated += 1
+    # 验证借贷平衡
+    total_debit = round(sum(e.debit_amount or 0 for e in entries), 2)
+    total_credit = round(sum(e.credit_amount or 0 for e in entries), 2)
+    if abs(total_debit - total_credit) > 0.01:
+        return {"generated": 0, "message": f"借贷不平衡: 借{total_debit} 贷{total_credit}，请检查数据"}
 
-    # 4. 缴纳社保公积金个人部分凭证
-    total_deduct = total_personal_ss + total_personal_hf
-    if total_deduct > 0:
-        summary_tag4 = f"缴纳社保公积金个人部分-{period}"
-        next_voucher_no += 1
-
-        entries4 = []
-        # 借：其他应付款-代扣社会保险费（个人社保部分）
-        if total_personal_ss > 0:
-            entries4.append(
-                JournalEntry(
-                    company_id=company_id, entry_date=entry_date,
-                    period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag4 + "（个人社保）",
-                    account_code="222101", account_name="代扣社会保险费",
-                    debit_amount=round(total_personal_ss, 2), credit_amount=0,
-                    source="社保公积金缴纳"
-                )
-            )
-        # 借：应付职工薪酬-住房公积金（个人公积金部分）
-        if total_personal_hf > 0:
-            entries4.append(
-                JournalEntry(
-                    company_id=company_id, entry_date=entry_date,
-                    period=period, voucher_word="记", voucher_no=next_voucher_no,
-                    summary=summary_tag4 + "（个人公积金）",
-                    account_code="221103", account_name="住房公积金",
-                    debit_amount=round(total_personal_hf, 2), credit_amount=0,
-                    source="社保公积金缴纳"
-                )
-            )
-        # 贷：银行存款
-        entries4.append(
-            JournalEntry(
-                company_id=company_id, entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary_tag4,
-                account_code="1002", account_name="银行存款",
-                debit_amount=0, credit_amount=round(total_deduct, 2),
-                source="社保公积金缴纳"
-            )
-        )
-        db.add_all(entries4)
-        db.flush()
-        generated += 1
-
-    return {"generated": generated, "period": period}
+    db.add_all(entries)
+    db.flush()
+    return {
+        "generated": 1,
+        "voucher_no": next_voucher_no,
+        "total_income": total_income,
+        "total_deduct": total_deduct,
+        "total_tax": total_tax,
+        "total_net": total_net,
+    }
 
 
 def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
-    """公积金计提凭证：根据公积金明细生成计提分录。
-    借：管理费用-住房公积金（单位部分合计）
-    贷：应付职工薪酬-住房公积金（单位部分合计）
-    按 (company_id, period, source='公积金计提') 去重。
+    """公积金计提凭证（新逻辑）：
+    公司承担部分：借 管理费用/住房公积金
+    个人承担部分：借 其他应收款/<员工姓名>（每人一行）
+    贷：应付职工薪酬/住房公积金（公司+个人合计）
+
+    都从公司直接付，人员承担部分先挂其他应收款，工资发放时冲回。
     """
-    # 查询该期间的公积金明细
     details = db.query(HousingFundDetail).filter(
         HousingFundDetail.company_id == company_id,
         HousingFundDetail.period == period
@@ -2491,74 +2418,90 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
     if not details:
         return {"generated": 0, "message": "无公积金明细数据"}
 
-    # 汇总单位部分
-    total_company = sum(d.company_amount or 0 for d in details)
+    period_str = period
+    summary_tag = f"公积金计提-{period_str}"
 
-    # 确保科目存在
-    _ensure_account(db, company_id, "660216", "住房公积金", "损益", "借")
-    _ensure_account(db, company_id, "221103", "住房公积金", "负债", "贷")
-
-    # 获取凭证号
-    entry_date = datetime.strptime(period + "-01", "%Y-%m-%d").date()
-    next_voucher_no = _next_voucher_no(db, company_id, period, "记")
-
-    summary_tag = f"公积金计提-{period}"
-
-    # 去重
+    # 去重：已存在则删除旧凭证重新生成
     existing = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
-        JournalEntry.period == period,
+        JournalEntry.period == period_str,
         JournalEntry.source == "公积金计提",
-        JournalEntry.summary == summary_tag
+        JournalEntry.summary == summary_tag,
     ).first()
     if existing:
-        old_voucher = existing.voucher_no
         db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_no == old_voucher,
-            JournalEntry.source == "公积金计提"
+            JournalEntry.voucher_no == existing.voucher_no,
+            JournalEntry.period == period_str,
+            JournalEntry.source == "公积金计提",
         ).delete()
         db.flush()
 
-    # 生成计提凭证
-    entries = [
-        JournalEntry(
+    # 确保科目
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    _ensure_account(db, company_id, "660216", "住房公积金", "损益", "借")
+    _ensure_account(db, company_id, "2211", "应付职工薪酬", "负债", "贷")
+    _ensure_account(db, company_id, "221103", "住房公积金", "负债", "贷")
+    _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
+
+    total_company = round(sum(d.company_amount or 0 for d in details), 2)
+    total_personal = round(sum(d.personal_amount or 0 for d in details), 2)
+    total_all = round(total_company + total_personal, 2)
+
+    entry_date = datetime.strptime(period_str + "-01", "%Y-%m-%d").date()
+    next_voucher_no = _next_voucher_no(db, company_id, period_str, "记")
+    entries = []
+
+    # 借：管理费用/住房公积金（公司部分）
+    entries.append(JournalEntry(
+        company_id=company_id, entry_date=entry_date,
+        period=period_str, voucher_word="记", voucher_no=next_voucher_no,
+        summary=summary_tag, account_code="660216", account_name="住房公积金",
+        debit_amount=total_company, credit_amount=0, source="公积金计提",
+    ))
+
+    # 借：其他应收款/<员工>（个人部分，每人一行）
+    for d in details:
+        personal = round(d.personal_amount or 0, 2)
+        if personal == 0:
+            continue
+        emp_code = _ensure_personal_ar_account(db, company_id, d.employee_name)
+        entries.append(JournalEntry(
             company_id=company_id, entry_date=entry_date,
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag,
-            account_code="660216", account_name="住房公积金",
-            debit_amount=round(total_company, 2), credit_amount=0,
-            source="公积金计提"
-        ),
-        JournalEntry(
-            company_id=company_id, entry_date=entry_date,
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag,
-            account_code="221103", account_name="应付职工薪酬-住房公积金",
-            debit_amount=0, credit_amount=round(total_company, 2),
-            source="公积金计提"
-        )
-    ]
+            period=period_str, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary_tag, account_code=emp_code,
+            account_name=f"其他应收款/{d.employee_name}",
+            debit_amount=personal, credit_amount=0, source="公积金计提",
+        ))
+
+    # 贷：应付职工薪酬/住房公积金（公司+个人合计）
+    entries.append(JournalEntry(
+        company_id=company_id, entry_date=entry_date,
+        period=period_str, voucher_word="记", voucher_no=next_voucher_no,
+        summary=summary_tag, account_code="221103", account_name="住房公积金",
+        debit_amount=0, credit_amount=total_all, source="公积金计提",
+    ))
+
     db.add_all(entries)
     db.flush()
-
-    return {"generated": 1, "voucher_no": next_voucher_no, "company_amount": round(total_company, 2)}
+    return {
+        "generated": 1,
+        "voucher_no": next_voucher_no,
+        "company_amount": total_company,
+        "personal_amount": total_personal,
+    }
 
 
 def _match_hf_payment_journals(db: Session, company_id: int):
-    """公积金缴纳凭证：匹配银行流水与公积金明细，生成缴纳分录。
-    匹配条件：
-      1. 银行流水经 _classify_bank_tx 分类为 housing_fund
-      2. 或银行流水期间/金额与公积金明细匹配
-    生成分录：
-      借：应付职工薪酬-住房公积金（单位+个人）
-      贷：银行存款（合计=单位+个人）
-    返回 {"matched": int, "generated": int}
-    """
-    from datetime import datetime
+    """公积金缴纳凭证（新逻辑）：
+    匹配银行流水中支付公积金的记录，生成：
+    借：应付职工薪酬/住房公积金（公司+个人合计）
+    贷：银行存款
 
-    # 查找所有已有的公积金相关流水
+    匹配关键词：住房公积金、公积金、公积金中心
+    """
+    from datetime import datetime as _dt
+
     txs = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id
     ).all()
@@ -2571,87 +2514,55 @@ def _match_hf_payment_journals(db: Session, company_id: int):
         summary = tx.summary or ""
         tx_period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else ""
 
-        # 分类
+        # 关键词匹配：公积金相关
+        full_text = (cp + " " + summary).lower()
         result = _classify_bank_tx(db, company_id, tx)
-        if result is None:
+        is_hf = (result and result[2] == "housing_fund") or \
+                any(kw in full_text for kw in ["公积金", "住房公积金", "公积金中心"])
+        if not is_hf:
             continue
-        _, _, match_type = result
 
-        if match_type != "housing_fund":
-            # 额外检查：对方户名/摘要是否包含公积金相关关键词
-            full_text = cp + " " + summary
-            if not any(kw in full_text for kw in ["公积金", "住房公积金", "公积金中心"]):
-                continue  # 不是公积金相关
-
-        # 确定支付金额（银行支出）
+        # 只处理支出
         is_debit = tx.debit_amount and tx.debit_amount > 0
         payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
-
-        # 尝试匹配公积金明细
-        details = db.query(HousingFundDetail).filter(
-            HousingFundDetail.company_id == company_id,
-        ).all()
-
-        matched_detail = None
-        total_all = 0
-        for d in details:
-            detail_total = (d.company_amount or 0) + (d.personal_amount or 0)
-            total_all += detail_total
-            # 金额容差5%或期间相同
-            if abs(payment_amount - detail_total) / max(detail_total, 1) < 0.05:
-                matched_detail = d
-                break
-            if tx_period and d.period == tx_period:
-                matched_detail = d
-                break
+        if payment_amount <= 0:
+            continue
 
         # 去重
-        cp_tag = cp or summary or "公积金"
-        summary_tag = f"银行流水-#{tx.id}-{cp_tag}"
+        summary_tag = f"公积金缴纳-#{tx.id}"
         existing = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.summary == summary_tag,
-            JournalEntry.account_code == "1002",
+            JournalEntry.source == "公积金缴纳",
         ).first()
         if existing:
             continue
 
         matched += 1
-
-        if matched_detail:
-            # 有匹配明细 → 精确分拆单位和个人的缴纳
-            total_company = matched_detail.company_amount or 0
-            total_personal = matched_detail.personal_amount or 0
-        else:
-            total_company = payment_amount
-            total_personal = 0
-
-        period = tx_period or datetime.now().strftime("%Y-%m")
+        period = tx_period or _dt.now().strftime("%Y-%m")
         next_voucher_no = _next_voucher_no(db, company_id, period, "记")
         date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
-        entries = []
-        # 借：应付职工薪酬-住房公积金（单位+个人）
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（缴纳公积金）",
-            account_code="221103", account_name="应付职工薪酬-住房公积金",
-            debit_amount=round(total_company + total_personal, 2), credit_amount=0,
-            source="公积金缴纳"
-        ))
+        # 借：应付职工薪酬/住房公积金
         # 贷：银行存款
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary_tag + "（缴纳公积金）",
-            account_code="1002", account_name="银行存款",
-            debit_amount=0, credit_amount=round(total_company + total_personal, 2),
-            source="公积金缴纳"
-        ))
-        db.add_all(entries)
+        db.add_all([
+            JournalEntry(
+                company_id=company_id,
+                entry_date=_dt.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=summary_tag, account_code="221103", account_name="住房公积金",
+                debit_amount=round(payment_amount, 2), credit_amount=0,
+                source="公积金缴纳",
+            ),
+            JournalEntry(
+                company_id=company_id,
+                entry_date=_dt.strptime(date_str, "%Y-%m-%d").date(),
+                period=period, voucher_word="记", voucher_no=next_voucher_no,
+                summary=summary_tag, account_code="1002", account_name="银行存款",
+                debit_amount=0, credit_amount=round(payment_amount, 2),
+                source="公积金缴纳",
+            ),
+        ])
         db.flush()
         generated += 1
 
