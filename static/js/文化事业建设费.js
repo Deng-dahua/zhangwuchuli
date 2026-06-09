@@ -358,12 +358,24 @@ function renderCCFMainForm(data, main) {
   h += '填表日期：' + escapeHtml(data.fill_date || '') + '&nbsp;&nbsp;状态：<span class="badge badge-info">' + escapeHtml(data.status || '草稿') + '</span>';
   h += '</div></div>';
 
-  // 主表 19 行 × 4 列（项目/栏次/本月数/本年累计）
+  // 先计算每个分类的行数（用于 rowspan）
+  var catSpans = {}, catOrder = [];
+  for (var i = 0; i < CCF_ROWS.length; i++) {
+    var c = CCF_ROWS[i].category || '';
+    if (catSpans[c]) {
+      catSpans[c]++;
+    } else {
+      catSpans[c] = 1;
+      catOrder.push(c);
+    }
+  }
+
+  // 主表 19 行 × 5 列（项目-分类侧边栏 | 项目-明细 | 栏次 | 本月数 | 本年累计）
   h += '<table class="vat-form-table" style="font-size:12px;width:100%">';
-  h += '<colgroup><col style="width:38%"><col style="width:7%"><col style="width:27.5%"><col style="width:27.5%"></colgroup>';
+  h += '<colgroup><col style="width:10%"><col style="width:28%"><col style="width:7%"><col style="width:27.5%"><col style="width:27.5%"></colgroup>';
   h += '<thead>';
   h += '<tr style="background:#d9e2f3">';
-  h += '<th style="padding:6px 8px">项　　目</th>';
+  h += '<th colspan="2" style="padding:6px 8px">项　　目</th>';
   h += '<th style="padding:6px 8px;text-align:center">栏次</th>';
   h += '<th style="padding:6px 8px;text-align:center">本月（期）数</th>';
   h += '<th style="padding:6px 8px;text-align:center">本年累计</th>';
@@ -371,35 +383,37 @@ function renderCCFMainForm(data, main) {
   h += '</thead>';
   h += '<tbody>';
 
-  var lastCategory = '';
+  var renderedCats = {};
   for (var i = 0; i < CCF_ROWS.length; i++) {
     var row = CCF_ROWS[i];
     var rn = i + 1;
     var bg = i % 2 === 1 ? 'background:#f9fafb' : '';
     var isCalc = !!row.calc;
-
-    // 分类标题行
-    if (row.category && row.category !== lastCategory) {
-      lastCategory = row.category;
-      h += '<tr style="background:#e8ecf4">';
-      h += '<td colspan="4" style="padding:5px 8px;font-size:12px;font-weight:700;color:#1e40af">' + escapeHtml(row.category) + '</td>';
-      h += '</tr>';
-    }
+    var cat = row.category || '';
 
     h += '<tr style="' + bg + '">';
-    // 项目
-    h += '<td style="padding:5px 8px;font-size:11px;text-indent:1em">';
+
+    // 第一列：分类侧边栏（rowspan 合并）
+    if (!renderedCats[cat]) {
+      renderedCats[cat] = true;
+      h += '<td rowspan="' + catSpans[cat] + '" style="vertical-align:top;padding:8px 4px;font-size:12px;font-weight:700;color:#1e40af;background:#e8ecf4;text-align:center;border-right:2px solid #93c5fd">';
+      h += escapeHtml(cat);
+      h += '</td>';
+    }
+
+    // 第二列：明细项目
+    h += '<td style="padding:5px 8px;font-size:11px">';
     h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
     h += '</td>';
-    // 栏次
+    // 第三列：栏次
     h += '<td style="padding:5px 4px;text-align:center;font-size:11px;font-weight:600">' + rn + '</td>';
-    // 本月数
+    // 第四列：本月数
     var curVal = _ccfGetVal(main, row.key + '_current');
     h += '<td style="padding:4px 6px;text-align:right">';
     h += '<input type="number" step="0.01" id="ccf-cur-' + row.key + '" value="' + curVal + '" style="width:100%;text-align:right;font-size:11px;border:1px solid #e5e7eb;border-radius:4px;padding:4px 6px;' + (isCalc ? 'background:#f0f9ff;font-weight:600' : '') + '" onchange="ccfOnMainChange()">';
     h += '</td>';
-    // 本年累计
+    // 第五列：本年累计
     var ytdVal = _ccfGetVal(main, row.key + '_ytd');
     h += '<td style="padding:4px 6px;text-align:right">';
     h += '<input type="number" step="0.01" id="ccf-ytd-' + row.key + '" value="' + ytdVal + '" style="width:100%;text-align:right;font-size:11px;border:1px solid #e5e7eb;border-radius:4px;padding:4px 6px;' + (isCalc ? 'background:#f0f9ff;font-weight:600' : '') + '" onchange="ccfOnMainChange()">';
