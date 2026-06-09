@@ -1329,6 +1329,9 @@ def create_account(data: AccountCreate, company_id: int = Query(...), db: Sessio
                        "应收账款(1122)、应付账款(2202)、预收账款(2203)、"
                        "预付账款(1123)、其他应收款(1221)、其他应付款(2241)。"
                        "请选择2级（含）以上级次。")
+    # 1221其他应收款不允许设二级科目，应使用往来项目（人员/供应商档案）
+    if code[:4] == '1221' and level and level >= 2:
+        raise HTTPException(400, detail="1221其他应收款不需要二级科目，请直接使用往来项目（人员档案/供应商档案）")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code,
                   opening_balance=data.opening_balance)
