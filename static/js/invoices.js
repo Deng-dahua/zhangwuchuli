@@ -482,7 +482,7 @@ async function showSalesDetail(id) {
 // ==================== 取得发票 ====================
 
 let piTab = 'all'; // all / zpt / ppt / tlp (专票/普票/铁路票)
-let piFilter = { category: '', cert: '', keyword: '', dateFrom: '', dateTo: '' };
+let piFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
 async function renderPurchaseInvoices(container) {
   // 核武器级防白屏：确保容器必定存在且在DOM中可见
@@ -508,7 +508,6 @@ async function renderPurchaseInvoices(container) {
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amt) + '</div><div class="stat-label">金额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_raw_tax) + '</div><div class="stat-label">税额合计</div></div>';
     html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_amount) + '</div><div class="stat-label">价税合计</div></div>';
-    html += '<div class="stat-card"><div class="stat-value">¥' + fmt(stats.total_tax) + '</div><div class="stat-label">可抵扣税额</div></div>';
     html += '</div>';
 
     html += '<div class="toolbar" style="flex-wrap:wrap;">';
@@ -530,7 +529,6 @@ async function renderPurchaseInvoices(container) {
     if (piTab === 'zpt') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('专用发票')));
     if (piTab === 'ppt') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('普通发票')));
     if (piTab === 'tlp') items = items.filter(i => i.invoice_category && (i.invoice_category.includes('铁路')));
-    if (piFilter.cert) items = items.filter(i => i.certification_status === piFilter.cert);
     if (piFilter.dateFrom) {
       const dFrom = piFilter.dateFrom.length === 10 && piFilter.dateFrom.includes('/') ? piFilter.dateFrom.replace(/\//g, '-') : piFilter.dateFrom;
       items = items.filter(i => i.invoice_date && i.invoice_date >= dFrom);
@@ -792,7 +790,6 @@ async function showPurchaseDetail(id) {
     html += '<div><b>金额（不含税）：</b>¥' + fmt(i.amount) + '</div>';
     html += '<div><b>税率：</b>' + i.tax_rate + '%</div>';
     html += '<div><b>税额：</b>¥' + fmt(i.tax_amount) + '</div>';
-    html += '<div><b>抵扣率：</b>' + (i.deduction_rate != null ? i.deduction_rate + '%' : '100%') + '</div>';
     html += '<div><b>价税合计：</b><span style="font-weight:700;font-size:16px;color:#1d4ed8">¥' + fmt(i.total_amount) + '</span></div>';
     html += '</div></div>';
 
@@ -805,14 +802,6 @@ async function showPurchaseDetail(id) {
     html += '<div><b>发票风险等级：</b>' + (i.invoice_risk_level || '-') + '</div>';
     html += '<div><b>是否正数发票：</b>' + (i.is_positive ? '是' : '否') + '</div>';
     html += '<div><b>开票人：</b>' + (i.issuer || '-') + '</div>';
-    html += '</div></div>';
-
-    // 认证信息
-    html += '<div class="payment-form-section"><div class="payment-form-section-title">✅ 认证信息</div>';
-    html += '<div class="form-grid-2">';
-    html += '<div><b>认证状态：</b><span class="' + (i.certification_status === STATUS.DEDUCTED ? 'badge-green' : i.certification_status === STATUS.CERTIFIED ? 'badge-blue' : 'badge-gray') + '">' + i.certification_status + '</span></div>';
-    html += '<div><b>认证日期：</b>' + (i.certification_date || '-') + '</div>';
-    html += '<div><b>抵扣期间：</b>' + (i.deduction_period || '-') + '</div>';
     html += '</div></div>';
 
     if (i.remark) {
@@ -887,7 +876,6 @@ async function showPurchaseInvoiceForm(id) {
   html += '</div>';
   html += '<div class="form-grid-2">';
   html += '<div class="form-group"><label class="form-label">价税合计</label><input type="number" step="any" class="form-input" id="pi-total" value="' + (data.total_amount || 0) + '" readonly style="background:#f0f9ff;font-weight:600;font-size:16px"></div>';
-  html += '<div class="form-group"><label class="form-label">抵扣率（%）</label><input type="number" step="any" class="form-input" id="pi-deduction-rate" value="' + (data.deduction_rate != null ? data.deduction_rate : 100) + '"></div>';
   html += '</div></div>';
 
   // ── 发票属性 ──
@@ -918,18 +906,6 @@ async function showPurchaseInvoiceForm(id) {
   html += '<option value="0"' + (data.is_positive === false ? ' selected' : '') + '>否</option>';
   html += '</select></div>';
   html += '<div class="form-group"><label class="form-label">开票人</label><input class="form-input" id="pi-issuer" value="' + (data.issuer || '') + '"></div>';
-  html += '</div></div>';
-
-  // ── 认证信息 ──
-  html += '<div class="payment-form-section"><div class="payment-form-section-title">✅ 认证信息</div>';
-  html += '<div class="form-grid-3">';
-  html += '<div class="form-group"><label class="form-label">认证状态</label><select class="form-input" id="pi-cert-status">';
-  ['未认证', '已认证', '已抵扣'].forEach(s => {
-    html += '<option value="' + s + '"' + (data.certification_status === s ? ' selected' : '') + '>' + s + '</option>';
-  });
-  html += '</select></div>';
-  html += '<div class="form-group"><label class="form-label">认证日期</label><input type="date" class="form-input" id="pi-cert-date" value="' + (data.certification_date || '') + '"></div>';
-  html += '<div class="form-group"><label class="form-label">抵扣期间</label><input class="form-input" id="pi-deduction-period" placeholder="YYYY-MM" value="' + (data.deduction_period || '') + '"></div>';
   html += '</div></div>';
 
   // ── 备注 ──
@@ -988,16 +964,12 @@ async function savePurchaseInvoice(id) {
       tax_rate: parseFloat(document.getElementById('pi-taxrate').value) || 0,
       tax_amount: parseFloat(document.getElementById('pi-taxamount').value) || 0,
       total_amount: parseFloat(document.getElementById('pi-total').value) || 0,
-      deduction_rate: parseFloat(document.getElementById('pi-deduction-rate').value) || 100,
       invoice_source: document.getElementById('pi-source').value.trim(),
       invoice_category: document.getElementById('pi-category').value,
       status: document.getElementById('pi-status').value,
       is_positive: document.getElementById('pi-is-positive').value === '1',
       invoice_risk_level: document.getElementById('pi-risk-level').value,
       issuer: document.getElementById('pi-issuer').value.trim(),
-      certification_status: document.getElementById('pi-cert-status').value,
-      certification_date: document.getElementById('pi-cert-date').value || null,
-      deduction_period: document.getElementById('pi-deduction-period').value.trim() || null,
       remark: document.getElementById('pi-remark').value.trim()
     };
     let result;

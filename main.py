@@ -2610,10 +2610,6 @@ class PurchaseInvoiceCreate(BaseModel):
     is_positive: Optional[bool] = True
     invoice_risk_level: Optional[str] = None
     issuer: Optional[str] = None
-    certification_status: str = "未认证"
-    certification_date: Optional[date] = None
-    deduction_period: Optional[str] = None
-    deduction_rate: Optional[float] = 100.0
     remark: Optional[str] = None
 
 
@@ -2642,16 +2638,11 @@ class PurchaseInvoiceUpdate(BaseModel):
     is_positive: Optional[bool] = None
     invoice_risk_level: Optional[str] = None
     issuer: Optional[str] = None
-    certification_status: Optional[str] = None
-    certification_date: Optional[date] = None
-    deduction_period: Optional[str] = None
-    deduction_rate: Optional[float] = None
     remark: Optional[str] = None
 @app.get("/api/purchase-invoices")
 def list_purchase_invoices(
     company_id: int = Query(...),
     invoice_category: Optional[str] = None,
-    certification_status: Optional[str] = None,
     status: Optional[str] = None,
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
@@ -2663,8 +2654,6 @@ def list_purchase_invoices(
     q = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id)
     if invoice_category:
         q = q.filter(PurchaseInvoice.invoice_category == invoice_category)
-    if certification_status:
-        q = q.filter(PurchaseInvoice.certification_status == certification_status)
     if status:
         q = q.filter(PurchaseInvoice.status == status)
     if date_from:
@@ -2680,31 +2669,6 @@ def list_purchase_invoices(
             PurchaseInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).offset(skip).limit(limit).all()
-    # 构建凭证号映射（进项发票 → 进项抵扣 → 序时账，按期间匹配 source="进项抵扣" 汇总凭证）
-    invoice_nos = [inv.invoice_no for inv in invoices if inv.invoice_no]
-    ded_period_map = {}
-    if invoice_nos:
-        for ded in db.query(InputVATDeduction).filter(
-            InputVATDeduction.company_id == company_id,
-            InputVATDeduction.invoice_no.in_(invoice_nos)
-        ).all():
-            if ded.deduction_period:
-                ded_period_map[ded.invoice_no] = ded.deduction_period
-    period_vouchers = {}
-    periods_set = list(set(ded_period_map.values()))
-    if periods_set:
-        for je in db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.source == "进项抵扣",
-            JournalEntry.period.in_(periods_set),
-            JournalEntry.account_code == "221001002"
-        ).all():
-            period_vouchers[je.period] = f"{je.voucher_word}-{je.voucher_no}"
-    voucher_map = {}
-    for inv in invoices:
-        period = ded_period_map.get(inv.invoice_no)
-        if period and period in period_vouchers:
-            voucher_map[inv.id] = period_vouchers[period]
     return [{
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -2732,12 +2696,8 @@ def list_purchase_invoices(
         "is_positive": inv.is_positive if inv.is_positive is not None else True,
         "invoice_risk_level": inv.invoice_risk_level or "",
         "issuer": inv.issuer or "",
-        "certification_status": inv.certification_status,
-        "certification_date": str(inv.certification_date) if inv.certification_date else "",
-        "deduction_period": inv.deduction_period or "",
-        "deduction_rate": inv.deduction_rate if inv.deduction_rate is not None else 100.0,
         "remark": inv.remark or "",
-        "journal_voucher_no": voucher_map.get(inv.id, ""),
+        "journal_voucher_no": "",
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
 
@@ -2785,19 +2745,12 @@ def purchase_invoice_stats(company_id: int = Query(...), tab: str = Query("all")
     normal_count = base.filter(PurchaseInvoice.status == "正常").count()
     void_count = base.filter(PurchaseInvoice.status.like("%作废%")).count()
     red_count = base.filter(PurchaseInvoice.status.like("%红冲%")).count()
-    uncertified_count = base.filter(PurchaseInvoice.certification_status == "未认证").count()
-    certified_count = base.filter(PurchaseInvoice.certification_status == "已认证").count()
-    deducted_count = base.filter(PurchaseInvoice.certification_status == "已抵扣").count()
     return {
         "total_count": total_count, "total_amt": round(total_amt, 2),
         "total_amount": round(total_amount, 2),
         "total_raw_tax": round(total_raw_tax, 2),
-        "total_tax": total_tax,
         "normal_count": normal_count, "void_count": void_count,
         "red_count": red_count,
-        "uncertified_count": uncertified_count,
-        "certified_count": certified_count,
-        "deducted_count": deducted_count
     }
 
 
@@ -2833,10 +2786,6 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Sess
         "is_positive": inv.is_positive if inv.is_positive is not None else True,
         "invoice_risk_level": inv.invoice_risk_level or "",
         "issuer": inv.issuer or "",
-        "certification_status": inv.certification_status,
-        "certification_date": str(inv.certification_date) if inv.certification_date else "",
-        "deduction_period": inv.deduction_period or "",
-        "deduction_rate": inv.deduction_rate if inv.deduction_rate is not None else 100.0,
         "remark": inv.remark or "",
         "created_at": str(inv.created_at) if inv.created_at else "",
         "updated_at": str(inv.updated_at) if inv.updated_at else ""
@@ -6190,14 +6139,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             new_customers[(buyer_tn, buyer_nm)] = True
                     else:  # purchase-invoice
                         # 全行指纹去重
-                        cert_date = None
-                        cert_date_str = mapped.get("certification_date", "")
-                        if cert_date_str:
-                            for cfmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"]:
-                                try:
-                                    cert_date = datetime.strptime(cert_date_str, cfmt).date()
-                                    break
-                                except Exception: pass
                         pi_fp_values = (
                             str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
                             str(mapped.get("digital_invoice_no", "")),
@@ -6214,9 +6155,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             str(mapped.get("is_positive", "是")),
                             str(mapped.get("invoice_risk_level", "")),
                             str(mapped.get("issuer", "")),
-                            str(mapped.get("certification_status", "未认证")),
-                            str(cert_date) if cert_date else "",
-                            str(mapped.get("deduction_period", "")),
                             str(mapped.get("remark", "")),
                         )
                         pi_fp_raw = "|".join(pi_fp_values)
@@ -6251,9 +6189,6 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             is_positive=mapped.get("is_positive", "是") in ("是", "true", "True", "1", True),
                             invoice_risk_level=mapped.get("invoice_risk_level", ""),
                             issuer=mapped.get("issuer", ""),
-                            certification_status=mapped.get("certification_status", "未认证"),
-                            certification_date=cert_date,
-                            deduction_period=mapped.get("deduction_period", ""),
                             remark=mapped.get("remark", ""),
                             raw_data=json.dumps(extra) if extra else None,
                             _fingerprint=pi_fp,

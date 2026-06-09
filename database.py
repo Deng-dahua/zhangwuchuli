@@ -555,7 +555,6 @@ class PurchaseInvoice(Base):
     __table_args__ = (
         Index('idx_pi_company_date', 'company_id', 'invoice_date'),
         Index('idx_pi_company_seller', 'company_id', 'seller_name'),
-        Index('idx_pi_company_cert', 'company_id', 'certification_status'),
     )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
@@ -590,11 +589,6 @@ class PurchaseInvoice(Base):
     status = Column(String(20), nullable=False, default="正常", comment="发票状态：正常/作废/红冲")
     is_positive = Column(Boolean, default=True, comment="是否正数发票")
     invoice_risk_level = Column(String(10), comment="发票风险等级")
-    # 认证信息
-    certification_status = Column(String(20), default="未认证", comment="认证状态：未认证/已认证/已抵扣")
-    certification_date = Column(Date, comment="认证日期")
-    deduction_period = Column(String(7), comment="抵扣期间 YYYY-MM")
-    deduction_rate = Column(Numeric(18, 2), default=100.0, comment="抵扣率（%），默认100=全额抵扣")
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
@@ -1061,6 +1055,19 @@ def migrate_schema(db):
         except Exception as e:
             db.rollback()
             print(f"创建 bookkeeping_invoices 表失败: {e}")
+
+    # ── 8.06 取得发票：删除认证/抵扣字段（认证状态、认证日期、抵扣期间、抵扣率） ──
+    if "purchase_invoices" in inspector.get_table_names():
+        existing_cols = {c["name"] for c in inspector.get_columns("purchase_invoices")}
+        for col in ["certification_status", "certification_date", "deduction_period", "deduction_rate"]:
+            if col in existing_cols:
+                try:
+                    db.execute(TextClause(f"ALTER TABLE purchase_invoices DROP COLUMN {col}"))
+                    db.commit()
+                    print(f"已删除 purchase_invoices.{col}")
+                except Exception as e:
+                    db.rollback()
+                    print(f"删除 purchase_invoices.{col} 失败（可能不支持 DROP COLUMN）: {e}")
 
     # ── 8.1 银行流水 _fingerprint 字段 ──
     if "bank_transactions" in inspector.get_table_names():
