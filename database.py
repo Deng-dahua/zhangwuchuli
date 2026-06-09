@@ -2115,40 +2115,11 @@ def _ensure_account(db, company_id, code, name, category, direction, parent_code
 
 
 def _ensure_personal_ar_account(db, company_id, employee_name: str) -> str:
-    """为员工在其他应收款(1221)下建立个人子科目，返回科目编码。
-    编码规则：1221 下级为 122101/122102/...（6位，01起）
-    科目名称就是员工姓名。
+    """返回其他应收款一级科目编码1221。
+    员工姓名通过序时账的 contact_project 字段记录，不建立二级科目。
     """
-    # 先确保父科目存在
     _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
-
-    # 查找已存在的个人子科目（按姓名）
-    existing = db.query(Account).filter(
-        Account.company_id == company_id,
-        Account.parent_code == "1221",
-        Account.name == employee_name
-    ).first()
-    if existing:
-        return existing.code
-
-    # 生成新编码：取1221下最大子编码+1
-    from sqlalchemy import func as sqlfunc
-    max_sub = db.query(Account.code).filter(
-        Account.company_id == company_id,
-        Account.parent_code == "1221"
-    ).order_by(Account.code.desc()).first()
-    if max_sub and max_sub[0] and len(max_sub[0]) >= 6:
-        next_num = int(max_sub[0][4:6]) + 1
-    else:
-        next_num = 1
-    new_code = f"1221{next_num:02d}"
-    db.add(Account(
-        company_id=company_id, code=new_code, name=employee_name,
-        category="资产", balance_direction="借",
-        level=2, parent_code="1221",
-    ))
-    db.flush()
-    return new_code
+    return "1221"
 
 
 def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[int]] = None):
@@ -2396,6 +2367,7 @@ def _generate_ss_accrual_journals(db: Session, company_id: int, declaration_id: 
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary_tag, account_code=emp_code,
             account_name=f"其他应收款/{d.employee_name}",
+            contact_project=d.employee_name,
             debit_amount=personal, credit_amount=0, source="社保计提",
         ))
 
@@ -2599,6 +2571,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
             period=period, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary_tag, account_code=emp_code,
             account_name=f"其他应收款/{emp_name}",
+            contact_project=emp_name,
             debit_amount=0, credit_amount=data["total"], source="工资计提",
         ))
 
@@ -2709,6 +2682,7 @@ def _generate_hf_accrual_journals(db: Session, company_id: int, period: str):
             period=period_str, voucher_word="记", voucher_no=next_voucher_no,
             summary=summary_tag, account_code=emp_code,
             account_name=f"其他应收款/{d.employee_name}",
+            contact_project=d.employee_name,
             debit_amount=personal, credit_amount=0, source="公积金计提",
         ))
 
