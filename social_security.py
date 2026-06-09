@@ -451,16 +451,23 @@ async def import_excel(
 
     db.commit()
 
-    # 自动生成社保计提凭证
+    # 自动生成社保计提凭证（先计提）
     result = _generate_ss_accrual_journals(db, company_id, decl.id)
+    msg_accrual = result.get('generated', 0)
+
+    # 再结合银行流水生成付款凭证
+    pay_result = _match_ss_payment_journals(db, company_id)
+    db.commit()
+    msg_pay = pay_result.get('matched', 0) if isinstance(pay_result, dict) else 0
 
     return {
         "imported": len(details),
         "total": len(details),
         "declaration_id": decl.id,
         "errors": errors[:10],
-        "message": f"成功导入 {len(details)} 条记录，已自动生成{result.get('generated', 0)}张计提凭证",
-        "journal": result
+        "message": f"成功导入 {len(details)} 条记录，已自动生成{msg_accrual}张计提凭证，{msg_pay}张付款凭证",
+        "journal": result,
+        "payment_journal": pay_result,
     }
 
 
