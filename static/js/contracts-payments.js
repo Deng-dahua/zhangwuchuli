@@ -249,11 +249,6 @@ async function renderPayments(container) {
   const el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   el.innerHTML =
     '<div class="card" style="margin-bottom:0;padding:24px">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
-        '<div style="display:flex;gap:8px">' +
-          '<button class="btn-toolbar" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">新增付款</button>' +
-          '<button class="btn-toolbar" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">新增付款</button>' +
-        '</div>' +
       '</div>' +
 
       // Tab bar
@@ -282,6 +277,8 @@ async function renderPayments(container) {
         '</select>' +
         '<input class="form-control" id="payment-keyword-filter" placeholder="搜索单号/人员/供应商/用途..." style="width:240px">' +
         '<button class="btn-toolbar" onclick="loadPayments()">查询</button>' +
+        '<button class="btn-toolbar" id="btn-add-internal" onclick="switchPaymentTab(\'internal\');showPaymentForm()">新增付款</button>' +
+        '<button class="btn-toolbar" id="btn-add-external" onclick="switchPaymentTab(\'external\');showPaymentForm()" style="display:none">新增付款</button>' +
       '</div>' +
 
       // Table
