@@ -1876,8 +1876,17 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         goods = inv.goods_name or ""
         summary = f"向{seller}采购{goods or '货物'}"
 
-        period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
-        date_str = inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else period + "-01"
+        # 兼容 invoice_date 为字符串或 date 对象两种情况
+        if inv.invoice_date:
+            if isinstance(inv.invoice_date, str):
+                period = inv.invoice_date[:7] if len(inv.invoice_date) >= 7 else datetime.now().strftime("%Y-%m")
+                date_str = inv.invoice_date if len(inv.invoice_date) >= 10 else (period + "-01")
+            else:
+                period = inv.invoice_date.strftime("%Y-%m")
+                date_str = inv.invoice_date.strftime("%Y-%m-%d")
+        else:
+            period = datetime.now().strftime("%Y-%m")
+            date_str = period + "-01"
 
         next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 

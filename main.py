@@ -2961,14 +2961,23 @@ def purchase_invoice_batch_to_journal(
     db=Depends(get_db)
 ):
     """一键将勾选的取得发票生成进项抵扣凭证（按月汇总）"""
-    ids = body.get("ids", []) if body else []
-    if not ids:
-        return {"message": "未选择任何发票", "generated": 0, "skipped": 0, "errors": []}
-
-    invoices = db.query(PurchaseInvoice).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.id.in_(ids)
-    ).order_by(PurchaseInvoice.invoice_date, PurchaseInvoice.id).all()
+    # body=None 表示前端传了 null，即为所有发票生成凭证
+    if body is None:
+        ids = None
+    else:
+        ids = body.get("ids")
+    if ids is None:
+        # 为所有未取得凭证的发票生成
+        invoices = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id
+        ).order_by(PurchaseInvoice.invoice_date, PurchaseInvoice.id).all()
+    else:
+        if not ids:
+            return {"message": "未选择任何发票", "generated": 0, "skipped": 0, "errors": []}
+        invoices = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.id.in_(ids)
+        ).order_by(PurchaseInvoice.invoice_date, PurchaseInvoice.id).all()
 
     generated = 0
     skipped = 0
