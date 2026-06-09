@@ -23,14 +23,23 @@ function renderTaxRiskReport(container) {
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
 
-  // 在时间栏清除按钮后插入刷新按钮和最近更新时间
+  // 删除查询按钮，在清除按钮前插入生成/刷新报告按钮（btn-toolbar 样式）
   var trBar = document.getElementById('tr-period-bar');
   if (trBar) {
+    var queryBtn = trBar.querySelector('.std-query-btn');
+    if (queryBtn) queryBtn.remove();
+    var clearBtn = trBar.querySelector('.std-clear-btn');
+    if (clearBtn) {
+      var refreshBtn = document.createElement('button');
+      refreshBtn.className = 'btn-toolbar';
+      refreshBtn.id = 'risk-refresh-btn';
+      refreshBtn.textContent = '生成/刷新报告';
+      refreshBtn.addEventListener('click', loadTaxRiskReport);
+      clearBtn.parentNode.insertBefore(refreshBtn, clearBtn);
+    }
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
-    spacer.innerHTML = '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
-      + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
-      + '<span id="risk-last-update" style="margin-left:12px;color:var(--gray-400);font-size:12px"></span>'
+    spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>'
       + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>';
     trBar.appendChild(spacer);
   }
@@ -46,9 +55,7 @@ async function loadTaxRiskReport() {
   if (taxRiskLoading) return;
   taxRiskLoading = true;
   var btn = document.getElementById('risk-refresh-btn');
-  var icon = document.getElementById('risk-refresh-icon');
-  if (btn) { btn.disabled = true; }
-  if (icon) { icon.className = 'spin'; icon.textContent = '⏳'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 分析中...'; }
 
   try {
     var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
@@ -69,8 +76,7 @@ async function loadTaxRiskReport() {
     toast('风险报告加载失败: ' + (err.message || err), 'error');
   } finally {
     taxRiskLoading = false;
-    if (btn) { btn.disabled = false; }
-    if (icon) { icon.className = ''; icon.textContent = '🔄'; }
+    if (btn) { btn.disabled = false; btn.textContent = '生成/刷新报告'; }
   }
 }
 
