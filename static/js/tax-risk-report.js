@@ -16,7 +16,7 @@ function renderTaxRiskReport(container) {
     + '<div class="risk-report-container">'
     + '<div class="risk-report-header">'
     + '<h2>🛡️ 涉税风险分析报告</h2>'
-    + '<p class="risk-report-subtitle">53个维度综合分析：涵盖经营实质（稽查级）、增值税专项、发票异常检测、费用匹配分析、企业所得税专项、薪酬福利合规、税种联动等</p>'
+    + '<div id="tr-period-bar" style="display:flex;align-items:center;gap:4px;margin-top:12px"></div>'
     + '<div class="risk-report-actions">'
     + '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
     + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
@@ -27,6 +27,8 @@ function renderTaxRiskReport(container) {
     + '<div id="risk-summary-cards" class="risk-summary-cards"></div>'
     + '<div id="risk-report-body" class="risk-report-body"></div>'
     + '</div>';
+
+  _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
 
   if (!taxRiskReportData) {
     loadTaxRiskReport();
@@ -45,10 +47,11 @@ async function loadTaxRiskReport() {
 
   try {
     var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
+    var from = (typeof _readPeriod === 'function') ? _readPeriod('tr-from') : '';
+    var to = (typeof _readPeriod === 'function') ? _readPeriod('tr-to') : '';
     var url = '/api/tax-risk/report?company_id=' + cid;
-    if (typeof window.globalPeriod !== 'undefined' && window.globalPeriod) {
-      url += '&period=' + window.globalPeriod;
-    }
+    if (from) url += '&period_from=' + from;
+    if (to) url += '&period_to=' + to;
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
     var now = new Date();

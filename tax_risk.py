@@ -116,10 +116,15 @@ def _monthly_account_balance(db: Session, company_id: int, account_code: str, ps
 def get_tax_risk_report(
     company_id: int = Query(...),
     period: Optional[str] = None,
+    period_from: Optional[str] = None,
+    period_to: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     results = []
-    if period:
+    if period_from and period_to:
+        period_start = period_from
+        period_end = period_to
+    elif period:
         period_start = period_end = period
     else:
         latest = db.query(func.max(VATDeclaration.period)).filter(
