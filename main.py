@@ -3239,12 +3239,17 @@ def list_bank_transactions(
     txs = q.order_by(BankTransaction.transaction_date.desc(), BankTransaction.id.desc()).offset(skip).limit(limit).all()
 
     # 动态查询凭证号：按 summary + 1002科目匹配（双分录中银行存款侧即代表该凭证）
+    # 银行流水可能被多个模块匹配生成凭证（银行流水自动生成 / 社保缴纳 / 公积金缴纳），
+    # summary 格式可能不同，需全部收集后匹配
     voucher_map = {}
     if txs:
         summaries = []
+        # 收集所有可能的 summary 格式
         for tx in txs:
             cp = tx.counterparty_name or tx.summary or "银行流水"
             summaries.append(f"银行流水-#{tx.id}-{cp}")
+            summaries.append(f"社保缴纳-#{tx.id}")
+            summaries.append(f"公积金缴纳-#{tx.id}")
         summaries = list(set(summaries))
         bank_jes = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
@@ -3257,8 +3262,16 @@ def list_bank_transactions(
             summary_to_voucher[je.summary] = f"{je.voucher_word}-{je.voucher_no}"
         for tx in txs:
             cp = tx.counterparty_name or tx.summary or "银行流水"
-            target_summary = f"银行流水-#{tx.id}-{cp}"
-            voucher_map[tx.id] = summary_to_voucher.get(target_summary, "")
+            target = f"银行流水-#{tx.id}-{cp}"
+            voucher_no = summary_to_voucher.get(target, "")
+            if not voucher_no:
+                # 尝试社保缴纳/公积金缴纳 summary 格式
+                for alt_fmt in [f"社保缴纳-#{tx.id}", f"公积金缴纳-#{tx.id}"]:
+                    alt = summary_to_voucher.get(alt_fmt)
+                    if alt:
+                        voucher_no = alt
+                        break
+            voucher_map[tx.id] = voucher_no
 
     return [{
         "id": tx.id, "bank_config_id": tx.bank_config_id,
