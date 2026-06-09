@@ -1,4 +1,9 @@
-// ==================== 涉税风险分析报告 ====================
+// ==================== 涉税风险分析报告 V2 ====================
+// 23 个分析维度：账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 /
+// 配比弹性 / 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
+// 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
+// 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践
+
 var taxRiskReportData = null;
 var taxRiskLoading = false;
 
@@ -9,18 +14,18 @@ function renderTaxRiskReport(container) {
     + '<div class="risk-report-container">'
     + '<div class="risk-report-header">'
     + '<h2>🛡️ 涉税风险分析报告</h2>'
-    + '<p class="risk-report-subtitle">基于账务数据、发票合规、税负水平、成本结构、政策执行等维度综合分析</p>'
+    + '<p class="risk-report-subtitle">23个维度综合分析：账务·发票·成本·财税票比对·弹性配比·隐匿虚增·税负·城建税·房产税·个税·印花税·纳税调整·收入时点·政策·资金·薪酬·客户·供应商·财务·信用·行业</p>'
     + '<div class="risk-report-actions">'
     + '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
     + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
     + '<span id="risk-last-update" style="margin-left:12px;color:var(--gray-400);font-size:12px"></span>'
+    + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>'
     + '</div>'
     + '</div>'
     + '<div id="risk-summary-cards" class="risk-summary-cards"></div>'
     + '<div id="risk-report-body" class="risk-report-body"></div>'
     + '</div>';
 
-  // 自动加载
   if (!taxRiskReportData) {
     loadTaxRiskReport();
   } else {
@@ -37,10 +42,10 @@ async function loadTaxRiskReport() {
   if (icon) { icon.className = 'spin'; icon.textContent = '⏳'; }
 
   try {
-    var url = '/api/tax-risk/report';
-    // 如果全局期间变量存在，附加期间参数
+    var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
+    var url = '/api/tax-risk/report?company_id=' + cid;
     if (typeof window.globalPeriod !== 'undefined' && window.globalPeriod) {
-      url += '?period=' + window.globalPeriod;
+      url += '&period=' + window.globalPeriod;
     }
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
@@ -66,8 +71,8 @@ function renderTaxRiskReportData(data) {
     return;
   }
 
-  // 汇总卡片
-  renderSummaryCards(data.summary, data.period_start, data.period_end);
+  // 汇总卡片 + 财务指标
+  renderSummaryCards(data.summary, data.period_start, data.period_end, data.metrics);
 
   // 分类渲染
   var body = document.getElementById('risk-report-body');
@@ -79,26 +84,34 @@ function renderTaxRiskReportData(data) {
     categories[cat].push(r);
   }
 
-  var catOrder = ['良好实践', '账务数据', '发票合规', '成本结构', '税负水平', '政策执行', '资金与往来', '薪酬合规'];
+  // 完整23个分类排序
+  var catOrder = [
+    '良好实践',
+    '财税票比对', '配比弹性', '隐匿虚增', '纳税调整', '收入时点',
+    '账务数据', '发票合规', '发票深度', '成本结构',
+    '税负水平', '城建税', '房产税', '个人所得税', '印花税',
+    '政策执行', '资金往来', '薪酬合规',
+    '客户穿透', '供应商穿透', '财务健康', '企业信用', '行业专项'
+  ];
   var html = '';
 
   for (var c = 0; c < catOrder.length; c++) {
     var catName = catOrder[c];
     var items = categories[catName];
+    delete categories[catName];
     if (!items || items.length === 0) continue;
     html += renderCategorySection(catName, items);
   }
 
-  // 若有未出现在 catOrder 的分类
+  // 未在 catOrder 中的分类放最后
   for (var cat in categories) {
-    if (catOrder.indexOf(cat) >= 0) continue;
     html += renderCategorySection(cat, categories[cat]);
   }
 
   body.innerHTML = html || '<div class="risk-empty">未发现明显风险事项</div>';
 }
 
-function renderSummaryCards(summary, ps, pe) {
+function renderSummaryCards(summary, ps, pe, metrics) {
   var el = document.getElementById('risk-summary-cards');
   if (!el || !summary) return;
 
@@ -138,6 +151,24 @@ function renderSummaryCards(summary, ps, pe) {
     + '<div class="risk-card-label">总计检查项</div>'
     + '<div class="risk-card-value" style="color:#6b7280">' + (summary.total_items || 0) + '</div>'
     + '<div class="risk-card-sub">项</div></div>';
+
+  // 显示财务指标
+  if (metrics && metrics.revenue > 0) {
+    var bar = document.getElementById('risk-metrics-bar');
+    if (bar) {
+      bar.textContent = '收入：¥' + formatNum(metrics.revenue)
+        + ' | 成本：¥' + formatNum(metrics.cost)
+        + ' | 毛利率：' + (metrics.gross_margin_pct || 0).toFixed(1) + '%'
+        + ' | 增值税：¥' + formatNum(metrics.vat_payable || 0);
+    }
+  }
+}
+
+function formatNum(n) {
+  if (!n) return '0';
+  if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '亿';
+  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(2) + '万';
+  return n.toFixed(2);
 }
 
 function renderCategorySection(catName, items) {
