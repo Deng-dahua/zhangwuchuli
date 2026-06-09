@@ -1441,7 +1441,7 @@ def auto_generate_journals(db):
                 Account.company_id == comp.id,
                 Account.parent_code == "6001"
             ).order_by(Account.code.desc()).first()
-            next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+            next_num = int(max_sub[0][4:6]) + 1 if (max_sub and max_sub[0]) else 1
             # 科目编码规则：6001 下级为 600101/600102/...（每张发票唯一货物子科目）
             new_code = f"6001{next_num:02d}"
             new_acc = Account(
@@ -1568,7 +1568,7 @@ def auto_generate_single_invoice(db, inv):
             Account.company_id == inv.company_id,
             Account.parent_code == "6001"
         ).order_by(Account.code.desc()).first()
-        next_num = int(max_sub[0][4:]) + 1 if (max_sub and max_sub[0]) else 1
+        next_num = int(max_sub[0][4:6]) + 1 if (max_sub and max_sub[0]) else 1
         new_code = f"6001{next_num:02d}"
         new_acc = Account(
             company_id=inv.company_id, code=new_code, name=gn,
