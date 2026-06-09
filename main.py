@@ -48,6 +48,7 @@ from salary import router as salary_router
 from social_security import router as social_security_router
 from housing_fund import router as housing_fund_router
 from cultural_construction_fee import router as cultural_construction_fee_router
+from tax_risk import router as tax_risk_router
 
 
 @asynccontextmanager
@@ -71,6 +72,7 @@ app.include_router(salary_router)
 app.include_router(social_security_router)
 app.include_router(housing_fund_router)
 app.include_router(cultural_construction_fee_router)
+app.include_router(tax_risk_router)
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")

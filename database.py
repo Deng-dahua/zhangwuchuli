@@ -1262,6 +1262,28 @@ def migrate_schema(db):
         db.commit()
         print("  [OK] 已创建 cultural_construction_fee_deductions 表")
 
+    # ── 18.1 CCF 新增 50% 减征字段（财税〔2025〕7号） ──
+    if "cultural_construction_fee_declarations" in inspector.get_table_names():
+        ccf_cols = [c["name"] for c in inspector.get_columns("cultural_construction_fee_declarations")]
+        if "row10a_fee_reduction_current" not in ccf_cols:
+            db.execute(TextClause(
+                "ALTER TABLE cultural_construction_fee_declarations ADD COLUMN row10a_fee_reduction_current NUMERIC(18,2) DEFAULT 0.0"
+            ))
+            db.commit()
+            print("  [OK] CCF 新增 row10a_fee_reduction_current 列")
+        if "row10a_fee_reduction_ytd" not in ccf_cols:
+            db.execute(TextClause(
+                "ALTER TABLE cultural_construction_fee_declarations ADD COLUMN row10a_fee_reduction_ytd NUMERIC(18,2) DEFAULT 0.0"
+            ))
+            db.commit()
+            print("  [OK] CCF 新增 row10a_fee_reduction_ytd 列")
+        if "fee_reduction_rate" not in ccf_cols:
+            db.execute(TextClause(
+                "ALTER TABLE cultural_construction_fee_declarations ADD COLUMN fee_reduction_rate NUMERIC(18,4) DEFAULT 0.5"
+            ))
+            db.commit()
+            print("  [OK] CCF 新增 fee_reduction_rate 列")
+
     # ── 19. 补充索引与唯一约束 ──
     idx_defs = [
         ("idx_accounts_company", "accounts", "company_id"),
@@ -3148,6 +3170,9 @@ class CulturalConstructionFeeDeclaration(Base):
     row9_fee_rate = Column(Numeric(18, 4), default=0.03, comment="栏次9 费率")
     row10_payable_fee_current = Column(Numeric(18, 2), default=0.0, comment="栏次10 应缴费额 本月数")
     row10_payable_fee_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次10 应缴费额 本年累计")
+    row10a_fee_reduction_current = Column(Numeric(18, 2), default=0.0, comment="栏次10a 本期减免额（财税〔2025〕7号 50%减征）本月数")
+    row10a_fee_reduction_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次10a 本期减免额 本年累计")
+    fee_reduction_rate = Column(Numeric(18, 4), default=0.5, comment="减免比例（财税〔2025〕7号：归属中央收入50%减征）")
     row11_unpaid_beginning_current = Column(Numeric(18, 2), default=0.0, comment="栏次11 期初未缴费额 本月数")
     row11_unpaid_beginning_ytd = Column(Numeric(18, 2), default=0.0, comment="栏次11 期初未缴费额 本年累计")
     row12_paid_current_period_current = Column(Numeric(18, 2), default=0.0, comment="栏次12 本期已缴费额 本月数")

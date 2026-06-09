@@ -539,5 +539,57 @@
     .ss-subtotal td:first-child { border-top: none; }
     .ss-grand-total td { font-weight: 700; background: #fde8e8; border-top: 2px solid #e02424; }
     .ss-grand-total td:first-child { border-top: none; }
+
+    /* ── 涉税风险分析报告 ── */
+    .risk-report-container { padding: 8px; }
+    .risk-report-header { text-align: center; padding: 16px 0 12px; border-bottom: 2px solid var(--gray-100); margin-bottom: 16px; }
+    .risk-report-header h2 { font-size: 20px; margin-bottom: 4px; }
+    .risk-report-subtitle { color: var(--gray-400); font-size: 13px; margin-bottom: 12px; }
+    .risk-report-actions { margin-top: 8px; }
+    .spin { display: inline-block; animation: spin 0.8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* 汇总卡片 */
+    .risk-summary-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+    .risk-card { background: #fff; border: 2px solid var(--gray-200); border-radius: 10px; padding: 14px 10px; text-align: center; }
+    .risk-card-label { font-size: 11px; color: var(--gray-400); margin-bottom: 6px; }
+    .risk-card-value { font-size: 28px; font-weight: 800; line-height: 1.1; }
+    .risk-card-sub { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+
+    /* 分类区块 */
+    .risk-category { margin-bottom: 20px; background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; }
+    .risk-category-header { padding: 12px 16px; font-size: 15px; font-weight: 700; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+    .risk-cat-icon { font-size: 18px; }
+    .risk-cat-count { font-size: 12px; color: var(--gray-400); font-weight: 400; margin-left: 8px; }
+
+    /* 风险项 */
+    .risk-item { padding: 14px 16px; border-bottom: 1px solid var(--gray-100); transition: background 0.15s; }
+    .risk-item:last-child { border-bottom: none; }
+    .risk-item:hover { background: var(--gray-50); }
+    .risk-item.item-high { border-left: 4px solid #dc2626; }
+    .risk-item.item-mid { border-left: 4px solid #f59e0b; }
+    .risk-item.item-low { border-left: 4px solid #3b82f6; }
+    .risk-item.item-good { border-left: 4px solid #10b981; }
+    .risk-item-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+    .risk-item-level { font-size: 11px; font-weight: 700; color: #fff; padding: 2px 10px; border-radius: 12px; white-space: nowrap; }
+    .risk-item-title { font-size: 14px; font-weight: 600; color: var(--gray-800); flex: 1; min-width: 150px; }
+    .risk-item-detail { font-size: 13px; color: var(--gray-500); line-height: 1.7; margin-bottom: 8px; padding-left: 4px; }
+    .risk-item-suggestion { font-size: 13px; color: var(--gray-600); background: var(--primary-light); padding: 10px 14px; border-radius: 8px; line-height: 1.7; }
+    .suggestion-label { font-weight: 700; color: var(--primary-dark); }
+
+    /* 紧急度徽章 */
+    .urgency-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+    .urgency-badge.urgent { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .urgency-badge.warning { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .urgency-badge.suggest { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+
+    .risk-empty { text-align: center; color: var(--gray-400); padding: 40px; font-size: 14px; }
+
+    @media (max-width: 900px) {
+      .risk-summary-cards { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .risk-summary-cards { grid-template-columns: repeat(2, 1fr); }
+    }
     #ss-table thead th { background: #f8fafc; position: sticky; top: 0; z-index: 1; text-align: center; vertical-align: middle; }
   

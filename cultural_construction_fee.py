@@ -33,7 +33,8 @@ def _ccf_build_form_main_from_db(decl):
         "row5_taxable_income_deduction", "row6_tax_exempt_deduction",
         "row7_deduction_ending_balance", "row8_taxable_sales",
         "row9_fee_rate",
-        "row10_payable_fee", "row11_unpaid_beginning",
+        "row10_payable_fee", "row10a_fee_reduction",
+        "row11_unpaid_beginning",
         "row12_paid_current_period", "row13_prepaid",
         "row14_paid_last_period", "row15_paid_arrears",
         "row16_unpaid_ending", "row17_arrears",
@@ -43,9 +44,13 @@ def _ccf_build_form_main_from_db(decl):
     for key in row_keys:
         if key == "row9_fee_rate":
             result["row9_fee_rate"] = float(getattr(decl, "row9_fee_rate", 0.03) or 0.03)
+        elif key == "row10a_fee_reduction":
+            result["row10a_fee_reduction_current"] = float(getattr(decl, "row10a_fee_reduction_current", 0) or 0)
+            result["row10a_fee_reduction_ytd"] = float(getattr(decl, "row10a_fee_reduction_ytd", 0) or 0)
         else:
             result[key + "_current"] = float(getattr(decl, key + "_current", 0) or 0)
             result[key + "_ytd"] = float(getattr(decl, key + "_ytd", 0) or 0)
+    result["fee_reduction_rate"] = float(getattr(decl, "fee_reduction_rate", 0.5) or 0.5)
     return result
 
 
@@ -85,6 +90,9 @@ class DeclarationCreate(BaseModel):
     row9_fee_rate: float = 0.03
     row10_payable_fee_current: float = 0.0
     row10_payable_fee_ytd: float = 0.0
+    row10a_fee_reduction_current: float = 0.0
+    row10a_fee_reduction_ytd: float = 0.0
+    fee_reduction_rate: float = 0.5
     row11_unpaid_beginning_current: float = 0.0
     row11_unpaid_beginning_ytd: float = 0.0
     row12_paid_current_period_current: float = 0.0

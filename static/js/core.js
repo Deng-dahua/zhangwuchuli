@@ -53,7 +53,8 @@ const pages = {
   'vat-declaration': '增值税',
   'salary': '工资薪金',
   'social-security': '社会保险费',
-  'housing-fund': '住房公积金'
+  'housing-fund': '住房公积金',
+  'tax-risk-report': '涉税风险分析报告'
 };
 
 // ==================== 初始化（多公司版本） ====================
@@ -480,6 +481,7 @@ function navigateTo(page) {
     case 'social-security': renderSocialSecurity(container); break;
     case 'housing-fund': renderHousingFund(container); break;
     case '文化事业建设费': renderCulturalConstructionFee(container); break;
+    case 'tax-risk-report': renderTaxRiskReport(container); break;
   }
   window.scrollTo(0, 0);
 }
