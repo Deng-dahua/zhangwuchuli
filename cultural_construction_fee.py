@@ -120,10 +120,12 @@ def get_stats(company_id: int = Query(), db: Session = Depends(get_db)):
         CulturalConstructionFeeDeclaration.company_id == company_id
     ).all()
     count = len(declarations)
+    total_taxable_income = sum(float(d.row1_taxable_income_current or 0) for d in declarations)
     total_fee = sum(float(d.row10_payable_fee_current or 0) for d in declarations)
     total_fill_refund = sum(float(d.row18_fill_refund_current or 0) for d in declarations)
     return {
         "count": count,
+        "total_taxable_income": round(total_taxable_income, 2),
         "total_fee": round(total_fee, 2),
         "total_fill_refund": round(total_fill_refund, 2),
     }
