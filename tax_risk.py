@@ -2511,12 +2511,12 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("运输"),
-            PurchaseInvoice.item_name.contains("物流"),
-            PurchaseInvoice.item_name.contains("快递"),
-            PurchaseInvoice.item_name.contains("配送"),
-            PurchaseInvoice.item_name.contains("货运"),
-            PurchaseInvoice.item_name.contains("搬运"),
+            PurchaseInvoice.goods_name.contains("运输"),
+            PurchaseInvoice.goods_name.contains("物流"),
+            PurchaseInvoice.goods_name.contains("快递"),
+            PurchaseInvoice.goods_name.contains("配送"),
+            PurchaseInvoice.goods_name.contains("货运"),
+            PurchaseInvoice.goods_name.contains("搬运"),
         )
     ).scalar() or 0
 
@@ -2568,7 +2568,7 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
             SalesInvoice.company_id == company_id,
             SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
             SalesInvoice.status == "正常",
-            or_(*[SalesInvoice.item_name.contains(kw) for kw in service_keywords])
+            or_(*[SalesInvoice.goods_name.contains(kw) for kw in service_keywords])
         ).scalar() or 0
 
     product_sales = total_sales_amt - service_sales
@@ -2618,13 +2618,13 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
             SalesInvoice.company_id == company_id,
             SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
             or_(
-                SalesInvoice.item_name.contains("苗木"),
-                SalesInvoice.item_name.contains("花卉"),
-                SalesInvoice.item_name.contains("蔬菜"),
-                SalesInvoice.item_name.contains("水果"),
-                SalesInvoice.item_name.contains("农产品"),
-                SalesInvoice.item_name.contains("粮食"),
-                SalesInvoice.item_name.contains("茶叶"),
+                SalesInvoice.goods_name.contains("苗木"),
+                SalesInvoice.goods_name.contains("花卉"),
+                SalesInvoice.goods_name.contains("蔬菜"),
+                SalesInvoice.goods_name.contains("水果"),
+                SalesInvoice.goods_name.contains("农产品"),
+                SalesInvoice.goods_name.contains("粮食"),
+                SalesInvoice.goods_name.contains("茶叶"),
                 SalesInvoice.tax_rate == 0,  # 免税农产品
             )
         ).scalar() or 0
@@ -2676,7 +2676,7 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
     planting_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(*[PurchaseInvoice.item_name.contains(kw) for kw in planting_keywords])
+        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in planting_keywords])
     ).scalar() or 0
 
     total_planting = planting_costs + planting_inv
@@ -2686,8 +2686,8 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("收购"),
-            PurchaseInvoice.item_name.contains("农产品"),
+            PurchaseInvoice.goods_name.contains("收购"),
+            PurchaseInvoice.goods_name.contains("农产品"),
             PurchaseInvoice.tax_rate == 0,
         )
     ).scalar() or 0
@@ -2774,11 +2774,11 @@ def _analyze_packaging_missing(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("包装"),
-            PurchaseInvoice.item_name.contains("纸箱"),
-            PurchaseInvoice.item_name.contains("塑料袋"),
-            PurchaseInvoice.item_name.contains("编织袋"),
-            PurchaseInvoice.item_name.contains("打包"),
+            PurchaseInvoice.goods_name.contains("包装"),
+            PurchaseInvoice.goods_name.contains("纸箱"),
+            PurchaseInvoice.goods_name.contains("塑料袋"),
+            PurchaseInvoice.goods_name.contains("编织袋"),
+            PurchaseInvoice.goods_name.contains("打包"),
         )
     ).scalar() or 0
 
@@ -2963,11 +2963,11 @@ def _analyze_advertising_missing(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("广告"),
-            PurchaseInvoice.item_name.contains("推广"),
-            PurchaseInvoice.item_name.contains("营销"),
-            PurchaseInvoice.item_name.contains("宣传"),
-            PurchaseInvoice.item_name.contains("展会"),
+            PurchaseInvoice.goods_name.contains("广告"),
+            PurchaseInvoice.goods_name.contains("推广"),
+            PurchaseInvoice.goods_name.contains("营销"),
+            PurchaseInvoice.goods_name.contains("宣传"),
+            PurchaseInvoice.goods_name.contains("展会"),
         )
     ).scalar() or 0
 
@@ -3047,9 +3047,9 @@ def _analyze_travel_missing(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("机票"),
-            PurchaseInvoice.item_name.contains("酒店"),
-            PurchaseInvoice.item_name.contains("住宿"),
+            PurchaseInvoice.goods_name.contains("机票"),
+            PurchaseInvoice.goods_name.contains("酒店"),
+            PurchaseInvoice.goods_name.contains("住宿"),
         )
     ).scalar() or 0
 
@@ -3276,7 +3276,7 @@ def _analyze_vat_retention_refund(db, company_id, ps, pe, results):
 def _analyze_vat_no_ticket_sales(db, company_id, ps, pe, results):
     """增值税无票销售额风险（适用一般纳税人）"""
     company = db.query(Company).filter(Company.id == company_id).first()
-    if not company or (company.taxpayer_type and "小规模" in company.taxpayer_type):
+    if not company or (company.company_type and "小规模" in company.company_type):
         return
 
     decls = db.query(VATDeclaration).filter(
@@ -3375,7 +3375,7 @@ def _analyze_sensitive_invoice(db, company_id, ps, pe, results):
         count = db.query(func.count(PurchaseInvoice.id)).filter(
             PurchaseInvoice.company_id == company_id,
             PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-            *[PurchaseInvoice.item_name.contains(kw) for kw in keywords]
+            *[PurchaseInvoice.goods_name.contains(kw) for kw in keywords]
         ).scalar() or 0
         if category == "预付卡" and count > 0:
             results.append({
@@ -3397,22 +3397,22 @@ def _analyze_buy_sell_mismatch(db, company_id, ps, pe, results):
         return
 
     # 检查是否是制造业
-    industry = company.industry or ""
+    industry = (company.business_scope or "") + " " + (company.company_type or "")
     if not any(kw in industry for kw in ["制造", "生产", "加工", "家具", "机械", "电子", "纺织", "服装", "食品"]):
         return
 
     # 提取进项和销项的商品名称关键词
     sales_items = set()
-    for inv in db.query(SalesInvoice.item_name).filter(
+    for inv in db.query(SalesInvoice.goods_name).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
     ).limit(100).all():
         if inv[0]: sales_items.add(inv[0][:4])
 
     purchase_items = set()
-    for inv in db.query(PurchaseInvoice.item_name).filter(
+    for inv in db.query(PurchaseInvoice.goods_name).filter(
         PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
     ).limit(100).all():
         if inv[0]: purchase_items.add(inv[0][:4])
 
@@ -3441,18 +3441,18 @@ def _analyze_fuel_vs_vehicles(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("汽油"),
-            PurchaseInvoice.item_name.contains("柴油"),
-            PurchaseInvoice.item_name.contains("加油"),
-            PurchaseInvoice.item_name.contains("燃油"),
-            PurchaseInvoice.item_name.contains("油费")
+            PurchaseInvoice.goods_name.contains("汽油"),
+            PurchaseInvoice.goods_name.contains("柴油"),
+            PurchaseInvoice.goods_name.contains("加油"),
+            PurchaseInvoice.goods_name.contains("燃油"),
+            PurchaseInvoice.goods_name.contains("油费")
         )
     ).scalar() or 0
 
     # 公司车辆
     vehicles = db.query(FixedAsset).filter(
         FixedAsset.company_id == company_id,
-        FixedAsset.asset_name.contains("车"),
+        FixedAsset.name.contains("车"),
         FixedAsset.status == "在用"
     ).all()
 
@@ -3484,11 +3484,11 @@ def _analyze_transport_ratio(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("运输"),
-            PurchaseInvoice.item_name.contains("物流"),
-            PurchaseInvoice.item_name.contains("快递"),
-            PurchaseInvoice.item_name.contains("配送"),
-            PurchaseInvoice.item_name.contains("货运")
+            PurchaseInvoice.goods_name.contains("运输"),
+            PurchaseInvoice.goods_name.contains("物流"),
+            PurchaseInvoice.goods_name.contains("快递"),
+            PurchaseInvoice.goods_name.contains("配送"),
+            PurchaseInvoice.goods_name.contains("货运")
         )
     ).scalar() or 0
 
@@ -3520,10 +3520,10 @@ def _analyze_expense_reasonability(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("餐饮"),
-            PurchaseInvoice.item_name.contains("招待"),
-            PurchaseInvoice.item_name.contains("宴请"),
-            PurchaseInvoice.item_name.contains("礼品"),
+            PurchaseInvoice.goods_name.contains("餐饮"),
+            PurchaseInvoice.goods_name.contains("招待"),
+            PurchaseInvoice.goods_name.contains("宴请"),
+            PurchaseInvoice.goods_name.contains("礼品"),
         )
     ).scalar() or 0
 
@@ -3542,9 +3542,9 @@ def _analyze_expense_reasonability(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
         or_(
-            PurchaseInvoice.item_name.contains("咨询"),
-            PurchaseInvoice.item_name.contains("顾问"),
-            PurchaseInvoice.item_name.contains("服务费"),
+            PurchaseInvoice.goods_name.contains("咨询"),
+            PurchaseInvoice.goods_name.contains("顾问"),
+            PurchaseInvoice.goods_name.contains("服务费"),
         )
     ).scalar() or 0
 
@@ -3672,7 +3672,7 @@ def _analyze_provisional_cost(db, company_id, ps, pe, results):
 def _analyze_staff_welfare(db, company_id, ps, pe, results):
     """职工福利费超14%工资总额限制"""
     salary_records = db.query(
-        func.sum(SalaryRecord.taxable_amount)
+        func.sum(SalaryRecord.current_income)
     ).filter(SalaryRecord.company_id == company_id, SalaryRecord.period >= ps,
              SalaryRecord.period <= pe).scalar() or 0
 
@@ -3682,14 +3682,14 @@ def _analyze_staff_welfare(db, company_id, ps, pe, results):
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.invoice_date >= ps + "-01", PurchaseInvoice.invoice_date <= pe + "-31",
         or_(
-            PurchaseInvoice.item_name.contains("福利"),
-            PurchaseInvoice.item_name.contains("节日"),
-            PurchaseInvoice.item_name.contains("月饼"),
-            PurchaseInvoice.item_name.contains("粽子"),
-            PurchaseInvoice.item_name.contains("慰问"),
-            PurchaseInvoice.item_name.contains("体检"),
-            PurchaseInvoice.item_name.contains("旅游"),
-            PurchaseInvoice.item_name.contains("团建"),
+            PurchaseInvoice.goods_name.contains("福利"),
+            PurchaseInvoice.goods_name.contains("节日"),
+            PurchaseInvoice.goods_name.contains("月饼"),
+            PurchaseInvoice.goods_name.contains("粽子"),
+            PurchaseInvoice.goods_name.contains("慰问"),
+            PurchaseInvoice.goods_name.contains("体检"),
+            PurchaseInvoice.goods_name.contains("旅游"),
+            PurchaseInvoice.goods_name.contains("团建"),
         )
     ).scalar() or 0
 
@@ -3728,7 +3728,7 @@ def _analyze_social_security_match(db, company_id, ps, pe, results):
 
     if not ss_decls:
         # 有工资但无社保记录
-        total_salary = sum(_safe_float(r.taxable_amount) for r in salary_records)
+        total_salary = sum(_safe_float(r.current_income) for r in salary_records)
         if total_salary > 50000:
             results.append({
                 "category": "薪酬福利", "category_icon": "👥", "risk_score": 9, "risk_level": "高风险",
@@ -3741,11 +3741,11 @@ def _analyze_social_security_match(db, company_id, ps, pe, results):
 
     # 社保基数与工资差异
     if ss_decls:
-        avg_salary = sum(_safe_float(r.taxable_amount) for r in salary_records) / max(len(salary_records), 1)
+        avg_salary = sum(_safe_float(r.current_income) for r in salary_records) / max(len(salary_records), 1)
         # 简化的社保基数检查
         low_base = 0
         for sd in ss_decls:
-            base = _safe_float(sd.pension_base or sd.medical_base or 0)
+            base = _safe_float(sd.salary_base or 0)
             if base > 0 and base < avg_salary * 0.8:  # 基数低于平均工资80%
                 low_base += 1
 
