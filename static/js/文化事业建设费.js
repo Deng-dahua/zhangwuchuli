@@ -289,7 +289,6 @@ function renderCCFTemplateViewInline(data) {
 
   if (ccfInlineDisplayId !== data.id) {
     ccfInlineDisplayId = data.id;
-    setTimeout(function() { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
   }
 }
 
