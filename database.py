@@ -2229,11 +2229,28 @@ def _match_ss_payment_journals(db: Session, company_id: int):
         summary = tx.summary or ""
         tx_period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else ""
 
-        # 判断是否社保相关：关键词匹配（税务征收 / 社保 / 社会保险）
+        # 判断是否社保相关：关键词匹配 + 金额匹配
         full_text = (cp + " " + summary).lower()
         result = _classify_bank_tx(db, company_id, tx)
         is_ss = (result and result[2] == "social_security") or \
                 any(kw in full_text for kw in ["社保", "社会保险", "社会保险费"])
+
+        # 关键词未命中时，按金额匹配社保申报总额（社保由税务统一征收，
+        # 对方户名为国家金库且摘要为"缴税"，无法通过关键词区分）
+        if not is_ss:
+            payment_amount = (tx.debit_amount or 0) if (tx.debit_amount and tx.debit_amount > 0) else (tx.credit_amount or 0)
+            if payment_amount > 0 and tx_period:
+                # 查同期社保明细合计
+                ss_amt = db.query(func.coalesce(func.sum(SocialSecurityDetail.total_amount), 0)).join(
+                    SocialSecurityDeclaration,
+                    SocialSecurityDetail.declaration_id == SocialSecurityDeclaration.id
+                ).filter(
+                    SocialSecurityDeclaration.company_id == company_id,
+                    SocialSecurityDeclaration.period == tx_period,
+                ).scalar()
+                if abs(payment_amount - ss_amt) < 0.01:
+                    is_ss = True
+
         if not is_ss:
             continue
 
@@ -2251,6 +2268,16 @@ def _match_ss_payment_journals(db: Session, company_id: int):
             JournalEntry.source == "社保缴纳",
         ).first()
         if existing:
+            continue
+
+        # 检查是否已被「银行流水」自动凭证生成过（避免重复）
+        existing_bank = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "银行流水",
+            func.abs(JournalEntry.debit_amount - payment_amount) < 0.01,
+            JournalEntry.account_code == "1002",
+        ).first()
+        if existing_bank:
             continue
 
         matched += 1
@@ -2535,6 +2562,16 @@ def _match_hf_payment_journals(db: Session, company_id: int):
             JournalEntry.source == "公积金缴纳",
         ).first()
         if existing:
+            continue
+
+        # 检查是否已被「银行流水」自动凭证生成过（避免重复）
+        existing_bank = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "银行流水",
+            func.abs(JournalEntry.debit_amount - payment_amount) < 0.01,
+            JournalEntry.account_code == "1002",
+        ).first()
+        if existing_bank:
             continue
 
         matched += 1
