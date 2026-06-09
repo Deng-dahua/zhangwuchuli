@@ -349,14 +349,8 @@ function ccfClearFilter() {
 function renderCCFMainForm(data, main) {
   var h = '';
 
-  // 表头
-  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">';
-  h += '<div style="font-size:15px;font-weight:700;text-align:center;flex:1">文化事业建设费申报表</div>';
-  h += '<div style="font-size:12px;color:#6b7280;text-align:right">';
-  h += '纳税人名称：' + escapeHtml(data.taxpayer_name || '') + '<br>';
-  h += '税款所属期：' + escapeHtml(data.period || '') + '<br>';
-  h += '填表日期：' + escapeHtml(data.fill_date || '') + '&nbsp;&nbsp;状态：<span class="badge badge-info">' + escapeHtml(data.status || '草稿') + '</span>';
-  h += '</div></div>';
+  // 标题
+  h += '<div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:8px">文化事业建设费申报表</div>';
 
   // 先计算每个分类的行数（用于 rowspan）
   var catSpans = {}, catOrder = [];
@@ -422,12 +416,6 @@ function renderCCFMainForm(data, main) {
   }
 
   h += '</tbody></table>';
-
-  // 底部：声明
-  h += '<div style="margin-top:12px;font-size:11px;color:#6b7280;line-height:1.8">';
-  h += '声明：此表是根据国家文化事业建设费有关规定填报的，是真实、可靠、完整的。<br>';
-  h += '经办人（签章）________　　　　填表人（签章）________　　　　纳税人（签章）________';
-  h += '</div>';
 
   return h;
 }
