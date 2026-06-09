@@ -31,7 +31,7 @@ from database import (
     InventoryItem, InventoryTransaction, InventoryBalance,
     Contract, ContractPayment,
     Payment,
-    SalesInvoice, PurchaseInvoice,
+    SalesInvoice, PurchaseInvoice, BookkeepingInvoice,
     BankConfig, BankTransaction, BankRule,
     InputVATDeduction, ColumnTemplate, JournalEntry,
     SalaryRecord, VATDeclaration,
@@ -1366,6 +1366,7 @@ def dashboard(company_id: int = Query(...), db: Session = Depends(get_db)):
     # 本月发票数量
     si_count = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).count()
     pi_count = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).count()
+    bi_count = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id).count()
 
     return {
         "period": period,
@@ -1375,6 +1376,7 @@ def dashboard(company_id: int = Query(...), db: Session = Depends(get_db)):
         "account_count": account_count,
         "sales_invoice_count": si_count,
         "purchase_invoice_count": pi_count,
+        "bookkeeping_invoice_count": bi_count,
     }
 
 
@@ -1516,6 +1518,7 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
     # 5. 业务核心
     db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).delete()
     db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).delete()
+    db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id).delete()
     db.query(InputVATDeduction).filter(InputVATDeduction.company_id == company_id).delete()
     db.query(BankTransaction).filter(BankTransaction.company_id == company_id).delete()
     db.query(BankConfig).filter(BankConfig.company_id == company_id).delete()
@@ -3004,6 +3007,232 @@ def purchase_invoice_batch_to_journal(
         msg += f"，{len(errors)} 项失败"
     return {"message": msg, "generated": generated, "skipped": skipped, "vouchers": voucher_count, "errors": errors}
 
+
+# ==================== 记账发票 ====================
+
+class BookkeepingInvoiceCreate(BaseModel):
+    invoice_code: Optional[str] = None
+    invoice_no: Optional[str] = None
+    digital_invoice_no: Optional[str] = None
+    seller_tax_no: Optional[str] = None
+    seller_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    buyer_name: Optional[str] = None
+    invoice_date: Optional[date] = None
+    tax_category_code: Optional[str] = None
+    specific_business_type: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = 0
+    unit_price: Optional[float] = 0
+    amount: float = 0.0
+    tax_rate: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    total_amount: Optional[float] = 0.0
+    invoice_source: Optional[str] = None
+    invoice_category: str = "增值税普通发票"
+    status: str = "正常"
+    is_positive: Optional[bool] = True
+    invoice_risk_level: Optional[str] = None
+    issuer: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class BookkeepingInvoiceUpdate(BaseModel):
+    invoice_code: Optional[str] = None
+    digital_invoice_no: Optional[str] = None
+    seller_tax_no: Optional[str] = None
+    seller_name: Optional[str] = None
+    buyer_tax_no: Optional[str] = None
+    buyer_name: Optional[str] = None
+    invoice_date: Optional[date] = None
+    tax_category_code: Optional[str] = None
+    specific_business_type: Optional[str] = None
+    goods_name: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    amount: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total_amount: Optional[float] = None
+    invoice_source: Optional[str] = None
+    invoice_category: Optional[str] = None
+    status: Optional[str] = None
+    is_positive: Optional[bool] = None
+    invoice_risk_level: Optional[str] = None
+    issuer: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/bookkeeping-invoices")
+def list_bookkeeping_invoices(
+    company_id: int = Query(...),
+    invoice_category: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db)
+):
+    q = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id)
+    if invoice_category:
+        q = q.filter(BookkeepingInvoice.invoice_category == invoice_category)
+    if status:
+        q = q.filter(BookkeepingInvoice.status == status)
+    if date_from:
+        q = q.filter(BookkeepingInvoice.invoice_date >= date_from)
+    if date_to:
+        q = q.filter(BookkeepingInvoice.invoice_date <= date_to)
+    if keyword:
+        q = q.filter(or_(
+            BookkeepingInvoice.invoice_no.contains(keyword),
+            BookkeepingInvoice.invoice_code.contains(keyword),
+            BookkeepingInvoice.digital_invoice_no.contains(keyword),
+            BookkeepingInvoice.seller_name.contains(keyword),
+            BookkeepingInvoice.goods_name.contains(keyword)
+        ))
+    invoices = q.order_by(BookkeepingInvoice.invoice_date.desc()).offset(skip).limit(limit).all()
+    t = q.count()
+    return {
+        "total": t,
+        "items": [{
+            "id": inv.id,
+            "invoice_code": inv.invoice_code or "",
+            "invoice_no": inv.invoice_no,
+            "digital_invoice_no": inv.digital_invoice_no or "",
+            "seller_tax_no": inv.seller_tax_no or "",
+            "seller_name": inv.seller_name or "",
+            "buyer_tax_no": inv.buyer_tax_no or "",
+            "buyer_name": inv.buyer_name or "",
+            "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+            "tax_category_code": inv.tax_category_code or "",
+            "specific_business_type": inv.specific_business_type or "",
+            "goods_name": inv.goods_name or "",
+            "spec": inv.spec or "",
+            "unit": inv.unit or "",
+            "quantity": inv.quantity or 0,
+            "unit_price": inv.unit_price or 0,
+            "amount": inv.amount or 0,
+            "tax_rate": inv.tax_rate or 0,
+            "tax_amount": inv.tax_amount or 0,
+            "total_amount": inv.total_amount or 0,
+            "invoice_source": inv.invoice_source or "",
+            "invoice_category": inv.invoice_category or "增值税普通发票",
+            "status": inv.status,
+            "is_positive": inv.is_positive if inv.is_positive is not None else True,
+            "invoice_risk_level": inv.invoice_risk_level or "",
+            "issuer": inv.issuer or "",
+            "remark": inv.remark or "",
+            "created_at": str(inv.created_at) if inv.created_at else ""
+        } for inv in invoices]
+    }
+
+
+@app.post("/api/bookkeeping-invoices")
+def create_bookkeeping_invoice(data: BookkeepingInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    inv = BookkeepingInvoice(company_id=company_id, **data.model_dump())
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "记账发票创建成功"}
+
+
+@app.get("/api/bookkeeping-invoices/stats")
+def bookkeeping_invoice_stats(company_id: int = Query(...), tab: str = Query("all"), db: Session = Depends(get_db)):
+    base = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id)
+    if tab == "zpt":
+        base = base.filter(BookkeepingInvoice.invoice_category.contains("专用发票"))
+    elif tab == "ppt":
+        base = base.filter(BookkeepingInvoice.invoice_category.contains("普通发票"))
+    total_count = base.count()
+    total_amt = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.amount).all())
+    total_amount = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.total_amount).all())
+    total_raw_tax = sum(a[0] or 0 for a in base.with_entities(BookkeepingInvoice.tax_amount).all())
+    normal_count = base.filter(BookkeepingInvoice.status == "正常").count()
+    void_count = base.filter(BookkeepingInvoice.status.like("%作废%")).count()
+    red_count = base.filter(BookkeepingInvoice.status.like("%红冲%")).count()
+    return {
+        "total_count": total_count, "total_amt": round(total_amt, 2),
+        "total_amount": round(total_amount, 2),
+        "total_raw_tax": round(total_raw_tax, 2),
+        "normal_count": normal_count, "void_count": void_count,
+        "red_count": red_count
+    }
+
+
+@app.get("/api/bookkeeping-invoices/{invoice_id}")
+def get_bookkeeping_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    inv = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id, BookkeepingInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    return {
+        "id": inv.id,
+        "invoice_code": inv.invoice_code or "",
+        "invoice_no": inv.invoice_no,
+        "digital_invoice_no": inv.digital_invoice_no or "",
+        "seller_tax_no": inv.seller_tax_no or "",
+        "seller_name": inv.seller_name or "",
+        "buyer_tax_no": inv.buyer_tax_no or "",
+        "buyer_name": inv.buyer_name or "",
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else "",
+        "tax_category_code": inv.tax_category_code or "",
+        "specific_business_type": inv.specific_business_type or "",
+        "goods_name": inv.goods_name or "",
+        "spec": inv.spec or "",
+        "unit": inv.unit or "",
+        "quantity": inv.quantity or 0,
+        "unit_price": inv.unit_price or 0,
+        "amount": inv.amount or 0,
+        "tax_rate": inv.tax_rate or 0,
+        "tax_amount": inv.tax_amount or 0,
+        "total_amount": inv.total_amount or 0,
+        "invoice_source": inv.invoice_source or "",
+        "invoice_category": inv.invoice_category or "增值税普通发票",
+        "status": inv.status,
+        "is_positive": inv.is_positive if inv.is_positive is not None else True,
+        "invoice_risk_level": inv.invoice_risk_level or "",
+        "issuer": inv.issuer or "",
+        "remark": inv.remark or "",
+        "created_at": str(inv.created_at) if inv.created_at else "",
+        "updated_at": str(inv.updated_at) if inv.updated_at else ""
+    }
+
+
+@app.put("/api/bookkeeping-invoices/{invoice_id}")
+def update_bookkeeping_invoice(invoice_id: int, data: BookkeepingInvoiceUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    inv = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id, BookkeepingInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(inv, k, v)
+    inv.updated_at = datetime.now()
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@app.delete("/api/bookkeeping-invoices/{invoice_id}")
+def delete_bookkeeping_invoice(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    inv = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id, BookkeepingInvoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, detail="发票不存在")
+    db.delete(inv)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+@app.post("/api/bookkeeping-invoices/batch-delete")
+def batch_delete_bookkeeping_invoices(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    deleted = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.id.in_(ids)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
 
 # ==================== 银行流水规则库 ====================
@@ -5599,6 +5828,18 @@ async def analyze_file_headers(
                 "invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level",
                 "issuer", "remark"
             ]
+        elif module == "bookkeeping-invoice":
+            # 记账发票25列（无认证信息列）
+            field_order = [
+                "invoice_code", "invoice_no", "digital_invoice_no",
+                "seller_tax_no", "seller_name",
+                "buyer_tax_no", "buyer_name",
+                "invoice_date", "tax_category_code", "specific_business_type",
+                "goods_name", "spec", "unit", "quantity", "unit_price",
+                "amount", "tax_rate", "tax_amount", "total_amount",
+                "invoice_source", "invoice_category", "status", "is_positive", "invoice_risk_level",
+                "issuer", "remark"
+            ]
         elif module == "bank-transaction":
             field_order = [
                 "transaction_date", "transaction_time", "application_date",
@@ -5836,7 +6077,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     db.flush()
                     new_bank_tx_ids.append(tx.id)
 
-                elif module in ("sales-invoice", "purchase-invoice"):
+                elif module in ("sales-invoice", "purchase-invoice", "bookkeeping-invoice"):
                     inv_date = None
                     date_str = mapped.get("invoice_date", "")
                     if date_str:
@@ -6020,6 +6261,66 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         db.add(inv)
                         db.flush()
                         new_invoices.append(inv)
+
+                elif module == "bookkeeping-invoice":
+                    # 记账发票导入（无认证相关字段）
+                    bi_fp_values = (
+                        str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
+                        str(mapped.get("digital_invoice_no", "")),
+                        str(mapped.get("seller_tax_no", "")), str(mapped.get("seller_name", "")),
+                        str(mapped.get("buyer_tax_no", "")), str(mapped.get("buyer_name", "")),
+                        str(inv_date) if inv_date else "",
+                        str(mapped.get("tax_category_code", "")), str(mapped.get("specific_business_type", "")),
+                        str(mapped.get("goods_name", "")), str(mapped.get("spec", "")),
+                        str(mapped.get("unit", "")), str(qty), str(uprice),
+                        str(amt), str(tr), str(tax_amt), str(total),
+                        str(mapped.get("invoice_source", "")),
+                        str(mapped.get("invoice_category", "增值税普通发票")),
+                        str(mapped.get("status", "正常")),
+                        str(mapped.get("is_positive", "是")),
+                        str(mapped.get("invoice_risk_level", "")),
+                        str(mapped.get("issuer", "")),
+                        str(mapped.get("remark", "")),
+                    )
+                    bi_fp_raw = "|".join(bi_fp_values)
+                    bi_fp = hashlib.sha256(bi_fp_raw.encode("utf-8")).hexdigest()
+                    existing_bi = db.query(BookkeepingInvoice).filter(
+                        BookkeepingInvoice.company_id == company_id,
+                        BookkeepingInvoice._fingerprint == bi_fp
+                    ).first()
+                    if existing_bi:
+                        errors.append(f"第{i+2}行: 数据重复，已跳过")
+                        continue
+                    inv = BookkeepingInvoice(
+                        company_id=company_id, invoice_no=inv_no,
+                        invoice_code=mapped.get("invoice_code", ""),
+                        digital_invoice_no=mapped.get("digital_invoice_no", ""),
+                        seller_tax_no=mapped.get("seller_tax_no", ""),
+                        seller_name=mapped.get("seller_name", ""),
+                        buyer_tax_no=mapped.get("buyer_tax_no", ""),
+                        buyer_name=mapped.get("buyer_name", ""),
+                        invoice_date=inv_date,
+                        tax_category_code=mapped.get("tax_category_code", ""),
+                        specific_business_type=mapped.get("specific_business_type", ""),
+                        goods_name=mapped.get("goods_name", ""),
+                        spec=mapped.get("spec", ""),
+                        unit=mapped.get("unit", ""),
+                        quantity=qty, unit_price=uprice,
+                        amount=amt, tax_rate=tr, tax_amount=tax_amt,
+                        total_amount=total,
+                        invoice_source=mapped.get("invoice_source", ""),
+                        invoice_category=mapped.get("invoice_category", "增值税普通发票"),
+                        status=mapped.get("status", "正常"),
+                        is_positive=mapped.get("is_positive", "是") in ("是", "true", "True", "1", True),
+                        invoice_risk_level=mapped.get("invoice_risk_level", ""),
+                        issuer=mapped.get("issuer", ""),
+                        remark=mapped.get("remark", ""),
+                        raw_data=json.dumps(extra) if extra else None,
+                        _fingerprint=bi_fp,
+                    )
+                    db.add(inv)
+                    db.flush()
+                    new_invoices.append(inv)
 
                 elif module == "input-vat-deduction":
                     # 进项抵扣导入：解析日期
@@ -6364,7 +6665,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                 infos.append(f"社保缴纳匹配失败: {str(e)}")
 
         # 进项发票/银行流水导入后自动触发供应商智能建档（双源信号满足时自动创建）
-        if module in ("purchase-invoice", "bank-transaction"):
+        if module in ("purchase-invoice", "bookkeeping-invoice", "bank-transaction"):
             try:
                 supp_result = _do_auto_create_suppliers(db, company_id)
                 if supp_result["created"] > 0:

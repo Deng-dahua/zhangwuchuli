@@ -1,7 +1,7 @@
 // ==================== 文件导入 - 列映射 ====================
 
 function showUploadModal(module) {
-  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'input-vat-deduction': '导入进项抵扣', 'employee': '导入人员档案', 'customer': '导入客户档案', 'supplier': '导入供应商档案', 'department': '导入部门档案' };
+  const titles = { 'bank-transaction': '导入银行流水', 'sales-invoice': '导入开具发票', 'purchase-invoice': '导入取得发票', 'bookkeeping-invoice': '导入记账发票', 'input-vat-deduction': '导入进项抵扣', 'employee': '导入人员档案', 'customer': '导入客户档案', 'supplier': '导入供应商档案', 'department': '导入部门档案' };
   const modal = createModal(titles[module] || '导入文件', `
     <p style="margin-bottom:12px;color:var(--gray-500);">上传 xlsx 或 csv 文件，系统将自动识别表头。</p>
     <div style="border:2px dashed var(--gray-300);border-radius:8px;padding:30px;text-align:center;margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('upload-file-input').click()">
@@ -379,6 +379,7 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     });
   }
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
+  else if (module === 'bookkeeping-invoice') renderBookkeepingInvoices();
   else if (module === 'input-vat-deduction') renderInputVATDeductions();
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
   else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }

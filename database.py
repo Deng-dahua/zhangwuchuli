@@ -73,6 +73,7 @@ class Company(Base):
     payments = relationship("Payment", back_populates="company")
     sales_invoices = relationship("SalesInvoice", back_populates="company")
     purchase_invoices = relationship("PurchaseInvoice", back_populates="company")
+    bookkeeping_invoices = relationship("BookkeepingInvoice", back_populates="company")
     bank_configs = relationship("BankConfig", back_populates="company", cascade="all, delete-orphan")
     bank_transactions = relationship("BankTransaction", back_populates="company")
     input_vat_deductions = relationship("InputVATDeduction", back_populates="company")
@@ -603,6 +604,57 @@ class PurchaseInvoice(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     company = relationship("Company", back_populates="purchase_invoices")
 
+
+class BookkeepingInvoice(Base):
+    """记账发票 - 企业收到的普通发票/收据等（不入进项抵扣体系）"""
+    __tablename__ = "bookkeeping_invoices"
+    __table_args__ = (
+        Index('idx_bi_company_date', 'company_id', 'invoice_date'),
+        Index('idx_bi_company_seller', 'company_id', 'seller_name'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, comment="所属公司")
+    # 发票基本信息
+    invoice_code = Column(String(30), comment="发票代码")
+    invoice_no = Column(String(30), nullable=True, comment="发票号码")
+    digital_invoice_no = Column(String(50), comment="数电发票号码")
+    # 销方信息
+    seller_tax_no = Column(String(50), comment="销方识别号")
+    seller_name = Column(String(100), comment="销方名称")
+    # 购方信息
+    buyer_tax_no = Column(String(50), comment="购方识别号")
+    buyer_name = Column(String(100), comment="购买方名称")
+    # 发票日期与分类
+    invoice_date = Column(Date, nullable=True, comment="开票日期")
+    tax_category_code = Column(String(30), comment="税收分类编码")
+    specific_business_type = Column(String(50), comment="特定业务类型")
+    # 货物明细
+    goods_name = Column(String(200), comment="货物或应税劳务名称")
+    spec = Column(String(100), comment="规格型号")
+    unit = Column(String(10), comment="单位")
+    quantity = Column(Numeric(18, 2), default=0, comment="数量")
+    unit_price = Column(Numeric(18, 2), default=0, comment="单价")
+    # 金额信息
+    amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="金额（不含税）")
+    tax_rate = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税率（%）")
+    tax_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="税额")
+    total_amount = Column(Numeric(18, 2), nullable=False, default=0.0, comment="价税合计")
+    # 发票属性
+    invoice_source = Column(String(20), comment="发票来源")
+    invoice_category = Column(String(20), nullable=False, default="增值税普通发票", comment="发票票种")
+    status = Column(String(20), nullable=False, default="正常", comment="发票状态：正常/作废/红冲")
+    is_positive = Column(Boolean, default=True, comment="是否正数发票")
+    invoice_risk_level = Column(String(10), comment="发票风险等级")
+    # 其他
+    issuer = Column(String(30), comment="开票人")
+    remark = Column(Text, comment="备注")
+    raw_data = Column(Text, comment="导入时的额外列数据JSON")
+    _fingerprint = Column(String(64), comment="全行指纹（去重用）")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    company = relationship("Company", back_populates="bookkeeping_invoices")
+
+
 # ==================== 银行配置（不同银行不同列映射）====================
 
 class BankConfig(Base):
@@ -962,6 +1014,53 @@ def migrate_schema(db):
                 print("已迁移 purchase_invoices.invoice_type → invoice_category")
             except Exception as e:
                 db.rollback()
+
+    # ── 8.05 记账发票表（复刻取得发票，独立建表） ──
+    if "bookkeeping_invoices" not in inspector.get_table_names():
+        try:
+            db.execute(TextClause("""
+                CREATE TABLE bookkeeping_invoices (
+                    id INTEGER NOT NULL,
+                    company_id INTEGER NOT NULL,
+                    invoice_code VARCHAR(30),
+                    invoice_no VARCHAR(30),
+                    digital_invoice_no VARCHAR(50),
+                    seller_tax_no VARCHAR(50),
+                    seller_name VARCHAR(100),
+                    buyer_tax_no VARCHAR(50),
+                    buyer_name VARCHAR(100),
+                    invoice_date DATE,
+                    tax_category_code VARCHAR(30),
+                    specific_business_type VARCHAR(50),
+                    goods_name VARCHAR(200),
+                    spec VARCHAR(100),
+                    unit VARCHAR(10),
+                    quantity NUMERIC(18,2) DEFAULT 0,
+                    unit_price NUMERIC(18,2) DEFAULT 0,
+                    amount NUMERIC(18,2) NOT NULL DEFAULT 0.0,
+                    tax_rate NUMERIC(18,2) NOT NULL DEFAULT 0.0,
+                    tax_amount NUMERIC(18,2) NOT NULL DEFAULT 0.0,
+                    total_amount NUMERIC(18,2) NOT NULL DEFAULT 0.0,
+                    invoice_source VARCHAR(20),
+                    invoice_category VARCHAR(20) NOT NULL DEFAULT '增值税普通发票',
+                    status VARCHAR(20) NOT NULL DEFAULT '正常',
+                    is_positive BOOLEAN DEFAULT 1,
+                    invoice_risk_level VARCHAR(10),
+                    issuer VARCHAR(30),
+                    remark TEXT,
+                    raw_data TEXT,
+                    _fingerprint VARCHAR(64),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    FOREIGN KEY (company_id) REFERENCES companies (id)
+                )
+            """))
+            db.commit()
+            print("已创建 bookkeeping_invoices 表")
+        except Exception as e:
+            db.rollback()
+            print(f"创建 bookkeeping_invoices 表失败: {e}")
 
     # ── 8.1 银行流水 _fingerprint 字段 ──
     if "bank_transactions" in inspector.get_table_names():

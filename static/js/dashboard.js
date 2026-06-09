@@ -27,7 +27,7 @@ async function renderDashboard(container) {
           <div class="stat-sub">个</div>
         </div>
       </div>
-      <div class="stat-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
         <div class="stat-card">
           <div class="stat-label">开具发票</div>
           <div class="stat-value" style="color:var(--primary)">${data.sales_invoice_count}</div>
@@ -38,10 +38,16 @@ async function renderDashboard(container) {
           <div class="stat-value" style="color:var(--success)">${data.purchase_invoice_count}</div>
           <div class="stat-sub">张</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">记账发票</div>
+          <div class="stat-value" style="color:var(--warning)">${data.bookkeeping_invoice_count || 0}</div>
+          <div class="stat-sub">张</div>
+        </div>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
         <button class="btn btn-primary" onclick="navigateTo('sales-invoices')">开具发票</button>
         <button class="btn btn-secondary" onclick="navigateTo('purchase-invoices')">取得发票</button>
+        <button class="btn btn-secondary" onclick="navigateTo('bookkeeping-invoices')">记账发票</button>
       </div>
     `;
   } catch (e) {
