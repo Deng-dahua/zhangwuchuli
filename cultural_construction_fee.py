@@ -10,11 +10,14 @@ from sqlalchemy import func, or_
 from datetime import datetime
 from typing import Optional, List
 import json
+import calendar
 
 from database import (
     CulturalConstructionFeeDeclaration,
     CulturalConstructionFeeDeduction,
     Company, get_db,
+    SalesInvoice, PurchaseInvoice, BookkeepingInvoice,
+    JournalEntry, Account, Supplier,
 )
 
 router = APIRouter(prefix="/api/cultural-construction-fee", tags=["文化事业建设费"])
@@ -491,3 +494,506 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
     decl.updated_at = datetime.now()
     db.commit()
     return {"message": "自动计算完成"}
+
+
+# ==================== AI 自动填列 ====================
+
+# 文化事业建设费 — 广告服务关键词（用于匹配销项/进项发票的货物/服务名称）
+CCF_AD_KEYWORDS = ["广告服务", "广告发布费", "广告制作费", "广告代理", "广告策划", "广告设计"]
+
+# 文化事业建设费 — 非广告服务关键词（有广告字眼但实际不是广告服务）
+CCF_AD_EXCLUDE = ["非广告", "非广告服务"]
+
+
+def _get_next_voucher_no(db, company_id: int) -> int:
+    """获取下一个凭证号"""
+    max_no = db.query(func.max(JournalEntry.voucher_no)).filter(
+        JournalEntry.company_id == company_id
+    ).scalar()
+    return (max_no or 0) + 1
+
+
+def _get_or_create_account(db, company_id: int, code: str, name: str,
+                           parent_code: str = None, category: str = "负债",
+                           balance_direction: str = "贷") -> Account:
+    """查找科目，不存在则自动创建"""
+    acct = db.query(Account).filter(
+        Account.company_id == company_id,
+        Account.code == code,
+    ).first()
+    if not acct:
+        acct = Account(
+            company_id=company_id,
+            code=code,
+            name=name,
+            parent_code=parent_code,
+            category=category,
+            balance_direction=balance_direction,
+        )
+        db.add(acct)
+        db.flush()
+    return acct
+
+
+def _generate_ccf_voucher(db, company_id: int, decl, fee_amount: float,
+                          entry_date, period: str) -> dict:
+    """生成文化事业建设费计提凭证（借：税金及附加 / 贷：应交文化事业建设费）"""
+    # 确保科目存在
+    tax_account = _get_or_create_account(
+        db, company_id, "6403", "税金及附加",
+        category="损益", balance_direction="借"
+    )
+    ccf_account = _get_or_create_account(
+        db, company_id, "221016", "应交文化事业建设费",
+        parent_code="2210", category="负债", balance_direction="贷"
+    )
+
+    # 检查是否已存在同日同金额的 CCF 凭证
+    existing = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "文化事业建设费",
+        JournalEntry.entry_date == entry_date,
+        JournalEntry.debit_amount == fee_amount,
+    ).first()
+    if existing:
+        vno = existing.voucher_no
+        return {"voucher_no": vno, "exists": True, "message": f"凭证 记-{vno} 已存在，跳过生成"}
+
+    vno = _get_next_voucher_no(db, company_id)
+    summary = f"计提文化事业建设费-{period}"
+
+    # 借方：税金及附加
+    db.add(JournalEntry(
+        company_id=company_id,
+        entry_date=entry_date,
+        period=period,
+        voucher_word="记",
+        voucher_no=vno,
+        summary=summary,
+        account_code=tax_account.code,
+        account_name=tax_account.name,
+        debit_amount=fee_amount,
+        credit_amount=0,
+        source="文化事业建设费",
+        ref_id=decl.id,
+        attach_count=0,
+    ))
+
+    # 贷方：应交文化事业建设费
+    db.add(JournalEntry(
+        company_id=company_id,
+        entry_date=entry_date,
+        period=period,
+        voucher_word="记",
+        voucher_no=vno,
+        summary=summary,
+        account_code=ccf_account.code,
+        account_name=ccf_account.name,
+        debit_amount=0,
+        credit_amount=fee_amount,
+        source="文化事业建设费",
+        ref_id=decl.id,
+        attach_count=0,
+    ))
+
+    db.flush()
+    return {"voucher_no": vno, "exists": False, "message": f"已生成凭证 记-{vno}"}
+
+
+def _match_ccf_payment_voucher(db, company_id: int, decl, fee_amount: float,
+                               entry_date, period: str) -> dict:
+    """匹配银行流水中的文化事业建设费支付记录"""
+    from database import BankTransaction
+
+    # 查找银行流水中对方户名含"国家金库"且金额匹配的支付
+    bank_txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= entry_date,
+        BankTransaction.credit_amount == fee_amount,
+        BankTransaction.counterparty_name.contains("国家金库"),
+    ).all()
+
+    if not bank_txs:
+        return {"matched": False, "message": "未找到匹配的银行支付流水"}
+
+    results = []
+    for tx in bank_txs:
+        # 检查是否已有支付凭证
+        existing_je = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "文化事业建设费缴纳",
+            JournalEntry.entry_date == tx.transaction_date,
+        ).first()
+        if existing_je:
+            results.append({"voucher_no": existing_je.voucher_no, "matched": True,
+                          "message": f"支付凭证 记-{existing_je.voucher_no} 已存在",
+                          "bank_tx_id": tx.id})
+            continue
+
+        vno = _get_next_voucher_no(db, company_id)
+        summary = f"缴纳文化事业建设费-{period}"
+
+        # 确保科目存在
+        ccf_account = _get_or_create_account(
+            db, company_id, "221016", "应交文化事业建设费",
+            parent_code="2210", category="负债", balance_direction="贷"
+        )
+        bank_account = db.query(Account).filter(
+            Account.company_id == company_id,
+            Account.code == "1002",
+        ).first()
+        if not bank_account:
+            bank_account = _get_or_create_account(
+                db, company_id, "1002", "银行存款",
+                category="资产", balance_direction="借"
+            )
+
+        # 借方：应交文化事业建设费（冲减）
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=tx.transaction_date,
+            period=period,
+            voucher_word="记",
+            voucher_no=vno,
+            summary=summary,
+            account_code=ccf_account.code,
+            account_name=ccf_account.name,
+            debit_amount=fee_amount,
+            credit_amount=0,
+            source="文化事业建设费缴纳",
+            ref_id=decl.id,
+        ))
+
+        # 贷方：银行存款
+        db.add(JournalEntry(
+            company_id=company_id,
+            entry_date=tx.transaction_date,
+            period=period,
+            voucher_word="记",
+            voucher_no=vno,
+            summary=summary,
+            account_code=bank_account.code,
+            account_name=bank_account.name,
+            debit_amount=0,
+            credit_amount=fee_amount,
+            source="文化事业建设费缴纳",
+            ref_id=decl.id,
+        ))
+
+        db.flush()
+        decl.row15_paid_arrears_current = fee_amount
+        results.append({"voucher_no": vno, "matched": True,
+                       "message": f"已生成支付凭证 记-{vno}",
+                       "bank_tx_id": tx.id})
+
+    return {"matched": True, "results": results}
+
+
+@router.post("/declarations/{declaration_id}/ai-auto-fill")
+def ai_auto_fill(declaration_id: int, company_id: int = Query(),
+                 db: Session = Depends(get_db)):
+    """
+    🤖 AI 自动填列文化事业建设费申报表
+    1. 从销项发票扫描广告服务含税收入 → 应征收入
+    2. 从进项/记账发票扫描可扣除的广告相关费用 → 扣除项目清单
+    3. 自动计算主表各栏次
+    4. 自动生成计提凭证到序时账
+    5. 自动匹配银行流水生成缴纳凭证
+    6. 自动建档供应商
+    """
+    decl = db.query(CulturalConstructionFeeDeclaration).filter(
+        CulturalConstructionFeeDeclaration.id == declaration_id,
+        CulturalConstructionFeeDeclaration.company_id == company_id,
+    ).first()
+    if not decl:
+        raise HTTPException(404, "申报记录不存在")
+
+    period = decl.period  # "2025-10"
+    try:
+        year, month = period.split("-")
+        year, month = int(year), int(month)
+    except:
+        raise HTTPException(400, f"期间格式错误：{period}")
+
+    # 计算期间起止日期
+    from calendar import monthrange
+    _, last_day = monthrange(year, month)
+    period_start = f"{year}-{month:02d}-01"
+    period_end = f"{year}-{month:02d}-{last_day:02d}"
+    entry_date = datetime(year, month, last_day).date()
+
+    log = []  # 操作日志
+
+    # ========== 1. 扫描销项发票 → 应征收入 ==========
+    # 筛选含"广告服务"关键词的正数发票
+    sales_invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date.between(period_start, period_end),
+        SalesInvoice.total_amount > 0,
+    ).all()
+
+    taxable_income = 0.0
+    exempt_income = 0.0
+    taxable_invoices = []
+    for si in sales_invoices:
+        goods = (si.goods_name or "").lower()
+        # 匹配广告服务关键词
+        is_ad = any(kw.lower() in goods for kw in CCF_AD_KEYWORDS)
+        is_exclude = any(kw.lower() in goods for kw in CCF_AD_EXCLUDE)
+        if is_ad and not is_exclude:
+            taxable_income += float(si.total_amount or 0)
+            taxable_invoices.append(si)
+            log.append(f"  销项发票 #{si.id} 广告服务 含税{si.total_amount:,.2f}")
+        elif is_ad:
+            exempt_income += float(si.total_amount or 0)
+
+    taxable_income = round(taxable_income, 2)
+    log.insert(0, f"📊 应征收入（广告服务含税）= {taxable_income:,.2f}（{len(taxable_invoices)} 张发票）")
+
+    # 更新主表
+    decl.row1_taxable_income_current = taxable_income
+    decl.row1_taxable_income_ytd = taxable_income
+    decl.row2_tax_exempt_income_current = 0  # 有应征收入时免征为0
+    decl.row2_tax_exempt_income_ytd = 0
+
+    # ========== 2. 扫描进项/记账发票 → 扣除项目清单 ==========
+    # 清空旧扣除项目
+    db.query(CulturalConstructionFeeDeduction).filter(
+        CulturalConstructionFeeDeduction.declaration_id == declaration_id
+    ).delete()
+
+    purchase_invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date.between(period_start, period_end),
+        PurchaseInvoice.total_amount > 0,
+    ).all()
+
+    bookkeeping_invoices = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.invoice_date.between(period_start, period_end),
+        BookkeepingInvoice.total_amount > 0,
+    ).all()
+
+    deduction_total = 0.0
+    deduction_count = 0
+    all_purchase = list(purchase_invoices) + list(bookkeeping_invoices)
+
+    for inv in all_purchase:
+        goods = (getattr(inv, 'goods_name', '') or '').lower()
+        is_ad = any(kw.lower() in goods for kw in CCF_AD_KEYWORDS)
+        is_exclude = any(kw.lower() in goods for kw in CCF_AD_EXCLUDE)
+        if is_ad and not is_exclude:
+            amount = float(getattr(inv, 'total_amount', 0) or 0)
+            seller_name = getattr(inv, 'seller_name', '') or getattr(inv, 'party_name', '') or ''
+            deduction_total += amount
+            deduction_count += 1
+            # 判断发票来源类型
+            inv_type = "purchase" if isinstance(inv, PurchaseInvoice) else "bookkeeping"
+            # 取纳税人识别号和发票号
+            tax_no = ""
+            inv_no = ""
+            if inv_type == "purchase":
+                tax_no = getattr(inv, 'seller_tax_no', '') or ''
+                # 优先数电发票号码，其次传统发票代码+号码
+                digital = getattr(inv, 'digital_invoice_no', '') or ''
+                inv_code = getattr(inv, 'invoice_code', '') or ''
+                inv_no_raw = getattr(inv, 'invoice_no', '') or ''
+                if digital:
+                    inv_no = digital
+                elif inv_code or inv_no_raw:
+                    inv_no = (inv_code + inv_no_raw).strip()
+                else:
+                    inv_no = digital  # 都为空时保持空字符串
+            else:
+                # 记账发票用 party_tax_no
+                tax_no = getattr(inv, 'party_tax_no', '') or ''
+                digital = getattr(inv, 'digital_invoice_no', '') or ''
+                inv_code = getattr(inv, 'invoice_code', '') or ''
+                inv_no_raw = getattr(inv, 'invoice_no', '') or ''
+                if digital:
+                    inv_no = digital
+                elif inv_code or inv_no_raw:
+                    inv_no = (inv_code + inv_no_raw).strip()
+                else:
+                    inv_no = ''
+            deduction = CulturalConstructionFeeDeduction(
+                declaration_id=declaration_id,
+                seq=deduction_count,
+                invoice_supplier_tax_no=tax_no[:50] if tax_no else "",
+                invoice_supplier_name=seller_name[:100] if seller_name else "",
+                service_item_name=(getattr(inv, 'goods_name', '') or '')[:100],
+                voucher_type="增值税专用发票" if inv_type == "purchase" else "增值税普通发票",
+                voucher_no=inv_no[:50] if inv_no else "",
+                amount=amount,
+            )
+            db.add(deduction)
+            log.append(f"  进项发票 #{inv.id} 广告扣除 {seller_name[:15]} {amount:,.2f}")
+
+    # 如无扣除项目则保持空
+    if deduction_count == 0:
+        log.append("📋 扣除项目清单：本期无广告服务进项发票，清单为空")
+
+    # ========== 2.5 自动建档供应商（只建 CCF 扣除相关的，且去重） ==========
+    # 只对扣除项目中的供应商建档
+    seen_suppliers = set()
+    for d in db.query(CulturalConstructionFeeDeduction).filter(
+        CulturalConstructionFeeDeduction.declaration_id == declaration_id
+    ).all():
+        seller_name = d.invoice_supplier_name
+        if not seller_name or seller_name in seen_suppliers:
+            continue
+        seen_suppliers.add(seller_name)
+        existing_supplier = db.query(Supplier).filter(
+            Supplier.company_id == company_id,
+            Supplier.name == seller_name,
+        ).first()
+        if not existing_supplier:
+            # 获取最大编码
+            max_code = db.query(func.max(Supplier.code)).filter(
+                Supplier.company_id == company_id
+            ).scalar()
+            try:
+                next_num = int(max_code.replace('GYS', '')) + 1 if max_code else 1
+            except:
+                next_num = 1
+            next_code = f"GYS{next_num:03d}"
+            db.add(Supplier(
+                company_id=company_id,
+                code=next_code,
+                name=seller_name,
+            ))
+            db.flush()  # 立即 flush 确保下个供应商编码不重复
+            log.append(f"  🏷️ 自动建档供应商：{seller_name}（{next_code}）")
+
+    # 扣除项目相关栏次
+    # 取前期期末余额
+    prior_period = f"{year}-{month-1:02d}" if month > 1 else f"{year-1}-12"
+    prior_decl = db.query(CulturalConstructionFeeDeclaration).filter(
+        CulturalConstructionFeeDeclaration.company_id == company_id,
+        CulturalConstructionFeeDeclaration.period == prior_period,
+    ).first()
+    r3_beginning = float(prior_decl.row7_deduction_ending_balance_current or 0) if prior_decl else 0
+
+    decl.row3_deduction_beginning_current = r3_beginning
+    decl.row3_deduction_beginning_ytd = r3_beginning
+    decl.row4_deduction_current_period_current = round(deduction_total, 2)
+    decl.row4_deduction_current_period_ytd = round(deduction_total, 2)
+
+    # 第5栏：应征收入减除额 = min(期初+本期, 应征收入)
+    available_deduction = r3_beginning + deduction_total
+    decl.row5_taxable_income_deduction_current = round(min(available_deduction, taxable_income), 2)
+    decl.row5_taxable_income_deduction_ytd = round(min(available_deduction, taxable_income), 2)
+
+    # 第6栏：免征收入减除额（暂无免征收入，为0）
+    decl.row6_tax_exempt_deduction_current = 0
+    decl.row6_tax_exempt_deduction_ytd = 0
+
+    # ========== 3. 自动计算 ==========
+    # 栏次7 = 3+4-5-6
+    decl.row7_deduction_ending_balance_current = round(
+        r3_beginning + deduction_total
+        - float(decl.row5_taxable_income_deduction_current or 0)
+        - float(decl.row6_tax_exempt_deduction_current or 0), 2
+    )
+    decl.row7_deduction_ending_balance_ytd = decl.row7_deduction_ending_balance_current
+
+    # 栏次8 = 1-5
+    decl.row8_taxable_sales_current = round(
+        taxable_income - float(decl.row5_taxable_income_deduction_current or 0), 2
+    )
+    decl.row8_taxable_sales_ytd = decl.row8_taxable_sales_current
+
+    # 费率
+    decl.row9_fee_rate = 0.03
+
+    # 栏次10 = 8×9
+    decl.row10_payable_fee_current = round(
+        float(decl.row8_taxable_sales_current or 0) * 0.03, 2
+    )
+    decl.row10_payable_fee_ytd = decl.row10_payable_fee_current
+
+    # 栏次11 = 前期期末未缴费
+    decl.row11_unpaid_beginning_current = float(prior_decl.row16_unpaid_ending_current or 0) if prior_decl else 0
+    decl.row11_unpaid_beginning_ytd = decl.row11_unpaid_beginning_current
+
+    # 栏次12 = 13+14+15
+    decl.row12_paid_current_period_current = round(
+        (decl.row13_prepaid_current or 0)
+        + (decl.row14_paid_last_period_current or 0)
+        + (decl.row15_paid_arrears_current or 0), 2
+    )
+    decl.row12_paid_current_period_ytd = decl.row12_paid_current_period_current
+
+    # 栏次16 = 10+11-12
+    decl.row16_unpaid_ending_current = round(
+        (decl.row10_payable_fee_current or 0)
+        + (decl.row11_unpaid_beginning_current or 0)
+        - (decl.row12_paid_current_period_current or 0), 2
+    )
+    decl.row16_unpaid_ending_ytd = decl.row16_unpaid_ending_current
+
+    # 栏次17 = 11-14-15
+    decl.row17_arrears_current = round(
+        (decl.row11_unpaid_beginning_current or 0)
+        - (decl.row14_paid_last_period_current or 0)
+        - (decl.row15_paid_arrears_current or 0), 2
+    )
+    decl.row17_arrears_ytd = decl.row17_arrears_current
+
+    # 栏次18 = 10-13
+    decl.row18_fill_refund_current = round(
+        (decl.row10_payable_fee_current or 0)
+        - (decl.row13_prepaid_current or 0), 2
+    )
+    decl.row18_fill_refund_ytd = decl.row18_fill_refund_current
+
+    # 栏次19 = 0（默认）
+    decl.row19_inspected_supplement_current = 0
+    decl.row19_inspected_supplement_ytd = 0
+
+    # 更新状态和时间
+    decl.status = "已申报"
+    decl.updated_at = datetime.now()
+
+    fee_amount = float(decl.row10_payable_fee_current or 0)
+    log.append(f"🧮 应缴费额 = {fee_amount:,.2f}（计费销售额 × 3%）")
+
+    # ========== 4. 生成计提凭证到序时账 ==========
+    if fee_amount > 0:
+        voucher_result = _generate_ccf_voucher(db, company_id, decl, fee_amount, entry_date, period)
+        log.append(f"📝 计提凭证：{voucher_result['message']}")
+    else:
+        log.append("📝 应缴费额为 0，跳过凭证生成")
+
+    # ========== 5. 自动匹配银行流水生成缴纳凭证 ==========
+    if fee_amount > 0:
+        payment_result = _match_ccf_payment_voucher(db, company_id, decl, fee_amount, entry_date, period)
+        if payment_result.get("matched") and payment_result.get("results"):
+            for r in payment_result["results"]:
+                log.append(f"💰 缴纳凭证：{r['message']}")
+        else:
+            log.append(f"💰 {payment_result.get('message', '未找到银行支付流水')}")
+
+    # 状态更新
+    decl.status = "已申报"
+    decl.updated_at = datetime.now()
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "AI 自动填列完成",
+        "declaration_id": declaration_id,
+        "period": period,
+        "summary": {
+            "taxable_income": taxable_income,
+            "deduction_total": round(deduction_total, 2),
+            "deduction_count": deduction_count,
+            "taxable_sales": float(decl.row8_taxable_sales_current or 0),
+            "fee_rate": 0.03,
+            "payable_fee": fee_amount,
+            "unpaid_ending": float(decl.row16_unpaid_ending_current or 0),
+            "fill_refund": float(decl.row18_fill_refund_current or 0),
+        },
+        "log": log,
+    }

@@ -331,6 +331,7 @@ function renderCCFToolbar(yearOpts, monthOpts) {
     + '<button class="stepper-btn stepper-down" onclick="stepCCFPeriod(\'month\',-1)" title="上一月">▼</button>'
     + '</div></div></div>'
     + '<button class="btn-toolbar" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
+    + '<button class="btn-toolbar" onclick="ccfAIAutoFill()" title="AI 自动填列报表、生成凭证、更新档案" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;font-weight:700">🤖 AI 自动处理</button>'
     + '<button class="btn-toolbar" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
     + '<button class="btn-toolbar" onclick="ccfImportFile()" title="导入文化事业建设费申报数据">导入文件</button>'
     + '<button class="btn-toolbar" onclick="ccfGenerateVoucher()" title="生成文化事业建设费相关凭证">生成凭证</button>'
@@ -614,7 +615,57 @@ function ccfGenerateVoucher() {
     toast('请先选择一份申报表', 'warning');
     return;
   }
-  toast('凭证生成功能开发中，请稍后...', 'info');
+  toast('请使用 🤖 AI 自动处理 按钮来生成凭证', 'info');
+}
+
+// ==================== AI 自动填列 ====================
+
+async function ccfAIAutoFill() {
+  if (!ccfCurrentData || !ccfCurrentData.id) {
+    toast('请先点击查询选择一份申报表，或新建申报表', 'warning');
+    return;
+  }
+
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ AI 处理中...';
+
+  try {
+    var resp = await api(
+      '/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '/ai-auto-fill',
+      { method: 'POST' }
+    );
+
+    if (resp.success) {
+      // 显示详细结果
+      var summary = resp.summary;
+      var msg = '✅ AI 自动处理完成！\n\n';
+      msg += '📊 应征收入：¥' + summary.taxable_income.toLocaleString() + '\n';
+      msg += '📋 扣除项目：' + summary.deduction_count + ' 项，共 ¥' + summary.deduction_total.toLocaleString() + '\n';
+      msg += '🧮 应缴费额：¥' + summary.payable_fee.toLocaleString() + '\n';
+      msg += '💰 应补退费额：¥' + summary.fill_refund.toLocaleString() + '\n\n';
+      msg += '📝 操作日志：\n' + resp.log.join('\n');
+
+      toast(msg, 'success', 8000);
+
+      // 重新加载数据
+      var data = await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id);
+      var idx = ccfDeclarations.findIndex(function(d) { return d.id === ccfCurrentData.id; });
+      if (idx >= 0) ccfDeclarations[idx] = data;
+      ccfCurrentData = data;
+      renderCCFTemplateViewInline(data);
+
+      // 刷新统计卡片
+      await renderCCFStats();
+    } else {
+      toast('AI 处理失败：' + (resp.message || '未知错误'), 'error');
+    }
+  } catch (e) {
+    toast('AI 处理失败：' + (e.message || e), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🤖 AI 自动处理';
+  }
 }
 
 // ==================== 自动计算 ====================

@@ -1252,7 +1252,17 @@ def migrate_schema(db):
         db.commit()
         print("  [OK] 已创建 housing_fund_declarations 表")
 
-    # ── 17. 补充索引与唯一约束 ──
+    # ── 18. 文化事业建设费申报表 ──
+    if "cultural_construction_fee_declarations" not in inspector.get_table_names():
+        CulturalConstructionFeeDeclaration.__table__.create(bind=db.get_bind())
+        db.commit()
+        print("  [OK] 已创建 cultural_construction_fee_declarations 表")
+    if "cultural_construction_fee_deductions" not in inspector.get_table_names():
+        CulturalConstructionFeeDeduction.__table__.create(bind=db.get_bind())
+        db.commit()
+        print("  [OK] 已创建 cultural_construction_fee_deductions 表")
+
+    # ── 19. 补充索引与唯一约束 ──
     idx_defs = [
         ("idx_accounts_company", "accounts", "company_id"),
         ("idx_customers_company", "customers", "company_id"),
