@@ -428,6 +428,14 @@ def update_salary_record(record_id: int, data: SalaryRecordUpdate, company_id: i
     ).first()
     if not r:
         raise HTTPException(404, "记录不存在")
+    # 检查该期间是否已生成凭证
+    je = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "工资计提",
+        JournalEntry.period == r.period,
+    ).first()
+    if je:
+        raise HTTPException(400, f"该记录所属期间({r.period})已生成工资凭证(记-{je.voucher_no})，不可编辑。")
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(r, k, v)
     r.updated_at = datetime.now()
@@ -444,6 +452,14 @@ def delete_salary_record(record_id: int, company_id: int = Query(...), db: Sessi
     ).first()
     if not r:
         raise HTTPException(404, "记录不存在")
+    # 检查该期间是否已生成凭证
+    je = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "工资计提",
+        JournalEntry.period == r.period,
+    ).first()
+    if je:
+        raise HTTPException(400, f"该记录所属期间({r.period})已生成工资凭证(记-{je.voucher_no})，不可删除。")
     db.delete(r)
     db.commit()
     return {"msg": "ok"}
@@ -451,13 +467,39 @@ def delete_salary_record(record_id: int, company_id: int = Query(...), db: Sessi
 
 @router.post("/records/batch-delete")
 def batch_delete_salary_records(ids: List[int], company_id: int = Query(...), db: Session = Depends(get_db)):
-    """批量删除"""
-    deleted = db.query(SalaryRecord).filter(
+    """批量删除（跳过已生成凭证的记录）"""
+    # 查出哪些 ID 所属的期间已生成凭证
+    records = db.query(SalaryRecord).filter(
         SalaryRecord.company_id == company_id,
         SalaryRecord.id.in_(ids)
+    ).all()
+
+    # 检查哪些期间有工资计提凭证
+    periods = list(set(r.period for r in records))
+    locked_periods = set()
+    if periods:
+        je_periods = db.query(JournalEntry.period).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "工资计提",
+            JournalEntry.period.in_(periods)
+        ).distinct().all()
+        locked_periods.update(r[0] for r in je_periods if r[0])
+
+    safe_ids = [r.id for r in records if r.period not in locked_periods]
+    if not safe_ids:
+        raise HTTPException(400, "所选记录均属于已生成凭证的期间，不可删除。")
+
+    deleted = db.query(SalaryRecord).filter(
+        SalaryRecord.company_id == company_id,
+        SalaryRecord.id.in_(safe_ids)
     ).delete(synchronize_session=False)
     db.commit()
-    return {"msg": f"已删除{deleted}条"}
+
+    skipped = len(ids) - len(safe_ids)
+    msg = f"已删除{deleted}条"
+    if skipped > 0:
+        msg += f"（{skipped}条因已生成凭证已跳过）"
+    return {"msg": msg}
 
 
 @router.post("/import")
@@ -815,6 +857,14 @@ def auto_create_employees(company_id: int = Query(...), period: Optional[str] = 
 @router.post("/generate-journals")
 def generate_salary_journals(period: str = Query(...), company_id: int = Query(...), db: Session = Depends(get_db)):
     """为指定期间的工资记录生成凭证（工资计提：借管理费用/工资，贷其他应收款+个税+应付职工薪酬）"""
+    # 检查是否已生成过凭证
+    je = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "工资计提",
+        JournalEntry.period == period,
+    ).first()
+    if je:
+        raise HTTPException(400, f"该期间({period})已生成工资凭证(记-{je.voucher_no})，请勿重复生成。如需重做，请先删除已有凭证。")
     from database import _generate_salary_journals
     result = _generate_salary_journals(db, company_id, period)
     db.commit()

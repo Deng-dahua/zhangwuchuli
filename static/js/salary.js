@@ -249,6 +249,11 @@ async function generateSalaryVouchers() {
         alert('请先选择期间');
         return;
     }
+    // 检查该期间是否已有凭证
+    if (currentSalaryRecords.length > 0 && currentSalaryRecords[0].voucher_no) {
+        alert('该期间已生成凭证（' + currentSalaryRecords[0].voucher_no + '），请勿重复生成。如需重做，请先删除已有凭证。');
+        return;
+    }
     if (!confirm(`确认生成 ${period} 的工资凭证？（将生成计提/发放/个税/社保公积金4组凭证）`)) return;
     try {
         const result = await api(`/api/salary/generate-journals?company_id=${currentCompanyId}&period=${period}`, {
@@ -305,9 +310,18 @@ function renderSalaryTable(records) {
         tbody.innerHTML = '<tr><td colspan="46" style="text-align:center;color:#999">暂无数据，请点击"导入Excel"或"新增"</td></tr>';
         return;
     }
-    tbody.innerHTML = records.map(r => `
+    tbody.innerHTML = records.map(r => {
+        const hasVoucher = r.voucher_no && r.voucher_no !== '';
+        const cbAttr = hasVoucher ? 'disabled title="该记录已生成凭证，不可操作"' : '';
+        const editBtn = hasVoucher
+            ? '<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="已生成凭证，不可编辑">编辑</button>'
+            : `<button class="btn btn-sm btn-secondary" onclick="showSalaryEditModal(${r.id})">编辑</button>`;
+        const delBtn = hasVoucher
+            ? '<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="已生成凭证，不可删除">删除</button>'
+            : `<button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>`;
+        return `
         <tr>
-            <td style="text-align:center"><input type="checkbox" class="salary-checkbox" value="${r.id}"></td>
+            <td style="text-align:center"><input type="checkbox" class="salary-checkbox" value="${r.id}" ${cbAttr}></td>
             <td>${escapeHtml(r.employee_code || '-')}</td>
             <td>${escapeHtml(r.employee_name)}</td>
             <td>${escapeHtml(r.id_type || '-')}</td>
@@ -354,8 +368,8 @@ function renderSalaryTable(records) {
             <td style="text-align:right;color:#27ae60;font-weight:bold">${(r.net_salary || 0).toFixed(2)}</td>
             <td style="text-align:center">${r.voucher_no || '-'}</td>
             <td style="white-space:nowrap">
-                <button class="btn btn-sm btn-secondary" onclick="showSalaryEditModal(${r.id})">编辑</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>
+                ${editBtn}
+                ${delBtn}
             </td>
         </tr>
     `).join('');
@@ -372,6 +386,10 @@ function showSalaryEditModal(id) {
     currentEditingSalaryId = id;
     const r = currentSalaryRecords.find(x => x.id === id);
     if (!r) return;
+    if (r.voucher_no && r.voucher_no !== '') {
+        toast('该记录已生成凭证（' + r.voucher_no + '），不可编辑。', 'warning');
+        return;
+    }
     renderSalaryModal(r);
 }
 
@@ -482,6 +500,11 @@ function saveSalaryRecord() {
 // ========== 删除 ==========
 
 function deleteSalaryRecord(id) {
+    const r = currentSalaryRecords.find(x => x.id === id);
+    if (r && r.voucher_no && r.voucher_no !== '') {
+        toast('该记录已生成凭证（' + r.voucher_no + '），不可删除。', 'warning');
+        return;
+    }
     if (!confirm('确定删除该条工资记录？')) return;
     api('/api/salary/records/' + id, { method: 'DELETE' }).then(() => {
         loadSalaryData();
@@ -674,7 +697,7 @@ function getSelectedIds(type) {
 function toggleSelectAll(type) {
     const master = document.getElementById(`${type}-select-all`);
     const checked = master.checked;
-    document.querySelectorAll(`.${type}-checkbox`).forEach(cb => cb.checked = checked);
+    document.querySelectorAll(`.${type}-checkbox:not([disabled])`).forEach(cb => cb.checked = checked);
 }
 
 // escHtml/closeModal 统一用 core.js 的 escapeHtml(), 不再重复定义

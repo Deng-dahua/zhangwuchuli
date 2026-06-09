@@ -420,11 +420,23 @@ def list_employees(
             Employee.name.contains(keyword)
         ))
     emps = q.order_by(Employee.code).offset(skip).limit(limit).all()
+
+    # 检测哪些人员在序时账往来项目中出现过
+    emp_names = [e.name for e in emps if e.name]
+    names_with_entries = set()
+    if emp_names:
+        hits = db.query(JournalEntry.contact_project).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project.in_(emp_names)
+        ).distinct().all()
+        names_with_entries.update(r[0] for r in hits if r[0])
+
     return [
         {
             "id": e.id, "code": e.code, "name": e.name,
             "id_card": e.id_card or "",
             "email": e.email or "", "salary": e.salary or 0,
+            "has_journal": e.name in names_with_entries if e.name else False,
         } for e in emps
     ]
 
@@ -440,6 +452,14 @@ def update_employee(emp_id: int, data: EmployeeUpdate, company_id: int = Query(.
     e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
+    # 检查该人员是否已被序时账往来项目引用
+    if e.name:
+        ref = db.query(JournalEntry.id).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project == e.name
+        ).first()
+        if ref:
+            raise HTTPException(400, detail=f"人员「{e.name}」已被序时账往来项目引用，不可编辑。")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(e, k, v)
     db.commit()
@@ -450,6 +470,14 @@ def delete_employee(emp_id: int, company_id: int = Query(...), db: Session = Dep
     e = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == emp_id).first()
     if not e:
         raise HTTPException(404, detail="员工不存在")
+    # 检查该人员是否已被序时账往来项目引用
+    if e.name:
+        ref = db.query(JournalEntry.id).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project == e.name
+        ).first()
+        if ref:
+            raise HTTPException(400, detail=f"人员「{e.name}」已被序时账往来项目引用，不可删除。")
     db.delete(e)
     db.flush()
     _renumber_archive(db, company_id, Employee, 'RY')
@@ -461,11 +489,43 @@ def batch_delete_employees(data: dict, company_id: int = Query(...), db: Session
     ids = data.get("ids", [])
     if not ids:
         raise HTTPException(400, detail="请选择要删除的记录")
-    deleted = db.query(Employee).filter(Employee.company_id == company_id, Employee.id.in_(ids)).delete(synchronize_session=False)
+
+    # 查询被序时账往来项目引用的人员名称
+    locked_names = set()
+    emp_names = db.query(Employee.name).filter(
+        Employee.company_id == company_id,
+        Employee.id.in_(ids)
+    ).all()
+    all_names = [n[0] for n in emp_names if n[0]]
+    if all_names:
+        hits = db.query(JournalEntry.contact_project).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.contact_project.in_(all_names)
+        ).distinct().all()
+        locked_names.update(r[0] for r in hits if r[0])
+
+    # 过滤掉被锁定的人员
+    if locked_names:
+        safe_ids = [
+            eid for eid in ids
+            if db.query(Employee).filter(Employee.company_id == company_id, Employee.id == eid).first().name not in locked_names
+        ]
+    else:
+        safe_ids = ids
+
+    if not safe_ids:
+        raise HTTPException(400, detail=f"所选人员均已被序时账往来项目引用，不可删除。")
+
+    deleted = db.query(Employee).filter(Employee.company_id == company_id, Employee.id.in_(safe_ids)).delete(synchronize_session=False)
     db.flush()
     _renumber_archive(db, company_id, Employee, 'RY')
     db.commit()
-    return {"message": f"成功删除 {deleted} 条人员记录"}
+
+    skipped = len(ids) - len(safe_ids)
+    msg = f"成功删除 {deleted} 条人员记录"
+    if skipped > 0:
+        msg += f"，{skipped} 条因被序时账引用已跳过"
+    return {"message": msg}
 
 
 # ==================== 客户档案 ====================

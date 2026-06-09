@@ -596,15 +596,23 @@ async function renderEmployees(container) {
             <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllEmp(this)" title="全选"></th><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
             <tbody>
               ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
+                const locked = e.has_journal;
+                const editBtn = locked
+                  ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该人员已被序时账往来项目引用，不可编辑">编辑</button>`
+                  : `<button class="btn btn-sm btn-secondary" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}')">编辑</button>`;
+                const delBtn = locked
+                  ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该人员已被序时账往来项目引用，不可删除">删除</button>`
+                  : `<button class="btn btn-sm btn-danger" onclick="deleteEmp(${e.id})">删除</button>`;
+                const cbAttr = locked ? 'disabled title="该人员已被序时账往来项目引用"' : '';
                 return `
                 <tr>
-                  <td><input type="checkbox" class="emp-check" value="${e.id}" onchange="updateEmpBatchBtn()"></td>
+                  <td><input type="checkbox" class="emp-check" value="${e.id}" onchange="updateEmpBatchBtn()" ${cbAttr}></td>
                   <td>${e.code}</td>
                   <td>${e.name}</td>
                   <td>${e.id_card || '-'}</td>
                   <td style="white-space:nowrap">
-                    <button class="btn btn-sm btn-secondary" onclick="showEmpForm(${e.id},'${e.code}','${esc(e.name)}','${esc(e.id_card||'')}')">编辑</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteEmp(${e.id})">删除</button>
+                    ${editBtn}
+                    ${delBtn}
                   </td>
                 </tr>
               `}).join('')}
@@ -619,7 +627,7 @@ async function renderEmployees(container) {
 }
 
 function toggleSelectAllEmp(cb) {
-  document.querySelectorAll('.emp-check').forEach(c => c.checked = cb.checked);
+  document.querySelectorAll('.emp-check:not([disabled])').forEach(c => c.checked = cb.checked);
   updateEmpBatchBtn();
 }
 
