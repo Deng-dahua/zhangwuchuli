@@ -1,12 +1,7 @@
-zhangwu.db
+*.db
 __pycache__/
 *.pyc
 *.pyo
 .env
 .DS_Store
-accounting.db
-accounting.db
 server.log
-nul
-nul
-tax_system.db
