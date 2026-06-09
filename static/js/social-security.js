@@ -134,7 +134,7 @@ async function renderSocialSecurity(container) {
         + '<button class="btn-toolbar" onclick="triggerSSImport()">导入文件</button>'
         + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
         + '<button class="btn-toolbar" onclick="generateSSVoucher()">生成凭证</button>'
-        + '<button class="btn-toolbar-danger" onclick="deleteSSDeclaration()">删除报表</button>'
+        + '<button class="btn-toolbar-danger" onclick="ssBatchDelete()" id="ss-batch-del-btn">批量删除</button>'
       + '</div>'
     + '</div>'
     + '<div id="ss-tables-container" style="display:flex;flex-direction:column;gap:24px;margin-top:12px;">'
@@ -213,7 +213,7 @@ function ssRenderStats(stats) {
 
 // ============ Excel模板风格表格 ============
 // 总列数: 序号/姓名/证件号码/所属期起/所属期止/应收金额/个人社保/单位社保/缴费工资 + 15*2保险列 + 操作列
-var SS_TOTAL_COLS = 9 + SS_INSURANCE_LIST.length * 2 + 2;
+var SS_TOTAL_COLS = 9 + SS_INSURANCE_LIST.length * 2 + 3;
 
 // 构建双层表头HTML（复用）
 function buildSSHeaderRows() {
@@ -223,7 +223,8 @@ function buildSSHeaderRows() {
     h2 += '<th style="min-width:60px">费率</th><th style="min-width:80px">应缴费额</th>';
   });
   var fixedHeaders =
-    '<th rowspan="2" style="min-width:50px">序号</th>'
+    '<th rowspan="2" style="width:36px;"><input type="checkbox" onclick="ssToggleAll(this)" /></th>'
+    + '<th rowspan="2" style="min-width:50px">序号</th>'
     + '<th rowspan="2" style="min-width:70px">姓名</th>'
     + '<th rowspan="2" style="min-width:160px">证件号码</th>'
     + '<th rowspan="2" style="min-width:90px">费款所属期起</th>'
@@ -262,6 +263,7 @@ function buildSSCategoryTable(category, items, showSubtotal) {
     items.forEach(function(item, idx) {
       var im = item._insMap || {};
       html += '<tr>';
+      html += '<td><input type="checkbox" value="' + item.id + '" onchange="ssToggleCheck(this)" /></td>';
       html += '<td class="num">' + (startSeq + idx) + '</td>';
       html += '<td>' + escapeHtml(item.employee_name || '-') + '</td>';
       html += '<td>' + escapeHtml(item.id_number || '-') + '</td>';
@@ -301,7 +303,7 @@ function buildSSCategoryTable(category, items, showSubtotal) {
         });
       });
       html += '<tr class="ss-subtotal">';
-      html += '<td></td><td style="font-weight:700">小计</td><td></td><td></td><td></td>';
+      html += '<td></td><td></td><td style="font-weight:700">小计</td><td></td><td></td><td></td>';
       html += '<td class="num" style="font-weight:700">' + sub.total.toLocaleString() + '</td>';
       html += '<td class="num" style="font-weight:700;color:#d97706">' + sub.personal.toLocaleString() + '</td>';
       html += '<td class="num" style="font-weight:700;color:#db2777">' + sub.company.toLocaleString() + '</td>';
@@ -340,7 +342,7 @@ function buildSSGrandTotal(allItems) {
   html += '<table class="data-table" style="font-size:12px;white-space:nowrap;min-width:100%;">';
   html += '<tbody>';
   html += '<tr class="ss-grand-total">';
-  html += '<td></td><td style="font-weight:700;font-size:13px">合计</td><td></td><td></td><td></td>';
+  html += '<td></td><td></td><td style="font-weight:700;font-size:13px">合计</td><td></td><td></td><td></td>';
   html += '<td class="num" style="font-weight:700;font-size:13px">' + grand.total.toLocaleString() + '</td>';
   html += '<td class="num" style="font-weight:700;color:#d97706;font-size:13px">' + grand.personal.toLocaleString() + '</td>';
   html += '<td class="num" style="font-weight:700;color:#db2777;font-size:13px">' + grand.company.toLocaleString() + '</td>';
@@ -570,18 +572,40 @@ async function generateSSVoucher() {
   } catch (e) { handleError(e, '生成凭证'); }
 }
 
-// ============ 删除报表 ============
-async function deleteSSDeclaration() {
-  if (!confirm('确认删除当前期间(' + ssPeriod + ')的全部申报记录？此操作不可恢复！')) return;
+// ============ 批量删除 ============
+var ssSelectedIds = new Set();
+
+function ssToggleAll(cb) {
+  var checks = document.querySelectorAll('.ss-category-block input[type="checkbox"]');
+  checks.forEach(function(c) { c.checked = cb.checked; });
+  ssSelectedIds.clear();
+  if (cb.checked) checks.forEach(function(c) { ssSelectedIds.add(parseInt(c.value)); });
+  ssUpdateBatchBtn();
+}
+
+function ssToggleCheck(cb) {
+  var id = parseInt(cb.value);
+  if (cb.checked) ssSelectedIds.add(id);
+  else ssSelectedIds.delete(id);
+  ssUpdateBatchBtn();
+}
+
+function ssUpdateBatchBtn() {
+  var btn = document.getElementById('ss-batch-del-btn');
+  if (btn) btn.textContent = ssSelectedIds.size > 0 ? '批量删除(' + ssSelectedIds.size + ')' : '批量删除';
+}
+
+async function ssBatchDelete() {
+  if (ssSelectedIds.size === 0) return alert('请先勾选要删除的记录');
+  if (!confirm('确认删除选中的 ' + ssSelectedIds.size + ' 条记录？此操作不可恢复！')) return;
   try {
-    var decls = await api('/api/social-security/declarations?company_id=' + currentCompanyId + '&period=' + ssPeriod);
-    if (!decls || decls.length === 0) { toast('当前期间无申报记录', 'warning'); return; }
-    for (var i = 0; i < decls.length; i++) {
-      await api('/api/social-security/declarations/' + decls[i].id + '?company_id=' + currentCompanyId, { method: 'DELETE' });
-    }
-    toast('申报记录已删除', 'success');
+    var res = await api('/api/social-security/details/batch-delete?company_id=' + currentCompanyId, {
+      method: 'POST',
+      body: JSON.stringify({ ids: [...ssSelectedIds] })
+    });
+    toast('成功删除 ' + (res.deleted || 0) + ' 条记录', 'success');
     ssRefresh();
-  } catch (e) { handleError(e, '删除报表'); }
+  } catch (e) { handleError(e, '批量删除'); }
 }
 
 // ============ 新增参保人员 ============

@@ -587,6 +587,33 @@ def delete_detail(detail_id: int, company_id: int, db: Session = Depends(get_db)
     return {"message": "删除成功"}
 
 
+class BatchDeleteSSRequest(BaseModel):
+    ids: List[int]
+
+
+@router.post("/details/batch-delete")
+def batch_delete_ss_details(data: BatchDeleteSSRequest, company_id: int, db: Session = Depends(get_db)):
+    """批量删除参保人员明细"""
+    deleted = 0
+    for detail_id in data.ids:
+        detail = db.query(SocialSecurityDetail).filter(
+            SocialSecurityDetail.id == detail_id
+        ).first()
+        if not detail:
+            continue
+        decl = db.query(SocialSecurityDeclaration).filter(
+            SocialSecurityDeclaration.id == detail.declaration_id,
+            SocialSecurityDeclaration.company_id == company_id
+        ).first()
+        if not decl:
+            continue
+        db.delete(detail)
+        decl.updated_at = datetime.now()
+        deleted += 1
+    db.commit()
+    return {"deleted": deleted}
+
+
 @router.post("/generate-payment-journals")
 def generate_ss_payment_journals(company_id: int = Query(...), db: Session = Depends(get_db)):
     """手动触发社保缴纳凭证匹配（银行流水 → 社保缴纳凭证）"""
