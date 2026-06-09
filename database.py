@@ -2265,7 +2265,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
         existing = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.summary == summary_tag,
-            JournalEntry.source == "社保缴纳",
+            JournalEntry.source == "银行流水",
         ).first()
         if existing:
             continue
@@ -2294,7 +2294,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="221102", account_name="社会保险费",
                 debit_amount=round(payment_amount, 2), credit_amount=0,
-                source="社保缴纳",
+                source="银行流水",
             ),
             JournalEntry(
                 company_id=company_id,
@@ -2302,7 +2302,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(payment_amount, 2),
-                source="社保缴纳",
+                source="银行流水",
             ),
         ])
         db.flush()
@@ -2559,7 +2559,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
         existing = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.summary == summary_tag,
-            JournalEntry.source == "公积金缴纳",
+            JournalEntry.source == "银行流水",
         ).first()
         if existing:
             continue
@@ -2588,7 +2588,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="221103", account_name="住房公积金",
                 debit_amount=round(payment_amount, 2), credit_amount=0,
-                source="公积金缴纳",
+                source="银行流水",
             ),
             JournalEntry(
                 company_id=company_id,
@@ -2596,7 +2596,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(payment_amount, 2),
-                source="公积金缴纳",
+                source="银行流水",
             ),
         ])
         db.flush()
