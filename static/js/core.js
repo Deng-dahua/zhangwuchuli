@@ -54,6 +54,7 @@ const pages = {
   'salary': '工资薪金',
   'social-security': '社会保险费',
   'housing-fund': '住房公积金',
+  'bookkeeping-invoices': '记账发票',
   'tax-risk-report': '涉税风险分析报告'
 };
 
