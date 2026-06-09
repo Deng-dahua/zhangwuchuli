@@ -15,20 +15,25 @@ function renderTaxRiskReport(container) {
   container.innerHTML = ''
     + '<div class="risk-report-container">'
     + '<div class="risk-report-header">'
-    + '<h2>🛡️ 涉税风险分析报告</h2>'
     + '<div id="tr-period-bar" style="display:flex;align-items:center;gap:4px;margin-top:12px"></div>'
-    + '<div class="risk-report-actions">'
-    + '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
-    + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
-    + '<span id="risk-last-update" style="margin-left:12px;color:var(--gray-400);font-size:12px"></span>'
-    + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>'
-    + '</div>'
     + '</div>'
     + '<div id="risk-summary-cards" class="risk-summary-cards"></div>'
     + '<div id="risk-report-body" class="risk-report-body"></div>'
     + '</div>';
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
+
+  // 在时间栏清除按钮后插入刷新按钮和最近更新时间
+  var trBar = document.getElementById('tr-period-bar');
+  if (trBar) {
+    var spacer = document.createElement('span');
+    spacer.style.marginLeft = '16px';
+    spacer.innerHTML = '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
+      + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
+      + '<span id="risk-last-update" style="margin-left:12px;color:var(--gray-400);font-size:12px"></span>'
+      + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>';
+    trBar.appendChild(spacer);
+  }
 
   if (!taxRiskReportData) {
     loadTaxRiskReport();
