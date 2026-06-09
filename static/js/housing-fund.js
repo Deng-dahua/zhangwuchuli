@@ -238,6 +238,9 @@ function hfRenderTable(items) {
     ? '<tr><td colspan="14" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
     : items.map(item => {
         var locked = !!(item.voucher_no);
+        var voucherNoHtml = item.voucher_no
+            ? `<a href="javascript:void(0)" onclick="showVoucherDetail(this.dataset.vno)" data-vno="${escapeHtml(item.voucher_no)}">${escapeHtml(item.voucher_no)}</a>`
+            : '-';
         return `
       <tr>
         <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)"${locked ? ' disabled' : ''} /></td>
@@ -252,7 +255,7 @@ function hfRenderTable(items) {
         <td class="num">${(item.company_amount || 0).toLocaleString()}</td>
         <td class="num">${(item.personal_amount || 0).toLocaleString()}</td>
         <td><span class="tag tag-green">${escapeHtml(item.status || '正常')}</span></td>
-        <td style="text-align:center">${item.voucher_no || '-'}</td>
+        <td style="text-align:center">${voucherNoHtml}</td>
         <td>
           ${locked
             ? '<button class="btn btn-sm btn-outline" disabled title="已入账不可编辑">编辑</button> <button class="btn btn-sm btn-danger" disabled title="已入账不可删除">删除</button>'

@@ -319,6 +319,9 @@ function renderSalaryTable(records) {
         const delBtn = hasVoucher
             ? '<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="已生成凭证，不可删除">删除</button>'
             : `<button class="btn btn-sm btn-danger" onclick="deleteSalaryRecord(${r.id})">删除</button>`;
+        const voucherNoHtml = r.voucher_no
+            ? `<a href="javascript:void(0)" onclick="showVoucherDetail('${r.voucher_no.replace(/'/g, "\\'")}')">${escapeHtml(r.voucher_no)}</a>`
+            : '-';
         return `
         <tr>
             <td style="text-align:center"><input type="checkbox" class="salary-checkbox" value="${r.id}" ${cbAttr}></td>
@@ -366,7 +369,7 @@ function renderSalaryTable(records) {
             <td style="text-align:right">${(r.tax_already_withheld || 0).toFixed(2)}</td>
             <td style="text-align:right">${(r.tax_refund || 0).toFixed(2)}</td>
             <td style="text-align:right;color:#27ae60;font-weight:bold">${(r.net_salary || 0).toFixed(2)}</td>
-            <td style="text-align:center">${r.voucher_no || '-'}</td>
+            <td style="text-align:center">${voucherNoHtml}</td>
             <td style="white-space:nowrap">
                 ${editBtn}
                 ${delBtn}

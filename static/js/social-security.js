@@ -279,7 +279,8 @@ function buildSSCategoryTable(category, items, showSubtotal) {
         html += '<td class="num" style="color:#6b7280;font-size:11px">' + escapeHtml(String(it.rate || '')) + '</td>';
         html += '<td class="num">' + ((it.amount || 0) > 0 ? (it.amount || 0).toLocaleString() : '') + '</td>';
       });
-      html += '<td style="text-align:center">' + (item._voucher_no || '-') + '</td>';
+      var _vnoHtml = item._voucher_no ? '<a href="javascript:void(0)" onclick="showVoucherDetail(this.dataset.vno)" data-vno="' + escapeHtml(item._voucher_no) + '">' + escapeHtml(item._voucher_no) + '</a>' : '-';
+      html += '<td style="text-align:center">' + _vnoHtml + '</td>';
       html += '<td>'
         + (locked
           ? '<button class="btn btn-sm btn-outline" disabled title="已入账不可编辑">编辑</button> '

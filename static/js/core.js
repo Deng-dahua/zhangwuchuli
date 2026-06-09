@@ -621,6 +621,77 @@ function showError(el, err, context) {
   el.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">' + msg + '</p></div>';
 }
 
+// ==================== 凭证详情弹窗（通用）====================
+// 点击凭证号时调用，voucherFull 格式："记-1"
+function showVoucherDetail(voucherFull) {
+    const idx = voucherFull.lastIndexOf('-');
+    if (idx === -1) { alert('凭证号格式错误：' + voucherFull); return; }
+    const voucher_word = voucherFull.substring(0, idx);
+    const voucher_no = parseInt(voucherFull.substring(idx + 1));
+    if (isNaN(voucher_no)) { alert('凭证号格式错误：' + voucherFull); return; }
+
+    // 移除已有 modal
+    const old = document.getElementById('voucher-detail-modal');
+    if (old) old.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'voucher-detail-modal';
+    modal.innerHTML = `
+        <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
+            <div class="modal-header">
+                <h3>凭证详情 - ${escapeHtml(voucherFull)}</h3>
+                <button class="modal-close" onclick="closeModal('voucher-detail-modal')">&times;</button>
+            </div>
+            <div class="modal-body" id="voucher-detail-body">
+                <div style="text-align:center;padding:40px;color:#999;">加载中...</div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    const url = `/api/journal-entries/by-voucher?voucher_word=${encodeURIComponent(voucher_word)}&voucher_no=${voucher_no}&company_id=${currentCompanyId}`;
+    api(url).then(data => {
+        const body = document.getElementById('voucher-detail-body');
+        if (!body) return;
+        let html = `
+            <div style="margin-bottom:16px;font-size:13px;color:#666;">
+                <span style="margin-right:24px;">期间：<b>${data.period || '-'}</b></span>
+                <span style="margin-right:24px;">日期：<b>${data.entry_date || '-'}</b></span>
+                <span>来源：<b>${escapeHtml(data.source || '-')}</b></span>
+            </div>
+            <table class="data-table" style="font-size:13px;">
+                <thead><tr>
+                    <th style="width:30%;">摘要</th>
+                    <th style="width:15%;">科目编码</th>
+                    <th style="width:25%;">科目名称</th>
+                    <th style="width:15%;text-align:right;">借方金额</th>
+                    <th style="width:15%;text-align:right;">贷方金额</th>
+                </tr></thead>
+                <tbody>`;
+        (data.entries || []).forEach(e => {
+            html += `<tr>
+                <td>${escapeHtml(e.summary || '-')}</td>
+                <td>${escapeHtml(e.account_code || '-')}</td>
+                <td>${escapeHtml(e.account_name || '-')}</td>
+                <td style="text-align:right;">${e.debit_amount ? Number(e.debit_amount).toLocaleString() : ''}</td>
+                <td style="text-align:right;">${e.credit_amount ? Number(e.credit_amount).toLocaleString() : ''}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>
+            <div style="margin-top:12px;font-size:13px;color:#666;text-align:right;">
+                借方合计：<b style="color:#16a34a;">${Number(data.total_debit || 0).toLocaleString()}</b>
+                &nbsp;&nbsp;
+                贷方合计：<b style="color:#dc2626;">${Number(data.total_credit || 0).toLocaleString()}</b>
+                &nbsp;&nbsp;
+                平衡：<b style="color:${data.is_balanced ? '#16a34a' : '#dc2626'};">${data.is_balanced ? '是' : '否'}</b>
+            </div>`;
+        body.innerHTML = html;
+    }).catch(err => {
+        const body = document.getElementById('voucher-detail-body');
+        if (body) body.innerHTML = `<div style="padding:40px;color:#f44;">加载失败：${escapeHtml(err.message || String(err))}</div>`;
+    });
+}
+
 // ==================== 启动 ====================
 document.addEventListener('DOMContentLoaded', function () {
   init().catch(function (e) {
