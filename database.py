@@ -2322,8 +2322,8 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
 
     # 汇总
     total_income = round(sum(r.current_income or 0 for r in records), 2)
-    total_tax = round(sum(r.tax_to_pay or 0 for r in records), 2)
-    total_net = round(sum(r.net_salary or 0 for r in records), 2)
+    # 工资表「本期应补(退)税额」才是当月实际从工资中扣缴的个税
+    total_tax = round(sum(r.tax_refund or 0 for r in records), 2)
 
     # 每人：个人社保+个人公积金（需要从其他应收款冲回）
     emp_personal = {}  # name → {ss, hf, code}
@@ -2373,8 +2373,7 @@ def _generate_salary_journals(db: Session, company_id: int, period: str):
         ))
 
     # 贷：应付职工薪酬/工资（实发工资，待发放）
-    # 实发 = 应发 - 个人社保 - 个人公积金 - 个税（始终推算，不依赖net_salary字段）
-    # net_salary字段含退税等复杂逻辑，会导致借贷不平
+    # 实发 = 应发 - 个人社保 - 个人公积金 - 本期应补退税额（与Excel实发工资一致）
     total_net = round(total_income - total_deduct - total_tax, 2)
     if total_net < 0:
         total_net = 0
