@@ -1841,25 +1841,45 @@ def _build_entity_index(db, company_id):
             norm = _normalize_customer_name(supp.name)
             idx['suppliers'][norm] = {'name': supp.name, 'code': supp.code}
 
-    # --- 股东与发票交叉比对：股东是否同时也是客户/供应商 ---
-    # 检查销项发票：股东名称出现在购方 → 股东也是客户
+    # --- 开具发票购方名称（补充客户索引） ---
+    # 老邓 2026-06-10：银行流水匹配客户时，综合参考客户档案 + 开具发票购方
     si_buyers = db.query(SalesInvoice.buyer_name).filter(
         SalesInvoice.company_id == company_id,
         SalesInvoice.buyer_name.isnot(None)
     ).distinct().all()
-    buyer_norms = set()
     for (bn,) in si_buyers:
         if bn:
-            buyer_norms.add(_normalize_customer_name(bn))
-    idx['shareholder_as_customer'] = idx['shareholders'] & buyer_norms
+            norm = _normalize_customer_name(bn)
+            if norm and norm not in idx['customers']:
+                idx['customers'][norm] = {'name': bn, 'code': None}
 
-    # 检查进项发票：股东名称出现在销方 → 股东也是供应商
+    # --- 取得发票销方名称（补充供应商索引） ---
+    # 老邓 2026-06-10：银行流水匹配供应商时，综合参考供应商档案 + 取得发票销方
     pi_sellers = db.query(PurchaseInvoice.seller_name).filter(
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.seller_name.isnot(None)
     ).distinct().all()
-    seller_norms = set()
     for (sn,) in pi_sellers:
+        if sn:
+            norm = _normalize_customer_name(sn)
+            if norm and norm not in idx['suppliers']:
+                idx['suppliers'][norm] = {'name': sn, 'code': None}
+
+    # --- 股东与发票交叉比对：股东是否同时也是客户/供应商 ---
+    buyer_norms = set()
+    for (bn,) in db.query(SalesInvoice.buyer_name).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).distinct().all():
+        if bn:
+            buyer_norms.add(_normalize_customer_name(bn))
+    idx['shareholder_as_customer'] = idx['shareholders'] & buyer_norms
+
+    seller_norms = set()
+    for (sn,) in db.query(PurchaseInvoice.seller_name).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).distinct().all():
         if sn:
             seller_norms.add(_normalize_customer_name(sn))
     idx['shareholder_as_supplier'] = idx['shareholders'] & seller_norms
@@ -2064,6 +2084,26 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     # 7d. 供应商 → 应付账款（含退款）
     if entity_type == 'supplier':
         return ("2202", "应付账款", "supplier")
+
+    # 7e. 未知实体 → 兜底：直接查发票购方/销方（老邓 2026-06-10）
+    # 银行流水收款 + 名称在开具发票购方中 → 客户
+    if not is_debit:
+        si_buyers = db.query(SalesInvoice.buyer_name).filter(
+            SalesInvoice.company_id == company_id,
+            SalesInvoice.buyer_name.isnot(None)
+        ).distinct().all()
+        for (bn,) in si_buyers:
+            if bn and _normalize_customer_name(bn) == norm:
+                return ("1122", "应收账款", "customer_invoice")
+    # 银行流水付款 + 名称在取得发票销方中 → 供应商
+    if is_debit:
+        pi_sellers = db.query(PurchaseInvoice.seller_name).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.seller_name.isnot(None)
+        ).distinct().all()
+        for (sn,) in pi_sellers:
+            if sn and _normalize_customer_name(sn) == norm:
+                return ("2202", "应付账款", "supplier_invoice")
 
     # 所有规则均未匹配 → 返回 None，由调用方决定如何处理
     return None
