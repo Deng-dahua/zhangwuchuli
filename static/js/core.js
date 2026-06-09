@@ -438,6 +438,7 @@ function navigateTo(page) {
     case 'housing-fund': renderHousingFund(container); break;
     case '文化事业建设费': renderCulturalConstructionFee(container); break;
   }
+  window.scrollTo(0, 0);
 }
 
 document.querySelectorAll('.nav-item').forEach(el => {

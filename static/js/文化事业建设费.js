@@ -158,6 +158,7 @@ async function renderCulturalConstructionFee(container) {
     + '<div id="ccf-forms-inline" style="display:none;margin-top:20px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px"></div>'
     + '<div id="ccf-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCCFModal()"><div class="modal modal-lg" id="ccf-modal-inner"></div></div>';
   await loadCCFDeclarationList();
+  window.scrollTo(0, 0);
 }
 
 // ==================== 列表加载 ====================
