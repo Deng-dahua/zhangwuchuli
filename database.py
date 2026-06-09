@@ -2311,8 +2311,12 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
             if sn and _normalize_customer_name(sn) == norm:
                 return ("2202", "应付账款", "supplier_invoice")
 
-    # 所有规则均未匹配 → 返回 None，由调用方决定如何处理
-    return None
+    # 所有规则均未匹配 → 银行流水历史 fallback（老邓 2026-06-10）
+    # 付款（debit）→ 默认供应商；收款（credit）→ 默认客户
+    if is_debit:
+        return ("2202", "应付账款", "supplier_fallback")
+    else:
+        return ("1122", "应收账款", "customer_fallback")
 
 
 def _next_voucher_no(db, company_id, period, voucher_word="记"):
