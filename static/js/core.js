@@ -21,7 +21,7 @@ function escapeHtml(s) {
 var esc = escapeHtml;  // 简写别名，统一使用 core.js 的 escapeHtml，不再重复定义
 
 const pages = {
-  'chat': 'AI 助手',
+  'chat': '财税问答',
   'dashboard': '数据看板',
   'company': '公司信息',
   'departments': '部门档案',

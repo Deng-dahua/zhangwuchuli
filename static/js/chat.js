@@ -1,4 +1,4 @@
-// ==================== AI 助手对话 ====================
+// ==================== 财税问答助手 ====================
 let chatSessionId = null;
 let chatMessages = [];
 let chatLoading = false;
@@ -8,7 +8,17 @@ async function renderChat(container) {
     chatSessionId = 'sess_' + Date.now();
     chatMessages = [{
       role: 'ai',
-      text: '👋 你好！我是**存勤账务助手**，你的 AI 会计搭档。\n\n直接告诉我你要做什么，例如：\n• 「录入凭证」— 我带你一步步填\n• 「新增客户」— 快速录入客户档案\n• 「查看利润表 2026-05」— 马上出报表\n\n输入「**帮助**」了解全部功能。'
+      text: '👋 你好！我是**存勤财税助手**，专注中小企业财税问答。\n\n'
+        + '我可以帮你解答：\n'
+        + '• 📋 **税务政策** — 增值税、企业所得税、个税、印花税等\n'
+        + '• 📝 **账务处理** — 会计分录、科目运用、凭证编制\n'
+        + '• ⚠️ **风险提示** — 稽查风险、发票合规、经营实质\n'
+        + '• 💰 **财务管理** — 成本控制、费用管理、资金规划\n\n'
+        + '直接输入你的问题，例如：\n'
+        + '• 「小规模纳税人增值税有什么优惠？」\n'
+        + '• 「采购原材料怎么记分录？」\n'
+        + '• 「固定资产折旧年限是多少？」\n\n'
+        + '也可以说「**帮助**」查看系统操作功能。'
     }];
   }
 
@@ -16,25 +26,25 @@ async function renderChat(container) {
   el.innerHTML = `
     <div class="chat-wrapper">
       <div class="chat-header">
-        <h3>🤖 AI 智能助手</h3>
-        <p>直接描述需求，我帮你搞定 — 新增客户 / 查报表</p>
+        <h3>📋 财税问答助手</h3>
+        <p>解答财务管理、账务处理、税务政策、风险提示等问题</p>
       </div>
       <div class="chat-quick-actions" id="quick-actions">
-                <span class="chat-chip" data-cmd="新增客户">👤 新增客户</span>
-        <span class="chat-chip" data-cmd="新增供应商">📦 新增供应商</span>
-        <span class="chat-chip" data-cmd="新增员工">🧑 新增员工</span>
-        <span class="chat-chip" data-cmd="查看利润表">📈 利润表</span>
-        <span class="chat-chip" data-cmd="查看资产负债表">⚖️ 资产负债表</span>
-        <span class="chat-chip" data-cmd="总账">📒 总账</span>
-        <span class="chat-chip" data-cmd="帮助">❓ 帮助</span>
+        <span class="chat-chip" data-cmd="增值税税率是多少？">📊 增值税税率</span>
+        <span class="chat-chip" data-cmd="企业所得税怎么计算？">🏢 企业所得税</span>
+        <span class="chat-chip" data-cmd="工资个税怎么计算？">💳 个税计算</span>
+        <span class="chat-chip" data-cmd="小规模纳税人有什么优惠政策？">📉 小规模优惠</span>
+        <span class="chat-chip" data-cmd="印花税有哪些税目和税率？">📄 印花税</span>
+        <span class="chat-chip" data-cmd="进项发票怎么抵扣？">🧾 进项抵扣</span>
+        <span class="chat-chip" data-cmd="帮助">❓ 系统操作</span>
       </div>
       <div class="chat-body" id="chat-body">
         ${renderMessages()}
       </div>
       <div class="chat-input-area">
         <input type="file" id="chat-file-input" accept=".xlsx,.xls,.csv,.pdf,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.bmp,.webp" style="display:none" onchange="handleFileUpload(this)">
-        <button class="chat-upload-btn" id="chat-upload-btn" onclick="document.getElementById('chat-file-input').click()" title="上传文件 (Excel/CSV/PDF/文本)">📎</button>
-        <input id="chat-input" type="text" placeholder="输入你的需求，或上传文件，例如：5月28日 采购原材料" 
+        <button class="chat-upload-btn" id="chat-upload-btn" onclick="document.getElementById('chat-file-input').click()" title="上传文件">📎</button>
+        <input id="chat-input" type="text" placeholder="输入财税问题，例如：增值税税率是多少？" 
                onkeypress="if(event.key==='Enter') sendChat()" autofocus>
         <button onclick="sendChat()" id="chat-send-btn">发送</button>
       </div>
