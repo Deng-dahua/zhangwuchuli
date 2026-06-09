@@ -241,7 +241,7 @@ function buildSSHeaderRows() {
 // 构建单个类别的完整表格HTML（独立表格）
 function buildSSCategoryTable(category, items, showSubtotal) {
   var hdrs = buildSSHeaderRows();
-  var html = '<div class="ss-category-block" style="margin-bottom:16px;">';
+  var html = '<div class="ss-category-block" data-category="' + category + '" style="margin-bottom:16px;">';
   html += '<div class="ss-cat-title" style="font-weight:700;font-size:14px;padding:8px 12px;background:#eef2ff;border-radius:6px 6px 0 0;">' + category + '</div>';
   html += '<div style="overflow-x:auto;">';
   html += '<table class="data-table" style="font-size:12px;white-space:nowrap;min-width:100%;">';
@@ -263,7 +263,8 @@ function buildSSCategoryTable(category, items, showSubtotal) {
     items.forEach(function(item, idx) {
       var im = item._insMap || {};
       html += '<tr>';
-      html += '<td><input type="checkbox" value="' + item.id + '" onchange="ssToggleCheck(this)" /></td>';
+      var locked = !!(item._voucher_no);
+      html += '<td><input type="checkbox" value="' + item.id + '" onchange="ssToggleCheck(this)"' + (locked ? ' disabled' : '') + ' /></td>';
       html += '<td class="num">' + (startSeq + idx) + '</td>';
       html += '<td>' + escapeHtml(item.employee_name || '-') + '</td>';
       html += '<td>' + escapeHtml(item.id_number || '-') + '</td>';
@@ -280,8 +281,11 @@ function buildSSCategoryTable(category, items, showSubtotal) {
       });
       html += '<td style="text-align:center">' + (item._voucher_no || '-') + '</td>';
       html += '<td>'
-        + '<button class="btn btn-sm btn-outline" onclick="ssShowEdit(' + item.id + ',' + item._declaration_id + ')">编辑</button> '
-        + '<button class="btn btn-sm btn-danger" onclick="ssDelete(' + item.id + ')">删除</button>'
+        + (locked
+          ? '<button class="btn btn-sm btn-outline" disabled title="已入账不可编辑">编辑</button> '
+            + '<button class="btn btn-sm btn-danger" disabled title="已入账不可删除">删除</button>'
+          : '<button class="btn btn-sm btn-outline" onclick="ssShowEdit(' + item.id + ',' + item._declaration_id + ')">编辑</button> '
+            + '<button class="btn btn-sm btn-danger" onclick="ssDelete(' + item.id + ')">删除</button>')
         + '</td>';
       html += '</tr>';
     });
@@ -576,14 +580,20 @@ async function generateSSVoucher() {
 var ssSelectedIds = new Set();
 
 function ssToggleAll(cb) {
-  var checks = document.querySelectorAll('.ss-category-block input[type="checkbox"]');
-  checks.forEach(function(c) { c.checked = cb.checked; });
-  ssSelectedIds.clear();
-  if (cb.checked) checks.forEach(function(c) { ssSelectedIds.add(parseInt(c.value)); });
+  var block = cb.closest('.ss-category-block');
+  if (!block) return;
+  var checks = block.querySelectorAll('input[type="checkbox"]:not([disabled])');
+  checks.forEach(function(c) {
+    c.checked = cb.checked;
+    var id = parseInt(c.value);
+    if (cb.checked) ssSelectedIds.add(id);
+    else ssSelectedIds.delete(id);
+  });
   ssUpdateBatchBtn();
 }
 
 function ssToggleCheck(cb) {
+  if (cb.disabled) return;
   var id = parseInt(cb.value);
   if (cb.checked) ssSelectedIds.add(id);
   else ssSelectedIds.delete(id);

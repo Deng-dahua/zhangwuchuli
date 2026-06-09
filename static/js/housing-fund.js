@@ -233,11 +233,14 @@ function hfRenderTable(items) {
   const tbody = document.getElementById('hf-tbody');
   if (!tbody) return;
   hfSelectedIds.clear();
+  updateBatchBtn();
   tbody.innerHTML = items.length === 0
     ? '<tr><td colspan="14" style="text-align:center;padding:40px;color:#999;">暂无数据</td></tr>'
-    : items.map(item => `
+    : items.map(item => {
+        var locked = !!(item.voucher_no);
+        return `
       <tr>
-        <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)" /></td>
+        <td><input type="checkbox" value="${item.id}" onchange="hfToggleCheck(this)"${locked ? ' disabled' : ''} /></td>
         <td>${escapeHtml(item.employee_id || '-')}</td>
         <td>${escapeHtml(item.employee_name)}</td>
         <td>${escapeHtml(item.id_number || '-')}</td>
@@ -251,23 +254,28 @@ function hfRenderTable(items) {
         <td><span class="tag tag-green">${escapeHtml(item.status || '正常')}</span></td>
         <td style="text-align:center">${item.voucher_no || '-'}</td>
         <td>
-          <button class="btn btn-sm btn-outline" onclick="hfShowEdit(${item.id})">编辑</button>
-          <button class="btn btn-sm btn-danger" onclick="hfDelete(${item.id})">删除</button>
+          ${locked
+            ? '<button class="btn btn-sm btn-outline" disabled title="已入账不可编辑">编辑</button> <button class="btn btn-sm btn-danger" disabled title="已入账不可删除">删除</button>'
+            : '<button class="btn btn-sm btn-outline" onclick="hfShowEdit(${item.id})">编辑</button> <button class="btn btn-sm btn-danger" onclick="hfDelete(${item.id})">删除</button>'}
         </td>
       </tr>
-    `).join('');
+    `; }).join('');
   updateBatchBtn();
 }
 
 function hfToggleAll(cb) {
-  const checks = document.querySelectorAll('#hf-tbody input[type="checkbox"]');
+  const checks = document.querySelectorAll('#hf-tbody input[type="checkbox"]:not([disabled])');
   checks.forEach(c => c.checked = cb.checked);
-  hfSelectedIds.clear();
-  if (cb.checked) checks.forEach(c => hfSelectedIds.add(parseInt(c.value)));
+  if (cb.checked) {
+    checks.forEach(c => hfSelectedIds.add(parseInt(c.value)));
+  } else {
+    hfSelectedIds.clear();
+  }
   updateBatchBtn();
 }
 
 function hfToggleCheck(cb) {
+  if (cb.disabled) return;
   if (cb.checked) hfSelectedIds.add(parseInt(cb.value));
   else hfSelectedIds.delete(parseInt(cb.value));
   updateBatchBtn();
