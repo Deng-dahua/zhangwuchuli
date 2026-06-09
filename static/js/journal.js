@@ -316,6 +316,10 @@ async function showJournalForm(entryId) {
     api('/api/suppliers'),
     api('/api/employees')
   ]);
+  // 缓存往来项目数据，供 onJeAccountChange 使用
+  window._jeCustomers = customers;
+  window._jeSuppliers = suppliers;
+  window._jeEmployees = employees;
   const title = isEdit ? '编辑序时账记录' : '新增序时账记录';
   const gw = entry ? entry.voucher_word : '记';
   const today = entry ? entry.entry_date : new Date().toISOString().slice(0,10);
@@ -378,13 +382,16 @@ function onJeAccountChange() {
   document.getElementById('je-account-code').value = code;
   document.getElementById('je-account-name').value = name;
 
-  // 往来项目：仅往来科目显示
+  // 往来项目：仅往来科目显示，且按科目类型过滤
   const contactWrap = document.getElementById('je-contact-wrap');
+  const 往来前缀 = ['1121','1122','1123','1221','2201','2202','2203','2241'];
+  const is往来 = 往来前缀.some(p => code.startsWith(p));
   if (contactWrap) {
-    const往来前缀 = ['1121','1122','1123','1221','2201','2202','2203','2241'];
-    const is往来 = 往来前缀.some(p => code.startsWith(p));
-    contactWrap.style.display = is往来 ? '' : 'none';
-    if (!is往来) {
+    if (is往来) {
+      contactWrap.style.display = '';
+      rebuildContactDropdown(code);
+    } else {
+      contactWrap.style.display = 'none';
       const contactSel = document.getElementById('je-contact');
       if (contactSel) contactSel.value = '';
     }
@@ -412,6 +419,47 @@ function onJeAccountChange() {
       if (revSel) revSel.value = '';
     }
   }
+}
+
+// 根据科目编码重建往来项目下拉框
+// 1221(其他应收款)→人员  1122/2203(应收/预收)→客户  1123/2202(预付/应付)→供应商  其他→全部
+function rebuildContactDropdown(accountCode) {
+  const sel = document.getElementById('je-contact');
+  if (!sel) return;
+  const prevVal = sel.value;
+  const customers = window._jeCustomers || [];
+  const suppliers = window._jeSuppliers || [];
+  const employees = window._jeEmployees || [];
+
+  let showCust = false, showSupp = false, showEmp = false;
+  const code4 = accountCode.substring(0, 4);
+  if (code4 === '1221') {
+    showEmp = true;
+  } else if (code4 === '1122' || code4 === '2203') {
+    showCust = true;
+  } else if (code4 === '1123' || code4 === '2202') {
+    showSupp = true;
+  } else {
+    showCust = true; showSupp = true; showEmp = true;
+  }
+
+  let html = '<option value="">无</option>';
+  if (showCust && customers.length) {
+    html += '<optgroup label="── 客户 ──">';
+    customers.forEach(c => { html += '<option value="' + escapeHtml(c.name) + '"' + (c.name === prevVal ? ' selected' : '') + '>' + c.name + '</option>'; });
+    html += '</optgroup>';
+  }
+  if (showSupp && suppliers.length) {
+    html += '<optgroup label="── 供应商 ──">';
+    suppliers.forEach(s => { html += '<option value="' + escapeHtml(s.name) + '"' + (s.name === prevVal ? ' selected' : '') + '>' + s.name + '</option>'; });
+    html += '</optgroup>';
+  }
+  if (showEmp && employees.length) {
+    html += '<optgroup label="── 人员 ──">';
+    employees.forEach(e => { html += '<option value="' + escapeHtml(e.name) + '"' + (e.name === prevVal ? ' selected' : '') + '>' + e.name + '</option>'; });
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
 }
 
 async function saveJournal(entryId) {
