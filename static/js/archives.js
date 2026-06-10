@@ -593,9 +593,9 @@ async function renderEmployees(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table class="single-line-table">
-            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllEmp(this)" title="全选"></th><th>工号</th><th>姓名</th><th>身份证号</th><th>余额方向</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" onchange="toggleSelectAllEmp(this)" title="全选"></th><th>工号</th><th>姓名</th><th>身份证号</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无人员，请添加</p></div></td></tr>' : data.map(e => {
                 const locked = e.has_journal;
                 const editBtn = locked
                   ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该人员已被序时账往来项目引用，不可编辑">编辑</button>`
@@ -604,14 +604,12 @@ async function renderEmployees(container) {
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该人员已被序时账往来项目引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteEmp(${e.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该人员已被序时账往来项目引用"' : '';
-                const balDir = e.balance_direction || '借';
                 return `
                 <tr>
                   <td><input type="checkbox" class="emp-check" value="${e.id}" onchange="updateEmpBatchBtn()" ${cbAttr}></td>
                   <td class="single-line">${e.code}</td>
                   <td class="single-line">${e.name}</td>
                   <td class="single-line">${e.id_card || '-'}</td>
-                  <td style="text-align:center">${balDir}</td>
                   <td style="white-space:nowrap">
                     ${editBtn}
                     ${delBtn}
@@ -719,9 +717,9 @@ async function renderCustomers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table class="single-line-table">
-            <thead><tr><th style="width:36px"><input type="checkbox" id="custSelectAll" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>余额方向</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="custSelectAll" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
                 const locked = c.has_journal;
                 const editBtn = locked
                   ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可编辑">编辑</button>`
@@ -730,15 +728,12 @@ async function renderCustomers(container) {
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteCust(${c.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该客户已被序时账引用"' : '';
-                // 余额方向：根据关联科目判断，默认应收账款为借
-                const balDir = c.balance_direction || '借';
                 return `
                 <tr>
                   <td><input type="checkbox" class="cust-check" value="${c.id}" onchange="updateBatchDelCustBtn()" ${cbAttr}></td>
                   <td class="single-line">${c.code}</td>
                   <td class="single-line">${c.name}</td>
                   <td class="single-line" style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
-                  <td style="text-align:center">${balDir}</td>
                   <td style="white-space:nowrap">
                     ${editBtn}
                     ${delBtn}
@@ -853,9 +848,9 @@ async function renderSuppliers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table class="single-line-table">
-            <thead><tr><th style="width:36px"><input type="checkbox" id="suppSelectAll" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>余额方向</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="suppSelectAll" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="6"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => {
+              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => {
                 const locked = s.has_journal;
                 const editBtn = locked
                   ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可编辑">编辑</button>`
@@ -864,14 +859,12 @@ async function renderSuppliers(container) {
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteSupp(${s.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该供应商已被序时账引用"' : '';
-                const balDir = s.balance_direction || '贷';
                 return `
                 <tr>
                   <td><input type="checkbox" class="supp-check" value="${s.id}" onchange="updateBatchDelSuppBtn()" ${cbAttr}></td>
                   <td class="single-line">${s.code}</td>
                   <td class="single-line">${s.name}</td>
                   <td class="single-line" style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
-                  <td style="text-align:center">${balDir}</td>
                   <td style="white-space:nowrap">
                     ${editBtn}
                     ${delBtn}
