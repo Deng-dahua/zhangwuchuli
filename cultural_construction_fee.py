@@ -689,6 +689,8 @@ def _match_ccf_payment_voucher(db, company_id: int, decl, fee_amount: float,
         ))
 
         db.flush()
+        # 回写银行流水的凭证号
+        tx.journal_voucher_no = f"记-{vno}"
         decl.row15_paid_arrears_current = fee_amount
         results.append({"voucher_no": vno, "matched": True,
                        "message": f"已生成支付凭证 记-{vno}",

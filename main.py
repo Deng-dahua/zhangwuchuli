@@ -3571,7 +3571,8 @@ def list_bank_transactions(
         "reference_no": tx.reference_no or "",
         "raw_data": tx.raw_data or "{}",
         "remark": tx.remark or "",
-        "journal_voucher_no": voucher_map.get(tx.id, ""),
+        # 凭证号：优先读 DB 存储值（所有凭证生成路径都会回写此字段），动态匹配兜底
+        "journal_voucher_no": tx.journal_voucher_no or voucher_map.get(tx.id, ""),
         "created_at": str(tx.created_at) if tx.created_at else ""
     } for tx in txs]
 
@@ -3728,7 +3729,10 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     result = _classify_bank_tx(db, company_id, tx)
     if result is None:
         raise HTTPException(400, "无法自动分类该银行流水，请完善银行流水规则后再生成凭证")
-    cp_code, cp_name, match_type = result
+    cp_code, cp_name, match_type, contact_name = result
+
+    # contact_project：人员匹配时用员工规范姓名，其余用原始对方名称
+    contact_proj = contact_name if contact_name else cp
 
     if is_debit:
         # 付款：借 对方科目  贷 银行存款
@@ -3739,7 +3743,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code=cp_code, account_name=cp_name,
             debit_amount=amount, credit_amount=0,
-            contact_project=cp, source="银行流水"
+            contact_project=contact_proj, source="银行流水"
         ))
         db.add(JournalEntry(
             company_id=company_id,
@@ -3748,7 +3752,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code="1002", account_name="银行存款",
             debit_amount=0, credit_amount=amount,
-            contact_project=cp, source="银行流水"
+            contact_project=contact_proj, source="银行流水"
         ))
     else:
         # 收款：借 银行存款  贷 对方科目
@@ -3759,7 +3763,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code="1002", account_name="银行存款",
             debit_amount=amount, credit_amount=0,
-            contact_project=cp, source="银行流水"
+            contact_project=contact_proj, source="银行流水"
         ))
         db.add(JournalEntry(
             company_id=company_id,
@@ -3768,7 +3772,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code=cp_code, account_name=cp_name,
             debit_amount=0, credit_amount=amount,
-            contact_project=cp, source="银行流水"
+            contact_project=contact_proj, source="银行流水"
         ))
 
     voucher_str = f"记-{next_voucher_no}"

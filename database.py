@@ -2929,6 +2929,8 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 source="银行流水",
             ),
         ])
+        voucher_str = f"记-{next_voucher_no}"
+        tx.journal_voucher_no = voucher_str
         db.flush()
         generated += 1
 
@@ -3225,6 +3227,8 @@ def _match_hf_payment_journals(db: Session, company_id: int):
                 source="银行流水",
             ),
         ])
+        voucher_str = f"记-{next_voucher_no}"
+        tx.journal_voucher_no = voucher_str
         db.flush()
         generated += 1
 
