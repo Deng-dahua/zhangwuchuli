@@ -2366,7 +2366,12 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
             return ("2241", "其他应付款", "personnel_receipt", emp_name)
 
     # 7c. 客户 → 应收账款（含退款）
+    # 老邓 2026-06-10：摘要/附言优先 — 保证金信号降级为其他应收款
     if entity_type == 'customer':
+        _DEPOSIT_KW = ['投标保证金', '履约保证金', '保证金', '押金', '质保金']
+        _cust_text = ((tx.summary or "") + " " + (tx.transaction_remark or "")).lower()
+        if any(kw in _cust_text for kw in _DEPOSIT_KW):
+            return ("1221", "其他应收款", "customer_deposit", None)
         return ("1122", "应收账款", "customer", None)
 
     # 7d. 供应商 → 应付账款（含退款）
