@@ -2631,7 +2631,23 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 continue
 
             cp = tx.counterparty_name or tx.summary or "银行流水"
+
+            # 银行原始上下文（摘要+交易附言，老邓 2026-06-10：辅助判断）
+            _bank_text = (tx.summary or "").strip()
+            _bank_remark = (tx.transaction_remark or "").strip()
+            if _bank_remark and _bank_remark != _bank_text:
+                # 去重：附言以摘要开头时，只用附言
+                if _bank_text and _bank_remark.startswith(_bank_text):
+                    _bank_context = _bank_remark
+                else:
+                    _bank_context = f"{_bank_text}（{_bank_remark}）" if _bank_text else _bank_remark
+            else:
+                _bank_context = _bank_text
+
             summary_tag = f"银行流水-#{tx.id}-{cp}"
+            if _bank_context:
+                summary_tag += f" | {_bank_context}"
+
             period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else datetime.now().strftime("%Y-%m")
             next_voucher_no = _next_voucher_no(db, company_id, period, "记")
             date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
@@ -2654,11 +2670,17 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             if acct:
                 other_name = acct.name
 
-            # 人员付款摘要更友好
+            # 人员付款摘要：融入银行侧原始上下文
             if match_type == "personnel_payment":
-                summary_tag = f"银行流水-#{tx.id}-{contact_proj}（报销/借支）"
+                if _bank_context:
+                    summary_tag = f"银行流水-#{tx.id}-{contact_proj} | {_bank_context}"
+                else:
+                    summary_tag = f"银行流水-#{tx.id}-{contact_proj}（报销/借支）"
             elif match_type == "personnel_receipt":
-                summary_tag = f"银行流水-#{tx.id}-{contact_proj}（还款/上缴）"
+                if _bank_context:
+                    summary_tag = f"银行流水-#{tx.id}-{contact_proj} | {_bank_context}"
+                else:
+                    summary_tag = f"银行流水-#{tx.id}-{contact_proj}（还款/上缴）"
             elif match_type == "customer_deposit":
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（保证金）"
             elif match_type == "prepaid_supplier":
