@@ -2282,14 +2282,16 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
 
     contact_name：人员匹配时为员工规范姓名，其余情况为 None（调用方使用原始 cp 名称）。
 
-    新规则优先级（老邓 2026-06-06）：
-    内部转账 > 规则匹配 > 税费识别 > 银行手续费 > 工资社保 > 跨实体匹配（股东/人员/客户/供应商） > 默认往来
-    股东特判：先查发票（销项购方=也是客户/进项销方=也是供应商），再查摘要关键词（货款/服务费等），
-    有业务证据→应收/应付，无证据→实收资本/股利
+    新优先级（老邓 2026-06-10 重构）：
+    内部转账 > 实体识别（强制往来科目） > 税费申报表匹配 > 银行手续费 > 工资社保 > 规则匹配（仅未知实体） > 默认往来
+    铁律：已知实体必须走往来科目，禁止直接走费用科目。
     """
     cp = tx.counterparty_name or tx.summary or ""
     full_text = (tx.summary or "") + " " + (tx.counterparty_name or "") + " " + (tx.transaction_remark or "")
     full_text_lower = full_text.lower()
+
+    if entity_index is None:
+        entity_index = _build_entity_index(db, company_id)
 
     # 1. 内部转账识别
     if tx.counterparty_account:
@@ -2304,7 +2306,57 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     is_debit = tx.debit_amount and tx.debit_amount > 0
     tx_type = "支出" if is_debit else "收入"
 
-    # 2. 规则匹配
+    # ===== 2. 实体识别（强制往来科目，铁律）=====
+    entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp else ('unknown', cp, None)
+    norm = _normalize_customer_name(cp) if cp else ""
+
+    # 2a. 股东 → 先判断是否有业务往来证据
+    if entity_type == 'shareholder':
+        if norm in entity_index.get('shareholder_as_customer', set()):
+            return ("1122", "应收账款", "shareholder_customer", None)
+        if norm in entity_index.get('shareholder_as_supplier', set()):
+            return ("2202", "应付账款", "shareholder_supplier", None)
+        biz_keywords = ["货款", "采购", "购买", "下单", "订单",
+                       "服务费", "咨询费", "技术开发", "租金", "物业",
+                       "工程", "施工", "合同", "协议", "结算", "对账",
+                       "往来款", "预付款", "保证金", "押金", "发票", "invoice", "报销"]
+        summary_lower = (tx.summary or "").lower()
+        remark_lower = (tx.transaction_remark or "").lower()
+        biz_text = summary_lower + " " + remark_lower
+        if any(kw in biz_text for kw in biz_keywords):
+            if is_debit:
+                return ("2202", "应付账款", "shareholder_biz", None)
+            else:
+                return ("1122", "应收账款", "shareholder_biz", None)
+        # 无业务往来证据 → 投资款/分红
+        if is_debit:
+            return ("410401", "利润分配-应付股利", "dividend", None)
+        else:
+            return ("4001", "实收资本", "capital", None)
+
+    # 2b. 人员/内部人 → 其他应收/其他应付
+    if entity_type in ('personnel', 'insider'):
+        emp_name = entity_name
+        if is_debit:
+            return ("1221", "其他应收款", "personnel_payment", emp_name)
+        else:
+            return ("2241", "其他应付款", "personnel_receipt", emp_name)
+
+    # 2c. 客户 → 应收账款（保证金降级为其他应收款）
+    if entity_type == 'customer':
+        _DEPOSIT_KW = ['投标保证金', '履约保证金', '保证金', '押金', '质保金']
+        _cust_text = ((tx.summary or "") + " " + (tx.transaction_remark or "")).lower()
+        if any(kw in _cust_text for kw in _DEPOSIT_KW):
+            return ("1221", "其他应收款", "customer_deposit", None)
+        return ("1122", "应收账款", "customer", None)
+
+    # 2d. 供应商 → 应付账款
+    if entity_type == 'supplier':
+        return ("2202", "应付账款", "supplier", None)
+
+    # ===== 以下是未知实体的处理 =====
+
+    # 3. 规则匹配（仅对未知实体生效，已知实体已在步骤2处理）
     rules = db.query(BankRule).filter(
         BankRule.company_id == company_id,
         BankRule.is_active == 1,
@@ -2314,13 +2366,33 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
             if rule.transaction_type == "全部" or rule.transaction_type == tx_type:
                 return (rule.account_code, rule.account_name or rule.account_code, "rule", None)
 
-    # 3. 税费关键词
-    # 3a. 国家金库/国库 缴费 → 无法从摘要判断具体税种，跳过自动做账，等待人工确认
-    if any(kw in full_text for kw in ["国家金库", "国库"]):
+    # 4. 税费识别（匹配增值税/文化事业建设费申报表）
+    # 4a. 国家金库/国库 缴费 → 匹配申报表
+    if any(kw in full_text_lower for kw in ["国家金库", "国库"]):
+        tx_period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else ""
+        payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        if payment_amount > 0 and tx_period:
+            # 匹配增值税申报表
+            vat_decl = db.query(VATDeclaration).filter(
+                VATDeclaration.company_id == company_id,
+                VATDeclaration.period == tx_period
+            ).first()
+            if vat_decl and abs(payment_amount - (vat_decl.row15 or 0)) < 0.01:
+                return ("221004", "未交增值税", "vat_payment", None)
+            # 匹配文化事业建设费申报表
+            ccf_decl = db.query(CulturalConstructionFeeDeclaration).filter(
+                CulturalConstructionFeeDeclaration.company_id == company_id,
+                CulturalConstructionFeeDeclaration.period == tx_period
+            ).first()
+            if ccf_decl and abs(payment_amount - (ccf_decl.row12 or 0)) < 0.01:
+                return ("221016", "应交文化事业建设费", "ccf_payment", None)
         return None
-    # 3b. 缴税/缴款书 → 同上，摘要仅有票号无法确定税种，跳过
+
+    # 4b. 缴税/缴款书 → 跳过，等待人工确认
     if any(kw in full_text for kw in ["缴税", "缴款书"]):
         return None
+
+    # 4c. 具体税费关键词
     tax_keywords = {
         "应交增值税": ("221001003", "待认证进项税额"),
         "未交增值税": ("221004", "未交增值税"),
@@ -2332,14 +2404,13 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         "企业所得税": ("221002", "应交企业所得税"),
         "个人所得税": ("221003", "应交个人所得税"),
         "印花税": ("221008", "应交印花税"),
+        "文化事业建设费": ("221016", "应交文化事业建设费"),
     }
     for kw, (code, name) in tax_keywords.items():
         if kw in full_text:
             return (code, name, "tax", None)
 
-    # 3.5 银行手续费识别（老邓 2026-06-06 确认）
-    # 综合对方户名、摘要、交易附言三字段判断
-    fee_text = (tx.counterparty_name or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
+    # 4.5 银行手续费识别
     _FEE_KEYWORDS = [
         "手续费", "工本费", "网银服务月费", "短信月费",
         "网上银行公司业务手续费收入",
@@ -2347,86 +2418,21 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         "结算业务委托书工本费",
         "待处理本币统一支付系统手续费款项",
     ]
+    fee_text = (tx.counterparty_name or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
     if any(kw in fee_text for kw in _FEE_KEYWORDS):
         return ("660301", "财务费用-手续费", "bank_fee", None)
 
-    # 4. 工资薪金
+    # 5. 工资薪金
     if any(kw in full_text for kw in ["工资", "薪资", "薪酬", "奖金", "绩效"]):
         return ("221101", "应付职工薪酬-工资", "salary", None)
 
-    # 5. 社保公积金
+    # 6. 社保公积金
     if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
         return ("221102", "社会保险费", "social_security", None)
     if any(kw in full_text for kw in ["公积金", "住房公积金"]):
         return ("221103", "住房公积金", "housing_fund", None)
 
-    # ====== 6. 跨实体智能匹配（新规则核心） ======
-    # 铁律：发票定成本费用，银行流水走往来。已知实体必须走往来科目，不走费用关键词。
-    if entity_index is None:
-        entity_index = _build_entity_index(db, company_id)
-
-    entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp else ('unknown', cp, None)
-    norm = _normalize_customer_name(cp) if cp else ""
-
-    # 7a. 股东 → 先判断是否有业务往来（股东也是客户/供应商），再决定
-    if entity_type == 'shareholder':
-        # 7a1. 发票证据：股东在销项发票中出现过 → 也是客户
-        if norm in entity_index.get('shareholder_as_customer', set()):
-            return ("1122", "应收账款", "shareholder_customer", None)
-        # 7a2. 发票证据：股东在进项发票中出现过 → 也是供应商
-        if norm in entity_index.get('shareholder_as_supplier', set()):
-            return ("2202", "应付账款", "shareholder_supplier", None)
-
-        # 7a3. 摘要关键词：业务往来信号
-        biz_keywords = [
-            "货款", "采购", "购买", "下单", "订单",
-            "服务费", "咨询费", "技术服务", "技术开发",
-            "租金", "物业", "工程", "施工",
-            "合同", "协议", "结算", "对账",
-            "往来款", "预付款", "保证金", "押金",
-            "发票", "invoice", "报销",
-        ]
-        summary_lower = (tx.summary or "").lower()
-        remark_lower = (tx.transaction_remark or "").lower()
-        biz_text = summary_lower + " " + remark_lower
-        if any(kw in biz_text for kw in biz_keywords):
-            if is_debit:
-                return ("2202", "应付账款", "shareholder_biz", None)
-            else:
-                return ("1122", "应收账款", "shareholder_biz", None)
-
-        # 7a4. 无业务往来证据 → 投资款/分红
-        if is_debit:
-            return ("410401", "利润分配-应付股利", "dividend", None)
-        else:
-            return ("4001", "实收资本", "capital", None)
-
-    # 7b. 人员/内部人 → 其他应收/其他应付
-    # contact_name 传递员工规范姓名，使序时账 contact_project 正确指向人员档案
-    if entity_type in ('personnel', 'insider'):
-        emp_name = entity_name  # _match_entity 返回的规范姓名
-        if is_debit:
-            # 公司付款给员工（报销/借支/代垫）→ 借 1221 其他应收款
-            return ("1221", "其他应收款", "personnel_payment", emp_name)
-        else:
-            # 员工还款/上缴给公司 → 贷 2241 其他应付款
-            return ("2241", "其他应付款", "personnel_receipt", emp_name)
-
-    # 7c. 客户 → 应收账款（含退款）
-    # 老邓 2026-06-10：摘要/附言优先 — 保证金信号降级为其他应收款
-    if entity_type == 'customer':
-        _DEPOSIT_KW = ['投标保证金', '履约保证金', '保证金', '押金', '质保金']
-        _cust_text = ((tx.summary or "") + " " + (tx.transaction_remark or "")).lower()
-        if any(kw in _cust_text for kw in _DEPOSIT_KW):
-            return ("1221", "其他应收款", "customer_deposit", None)
-        return ("1122", "应收账款", "customer", None)
-
-    # 7d. 供应商 → 应付账款（含退款）
-    if entity_type == 'supplier':
-        return ("2202", "应付账款", "supplier", None)
-
-    # 7. 费用类关键词（仅对未知实体兜底，已知供应商/客户已在步骤6处理）
-    # 铁律：已识别实体必须走往来科目，不在此处匹配费用关键词
+    # 7. 费用类关键词（仅对未知实体兜底）
     expense_keywords = {
         "房租": ("660214", "租赁费"),
         "租金": ("660214", "租赁费"),
@@ -2446,44 +2452,13 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         if kw in full_text:
             return (code, name, "expense", None)
 
-    # 8. 未知实体 → 兜底：直接查发票购方/销方（老邓 2026-06-10）
-    # 银行流水收款 + 名称在开具发票购方中 → 客户
-    if not is_debit:
-        si_buyers = db.query(SalesInvoice.buyer_name).filter(
-            SalesInvoice.company_id == company_id,
-            SalesInvoice.buyer_name.isnot(None)
-        ).distinct().all()
-        for (bn,) in si_buyers:
-            if bn and _normalize_customer_name(bn) == norm:
-                return ("1122", "应收账款", "customer_invoice", None)
-    # 银行流水付款 + 名称在取得发票销方中 → 供应商
+    # 8. 未知实体 → 兜底往来科目
     if is_debit:
-        pi_sellers = db.query(PurchaseInvoice.seller_name).filter(
-            PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.seller_name.isnot(None)
-        ).distinct().all()
-        for (sn,) in pi_sellers:
-            if sn and _normalize_customer_name(sn) == norm:
-                return ("2202", "应付账款", "supplier_invoice", None)
-
-    # 所有规则均未匹配 → 银行流水 fallback
-    # 老邓 2026-06-10：摘要/附言方向修正 —— 仅靠借/贷方向不够，要结合业务语义
-    _summary_text = ((tx.summary or "") + " " + (tx.transaction_remark or "")).lower()
-
-    # 保证金类关键词 → 付款方是交保证金的一方，对方是招标方/合作方 → **客户**
-    _DEPOSIT_KW = ['投标保证金', '履约保证金', '保证金', '押金', '质保金']
-
-    if is_debit:
-        # 付款 + 保证金信号 → 对方为客户（1221 其他应收款-保证金）
-        if any(kw in _summary_text for kw in _DEPOSIT_KW):
-            return ("1221", "其他应收款", "customer_deposit", None)
-        # 付款 → 无对应发票 → 预付账款（待发票到后冲销）
-        # 老邓 2026-06-10：银行流水必须全部做账，供应商付款无发票走预付账款
-        return ("1123", "预付账款", "prepaid_supplier", None)
+        # 付款 → 预付账款（待发票到后冲销）
+        return ("1123", "预付账款", "prepaid_unknown", None)
     else:
         # 收款 → 默认客户
         return ("1122", "应收账款", "customer_fallback", None)
-
 
 def _next_voucher_no(db, company_id, period, voucher_word="记"):
     """获取指定期间下一个凭证号（并发不安全，需外层加锁或事务）"""
