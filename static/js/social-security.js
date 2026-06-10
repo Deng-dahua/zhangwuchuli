@@ -133,7 +133,7 @@ async function renderSocialSecurity(container) {
         + '<button class="btn-toolbar" onclick="ssAddNew()">新增社会保险费</button>'
         + '<button class="btn-toolbar" onclick="triggerSSImport()">导入文件</button>'
         + '<input type="file" id="ss-import-file" accept=".xlsx,.xls" style="display:none" onchange="handleSSImportFile(event)">'
-        + '<button class="btn-toolbar" onclick="generateSSVoucher()">生成凭证</button>'
+        + '<button class="btn-toolbar" onclick="generateSSVoucher()">生成计提凭证</button>'
         + '<button class="btn-toolbar-danger" onclick="ssBatchDelete()" id="ss-batch-del-btn">批量删除</button>'
       + '</div>'
     + '</div>'
@@ -565,16 +565,23 @@ async function handleSSImportFile(event) {
   event.target.value = '';
 }
 
-// ============ 生成凭证 ============
+// ============ 生成计提凭证 ============
 async function generateSSVoucher() {
-  if (!confirm('确认生成当前期间(' + ssPeriod + ')的社保凭证？')) return;
+  if (!confirm('确认生成当前期间(' + ssPeriod + ')的社保计提凭证？')) return;
   try {
-    var result = await api('/api/social-security/generate-payment-journals?company_id=' + currentCompanyId + '&period=' + ssPeriod, {
+    // 先根据期间找到对应的申报记录
+    var decls = await api('/api/social-security/declarations?company_id=' + currentCompanyId + '&period=' + ssPeriod);
+    if (!decls || !decls.items || decls.items.length === 0) {
+      toast('当前期间无社保申报记录，请先导入或新增', 'error');
+      return;
+    }
+    var declId = decls.items[0].id;
+    var result = await api('/api/social-security/declarations/' + declId + '/generate-accrual-journal?company_id=' + currentCompanyId, {
       method: 'POST'
     });
-    toast(result.message || '凭证生成成功', 'success');
+    toast(result.message || '计提凭证生成成功', 'success');
     ssRefresh();
-  } catch (e) { handleError(e, '生成凭证'); }
+  } catch (e) { handleError(e, '生成计提凭证'); }
 }
 
 // ============ 批量删除 ============
