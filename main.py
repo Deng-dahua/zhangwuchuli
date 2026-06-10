@@ -3997,8 +3997,8 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     _ensure_account(db, company_id, "410401", "利润分配-应付股利", "权益", "贷")
     _ensure_account(db, company_id, "221101", "应付职工薪酬-工资", "负债", "贷")
 
-    is_debit = tx.debit_amount and tx.debit_amount > 0
-    amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+    is_debit = tx.amount is not None and tx.amount < 0
+    amount = abs(float(tx.amount) if tx.amount else 0)
 
     # 使用与批量生成相同的智能分类逻辑（跨实体匹配：股东/人员/客户/供应商）
     result = _classify_bank_tx(db, company_id, tx)
@@ -4014,6 +4014,34 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
         summary_tag = f"银行流水-#{tx_id}-{contact_proj}（保证金）"
     elif match_type == "prepaid_supplier":
         summary_tag = f"银行流水-#{tx_id}-{contact_proj}（预付供应商，待发票冲销）"
+
+    # 工资匹配上月数据（老邓 2026-06-10）
+    if match_type == "salary":
+        salary_note = ""
+        tx_date_val = tx.transaction_date
+        if tx_date_val and hasattr(tx_date_val, 'year'):
+            prev_month = tx_date_val.month - 1
+            prev_year = tx_date_val.year
+            if prev_month == 0:
+                prev_month = 12
+                prev_year -= 1
+            prev_period = f"{prev_year}-{prev_month:02d}"
+            salary_records = db.query(SalaryRecord).filter(
+                SalaryRecord.company_id == company_id,
+                SalaryRecord.period == prev_period
+            ).all()
+            if salary_records:
+                total_net = sum(float(sr.net_salary or 0) for sr in salary_records)
+                amt = float(amount)
+                if abs(amt - total_net) < 0.02:
+                    salary_note = "（已匹配上月工资表）"
+                elif amt < total_net - 0.02:
+                    salary_note = "（支付<计提，存有工资未发放）"
+                else:
+                    salary_note = "（支付>计提，可能存在工资未计提）"
+            else:
+                salary_note = "（无上月工资表数据）"
+        summary_tag = f"{summary_tag}{salary_note}"
 
     if is_debit:
         # 付款：借 对方科目  贷 银行存款
@@ -4055,6 +4083,58 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             debit_amount=0, credit_amount=amount,
             contact_project=contact_proj, source="银行流水", ref_id=tx_id
         ))
+
+    # 老邓 2026-06-10：自动建档供应商/客户（即时创建，不依赖双源）
+    entity_name = contact_name or (tx.counterparty_name or "").strip()
+    if entity_name and len(entity_name) >= 2:
+        _NON_ENTITY = ("手续费", "金库", "公积金", "待处理", "出售凭证", "业务收入", "国家金库", "税务", "国库")
+        if not any(kw in entity_name for kw in _NON_ENTITY):
+            if match_type in ("supplier", "supplier_invoice", "supplier_payment"):
+                norm = _normalize_customer_name(entity_name)
+                existing = db.query(Supplier).filter(
+                    Supplier.company_id == company_id,
+                    Supplier._fingerprint == norm
+                ).first()
+                if not existing:
+                    max_code = db.query(Supplier.code).filter(
+                        Supplier.company_id == company_id,
+                        Supplier.code.like("GYS%")
+                    ).order_by(Supplier.code.desc()).first()
+                    next_num = 1
+                    if max_code and max_code[0] and max_code[0].startswith("GYS"):
+                        try:
+                            next_num = int(max_code[0][3:]) + 1
+                        except ValueError:
+                            pass
+                    code = f"GYS{next_num:03d}"
+                    db.add(Supplier(
+                        company_id=company_id, code=code,
+                        name=entity_name, _fingerprint=norm, is_active=True,
+                    ))
+                    db.flush()
+            elif match_type in ("customer", "customer_invoice", "customer_fallback", "customer_deposit", "customer_deposit_refund"):
+                norm = _normalize_customer_name(entity_name)
+                existing = db.query(Customer).filter(
+                    Customer.company_id == company_id,
+                    Customer._fingerprint == norm
+                ).first()
+                if not existing:
+                    max_code = db.query(Customer.code).filter(
+                        Customer.company_id == company_id,
+                        Customer.code.like("KH%")
+                    ).order_by(Customer.code.desc()).first()
+                    next_num = 1
+                    if max_code and max_code[0] and max_code[0].startswith("KH"):
+                        try:
+                            next_num = int(max_code[0][2:]) + 1
+                        except ValueError:
+                            pass
+                    code = f"KH{next_num:03d}"
+                    db.add(Customer(
+                        company_id=company_id, code=code,
+                        name=entity_name, _fingerprint=norm, is_active=True,
+                    ))
+                    db.flush()
 
     voucher_str = f"记-{next_voucher_no}"
     tx.journal_voucher_no = voucher_str
@@ -6014,16 +6094,16 @@ def classify_bank_transactions(ids: List[int] = Body(...), company_id: int = Que
             results.append({
                 "tx_id": tx.id,
                 "summary": tx.summary or tx.counterparty_name or "银行流水",
-                "amount": (tx.debit_amount or 0) if (tx.debit_amount and tx.debit_amount > 0) else (tx.credit_amount or 0),
-                "is_debit": tx.debit_amount and tx.debit_amount > 0,
+                "amount": abs(float(tx.amount) if tx.amount else 0),
+                "is_debit": tx.amount is not None and tx.amount < 0,
                 "debit_account": "", "debit_name": "",
                 "credit_account": "", "credit_name": "",
                 "match_type": "unclassified",
             })
             continue
         other_code, other_name, match_type = result
-        is_debit = tx.debit_amount and tx.debit_amount > 0
-        amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        is_debit = tx.amount is not None and tx.amount < 0
+        amount = abs(float(tx.amount) if tx.amount else 0)
         # 确定借贷方向
         if match_type == "internal_transfer":
             results.append({

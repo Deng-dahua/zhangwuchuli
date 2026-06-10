@@ -2307,7 +2307,9 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None, hf_period_totals=No
             if bc.account_number and tx.counterparty_account.strip() == bc.account_number.strip():
                 return ("1002", "银行存款-内部转账", "internal_transfer", None)
 
-    is_debit = tx.debit_amount and tx.debit_amount > 0
+    # 判断方向：amount < 0 表示支出（钱离开企业），amount > 0 表示收入（钱进入企业）
+    # 注：debit_amount/credit_amount 是银行对账单格式，debit_amount>0 表示钱进入企业账户
+    is_debit = tx.amount is not None and tx.amount < 0  # 支出=True，收入=False
     tx_type = "支出" if is_debit else "收入"
 
     # ===== 2. 实体识别（强制往来科目，铁律）=====
@@ -2484,12 +2486,39 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None, hf_period_totals=No
         if kw in full_text:
             return (code, name, "expense", None)
 
+    # 7.5 保证金/押金识别（老邓 2026-06-10：保证金走客户1122）
+    _DEPOSIT_KEYWORDS = ["保证金", "押金", "质保金", "投标保证金", "履约保证金"]
+    if any(kw in full_text for kw in _DEPOSIT_KEYWORDS):
+        cp_name = (tx.counterparty_name or "").strip()
+        if cp_name and len(cp_name) > 1:
+            if is_debit:
+                # 支付保证金 → 借1122应收账款 贷1002
+                return ("1122", "应收账款", "customer_deposit", cp_name)
+            else:
+                # 收到保证金退款 → 借1002 贷1122
+                return ("1122", "应收账款", "customer_deposit_refund", cp_name)
+        else:
+            # 无法识别对方名称 → 走其他应收款
+            if is_debit:
+                return ("1221", "其他应收款", "deposit_unknown", None)
+            else:
+                return ("1221", "其他应收款", "deposit_refund_unknown", None)
+
     # 8. 未知实体 → 兜底往来科目
     if is_debit:
-        # 付款 → 预付账款（待发票到后冲销）
+        # 付款：对方名称含公司特征词 → 供应商2202（老邓 2026-06-10：项目款等走应付账款，后期发票冲销）
+        cp_name = (tx.counterparty_name or "").strip()
+        if cp_name and len(cp_name) > 1:
+            _COMPANY_SUFFIXES = ["公司", "有限公司", "股份有限公司", "集团", "事务所", "中心", "厂", "店", "合作社", "协会", "基金会", "委员会", "银行", "分行", "支行", "营业部"]
+            if any(suffix in cp_name for suffix in _COMPANY_SUFFIXES):
+                return ("2202", "应付账款", "supplier_payment", cp_name)
+        # 默认：预付账款（待发票到后冲销）
         return ("1123", "预付账款", "prepaid_unknown", None)
     else:
-        # 收款 → 默认客户
+        # 收款 → 尝试提取对方名称作为客户
+        cp_name = (tx.counterparty_name or "").strip()
+        if cp_name and len(cp_name) > 1:
+            return ("1122", "应收账款", "customer_receipt", cp_name)
         return ("1122", "应收账款", "customer_fallback", None)
 
 def _next_voucher_no(db, company_id, period, voucher_word="记"):
@@ -2680,8 +2709,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             next_voucher_no = _next_voucher_no(db, company_id, period, "记")
             date_str = tx.transaction_date.strftime("%Y-%m-%d") if tx.transaction_date else period + "-01"
 
-            is_debit = tx.debit_amount and tx.debit_amount > 0
-            amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+            is_debit = tx.amount is not None and tx.amount < 0
+            amount = abs(float(tx.amount) if tx.amount else 0)
 
             # 智能分类（传入预建索引 + 公积金总额用于双源加固）
             result = _classify_bank_tx(db, company_id, tx, entity_index, hf_period_totals)
@@ -2692,6 +2721,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
 
             # contact_project：人员匹配时用员工规范姓名，其余用原始对方名称
             contact_proj = contact_name if contact_name else cp
+            # 待建档实体名称：优先用分类返回的 contact_name，否则用 cp
+            entity_name = contact_name if contact_name else cp
 
             # 确保对方科目存在
             acct = db.query(Account).filter(Account.company_id == company_id, Account.code == other_code).first()
@@ -2713,6 +2744,36 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（保证金）"
             elif match_type == "prepaid_supplier":
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（预付供应商，待发票冲销）"
+
+            elif match_type == "salary":
+                # 工资匹配上月数据（老邓 2026-06-10）
+                salary_note = ""
+                tx_date = tx.transaction_date
+                if tx_date:
+                    if tx_date.month == 1:
+                        prev_year = tx_date.year - 1
+                        prev_month = 12
+                    else:
+                        prev_year = tx_date.year
+                        prev_month = tx_date.month - 1
+                    prev_period = f"{prev_year}-{prev_month:02d}"
+                    from database import SalaryRecord
+                    salary_records = db.query(SalaryRecord).filter(
+                        SalaryRecord.company_id == company_id,
+                        SalaryRecord.period == prev_period
+                    ).all()
+                    if salary_records:
+                        total_net = sum(float(sr.net_salary or 0) for sr in salary_records)
+                        amt = float(amount)
+                        if abs(amt - total_net) < 0.02:
+                            salary_note = "（已匹配上月工资表）"
+                        elif amt < total_net - 0.02:
+                            salary_note = "（支付<计提，存有工资未发放）"
+                        else:
+                            salary_note = "（支付>计提，可能存在工资未计提）"
+                    else:
+                        salary_note = "（无上月工资表数据）"
+                summary_tag = f"{summary_tag}{salary_note}"
 
             if match_type == "internal_transfer":
                 # 内部转账：借1002 贷1002（不同明细）
@@ -2764,19 +2825,19 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             generated += 1
 
             # 老邓 2026-06-10：收集需要自动建档的供应商/客户名称
-            if cp and cp.strip():
-                norm = _normalize_customer_name(cp.strip())
-                if norm and norm not in _insider_norms and len(cp.strip()) >= 2:
+            if entity_name and entity_name.strip():
+                norm = _normalize_customer_name(entity_name.strip())
+                if norm and norm not in _insider_norms and len(entity_name.strip()) >= 2:
                     # 供应商非真实企业过滤（手续费/税费/政府机构等）
                     _NON_SUPP = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
-                    _is_non_supplier = any(kw in cp for kw in _NON_SUPP)
-                    if match_type in ('supplier', 'supplier_invoice'):
+                    _is_non_supplier = any(kw in entity_name for kw in _NON_SUPP)
+                    if match_type in ('supplier', 'supplier_invoice', 'supplier_payment'):
                         # 双源信号铁律：供应商必须同时出现在银行流水和取得发票中
                         if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers and norm in _pi_seller_norms:
-                            _pending_suppliers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
-                    elif match_type in ('customer', 'customer_invoice', 'customer_fallback', 'customer_deposit'):
+                            _pending_suppliers[norm] = {'name': entity_name.strip(), 'source': f'银行流水:#{tx.id}'}
+                    elif match_type in ('customer', 'customer_invoice', 'customer_fallback', 'customer_deposit', 'customer_deposit_refund'):
                         if norm not in _cust_norms and norm not in _pending_customers:
-                            _pending_customers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
+                            _pending_customers[norm] = {'name': entity_name.strip(), 'source': f'银行流水:#{tx.id}'}
 
         except Exception as ex:
             errors.append(f"流水#{tx.id}: {str(ex)}")
@@ -2982,9 +3043,9 @@ def _match_ss_payment_journals(db: Session, company_id: int):
         if not is_ss:
             continue
 
-        # 只处理支出（借方>0 表示银行账户减少即付款）
-        is_debit = tx.debit_amount and tx.debit_amount > 0
-        payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        # 只处理支出（amount < 0 表示支付）
+        is_debit = tx.amount is not None and tx.amount < 0
+        payment_amount = abs(float(tx.amount) if tx.amount else 0)
         if payment_amount <= 0:
             continue
 
@@ -3288,9 +3349,9 @@ def _match_hf_payment_journals(db: Session, company_id: int):
         if not is_hf:
             continue
 
-        # 只处理支出
-        is_debit = tx.debit_amount and tx.debit_amount > 0
-        payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        # 只处理支出（amount < 0 表示支付）
+        is_debit = tx.amount is not None and tx.amount < 0
+        payment_amount = abs(float(tx.amount) if tx.amount else 0)
         if payment_amount <= 0:
             continue
 
