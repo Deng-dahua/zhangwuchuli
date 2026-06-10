@@ -1801,6 +1801,55 @@ def _find_matching_payment(db, company_id, inv):
     return best
 
 
+def _classify_purchase_debit(db, company_id, inv):
+    """根据进项发票品名智能分类借方科目。铁律：发票定成本费用。
+    返回 (科目编码, 科目名称)
+    仅使用 goods_name 分类，remark 是备注字段不参与分类判断。"""
+    goods = (inv.goods_name or "").lower().strip()
+
+    # 费用类科目映射（品名关键词 → 费用科目）
+    _EXPENSE_MAP = [
+        # 租赁类
+        (["租赁", "租金", "不动产租金", "房租", "场地费"], "660214", "租赁费"),
+        # 水电类
+        (["电费", "水费", "供电", "水冰雪", "水电"], "660215", "水电费"),
+        # 物业/管理/维护
+        (["企业管理服务", "物业服务", "物业管理", "电梯维护", "垃圾清运", "保洁", "清洁"], "660212", "维修费"),
+        # 办公
+        (["办公", "文具", "打印", "复印", "纸张"], "660201", "办公费"),
+        # 差旅
+        (["差旅", "住宿", "机票", "火车票"], "660202", "差旅费"),
+        # 交通
+        (["交通", "加油", "停车", "过路", "通行费"], "660206", "交通费"),
+        # 通讯
+        (["通讯", "电话", "宽带", "网络", "短信"], "660207", "通讯费"),
+        # 咨询
+        (["咨询", "顾问", "法律", "审计"], "660210", "咨询费"),
+        # 培训
+        (["培训", "教育", "课程"], "660211", "培训费"),
+        # 招待
+        (["招待", "餐饮", "宴请", "礼品"], "660216", "业务招待费"),
+        # 折旧
+        (["折旧"], "660203", "折旧费"),
+        # 摊销
+        (["摊销"], "660209", "摊销费"),
+        # 广告
+        (["广告", "宣传", "推广", "策划"], "660208", "广告费"),
+        # 装修/修理
+        (["装修", "修理", "修缮", "翻新"], "660212", "维修费"),
+    ]
+
+    for patterns, code, name in _EXPENSE_MAP:
+        for pat in patterns:
+            if pat in goods:
+                _ensure_account(db, company_id, code, name, "损益", "借")
+                return (code, name)
+
+    # 默认：库存商品/存货
+    _ensure_account(db, company_id, "1405", "库存商品", "资产", "借")
+    return ("1405", "库存商品")
+
+
 def auto_generate_purchase_journal(db, company_id, invoice_id=None):
     """为取得发票生成采购入账凭证。
 
@@ -1890,36 +1939,53 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
 
         next_voucher_no = _next_voucher_no(db, company_id, period, "记")
 
-        # 借：库存商品/费用（默认 1405 库存商品）
-        debit_code = "1405"
-        debit_name = get_full_name("1405") or "库存商品"
+        # ── 根据品名智能分类借方科目（费用/存货/资产）──
+        # 铁律：发票定成本费用，银行流水走往来
+        debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
 
-        # 贷：应付账款 或 银行存款（查银行流水是否有对应付款）
+        # 确保进项税额科目存在（专票需要拆分税额）
+        tax_code = "221001002"
+        tax_name = "进项税额"
+        if inv.tax_amount and inv.tax_amount != 0:
+            _ensure_account(db, company_id, tax_code, tax_name, "负债", "借")
+
+        # 贷方：应付账款（价税合计）
+        # 铁律：发票入账永远贷应付账款，不做银行存款
         credit_code, credit_name = "2202", get_full_name("2202") or "应付账款"
-        tx = _find_matching_payment(db, company_id, inv)
-        if tx:
-            credit_code, credit_name = "1002", get_full_name("1002") or "银行存款"
+        total_amount = (inv.amount or 0) + abs(inv.tax_amount or 0)
 
-        entries = [
-            JournalEntry(
+        entries = []
+        # 借方1：费用/成本（不含税金额）
+        entries.append(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary, account_code=debit_code, account_name=debit_name,
+            debit_amount=inv.amount, credit_amount=0,
+            contact_project=seller,
+            source="取得发票", ref_id=inv.id,
+        ))
+        # 借方2：进项税额（若有）
+        if inv.tax_amount and inv.tax_amount != 0:
+            entries.append(JournalEntry(
                 company_id=company_id,
                 entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary, account_code=debit_code, account_name=debit_name,
-                debit_amount=inv.amount, credit_amount=0,
+                summary=summary, account_code=tax_code, account_name=tax_name,
+                debit_amount=abs(inv.tax_amount), credit_amount=0,
                 contact_project=seller,
                 source="取得发票", ref_id=inv.id,
-            ),
-            JournalEntry(
-                company_id=company_id,
-                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary, account_code=credit_code, account_name=credit_name,
-                debit_amount=0, credit_amount=inv.amount,
-                contact_project=seller,
-                source="取得发票", ref_id=inv.id,
-            ),
-        ]
+            ))
+        # 贷方：应付账款（价税合计）
+        entries.append(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=summary, account_code=credit_code, account_name=credit_name,
+            debit_amount=0, credit_amount=total_amount,
+            contact_project=seller,
+            source="取得发票", ref_id=inv.id,
+        ))
 
         for e in entries:
             db.add(e)
@@ -2294,27 +2360,8 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     if any(kw in full_text for kw in ["公积金", "住房公积金"]):
         return ("221103", "住房公积金", "housing_fund", None)
 
-    # 6. 费用类关键词
-    expense_keywords = {
-        "房租": ("660214", "租赁费"),
-        "租金": ("660214", "租赁费"),
-        "水电": ("660215", "水电费"),
-        "办公": ("660201", "办公费"),
-        "差旅": ("660202", "差旅费"),
-        "招待": ("660216", "业务招待费"),
-        "交通": ("660206", "交通费"),
-        "通讯": ("660207", "通讯费"),
-        "折旧": ("660203", "折旧费"),
-        "摊销": ("660209", "摊销费"),
-        "咨询": ("660210", "咨询费"),
-        "培训": ("660211", "培训费"),
-        "维修": ("660212", "维修费"),
-    }
-    for kw, (code, name) in expense_keywords.items():
-        if kw in full_text:
-            return (code, name, "expense", None)
-
-    # ====== 7. 跨实体智能匹配（新规则核心） ======
+    # ====== 6. 跨实体智能匹配（新规则核心） ======
+    # 铁律：发票定成本费用，银行流水走往来。已知实体必须走往来科目，不走费用关键词。
     if entity_index is None:
         entity_index = _build_entity_index(db, company_id)
 
@@ -2378,7 +2425,28 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     if entity_type == 'supplier':
         return ("2202", "应付账款", "supplier", None)
 
-    # 7e. 未知实体 → 兜底：直接查发票购方/销方（老邓 2026-06-10）
+    # 7. 费用类关键词（仅对未知实体兜底，已知供应商/客户已在步骤6处理）
+    # 铁律：已识别实体必须走往来科目，不在此处匹配费用关键词
+    expense_keywords = {
+        "房租": ("660214", "租赁费"),
+        "租金": ("660214", "租赁费"),
+        "水电": ("660215", "水电费"),
+        "办公": ("660201", "办公费"),
+        "差旅": ("660202", "差旅费"),
+        "招待": ("660216", "业务招待费"),
+        "交通": ("660206", "交通费"),
+        "通讯": ("660207", "通讯费"),
+        "折旧": ("660203", "折旧费"),
+        "摊销": ("660209", "摊销费"),
+        "咨询": ("660210", "咨询费"),
+        "培训": ("660211", "培训费"),
+        "维修": ("660212", "维修费"),
+    }
+    for kw, (code, name) in expense_keywords.items():
+        if kw in full_text:
+            return (code, name, "expense", None)
+
+    # 8. 未知实体 → 兜底：直接查发票购方/销方（老邓 2026-06-10）
     # 银行流水收款 + 名称在开具发票购方中 → 客户
     if not is_debit:
         si_buyers = db.query(SalesInvoice.buyer_name).filter(
