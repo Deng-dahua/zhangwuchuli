@@ -980,8 +980,8 @@ def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
                 'source': f'银行流水:#{tx.id}',
             }
 
-    # 3. 候选供应商：银行流水付款方 ∪ 取得发票销方（老邓 2026-06-10 放宽为单源信号）
-    candidate_names = pi_names | bt_names
+    # 3. 候选供应商：银行流水付款方 ∩ 取得发票销方（双源信号，老邓 2026-06-10 回归铁律）
+    candidate_names = pi_names & bt_names
     existing_supp_norms = set(idx['suppliers'].keys())
 
     for norm in candidate_names:

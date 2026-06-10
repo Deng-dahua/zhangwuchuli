@@ -1950,36 +1950,13 @@ def auto_process_purchase_invoice(db, company_id, invoice_id):
 
     seller_norm = _normalize_customer_name(seller)
 
-    # ── 1. 自动建档供应商 ──
-    _NON_SUPP_KW = ('手续费', '金库', '公积金', '待处理', '税务', '国库', '国家金库')
-    if len(seller.strip()) >= 2 and not any(kw in seller for kw in _NON_SUPP_KW):
-        existing = db.query(Supplier).filter(
-            Supplier.company_id == company_id,
-            Supplier._fingerprint == seller_norm
-        ).first()
-        if not existing:
-            # 生成供应商编码
-            max_code = db.query(Supplier.code).filter(
-                Supplier.company_id == company_id,
-                Supplier.code.like('GYS%')
-            ).order_by(Supplier.code.desc()).first()
-            next_num = 1
-            if max_code and max_code[0] and max_code[0].startswith('GYS'):
-                try:
-                    next_num = int(max_code[0][3:]) + 1
-                except ValueError:
-                    pass
-            code = f"GYS{next_num:03d}"
-            supp = Supplier(
-                company_id=company_id, code=code,
-                name=seller, _fingerprint=seller_norm,
-                tax_no=inv.seller_tax_no or '',
-                bank_name='', bank_account='', remark='',
-                is_active=True,
-            )
-            db.add(supp)
-            db.flush()
-            result["supplier"] = code
+    # ── 1. 自动建档供应商（双源信号规则：必须发票+银行流水双源齐备才建档）──
+    # 供应商建档统一由 _do_auto_create_suppliers 在导入后集中处理
+    existing_supp = db.query(Supplier).filter(
+        Supplier.company_id == company_id,
+        Supplier._fingerprint == seller_norm
+    ).first()
+    result["supplier"] = existing_supp.code if existing_supp else None
 
     # ── 2. 自动生成采购凭证 ──
     count = auto_generate_purchase_journal(db, company_id, invoice_id)
@@ -2560,12 +2537,17 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     # 预建跨实体索引（一次查询，全循环复用）
     entity_index = _build_entity_index(db, company_id)
 
-    # 老邓 2026-06-10：收集需要自动建档的供应商/客户名称
+    # 老邓 2026-06-10：双源信号规则 — 供应商必须同时出现在发票和银行流水
     _pending_suppliers = {}   # {norm: {'name': orig_name, 'source': str}}
     _pending_customers = {}   # {norm: {'name': orig_name, 'source': str}}
     _supp_norms = set(entity_index['suppliers'].keys())
     _cust_norms = set(entity_index['customers'].keys())
     _insider_norms = entity_index['insiders'] | entity_index['shareholders']
+    # 取得发票销方标准化集合（双源校验用）
+    _pi_seller_norms = set()
+    for inv in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.seller_name.isnot(None)).all():
+        if inv.seller_name:
+            _pi_seller_norms.add(_normalize_customer_name(inv.seller_name.strip()))
 
     for tx in txs:
         try:
@@ -2668,7 +2650,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     _NON_SUPP = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
                     _is_non_supplier = any(kw in cp for kw in _NON_SUPP)
                     if match_type in ('supplier', 'supplier_invoice', 'supplier_fallback'):
-                        if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers:
+                        # 双源信号铁律：供应商必须同时出现在银行流水和取得发票中
+                        if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers and norm in _pi_seller_norms:
                             _pending_suppliers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
                     elif match_type in ('customer', 'customer_invoice', 'customer_fallback', 'customer_deposit'):
                         if norm not in _cust_norms and norm not in _pending_customers:
