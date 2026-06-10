@@ -2754,6 +2754,18 @@ def list_purchase_invoices(
             PurchaseInvoice.goods_name.contains(keyword)
         ))
     invoices = q.order_by(PurchaseInvoice.invoice_date.desc()).offset(skip).limit(limit).all()
+    # 构建凭证号映射（取得发票 → 序时账，通过 ref_id 精确匹配）
+    voucher_map = {}
+    if invoices:
+        inv_ids = [inv.id for inv in invoices]
+        entries = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.source == "取得发票",
+            JournalEntry.ref_id.in_(inv_ids)
+        ).all()
+        for je in entries:
+            if je.ref_id not in voucher_map:
+                voucher_map[je.ref_id] = f"{je.voucher_word}-{je.voucher_no}"
     return [{
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -2782,7 +2794,7 @@ def list_purchase_invoices(
         "invoice_risk_level": inv.invoice_risk_level or "",
         "issuer": inv.issuer or "",
         "remark": inv.remark or "",
-        "journal_voucher_no": "",
+        "journal_voucher_no": voucher_map.get(inv.id, ""),
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
 
@@ -2879,6 +2891,15 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Sess
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
+    # 查询凭证号
+    voucher_no = ""
+    je = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "取得发票",
+        JournalEntry.ref_id == inv.id
+    ).first()
+    if je:
+        voucher_no = f"{je.voucher_word}-{je.voucher_no}"
     return {
         "id": inv.id,
         "invoice_code": inv.invoice_code or "",
@@ -2907,6 +2928,7 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Sess
         "invoice_risk_level": inv.invoice_risk_level or "",
         "issuer": inv.issuer or "",
         "remark": inv.remark or "",
+        "journal_voucher_no": voucher_no,
         "created_at": str(inv.created_at) if inv.created_at else "",
         "updated_at": str(inv.updated_at) if inv.updated_at else ""
     }
