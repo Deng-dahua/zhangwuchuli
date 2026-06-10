@@ -2309,8 +2309,16 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     tx_type = "支出" if is_debit else "收入"
 
     # ===== 2. 实体识别（强制往来科目，铁律）=====
-    entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp else ('unknown', cp, None)
-    norm = _normalize_customer_name(cp) if cp else ""
+    # 第一遍：用对方户名/摘要匹配
+    entity_type, entity_name, entity_code = _match_entity(cp, entity_index) if cp.strip() else ('unknown', cp, None)
+    norm = _normalize_customer_name(cp) if cp.strip() else ""
+
+    # 三源扩展：对方户名+摘要未匹配时，再用全文本（含交易附言）综合匹配（老邓 2026-06-10）
+    if entity_type == 'unknown' and full_text.strip():
+        et2, en2, ec2 = _match_entity(full_text, entity_index)
+        if et2 != 'unknown':
+            entity_type, entity_name, entity_code = et2, en2, ec2
+            norm = _normalize_customer_name(en2) if en2 else norm
 
     # 2a. 股东 → 先判断是否有业务往来证据
     if entity_type == 'shareholder':
