@@ -2317,11 +2317,21 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
             if sn and _normalize_customer_name(sn) == norm:
                 return ("2202", "应付账款", "supplier_invoice", None)
 
-    # 所有规则均未匹配 → 银行流水历史 fallback（老邓 2026-06-10）
-    # 付款（debit）→ 默认供应商；收款（credit）→ 默认客户
+    # 所有规则均未匹配 → 银行流水 fallback
+    # 老邓 2026-06-10：摘要/附言方向修正 —— 仅靠借/贷方向不够，要结合业务语义
+    _summary_text = ((tx.summary or "") + " " + (tx.transaction_remark or "")).lower()
+
+    # 保证金类关键词 → 付款方是交保证金的一方，对方是招标方/合作方 → **客户**
+    _DEPOSIT_KW = ['投标保证金', '履约保证金', '保证金', '押金', '质保金']
+
     if is_debit:
+        # 付款 + 保证金信号 → 对方为客户（1221 其他应收款-保证金）
+        if any(kw in _summary_text for kw in _DEPOSIT_KW):
+            return ("1221", "其他应收款", "customer_deposit", None)
+        # 付款 → 默认供应商
         return ("2202", "应付账款", "supplier_fallback", None)
     else:
+        # 收款 → 默认客户
         return ("1122", "应收账款", "customer_fallback", None)
 
 
@@ -2505,6 +2515,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（报销/借支）"
             elif match_type == "personnel_receipt":
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（还款/上缴）"
+            elif match_type == "customer_deposit":
+                summary_tag = f"银行流水-#{tx.id}-{contact_proj}（保证金）"
 
             if match_type == "internal_transfer":
                 # 内部转账：借1002 贷1002（不同明细）
@@ -2565,7 +2577,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     if match_type in ('supplier', 'supplier_invoice', 'supplier_fallback'):
                         if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers:
                             _pending_suppliers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
-                    elif match_type in ('customer', 'customer_invoice', 'customer_fallback'):
+                    elif match_type in ('customer', 'customer_invoice', 'customer_fallback', 'customer_deposit'):
                         if norm not in _cust_norms and norm not in _pending_customers:
                             _pending_customers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
 
