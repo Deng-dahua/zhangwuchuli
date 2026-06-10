@@ -2996,23 +2996,7 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
     db.flush()
     db.commit()
     db.refresh(inv)
-    # ── 自动智能处理：供应商建档 + 生成凭证 + 自动添加会计科目 ──
-    auto_result = {"supplier": None, "journal": False}
-    try:
-        supp_result = _do_auto_create_suppliers(db, company_id)
-        db.commit()
-        if supp_result["created"] > 0:
-            auto_result["supplier"] = f"新增{supp_result['created']}个供应商"
-    except Exception:
-        pass
-    try:
-        count = auto_generate_purchase_journal(db, company_id, inv.id)
-        db.commit()
-        if count > 0:
-            auto_result["journal"] = True
-    except Exception:
-        db.rollback()
-    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "取得发票创建成功", "auto": auto_result}
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "取得发票创建成功"}
 
 
 @app.get("/api/purchase-invoices/stats")
@@ -3821,22 +3805,7 @@ def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query
     db.add(tx)
     db.commit()
     db.refresh(tx)
-    # ── 自动智能处理：供应商建档 + 生成凭证 + 自动添加会计科目 ──
-    auto_result = {"supplier": None, "journal": 0}
-    try:
-        supp_result = _do_auto_create_suppliers(db, company_id)
-        db.commit()
-        if supp_result["created"] > 0:
-            auto_result["supplier"] = f"新增{supp_result['created']}个供应商"
-    except Exception:
-        pass
-    try:
-        bank_result = _generate_bank_journals(db, company_id, [tx.id])
-        db.commit()
-        auto_result["journal"] = bank_result.get("generated", 0)
-    except Exception:
-        db.rollback()
-    return {"id": tx.id, "message": "银行流水创建成功", "auto": auto_result}
+    return {"id": tx.id, "message": "银行流水创建成功"}
 
 
 @app.get("/api/bank-transactions/stats")
