@@ -2956,6 +2956,7 @@ def list_purchase_invoices(
         "issuer": inv.issuer or "",
         "remark": inv.remark or "",
         "journal_voucher_no": voucher_map.get(inv.id, ""),
+        "skip_accounting": bool(inv.skip_accounting) if inv.skip_accounting is not None else False,
         "created_at": str(inv.created_at) if inv.created_at else ""
     } for inv in invoices]
 

@@ -594,6 +594,7 @@ class PurchaseInvoice(Base):
     remark = Column(Text, comment="备注")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
+    skip_accounting = Column(Boolean, default=False, comment="暂不记账：True=该发票暂不生成序时账凭证")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     company = relationship("Company", back_populates="purchase_invoices")
@@ -1901,9 +1902,10 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         db.flush()
         account_map["1405"] = acc_1405
 
-    # 查询需要生成凭证的发票
+    # 查询需要生成凭证的发票（跳过暂不记账的发票）
     query = db.query(PurchaseInvoice).filter(
-        PurchaseInvoice.company_id == company_id
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.skip_accounting == False
     )
     if invoice_id is not None:
         query = query.filter(PurchaseInvoice.id == invoice_id)
@@ -1912,6 +1914,9 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
     total = 0
 
     for inv in invoices:
+        # 跳过标记为暂不记账的发票（双重保护）
+        if inv.skip_accounting:
+            continue
         # 幂等检查：该发票已生成过凭证则跳过
         _existing = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
