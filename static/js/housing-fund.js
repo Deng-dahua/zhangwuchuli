@@ -148,7 +148,7 @@ async function renderHousingFund(container) {
           <button class="btn-toolbar" onclick="hfClearPeriod()">清除</button>
           <button class="btn-toolbar" onclick="hfShowCreate()">新增住房公积金</button>
           <button class="btn-toolbar" onclick="hfShowImport()">导入文件</button>
-          <button class="btn-toolbar" onclick="generateHfVouchers()">生成凭证</button>
+          <button class="btn-toolbar" onclick="generateHfVouchers()">生成计提凭证</button>
           <button class="btn-toolbar-danger" onclick="hfBatchDelete()" id="hf-batch-del-btn">批量删除</button>
         </div>
       </div>
@@ -642,7 +642,7 @@ async function hfDoImport() {
   }
 }
 
-// ============ 生成凭证 ============
+// ============ 生成计提凭证 ============
 
 async function generateHfVouchers() {
     const period = hfPeriod;
@@ -650,13 +650,10 @@ async function generateHfVouchers() {
         alert('请先选择期间');
         return;
     }
-    if (!confirm(`确认生成 ${period} 的住房公积金凭证？（将生成计提+缴纳2组凭证）`)) return;
+    if (!confirm(`确认生成 ${period} 的住房公积金计提凭证？`)) return;
     try {
-        // 1. 生成计提凭证
-        const result1 = await api('POST', `/api/housing-fund/generate-accrual?company_id=${currentCompanyId}&period=${period}`);
-        // 2. 匹配缴纳凭证
-        const result2 = await api('POST', `/api/housing-fund/match-payment?company_id=${currentCompanyId}`);
-        alert(`生成成功！\n计提凭证：${result1.generated || 0} 张\n缴纳凭证：${result2.generated || 0} 张`);
+        const result = await api('POST', `/api/housing-fund/generate-accrual?company_id=${currentCompanyId}&period=${period}`);
+        alert(`生成成功！计提凭证：${result.generated || 0} 张`);
         // 刷新公积金页面
         hfRefresh();
         // 刷新序时账（如果用户正在看）
