@@ -5271,6 +5271,9 @@ def delete_journal_entry(entry_id: int, company_id: int = Query(...), db: Sessio
     if not e:
         raise HTTPException(404, detail="记录不存在")
     period, vw = e.period, e.voucher_word
+    # 删除前清除关联业务记录的凭证号（银行流水 journal_voucher_no / 进项抵扣 voucher_no 等）
+    _clear_source_voucher_no(db, company_id, e)
+    db.flush()
     db.delete(e)
     db.flush()
     _renumber_vouchers(db, company_id, period, vw)
@@ -5318,6 +5321,22 @@ def _renumber_vouchers(db, company_id, period, voucher_word):
         new_no += 1
 
 
+def _clear_source_voucher_no(db, company_id, entry):
+    """删除序时账凭证时，同步清除关联业务记录的凭证号，防止残留"""
+    if not entry.source or not entry.ref_id:
+        return
+    if entry.source == "银行流水":
+        db.query(BankTransaction).filter(
+            BankTransaction.company_id == company_id,
+            BankTransaction.id == entry.ref_id
+        ).update({"journal_voucher_no": None}, synchronize_session=False)
+    elif entry.source == "进项抵扣":
+        db.query(InputVATDeduction).filter(
+            InputVATDeduction.company_id == company_id,
+            InputVATDeduction.id == entry.ref_id
+        ).update({"voucher_no": None}, synchronize_session=False)
+
+
 @app.post("/api/journal-entries/batch-delete")
 def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 先查出被删记录的 (period, voucher_word) 组合
@@ -5325,6 +5344,10 @@ def batch_delete_journal_entries(req: BatchDeleteRequest, company_id: int = Quer
         JournalEntry.company_id == company_id,
         JournalEntry.id.in_(req.ids)
     ).all()
+    # 删除前清除关联业务记录的凭证号
+    for e in deleted_records:
+        _clear_source_voucher_no(db, company_id, e)
+    db.flush()
     combos = set((e.period, e.voucher_word) for e in deleted_records)
     deleted = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
