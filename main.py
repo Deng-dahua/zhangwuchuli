@@ -2962,31 +2962,35 @@ def list_purchase_invoices(
 
 @app.post("/api/purchase-invoices")
 def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
-    # ── 按票号唯一去重 ──
-    # 优先数电发票号码，否则按发票代码+号码
-    digital_no = (data.digital_invoice_no or "").strip()
-    inv_code = (data.invoice_code or "").strip()
-    inv_no = (data.invoice_no or "").strip()
-
-    if digital_no:
-        existing = db.query(PurchaseInvoice).filter(
-            PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.digital_invoice_no == digital_no
-        ).first()
-        if existing:
-            raise HTTPException(400, detail=f"数电发票 {digital_no} 已存在，请勿重复录入")
-    elif inv_no and (inv_code or True):
-        # 发票代码可能为空（传统发票）
-        q = db.query(PurchaseInvoice).filter(
-            PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.invoice_no == inv_no
-        )
-        if inv_code:
-            q = q.filter(PurchaseInvoice.invoice_code == inv_code)
-        existing = q.first()
-        if existing:
-            raise HTTPException(400, detail=f"发票 {inv_code}+{inv_no} 已存在，请勿重复录入")
-    inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
+    # ── 取得发票全指纹去重 ──
+    import hashlib
+    fp_values = (
+        str(company_id), str(data.invoice_no or ""), str(data.invoice_code or ""),
+        str(data.digital_invoice_no or ""),
+        str(data.seller_tax_no or ""), str(data.seller_name or ""),
+        str(data.buyer_tax_no or ""), str(data.buyer_name or ""),
+        str(data.invoice_date) if data.invoice_date else "",
+        str(data.tax_category_code or ""), str(data.specific_business_type or ""),
+        str(data.goods_name or ""), str(data.spec or ""),
+        str(data.unit or ""), str(data.quantity or 0), str(data.unit_price or 0),
+        str(data.amount or 0), str(data.tax_rate or 0), str(data.tax_amount or 0), str(data.total_amount or 0),
+        str(data.invoice_source or ""),
+        str(data.invoice_category or "增值税专用发票"),
+        str(data.status or "正常"),
+        str("是" if data.is_positive else "否"),
+        str(data.invoice_risk_level or ""),
+        str(data.issuer or ""),
+        str(data.remark or ""),
+    )
+    fp_raw = "|".join(fp_values)
+    pi_fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
+    existing = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice._fingerprint == pi_fp
+    ).first()
+    if existing:
+        raise HTTPException(400, detail="全指纹重复，发票已存在，请勿重复录入")
+    inv = PurchaseInvoice(company_id=company_id, _fingerprint=pi_fp, **data.model_dump())
     db.add(inv)
     db.flush()
     db.commit()
@@ -6429,7 +6433,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                     tr = safe_float(mapped.get("tax_rate"))
 
                     if module == "sales-invoice":
-                        # 全行指纹去重
+                        # 计算全行指纹（仅用于审计，去重以票号为准）
                         fp_values = (
                             str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
                             str(mapped.get("digital_invoice_no", "")),
@@ -6450,28 +6454,21 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         )
                         fp_raw = "|".join(fp_values)
                         fp = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()
-                        existing = db.query(SalesInvoice).filter(
-                            SalesInvoice.company_id == company_id,
-                            SalesInvoice._fingerprint == fp
-                        ).first()
-                        if existing and not force_dup:
-                            errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            continue
 
-                        # ── 按票号二次去重（数字发票号 > 发票代码+号码） ──
+                        # ── 按票号去重（数电发票号 > 发票代码+号码） ──
                         _si_digital = str(mapped.get("digital_invoice_no", "")).strip()
                         _si_code = str(mapped.get("invoice_code", "")).strip()
                         _si_no = str(inv_no or "").strip()
                         if _si_digital:
                             _dup = db.query(SalesInvoice).filter(
-                                SalesInvoice.company_id == company_id,
-                                SalesInvoice.digital_invoice_no == _si_digital
-                            ).first()
+                                    SalesInvoice.company_id == company_id,
+                                    SalesInvoice.digital_invoice_no == _si_digital
+                                ).first()
                         elif _si_no:
                             _q = db.query(SalesInvoice).filter(
-                                SalesInvoice.company_id == company_id,
-                                SalesInvoice.invoice_no == _si_no
-                            )
+                                    SalesInvoice.company_id == company_id,
+                                    SalesInvoice.invoice_no == _si_no
+                                )
                             if _si_code:
                                 _q = _q.filter(SalesInvoice.invoice_code == _si_code)
                             _dup = _q.first()
@@ -6516,7 +6513,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                         if buyer_nm:
                             new_customers[(buyer_tn, buyer_nm)] = True
                     else:  # purchase-invoice
-                        # 全行指纹去重
+                        # ── 取得发票全指纹去重 ──
                         pi_fp_values = (
                             str(company_id), str(inv_no or ""), str(mapped.get("invoice_code", "")),
                             str(mapped.get("digital_invoice_no", "")),
@@ -6542,30 +6539,7 @@ async def import_file_with_mapping(  # v2026-06-04-simplify: 进项发票改为�
                             PurchaseInvoice._fingerprint == pi_fp
                         ).first()
                         if existing_pi and not force_dup:
-                            errors.append(f"第{i+2}行: 数据重复，已跳过")
-                            continue
-
-                        # ── 按票号二次去重（数字发票号 > 发票代码+号码） ──
-                        _pi_digital = str(mapped.get("digital_invoice_no", "")).strip()
-                        _pi_code = str(mapped.get("invoice_code", "")).strip()
-                        _pi_no = str(inv_no or "").strip()
-                        if _pi_digital:
-                            _dup = db.query(PurchaseInvoice).filter(
-                                PurchaseInvoice.company_id == company_id,
-                                PurchaseInvoice.digital_invoice_no == _pi_digital
-                            ).first()
-                        elif _pi_no:
-                            _q = db.query(PurchaseInvoice).filter(
-                                PurchaseInvoice.company_id == company_id,
-                                PurchaseInvoice.invoice_no == _pi_no
-                            )
-                            if _pi_code:
-                                _q = _q.filter(PurchaseInvoice.invoice_code == _pi_code)
-                            _dup = _q.first()
-                        else:
-                            _dup = None
-                        if _dup and not force_dup:
-                            errors.append(f"第{i+2}行: 发票票号重复，已跳过")
+                            errors.append(f"第{i+2}行: 全指纹重复，已跳过")
                             continue
                         inv = PurchaseInvoice(
                             company_id=company_id, invoice_no=inv_no,
