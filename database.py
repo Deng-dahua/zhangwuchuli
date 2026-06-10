@@ -2249,6 +2249,12 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
                 return (rule.account_code, rule.account_name or rule.account_code, "rule", None)
 
     # 3. 税费关键词
+    # 3a. 国家金库/国库 缴费（对方户名直接信号）
+    if any(kw in full_text for kw in ["国家金库", "国库"]):
+        return ("221004", "未交增值税", "tax", None)
+    # 3b. 缴税/缴款书（摘要关键词）
+    if any(kw in full_text for kw in ["缴税", "缴款书"]):
+        return ("221004", "未交增值税", "tax", None)
     tax_keywords = {
         "应交增值税": ("221001003", "待认证进项税额"),
         "未交增值税": ("221004", "未交增值税"),
