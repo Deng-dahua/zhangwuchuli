@@ -2962,7 +2962,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="221102", account_name="社会保险费",
                 debit_amount=round(payment_amount, 2), credit_amount=0,
-                source="银行流水",
+                source="银行流水", ref_id=tx.id,
             ),
             JournalEntry(
                 company_id=company_id,
@@ -2970,7 +2970,7 @@ def _match_ss_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(payment_amount, 2),
-                source="银行流水",
+                source="银行流水", ref_id=tx.id,
             ),
         ])
         voucher_str = f"记-{next_voucher_no}"
@@ -3260,7 +3260,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="221103", account_name="住房公积金",
                 debit_amount=round(payment_amount, 2), credit_amount=0,
-                source="银行流水",
+                source="银行流水", ref_id=tx.id,
             ),
             JournalEntry(
                 company_id=company_id,
@@ -3268,7 +3268,7 @@ def _match_hf_payment_journals(db: Session, company_id: int):
                 period=period, voucher_word="记", voucher_no=next_voucher_no,
                 summary=summary_tag, account_code="1002", account_name="银行存款",
                 debit_amount=0, credit_amount=round(payment_amount, 2),
-                source="银行流水",
+                source="银行流水", ref_id=tx.id,
             ),
         ])
         voucher_str = f"记-{next_voucher_no}"

@@ -3963,7 +3963,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code=cp_code, account_name=cp_name,
             debit_amount=amount, credit_amount=0,
-            contact_project=contact_proj, source="银行流水"
+            contact_project=contact_proj, source="银行流水", ref_id=tx_id
         ))
         db.add(JournalEntry(
             company_id=company_id,
@@ -3972,7 +3972,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code="1002", account_name="银行存款",
             debit_amount=0, credit_amount=amount,
-            contact_project=contact_proj, source="银行流水"
+            contact_project=contact_proj, source="银行流水", ref_id=tx_id
         ))
     else:
         # 收款：借 银行存款  贷 对方科目
@@ -3983,7 +3983,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code="1002", account_name="银行存款",
             debit_amount=amount, credit_amount=0,
-            contact_project=contact_proj, source="银行流水"
+            contact_project=contact_proj, source="银行流水", ref_id=tx_id
         ))
         db.add(JournalEntry(
             company_id=company_id,
@@ -3992,7 +3992,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
             summary=summary_tag,
             account_code=cp_code, account_name=cp_name,
             debit_amount=0, credit_amount=amount,
-            contact_project=contact_proj, source="银行流水"
+            contact_project=contact_proj, source="银行流水", ref_id=tx_id
         ))
 
     voucher_str = f"记-{next_voucher_no}"
@@ -5323,18 +5323,33 @@ def _renumber_vouchers(db, company_id, period, voucher_word):
 
 def _clear_source_voucher_no(db, company_id, entry):
     """删除序时账凭证时，同步清除关联业务记录的凭证号，防止残留"""
-    if not entry.source or not entry.ref_id:
+    if not entry.source:
         return
-    if entry.source == "银行流水":
+    voucher_str = f"{entry.voucher_word}-{entry.voucher_no}"
+
+    # ── 银行流水：双保险清除 ──
+    # ① ref_id 精确匹配（优先）
+    if entry.source == "银行流水" and entry.ref_id:
         db.query(BankTransaction).filter(
             BankTransaction.company_id == company_id,
             BankTransaction.id == entry.ref_id
         ).update({"journal_voucher_no": None}, synchronize_session=False)
-    elif entry.source == "进项抵扣":
+    # ② 凭证号反向匹配（兜底，不限 source，覆盖 CCF/社保/公积金等所有来源）
+    db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.journal_voucher_no == voucher_str
+    ).update({"journal_voucher_no": None}, synchronize_session=False)
+
+    # ── 进项抵扣：双保险清除 ──
+    if entry.source == "进项抵扣" and entry.ref_id:
         db.query(InputVATDeduction).filter(
             InputVATDeduction.company_id == company_id,
             InputVATDeduction.id == entry.ref_id
         ).update({"voucher_no": None}, synchronize_session=False)
+    db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        InputVATDeduction.voucher_no == voucher_str
+    ).update({"voucher_no": None}, synchronize_session=False)
 
 
 @app.post("/api/journal-entries/batch-delete")
