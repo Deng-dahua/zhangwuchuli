@@ -2279,7 +2279,7 @@ def _match_customer(db: Session, company_id: int, counterparty_name: str = None,
     return None
 
 
-def _classify_bank_tx(db, company_id, tx, entity_index=None):
+def _classify_bank_tx(db, company_id, tx, entity_index=None, hf_period_totals=None):
     """智能分类单条银行流水，返回 (other_side_code, other_side_name, match_type, contact_name)
 
     contact_name：人员匹配时为员工规范姓名，其余情况为 None（调用方使用原始 cp 名称）。
@@ -2287,6 +2287,8 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     新优先级（老邓 2026-06-10 重构）：
     内部转账 > 实体识别（强制往来科目） > 税费申报表匹配 > 银行手续费 > 工资社保 > 规则匹配（仅未知实体） > 默认往来
     铁律：已知实体必须走往来科目，禁止直接走费用科目。
+    
+    hf_period_totals：{period_str: total_amount} 住房公积金模块期间总额，用于双源加固判断
     """
     cp = tx.counterparty_name or tx.summary or ""
     full_text = (tx.summary or "") + " " + (tx.counterparty_name or "") + " " + (tx.transaction_remark or "")
@@ -2443,12 +2445,20 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
         return ("221102", "社会保险费", "social_security", None)
     
-    # 公积金判断：扩展关键词 + 区分付款/退款方向
+    # 公积金判断：扩展关键词 + 区分付款/退款方向 + 双源金额匹配加固（老邓 2026-06-10）
     _HF_KEYWORDS = ["公积金", "住房公积金", "公积金中心", "住房公积金管理中心", "公积金缴款"]
     _HF_REFUND_KEYWORDS = ["退回", "退款", "返还"]
     if any(kw in full_text for kw in _HF_KEYWORDS):
         # 付款方向（debit_amount > 0）：公积金缴纳
         if tx.debit_amount and tx.debit_amount > 0:
+            # 双源加固：比对住房公积金模块的缴款总额
+            if hf_period_totals:
+                tx_amt = float(tx.debit_amount)
+                amt_matched = any(abs(tx_amt - pt) < 0.02 for pt in hf_period_totals.values())
+                if not amt_matched:
+                    # 关键词匹配但金额不匹配 → 不是公积金缴纳，可能是同名账户其他用途
+                    # 返回 None，交给后续规则判断
+                    return None
             return ("221103", "住房公积金", "housing_fund", None)
         # 退款方向（credit_amount > 0）：公积金退款，不匹配（由用户手动处理）
         pass
@@ -2627,6 +2637,14 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
         if inv.seller_name:
             _pi_seller_norms.add(_normalize_customer_name(inv.seller_name.strip()))
 
+    # 公积金双源加固：预计算各期间缴款总额（老邓 2026-06-10）
+    hf_period_totals: dict = {}
+    from database import HousingFundDetail
+    hf_rows = db.query(HousingFundDetail).filter(HousingFundDetail.company_id == company_id).all()
+    for row in hf_rows:
+        p = row.period
+        hf_period_totals[p] = round(float(hf_period_totals.get(p, 0)) + float(row.total_amount or 0), 2)
+
     for tx in txs:
         try:
             # 幂等检查：该流水已生成凭证，跳过（不重复生成）
@@ -2664,8 +2682,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             is_debit = tx.debit_amount and tx.debit_amount > 0
             amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
 
-            # 智能分类（传入预建索引）
-            result = _classify_bank_tx(db, company_id, tx, entity_index)
+            # 智能分类（传入预建索引 + 公积金总额用于双源加固）
+            result = _classify_bank_tx(db, company_id, tx, entity_index, hf_period_totals)
             if result is None:
                 skipped += 1
                 continue
@@ -3238,12 +3256,21 @@ def _match_hf_payment_journals(db: Session, company_id: int):
     贷：银行存款
 
     匹配关键词：住房公积金、公积金、公积金中心
+    老邓 2026-06-10：双源加固 — 附加金额匹配
     """
     from datetime import datetime as _dt
 
     txs = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id
     ).all()
+
+    # 公积金双源加固：预计算各期间缴款总额
+    hf_period_totals: dict = {}
+    from database import HousingFundDetail
+    hf_rows = db.query(HousingFundDetail).filter(HousingFundDetail.company_id == company_id).all()
+    for row in hf_rows:
+        p = row.period
+        hf_period_totals[p] = round(float(hf_period_totals.get(p, 0)) + float(row.total_amount or 0), 2)
 
     generated = 0
     matched = 0
@@ -3255,9 +3282,8 @@ def _match_hf_payment_journals(db: Session, company_id: int):
 
         # 关键词匹配：公积金相关
         full_text = (cp + " " + summary).lower()
-        result = _classify_bank_tx(db, company_id, tx)
-        is_hf = (result and result[2] == "housing_fund") or \
-                any(kw in full_text for kw in ["公积金", "住房公积金", "公积金中心"])
+        result = _classify_bank_tx(db, company_id, tx, hf_period_totals=hf_period_totals)
+        is_hf = (result and result[2] == "housing_fund")
         if not is_hf:
             continue
 
