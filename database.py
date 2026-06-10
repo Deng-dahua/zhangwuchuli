@@ -2344,13 +2344,15 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         else:
             return ("4001", "实收资本", "capital", None)
 
-    # 2b. 人员/内部人 → 其他应收/其他应付
+    # 2b. 人员/内部人 → 统一走1221其他应收款（老邓 2026-06-10：对账便利，单向科目轧差）
     if entity_type in ('personnel', 'insider'):
         emp_name = entity_name
         if is_debit:
+            # 付款给员工：借 1221其他应收款 / 贷 1002银行存款
             return ("1221", "其他应收款", "personnel_payment", emp_name)
         else:
-            return ("2241", "其他应付款", "personnel_receipt", emp_name)
+            # 收到员工还款：借 1002银行存款 / 贷 1221其他应收款（冲减）
+            return ("1221", "其他应收款", "personnel_receipt", emp_name)
 
     # 2c. 客户 → 应收账款（保证金降级为其他应收款）
     if entity_type == 'customer':
