@@ -2457,6 +2457,13 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     # 预建跨实体索引（一次查询，全循环复用）
     entity_index = _build_entity_index(db, company_id)
 
+    # 老邓 2026-06-10：收集需要自动建档的供应商/客户名称
+    _pending_suppliers = {}   # {norm: {'name': orig_name, 'source': str}}
+    _pending_customers = {}   # {norm: {'name': orig_name, 'source': str}}
+    _supp_norms = set(entity_index['suppliers'].keys())
+    _cust_norms = set(entity_index['customers'].keys())
+    _insider_norms = entity_index['insiders'] | entity_index['shareholders']
+
     for tx in txs:
         try:
             # 幂等检查：该流水已生成凭证，跳过（不重复生成）
@@ -2547,9 +2554,72 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
             tx.journal_voucher_no = voucher_str
             db.flush()
             generated += 1
+
+            # 老邓 2026-06-10：收集需要自动建档的供应商/客户名称
+            if cp and cp.strip():
+                norm = _normalize_customer_name(cp.strip())
+                if norm and norm not in _insider_norms and len(cp.strip()) >= 2:
+                    # 供应商非真实企业过滤（手续费/税费/政府机构等）
+                    _NON_SUPP = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
+                    _is_non_supplier = any(kw in cp for kw in _NON_SUPP)
+                    if match_type in ('supplier', 'supplier_invoice', 'supplier_fallback'):
+                        if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers:
+                            _pending_suppliers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
+                    elif match_type in ('customer', 'customer_invoice', 'customer_fallback'):
+                        if norm not in _cust_norms and norm not in _pending_customers:
+                            _pending_customers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
+
         except Exception as ex:
             errors.append(f"流水#{tx.id}: {str(ex)}")
             skipped += 1
+
+    # 老邓 2026-06-10：自动建档供应商/客户（消除"有明细账无档案"的gap）
+    for norm, info in _pending_suppliers.items():
+        try:
+            max_code = db.query(Supplier.code).filter(
+                Supplier.company_id == company_id,
+                Supplier.code.like('GYS%')
+            ).order_by(Supplier.code.desc()).first()
+            next_num = 1
+            if max_code and max_code[0] and max_code[0].startswith('GYS'):
+                try:
+                    next_num = int(max_code[0][3:]) + 1
+                except ValueError:
+                    pass
+            code = f"GYS{next_num:03d}"
+            supp = Supplier(
+                company_id=company_id, code=code,
+                name=info['name'], _fingerprint=norm, is_active=True,
+            )
+            db.add(supp)
+            db.flush()
+            infos.append(f"自动建档供应商：{info['name']}（来源：{info['source']}）")
+        except Exception as ex:
+            infos.append(f"供应商建档失败({info['name']}): {str(ex)}")
+
+    for norm, info in _pending_customers.items():
+        try:
+            max_code = db.query(Customer.code).filter(
+                Customer.company_id == company_id,
+                Customer.code.like('KH%')
+            ).order_by(Customer.code.desc()).first()
+            next_num = 1
+            if max_code and max_code[0] and max_code[0].startswith('KH'):
+                try:
+                    next_num = int(max_code[0][2:]) + 1
+                except ValueError:
+                    pass
+            code = f"KH{next_num:03d}"
+            cust = Customer(
+                company_id=company_id, code=code,
+                name=info['name'], _fingerprint=norm, is_active=True,
+            )
+            db.add(cust)
+            db.flush()
+            infos.append(f"自动建档客户：{info['name']}（来源：{info['source']}）")
+        except Exception as ex:
+            infos.append(f"客户建档失败({info['name']}): {str(ex)}")
+
     return {"generated": generated, "skipped": skipped, "infos": infos, "errors": errors}
 
 
