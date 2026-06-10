@@ -2452,12 +2452,13 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None, hf_period_totals=No
         # 付款方向（debit_amount > 0）：公积金缴纳
         if tx.debit_amount and tx.debit_amount > 0:
             # 双源加固：比对住房公积金模块的缴款总额
+            # 老邓 2026-06-10：允许部分缴纳（银行付款 ≤ 期间总额即视为匹配）
             if hf_period_totals:
                 tx_amt = float(tx.debit_amount)
-                amt_matched = any(abs(tx_amt - pt) < 0.02 for pt in hf_period_totals.values())
+                # 任一期间：银行付款金额 ≤ 期间公积金总额 → 匹配
+                amt_matched = any(tx_amt <= pt + 0.02 for pt in hf_period_totals.values())
                 if not amt_matched:
-                    # 关键词匹配但金额不匹配 → 不是公积金缴纳，可能是同名账户其他用途
-                    # 返回 None，交给后续规则判断
+                    # 关键词匹配但金额超出所有期间总额 → 不是公积金缴纳
                     return None
             return ("221103", "住房公积金", "housing_fund", None)
         # 退款方向（credit_amount > 0）：公积金退款，不匹配（由用户手动处理）
