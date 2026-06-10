@@ -904,6 +904,55 @@ def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = De
 
 # ==================== 供应商智能建档（新规则 2026-06-06） ====================
 
+def _extract_company_names(text: str) -> set:
+    """从自由文本中提取企业名称（用于摘要/交易附言等字段）"""
+    if not text:
+        return set()
+    # 常见前缀动词/介词（提取后需剥离）
+    _LEADING_PREFIXES = [
+        '待支付', '支付给', '转账给', '汇给', '转给', '退还', '退回',
+        '支付', '转账', '付款给', '付款至', '付给', '付至', '付款',
+        '预付', '预付给', '归还', '汇入', '汇出', '转付', '代付',
+        '付', '转', '如', '给', '向',
+    ]
+    # 伪名称关键词：提取结果包含这些的视为非公司名（避免误提取）
+    _NON_NAME_KEYWORDS = [
+        '项目款', '保证金', '投标', '服务费', '货款', '租费',
+        '顾问费', '咨询费', '代理费', '赞助费', '劳务费',
+    ]
+    names = set()
+    # 企业后缀，按长度降序优先匹配长的
+    _NAME_SUFFIXES = sorted([
+        '有限责任公司', '股份有限公司', '集团有限公司', '有限公司',
+        '总公司', '分公司', '公司', '厂', '中心', '机构', '店', '行',
+        '协会', '所', '部', '网', '工作室', '事务所', '经营部'
+    ], key=len, reverse=True)
+    for suffix in _NAME_SUFFIXES:
+        idx = 0
+        while True:
+            idx = text.find(suffix, idx)
+            if idx < 0:
+                break
+            end = idx + len(suffix)
+            start = idx
+            # 向前扩展到标点/空格/换行
+            while start > 0 and text[start - 1] not in '，,。. \t;；:：、（）()\n\r【】《》""\'\'!！?？':
+                start -= 1
+            name = text[start:end].strip()
+            # 剥离常见前缀
+            for prefix in sorted(_LEADING_PREFIXES, key=len, reverse=True):
+                if name.startswith(prefix) and len(name) > len(prefix) + 2:
+                    name = name[len(prefix):]
+                    break
+            # 合理长度范围（至少4个字符，不超过80字符）
+            if 4 <= len(name) <= 80:
+                # 排除包含业务关键词的伪名称
+                if not any(kw in name for kw in _NON_NAME_KEYWORDS):
+                    names.add(name)
+            idx = end
+    return names
+
+
 def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
     """供应商智能建档核心逻辑（可被API和导入流程复用）"""
     created = 0
@@ -948,37 +997,49 @@ def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
         }
 
     # 2. 银行流水付款方（借方=付款，即 debit_amount > 0）
+    #   取数来源：对方户名 + 摘要 + 交易附言（老邓 2026-06-10 三源综合）
     # 手续费/税费/政府机构等非供应商关键词
-    _NON_SUPPLIER_KEYWORDS = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
+    _NON_SUPPLIER_KEYWORDS = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库', '工资', '社保', '个税', '薪金', '薪酬')
+    _BIZ_SUFFIXES = ('公司', '厂', '中心', '机构', '店', '行', '协会', '所', '部', '网')
     bt_names = set()
     bt_sources = {}
     txs = db.query(BankTransaction).filter(
         BankTransaction.company_id == company_id,
-        BankTransaction.debit_amount > 0,
-        BankTransaction.counterparty_name.isnot(None)
+        BankTransaction.debit_amount > 0
     ).all()
     for tx in txs:
-        name = tx.counterparty_name.strip() if tx.counterparty_name else ""
-        if not name:
-            continue
-        # 跳过股东/内部人员
-        norm = _normalize_customer_name(name)
-        if norm in insider_norms:
-            continue
-        # 跳过手续费/税费/政府机构关键词
-        if any(kw in name for kw in _NON_SUPPLIER_KEYWORDS):
-            continue
-        # 跳过明显非企业名称（长度<6且不含公司等后缀）
-        _BIZ_SUFFIXES = ('公司', '厂', '中心', '机构', '店', '行', '协会', '所', '部', '网')
-        if len(name) < 6 and not any(s in name for s in _BIZ_SUFFIXES):
-            continue
-        bt_names.add(norm)
-        if norm not in bt_sources:
-            bt_sources[norm] = {
-                'name': name,
-                'tax_no': None,
-                'source': f'银行流水:#{tx.id}',
-            }
+        # 从三个来源收集名称
+        raw_names = set()
+        # ① 对方户名
+        if tx.counterparty_name and tx.counterparty_name.strip():
+            raw_names.add(tx.counterparty_name.strip())
+        # ② 摘要
+        if tx.summary:
+            raw_names |= _extract_company_names(tx.summary)
+        # ③ 交易附言
+        if tx.transaction_remark:
+            raw_names |= _extract_company_names(tx.transaction_remark)
+
+        for name in raw_names:
+            if not name:
+                continue
+            # 跳过股东/内部人员
+            norm = _normalize_customer_name(name)
+            if norm in insider_norms:
+                continue
+            # 跳过手续费/税费/政府机构关键词
+            if any(kw in name for kw in _NON_SUPPLIER_KEYWORDS):
+                continue
+            # 跳过明显非企业名称（长度<6且不含公司等后缀）
+            if len(name) < 6 and not any(s in name for s in _BIZ_SUFFIXES):
+                continue
+            bt_names.add(norm)
+            if norm not in bt_sources:
+                bt_sources[norm] = {
+                    'name': name,
+                    'tax_no': None,
+                    'source': f'银行流水:#{tx.id}',
+                }
 
     # 3. 候选供应商：银行流水付款方 ∩ 取得发票销方（双源信号，老邓 2026-06-10 回归铁律）
     candidate_names = pi_names & bt_names
