@@ -57,6 +57,19 @@ from tax_risk import router as tax_risk_router
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化数据库"""
     init_db()
+    # 启动后自动触发供应商双源建档
+    try:
+        from database import SessionLocal
+        startup_db = SessionLocal()
+        try:
+            for company in startup_db.query(Company).order_by(Company.id).all():
+                supp_result = _do_auto_create_suppliers(startup_db, company.id)
+                if supp_result["created"] > 0:
+                    print(f"  供应商双源建档: 公司{company.id} 新增{supp_result['created']}个")
+        finally:
+            startup_db.close()
+    except Exception as e:
+        print(f"  供应商建档跳过: {e}")
     yield
 
 app = FastAPI(title="账务处理系统", description="中小制造业账务管理系统", version="1.0.0", lifespan=lifespan)
@@ -982,7 +995,12 @@ def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
 
     # 3. 候选供应商：银行流水付款方 ∩ 取得发票销方（双源信号，老邓 2026-06-10 回归铁律）
     candidate_names = pi_names & bt_names
-    existing_supp_norms = set(idx['suppliers'].keys())
+    # ⚠️ 用数据库直接查判重，不能用 idx['suppliers']——它被 _build_entity_index 污染了（含所有发票销方）
+    existing_supp_norms = set()
+    for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        fp = s._fingerprint or _normalize_customer_name(s.name or "")
+        if fp:
+            existing_supp_norms.add(fp)
 
     for norm in candidate_names:
         if norm in shareholder_norms:
@@ -1053,6 +1071,96 @@ def auto_create_suppliers(company_id: int = Query(...), db: Session = Depends(ge
         "updated": result['updated'],
         "skipped": result['skipped'],
         "infos": result['infos'],
+    }
+
+
+@app.get("/api/suppliers/diagnose")
+def diagnose_suppliers(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """双源供应商诊断：展示取得发票销方 ∩ 银行流水付款方的匹配过程"""
+    from database import _normalize_customer_name, _build_entity_index
+    idx = _build_entity_index(db, company_id)
+    insider_norms = idx['insiders']
+
+    # 排除关键词
+    _NON_SUPPLIER_KEYWORDS = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
+    _BIZ_SUFFIXES = ('公司', '厂', '中心', '机构', '店', '行', '协会', '所', '部', '网')
+
+    # 1. 取得发票销方
+    pi_items = []
+    pi_norms = set()
+    for inv in db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).all():
+        name = inv.seller_name.strip()
+        if not name: continue
+        norm = _normalize_customer_name(name)
+        pi_norms.add(norm)
+        pi_items.append({
+            "name": name, "norm": norm,
+            "tax_no": inv.seller_tax_no.strip() if inv.seller_tax_no else "",
+            "invoice_no": inv.invoice_no or inv.digital_invoice_no or str(inv.id),
+        })
+
+    # 2. 银行流水付款方
+    bt_items = []
+    bt_norms = set()
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all():
+        name = tx.counterparty_name.strip()
+        if not name: continue
+        norm = _normalize_customer_name(name)
+        if norm in insider_norms: continue
+        if any(kw in name for kw in _NON_SUPPLIER_KEYWORDS): continue
+        if len(name) < 6 and not any(s in name for s in _BIZ_SUFFIXES): continue
+        bt_norms.add(norm)
+        bt_items.append({
+            "name": name, "norm": norm,
+            "tx_id": tx.id, "amount": float(tx.debit_amount or 0),
+        })
+
+    # 3. 交集分析
+    both = pi_norms & bt_norms
+    pi_only = pi_norms - bt_norms
+    bt_only = bt_norms - pi_norms
+
+    # 4. 已有供应商（直接查数据库，不用 idx['suppliers']——已被发票销方污染）
+    existing_list = [{"code": s.code, "name": s.name} for s in db.query(Supplier).filter(
+        Supplier.company_id == company_id
+    ).order_by(Supplier.code).all()]
+    existing_norms = set()
+    for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        fp = s._fingerprint or _normalize_customer_name(s.name or "")
+        if fp:
+            existing_norms.add(fp)
+
+    return {
+        "summary": {
+            "purchase_invoice_sellers": len(pi_norms),
+            "bank_transaction_payers": len(bt_norms),
+            "dual_source_match": len(both),
+            "pi_only": len(pi_only),
+            "bt_only": len(bt_only),
+            "existing_suppliers": len(existing_list),
+            "new_to_create": len(both - existing_norms),
+        },
+        "dual_source": sorted([
+            {
+                "name": next((bi["name"] for bi in bt_items if bi["norm"] == n), 
+                              next((pi["name"] for pi in pi_items if pi["norm"] == n), n)),
+                "norm": n,
+                "from_purchase_invoice": bool(n in pi_norms),
+                "from_bank_transaction": bool(n in bt_norms),
+                "already_exists": n in existing_norms,
+            }
+            for n in both
+        ], key=lambda x: x["name"]),
+        "pi_only_sample": sorted(list(pi_only))[:10],
+        "bt_only_sample": sorted(list(bt_only))[:10],
+        "existing_suppliers": existing_list,
     }
 
 
@@ -2832,6 +2940,9 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
     # 老邓 2026-06-10：导入发票后自动全流程处理（供应商建档+采购凭证+关联银行流水）
     proc_result = auto_process_purchase_invoice(db, company_id, inv.id)
 
+    # 单条导入后触发双源供应商建档
+    supp_result = _do_auto_create_suppliers(db, company_id)
+
     db.commit()
     db.refresh(inv)
     msg = "取得发票创建成功"
@@ -2840,6 +2951,8 @@ def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query
             msg += f"，已自动建档供应商 {proc_result['supplier']}"
         if proc_result.get("journal"):
             msg += "，已自动生成采购凭证"
+    if supp_result.get("created", 0) > 0:
+        msg += f"（新增{supp_result['created']}个双源供应商）"
     return {"id": inv.id, "invoice_no": inv.invoice_no, "message": msg, "processed": proc_result}
 
 
@@ -3652,6 +3765,8 @@ def create_bank_transaction(data: BankTransactionCreate, company_id: int = Query
     db.add(tx)
     db.commit()
     db.refresh(tx)
+    # 单条银行流水导入后触发双源供应商建档
+    _do_auto_create_suppliers(db, company_id)
     return {"id": tx.id, "message": "银行流水创建成功"}
 
 
