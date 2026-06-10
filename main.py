@@ -3715,6 +3715,7 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
     # 确保科目存在（复用 _generate_bank_journals 的依赖）
     _ensure_account(db, company_id, "1002", "银行存款", "资产", "借")
     _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
+    _ensure_account(db, company_id, "1123", "预付账款", "资产", "借")
     _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
     _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
     _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
@@ -3733,6 +3734,12 @@ def bank_transaction_to_journal(tx_id: int, company_id: int = Query(...), db: Se
 
     # contact_project：人员匹配时用员工规范姓名，其余用原始对方名称
     contact_proj = contact_name if contact_name else cp
+
+    # 摘要修正
+    if match_type == "customer_deposit":
+        summary_tag = f"银行流水-#{tx_id}-{contact_proj}（保证金）"
+    elif match_type == "prepaid_supplier":
+        summary_tag = f"银行流水-#{tx_id}-{contact_proj}（预付供应商，待发票冲销）"
 
     if is_debit:
         # 付款：借 对方科目  贷 银行存款

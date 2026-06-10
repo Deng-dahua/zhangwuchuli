@@ -2409,8 +2409,9 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
         # 付款 + 保证金信号 → 对方为客户（1221 其他应收款-保证金）
         if any(kw in _summary_text for kw in _DEPOSIT_KW):
             return ("1221", "其他应收款", "customer_deposit", None)
-        # 付款 → 默认供应商
-        return ("2202", "应付账款", "supplier_fallback", None)
+        # 付款 → 无对应发票 → 预付账款（待发票到后冲销）
+        # 老邓 2026-06-10：银行流水必须全部做账，供应商付款无发票走预付账款
+        return ("1123", "预付账款", "prepaid_supplier", None)
     else:
         # 收款 → 默认客户
         return ("1122", "应收账款", "customer_fallback", None)
@@ -2445,6 +2446,7 @@ def _ensure_account(db, company_id, code, name, category, direction, parent_code
                 "2241": None,
                 "1221": None,
                 "1122": None,
+                "1123": None,
                 "1002": None,
                 "6001": None,
             }
@@ -2484,6 +2486,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     # 确保所需科目存在
     _ensure_account(db, company_id, "1002", "银行存款", "资产", "借")
     _ensure_account(db, company_id, "1122", "应收账款", "资产", "借")
+    _ensure_account(db, company_id, "1123", "预付账款", "资产", "借")
     _ensure_account(db, company_id, "2202", "应付账款", "负债", "贷")
     _ensure_account(db, company_id, "1221", "其他应收款", "资产", "借")
     _ensure_account(db, company_id, "2241", "其他应付款", "负债", "贷")
@@ -2603,6 +2606,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（还款/上缴）"
             elif match_type == "customer_deposit":
                 summary_tag = f"银行流水-#{tx.id}-{contact_proj}（保证金）"
+            elif match_type == "prepaid_supplier":
+                summary_tag = f"银行流水-#{tx.id}-{contact_proj}（预付供应商，待发票冲销）"
 
             if match_type == "internal_transfer":
                 # 内部转账：借1002 贷1002（不同明细）
@@ -2660,7 +2665,7 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
                     # 供应商非真实企业过滤（手续费/税费/政府机构等）
                     _NON_SUPP = ('手续费', '金库', '公积金', '待处理', '出售凭证', '业务收入', '国家金库', '税务', '国库')
                     _is_non_supplier = any(kw in cp for kw in _NON_SUPP)
-                    if match_type in ('supplier', 'supplier_invoice', 'supplier_fallback'):
+                    if match_type in ('supplier', 'supplier_invoice'):
                         # 双源信号铁律：供应商必须同时出现在银行流水和取得发票中
                         if not _is_non_supplier and norm not in _supp_norms and norm not in _pending_suppliers and norm in _pi_seller_norms:
                             _pending_suppliers[norm] = {'name': cp.strip(), 'source': f'银行流水:#{tx.id}'}
