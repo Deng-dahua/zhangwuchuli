@@ -2001,12 +2001,9 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
 
 
 def auto_process_purchase_invoice(db, company_id, invoice_id):
-    """取得发票导入后自动全流程处理（老邓 2026-06-10）：
-    1. 自动创建供应商档案（含税号等核心字段）
-    2. 自动生成采购凭证（借1405/贷2202，有银行支付则贷1002）
-    3. 关联银行流水：已有该供应商付款的银行流水，若为 fallback 分类则升级
-    返回 {"supplier": str, "journal": bool, "bank_linked": int}
-    """
+    """取得发票导入后自动全流程处理（已禁用，回归三步处理铁律）"""
+    return None  # 禁用：自动处理已取消，统一由 /api/process-all 处理
+    # 以下代码不再执行
     inv = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.id == invoice_id,
         PurchaseInvoice.company_id == company_id
