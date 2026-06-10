@@ -1779,7 +1779,7 @@ def _find_matching_payment(db, company_id, inv):
         BankTransaction.debit_amount > 0,
     ).all():
         # 金额匹配（允许 ±0.5 元误差）
-        if abs(tx.debit_amount - (inv.total_amount or 0)) > 0.5:
+        if abs(float(tx.debit_amount) - float(inv.total_amount or 0)) > 0.5:
             continue
         # 对方户名相似度
         if tx.counterparty_name:
@@ -1926,10 +1926,103 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         db.flush()
         total += 1
 
-    if total > 0:
-        db.commit()
-
     return total
+
+
+def auto_process_purchase_invoice(db, company_id, invoice_id):
+    """取得发票导入后自动全流程处理（老邓 2026-06-10）：
+    1. 自动创建供应商档案（含税号等核心字段）
+    2. 自动生成采购凭证（借1405/贷2202，有银行支付则贷1002）
+    3. 关联银行流水：已有该供应商付款的银行流水，若为 fallback 分类则升级
+    返回 {"supplier": str, "journal": bool, "bank_linked": int}
+    """
+    inv = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.id == invoice_id,
+        PurchaseInvoice.company_id == company_id
+    ).first()
+    if not inv:
+        return None
+
+    result = {"supplier": None, "journal": False, "bank_linked": 0}
+    seller = inv.seller_name
+    if not seller:
+        return result
+
+    seller_norm = _normalize_customer_name(seller)
+
+    # ── 1. 自动建档供应商 ──
+    _NON_SUPP_KW = ('手续费', '金库', '公积金', '待处理', '税务', '国库', '国家金库')
+    if len(seller.strip()) >= 2 and not any(kw in seller for kw in _NON_SUPP_KW):
+        existing = db.query(Supplier).filter(
+            Supplier.company_id == company_id,
+            Supplier._fingerprint == seller_norm
+        ).first()
+        if not existing:
+            # 生成供应商编码
+            max_code = db.query(Supplier.code).filter(
+                Supplier.company_id == company_id,
+                Supplier.code.like('GYS%')
+            ).order_by(Supplier.code.desc()).first()
+            next_num = 1
+            if max_code and max_code[0] and max_code[0].startswith('GYS'):
+                try:
+                    next_num = int(max_code[0][3:]) + 1
+                except ValueError:
+                    pass
+            code = f"GYS{next_num:03d}"
+            supp = Supplier(
+                company_id=company_id, code=code,
+                name=seller, _fingerprint=seller_norm,
+                tax_no=inv.seller_tax_no or '',
+                bank_name='', bank_account='', remark='',
+                is_active=True,
+            )
+            db.add(supp)
+            db.flush()
+            result["supplier"] = code
+
+    # ── 2. 自动生成采购凭证 ──
+    count = auto_generate_purchase_journal(db, company_id, invoice_id)
+    result["journal"] = count > 0
+
+    # ── 3. 关联银行流水：查找已存在但为 supplier_fallback 的付款记录 ──
+    matching_txs = []
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.debit_amount > 0,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all():
+        tx_norm = _normalize_customer_name(tx.counterparty_name) if tx.counterparty_name else ""
+        if tx_norm == seller_norm:
+            matching_txs.append(tx)
+
+    if matching_txs:
+        # 重新检查这些银行流水的凭证是否需要升级
+        for tx in matching_txs:
+            # 查找已生成的银行流水凭证
+            entries = db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.source == "银行流水",
+                JournalEntry.ref_id == tx.id,
+            ).all()
+
+            if not entries:
+                # 尚未生成凭证 → 由 _generate_bank_journals 处理
+                continue
+
+            # 检查当前分类是否为 supplier_fallback
+            has_fallback = any(
+                e.account_code == "2202" and e.contact_project == tx.counterparty_name
+                for e in entries
+            )
+            if has_fallback:
+                # 已经是2202分类，无需改动，但 contact_project 应该确保是规范名称
+                for e in entries:
+                    if e.contact_project == tx.counterparty_name:
+                        e.contact_project = seller  # 使用发票上的规范名称
+                result["bank_linked"] += 1
+
+    return result
 
 
 def auto_generate_input_vat_journals(db):

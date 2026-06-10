@@ -42,6 +42,7 @@ from database import (
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals,
     auto_generate_purchase_journal,
+    auto_process_purchase_invoice,
 )
 
 from vat import router as vat_router
@@ -2767,9 +2768,20 @@ def list_purchase_invoices(
 def create_purchase_invoice(data: PurchaseInvoiceCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = PurchaseInvoice(company_id=company_id, **data.model_dump())
     db.add(inv)
+    db.flush()
+
+    # 老邓 2026-06-10：导入发票后自动全流程处理（供应商建档+采购凭证+关联银行流水）
+    proc_result = auto_process_purchase_invoice(db, company_id, inv.id)
+
     db.commit()
     db.refresh(inv)
-    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": "取得发票创建成功"}
+    msg = "取得发票创建成功"
+    if proc_result:
+        if proc_result.get("supplier"):
+            msg += f"，已自动建档供应商 {proc_result['supplier']}"
+        if proc_result.get("journal"):
+            msg += "，已自动生成采购凭证"
+    return {"id": inv.id, "invoice_no": inv.invoice_no, "message": msg, "processed": proc_result}
 
 
 @app.get("/api/purchase-invoices/stats")
@@ -2930,6 +2942,9 @@ def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(...), d
 
     db.flush()
 
+    # 老邓 2026-06-10：自动建档供应商
+    auto_process_purchase_invoice(db, company_id, invoice_id)
+
     # 生成采购入账凭证（借：库存商品 / 贷：应付账款）
     purchase_count = auto_generate_purchase_journal(db, company_id, invoice_id)
 
@@ -2972,6 +2987,10 @@ def purchase_invoice_batch_to_journal(
     for inv in invoices:
         try:
             period = inv.invoice_date.strftime("%Y-%m") if inv.invoice_date else datetime.now().strftime("%Y-%m")
+
+            # 老邓 2026-06-10：自动建档供应商
+            from database import auto_process_purchase_invoice as _proc_pi
+            _proc_pi(db, company_id, inv.id)
 
             # 查找或创建进项抵扣记录
             ded = db.query(InputVATDeduction).filter(
