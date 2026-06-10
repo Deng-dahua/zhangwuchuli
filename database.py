@@ -2438,11 +2438,20 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None):
     if any(kw in full_text for kw in ["工资", "薪资", "薪酬", "奖金", "绩效"]):
         return ("221101", "应付职工薪酬-工资", "salary", None)
 
-    # 6. 社保公积金
+    # 6. 社保公积金（老邓 2026-06-10：优化判断逻辑）
+    full_text = (tx.counterparty_name or "") + " " + (tx.summary or "") + " " + (tx.transaction_remark or "")
     if any(kw in full_text for kw in ["社保", "社会保险", "养老", "医疗", "失业", "工伤", "生育"]):
         return ("221102", "社会保险费", "social_security", None)
-    if any(kw in full_text for kw in ["公积金", "住房公积金"]):
-        return ("221103", "住房公积金", "housing_fund", None)
+    
+    # 公积金判断：扩展关键词 + 区分付款/退款方向
+    _HF_KEYWORDS = ["公积金", "住房公积金", "公积金中心", "住房公积金管理中心", "公积金缴款"]
+    _HF_REFUND_KEYWORDS = ["退回", "退款", "返还"]
+    if any(kw in full_text for kw in _HF_KEYWORDS):
+        # 付款方向（debit_amount > 0）：公积金缴纳
+        if tx.debit_amount and tx.debit_amount > 0:
+            return ("221103", "住房公积金", "housing_fund", None)
+        # 退款方向（credit_amount > 0）：公积金退款，不匹配（由用户手动处理）
+        pass
 
     # 7. 费用类关键词（仅对未知实体兜底）
     expense_keywords = {
