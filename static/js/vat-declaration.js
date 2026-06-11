@@ -1437,6 +1437,8 @@ function calculateSchedule1() {
       if (el14) el14.textContent = _fm0(col14);
     }
   }
+  // 附表 → 主表同步
+  syncMainFromSchedules();
 }
 
 // ==================== 附表二：进项税额明细 ====================
@@ -1753,6 +1755,9 @@ function calculateSchedule2() {
   uCalc('row29_other_pending_count', r29_cnt, 0);
   uCalc('row29_other_pending_amount', r29_amt);
   uCalc('row29_other_pending_tax', r29_tax);
+
+  // 附表 → 主表同步
+  syncMainFromSchedules();
 }
 
 // ==================== 附表三：扣除项目明细 ====================
@@ -1965,6 +1970,9 @@ function calculateSchedule4() {
   uc('total_can_deduct', tCan);
   uc('total_actual_deduct', tAct);
   uc('total_end', tEnd);
+
+  // 附表 → 主表同步
+  syncMainFromSchedules();
 }
 
 // ==================== 附表五：附加税费情况表（可手动填列） ====================
@@ -2187,6 +2195,9 @@ function calculateSchedule5() {
   uc('total_edu_pilot', totalPilot);
   uc('total_paid', totalPaid);
   uc('total_final', totalFinal);
+
+  // 附表 → 主表同步
+  syncMainFromSchedules();
 }
 
 
@@ -2309,4 +2320,98 @@ function calculateReductionForm() {
   // Row 3 (跨境)
   var s3 = gv('exempt_3_sales');
   uc('exempt_3_after', s3);
+
+  // 表间数据同步（附表 → 主表）
+  syncMainFromSchedules();
+}
+
+// ==================== 表间数据逻辑：附表 → 主表自动填列 ====================
+function syncMainFromSchedules() {
+  // 判断主表是否已渲染在 DOM 中
+  var mainFormExists = !!document.getElementById('vat-row1_sales');
+
+  // Helper: 读取 DOM 元素的值（span 文本或 input 值）
+  function readVal(fullId) {
+    var el = document.getElementById(fullId);
+    if (!el) return 0;
+    if (el.tagName === 'INPUT') { var v = parseFloat(el.value); return isNaN(v) ? 0 : v; }
+    var t = parseFloat(el.textContent); return isNaN(t) ? 0 : t;
+  }
+
+  // Helper: 同时更新主表 DOM 和 vatCurrentData 缓存
+  function syncMainVal(id, val) {
+    if (val === 0 || isNaN(val)) return;
+    var v = parseFloat(val).toFixed(2);
+
+    // 更新主表 DOM（如果可见）
+    if (mainFormExists) {
+      var el = document.getElementById('vat-' + id);
+      if (el) el.value = v;
+    }
+
+    // 更新 vatCurrentData 缓存（跨页签持久化）
+    if (vatCurrentData) {
+      var fm = safeJSON(vatCurrentData.form_main, {});
+      fm[id] = parseFloat(v);
+      vatCurrentData.form_main = JSON.stringify(fm);
+    }
+  }
+
+  // ====== 1. 附表一 → 主表 ======
+  // 一般计税方法销售额/税额: rows 1-5
+  //   goods rows: 1,3 → col9=销售额, col10=税额
+  //   service rows: 2,4,5 → col13=扣除后销售额, col14=扣除后税额
+  var generalSales = 0, generalTax = 0;
+  [1, 3].forEach(function(r) {
+    generalSales += readVal('sch1-row' + r + '_col9');
+    generalTax  += readVal('sch1-row' + r + '_col10');
+  });
+  [2, 4, 5].forEach(function(r) {
+    generalSales += readVal('sch1-row' + r + '_col13');
+    generalTax  += readVal('sch1-row' + r + '_col14');
+  });
+  if (generalSales !== 0) syncMainVal('row1_sales', generalSales);
+  if (generalTax  !== 0) syncMainVal('row11_output_tax', generalTax);
+
+  // 简易计税方法销售额/税额: rows 8-16
+  //   goods rows: 8,9,11,12,14,15,16 → col9, col10
+  //   service rows: 10,13 → col13, col14
+  var simpleSales = 0, simpleTax = 0;
+  [8, 9, 11, 12, 14, 15, 16].forEach(function(r) {
+    simpleSales += readVal('sch1-row' + r + '_col9');
+    simpleTax  += readVal('sch1-row' + r + '_col10');
+  });
+  [10, 13].forEach(function(r) {
+    simpleSales += readVal('sch1-row' + r + '_col13');
+    simpleTax  += readVal('sch1-row' + r + '_col14');
+  });
+  if (simpleSales !== 0) syncMainVal('row5_simple_method', simpleSales);
+  if (simpleTax  !== 0) syncMainVal('row21_simple_tax', simpleTax);
+
+  // ====== 2. 附表二 → 主表 ======
+  var inputTax = readVal('sch2-row12_total_tax');
+  if (inputTax !== 0) syncMainVal('row12_input_tax', inputTax);
+
+  var transferOut = readVal('sch2-row13_transfer_out_total');
+  if (transferOut !== 0) syncMainVal('row14_input_transfer_out', transferOut);
+
+  // ====== 3. 附表四 → 主表 row23 ======
+  var reduction = 0;
+  ['tax_control', 'branch', 'construction', 'real_estate', 'rental'].forEach(function(item) {
+    reduction += readVal('sch4-' + item + '_actual');
+  });
+  if (reduction !== 0) syncMainVal('row23_reduction', reduction);
+
+  // ====== 4. 附表五 → 主表 row39/40/41 ======
+  var cityFinal = readVal('sch5-city_final');
+  if (cityFinal !== 0) syncMainVal('row39_city_maintenance_tax', cityFinal);
+
+  var eduFinal = readVal('sch5-edu_final');
+  if (eduFinal !== 0) syncMainVal('row40_education_surcharge', eduFinal);
+
+  var localFinal = readVal('sch5-local_edu_final');
+  if (localFinal !== 0) syncMainVal('row41_local_education_surcharge', localFinal);
+
+  // 主表重算（仅 DOM 存在时）
+  if (mainFormExists) calculateVATMainForm();
 }
