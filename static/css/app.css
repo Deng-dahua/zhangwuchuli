@@ -431,7 +431,7 @@
 
     /* ====== 增值税申报模板表 ====== */
     .vat-form-table {
-      width: 100%; border-collapse: collapse; font-size: 12px;
+      width: auto; border-collapse: collapse; font-size: 12px;
       border: none; margin-bottom: 0;
     }
     .vat-form-table thead tr { background: #e8edf5; }
@@ -490,19 +490,6 @@
     }
     .vat-form-table select:focus {
       background: #fef9c4; outline: 1px solid #1a56db; outline-offset: -1px;
-    }
-
-    /* 附表五专用 — 紧凑布局，min-width 防压缩 */
-    .vat-form-table.sch5-compact { table-layout: auto; min-width: 700px; }
-    .vat-form-table.sch5-compact thead th {
-      padding: 4px 3px; font-size: 9px; line-height: 1.2;
-    }
-    .vat-form-table.sch5-compact td {
-      padding: 3px 3px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;
-    }
-    .vat-form-table.sch5-compact input[type="number"],
-    .vat-form-table.sch5-compact input[type="text"] {
-      font-size: 10px; padding: 1px 2px;
     }
 
     /* ====== 登录/注册/选择公司页面样式 ====== */
