@@ -517,6 +517,11 @@ function renderVATTemplateViewInline(data) {
   if (vatInlineDisplayId !== data.id) {
     vatInlineDisplayId = data.id;
   }
+
+  // 主表自动计算
+  if (vatActivePage === 'main') {
+    setTimeout(calculateVATMainForm, 100);
+  }
 }
 
 function closeVATInline() {
@@ -664,6 +669,97 @@ function vatClearFilter() {
 function vatFieldChanged() {
   // 标记表单已修改，提示用户保存
   if (typeof vatDirty !== 'undefined') vatDirty = true;
+  // 自动计算主表
+  calculateVATMainForm();
+}
+
+// ==================== 主表自动计算逻辑 ====================
+function calculateVATMainForm() {
+  // 辅助：读输入框数值
+  function getVal(id) {
+    var el = document.getElementById(id);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  // 辅助：设置只读单元格文本
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = (val === 0 || val === -0) ? '' : parseFloat(val).toFixed(2);
+  }
+
+  // 读取相关字段（一般项目本月数）
+  var r11 = getVal('vat-row11_output_tax');
+  var r12 = getVal('vat-row12_input_tax');
+  var r13 = getVal('vat-row13_prior_credit');
+  var r14 = getVal('vat-row14_input_transfer_out');
+  var r15 = getVal('vat-row15_exempt_refund');
+  var r16 = getVal('vat-row16_actual_deduct_by_item');
+  var r21 = getVal('vat-row21_simple_tax');
+  var r23 = getVal('vat-row23_reduction');
+  var r25 = getVal('vat-row25_prior_unpaid');
+  var r26 = getVal('vat-row26_real_paid_during');
+  var r28 = getVal('vat-row28_export_tax_refund');
+  var r29 = getVal('vat-row29_remote_prepaid');
+  var r30 = getVal('vat-row30_already_paid_total');
+  var r31 = getVal('vat-row31_should_pay_refund');
+
+  // 计算
+  var r17 = r12 + r13 - r14 - r15 + r16;  // 17=12+13-14-15+16
+  var r18 = Math.min(r17, r11);            // 18=min(17,11)
+  var r19 = r11 - r18;                     // 19=11-18
+  var r20 = r17 - r18;                     // 20=17-18
+  var r24 = r19 + r21 - r23;               // 24=19+21-23
+  var r27 = r28 + r29 + r30 + r31;         // 27=28+29+30+31
+  var r32 = r24 + r25 + r26 - r27;         // 32=24+25+26-27
+  var r34 = r24 - r28 - r29;               // 34=24-28-29
+
+  // 更新显示（一般项目本月数）
+  setText('vat-row17_total_deductible', r17);
+  setText('vat-row18_actual_deduct', r18);
+  setText('vat-row19_tax_payable', r19);
+  setText('vat-row20_end_credit', r20);
+  setText('vat-row24_tax_payable_total', r24);
+  setText('vat-row27_installment_prepaid', r27);
+  setText('vat-row32_check_tax_should', r32);
+  setText('vat-row34_should_check', r34);
+
+  // 读取本年累计字段
+  var r11ytd = getVal('vat-row11_output_tax_ytd');
+  var r12ytd = getVal('vat-row12_input_tax_ytd');
+  var r13ytd = getVal('vat-row13_prior_credit_ytd');
+  var r14ytd = getVal('vat-row14_input_transfer_out_ytd');
+  var r15ytd = getVal('vat-row15_exempt_refund_ytd');
+  var r16ytd = getVal('vat-row16_actual_deduct_by_item_ytd');
+  var r21ytd = getVal('vat-row21_simple_tax_ytd');
+  var r23ytd = getVal('vat-row23_reduction_ytd');
+  var r25ytd = getVal('vat-row25_prior_unpaid_ytd');
+  var r26ytd = getVal('vat-row26_real_paid_during_ytd');
+  var r28ytd = getVal('vat-row28_export_tax_refund_ytd');
+  var r29ytd = getVal('vat-row29_remote_prepaid_ytd');
+  var r30ytd = getVal('vat-row30_already_paid_total_ytd');
+  var r31ytd = getVal('vat-row31_should_pay_refund_ytd');
+
+  // 计算本年累计
+  var r17ytd = r12ytd + r13ytd - r14ytd - r15ytd + r16ytd;
+  var r18ytd = Math.min(r17ytd, r11ytd);
+  var r19ytd = r11ytd - r18ytd;
+  var r20ytd = r17ytd - r18ytd;
+  var r24ytd = r19ytd + r21ytd - r23ytd;
+  var r27ytd = r28ytd + r29ytd + r30ytd + r31ytd;
+  var r32ytd = r24ytd + r25ytd + r26ytd - r27ytd;
+  var r34ytd = r24ytd - r28ytd - r29ytd;
+
+  // 更新显示（本年累计）
+  setText('vat-row17_total_deductible_ytd', r17ytd);
+  setText('vat-row18_actual_deduct_ytd', r18ytd);
+  setText('vat-row19_tax_payable_ytd', r19ytd);
+  setText('vat-row20_end_credit_ytd', r20ytd);
+  setText('vat-row24_tax_payable_total_ytd', r24ytd);
+  setText('vat-row27_installment_prepaid_ytd', r27ytd);
+  setText('vat-row32_check_tax_should_ytd', r32ytd);
+  setText('vat-row34_should_check_ytd', r34ytd);
 }
 
 function vatCollectFormData() {
@@ -832,18 +928,18 @@ function renderMainForm(data) {
   h += _fmtDash(m.row16_actual_deduct_by_item_refund) + _fmtDash(m.row16_actual_deduct_by_item_refund_ytd) + '</tr>';
   // row 17
   h += '<tr style="background:#e8f0fe"><td>应抵扣税额合计</td><td style="text-align:center;font-size:10px;color:#6b7280">17=12+13-14-15+16</td>';
-  h += '<td class="num" style="font-weight:700">' + _fmt2(m.row17_total_deductible) + '</td>';
-  h += '<td class="num" style="font-weight:700">' + _fmt2(m.row17_total_deductible_ytd) + '</td>';
+  h += '<td class="num" style="font-weight:700"><span id="vat-row17_total_deductible">' + _fmt2(m.row17_total_deductible) + '</span></td>';
+  h += '<td class="num" style="font-weight:700"><span id="vat-row17_total_deductible_ytd">' + _fmt2(m.row17_total_deductible_ytd) + '</span></td>';
   h += _fmtDash(m.row17_total_deductible_refund) + _fmtDash(m.row17_total_deductible_refund_ytd) + '</tr>';
   // row 18
   h += '<tr style="background:#e8f0fe"><td>实际抵扣税额</td><td style="text-align:center;font-size:10px;color:#6b7280">18（如17＜11，则为17，否则为11）</td>';
-  h += '<td class="num" style="font-weight:700">' + _fmt2(m.row18_actual_deduct) + '</td>';
-  h += '<td class="num" style="font-weight:700">' + _fmt2(m.row18_actual_deduct_ytd) + '</td>';
+  h += '<td class="num" style="font-weight:700"><span id="vat-row18_actual_deduct">' + _fmt2(m.row18_actual_deduct) + '</span></td>';
+  h += '<td class="num" style="font-weight:700"><span id="vat-row18_actual_deduct_ytd">' + _fmt2(m.row18_actual_deduct_ytd) + '</span></td>';
   h += _fmtDash(m.row18_actual_deduct_refund) + _fmtDash(m.row18_actual_deduct_refund_ytd) + '</tr>';
   // row 19
   h += '<tr style="background:#fef9c4"><td>应纳税额</td><td style="text-align:center;font-size:10px;color:#6b7280">19=11-18</td>';
-  h += '<td class="num" style="font-weight:700;color:#d97706">' + _fmt2(m.row19_tax_payable) + '</td>';
-  h += '<td class="num" style="font-weight:700;color:#d97706">' + _fmt2(m.row19_tax_payable_ytd) + '</td>';
+  h += '<td class="num" style="font-weight:700;color:#d97706"><span id="vat-row19_tax_payable">' + _fmt2(m.row19_tax_payable) + '</span></td>';
+  h += '<td class="num" style="font-weight:700;color:#d97706"><span id="vat-row19_tax_payable_ytd">' + _fmt2(m.row19_tax_payable_ytd) + '</span></td>';
   h += _fmtDash(m.row19_tax_payable_refund) + _fmtDash(m.row19_tax_payable_refund_ytd) + '</tr>';
   // row 20
   h += '<tr><td>期末留抵税额</td><td style="text-align:center;font-size:10px;color:#6b7280">20=17-18</td>';
@@ -867,8 +963,8 @@ function renderMainForm(data) {
   h += _fmtDash(m.row23_reduction_refund) + _fmtDash(m.row23_reduction_refund_ytd) + '</tr>';
   // row 24
   h += '<tr style="background:#fef9c4;font-weight:700"><td>应纳税额合计</td><td style="text-align:center;font-size:10px;color:#6b7280">24=19+21-23</td>';
-  h += '<td class="num" style="color:#d97706">' + _fmt2(m.row24_tax_payable_total) + '</td>';
-  h += '<td class="num" style="color:#d97706">' + _fmt2(m.row24_tax_payable_total_ytd) + '</td>';
+  h += '<td class="num" style="color:#d97706"><span id="vat-row24_tax_payable_total">' + _fmt2(m.row24_tax_payable_total) + '</span></td>';
+  h += '<td class="num" style="color:#d97706"><span id="vat-row24_tax_payable_total_ytd">' + _fmt2(m.row24_tax_payable_total_ytd) + '</span></td>';
   h += _fmtDash(m.row24_tax_payable_total_refund) + _fmtDash(m.row24_tax_payable_total_refund_ytd) + '</tr>';
 
   // --- 三、税款缴纳 ---
@@ -909,8 +1005,8 @@ function renderMainForm(data) {
   h += _fmtDash(m.row31_should_pay_refund_refund) + _fmtDash(m.row31_should_pay_refund_refund_ytd) + '</tr>';
   // row 32
   h += '<tr><td>期末未缴税额（多缴为负数）</td><td style="text-align:center;font-size:10px;color:#6b7280">32=24+25+26-27</td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row32_check_tax_should" value="' + (m.row32_check_tax_should != null ? m.row32_check_tax_should : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row32_check_tax_should_ytd" value="' + (m.row32_check_tax_should_ytd != null ? m.row32_check_tax_should_ytd : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
+  h += '<td class="num"><span id="vat-row32_check_tax_should">' + _fmt2(m.row32_check_tax_should) + '</span></td>';
+  h += '<td class="num"><span id="vat-row32_check_tax_should_ytd">' + _fmt2(m.row32_check_tax_should_ytd) + '</span></td>';
   h += _fmtDash(m.row32_check_tax_should_refund) + _fmtDash(m.row32_check_tax_should_refund_ytd) + '</tr>';
   // row 33
   h += '<tr><td style="padding-left:18px">其中：欠缴税额（≥0）</td><td style="text-align:center;font-size:10px;color:#6b7280">33=25+26-27</td>';
@@ -919,8 +1015,8 @@ function renderMainForm(data) {
   h += _fmtDash(m.row33_check_prepaid_refund) + _fmtDash(m.row33_check_prepaid_refund_ytd) + '</tr>';
   // row 34
   h += '<tr style="background:#fef9c4"><td>本期应补(退)税额</td><td style="text-align:center;font-size:10px;color:#6b7280">34＝24-28-29</td>';
-  h += '<td class="num" style="font-weight:700;color:#d97706">' + _fmt2(m.row34_should_check) + '</td>';
-  h += '<td class="num" style="font-weight:700;color:#d97706">' + _fmt2(m.row34_should_check_ytd) + '</td>';
+  h += '<td class="num" style="font-weight:700;color:#d97706"><span id="vat-row34_should_check">' + _fmt2(m.row34_should_check) + '</span></td>';
+  h += '<td class="num" style="font-weight:700;color:#d97706"><span id="vat-row34_should_check_ytd">' + _fmt2(m.row34_should_check_ytd) + '</span></td>';
   h += _fmtDash(m.row34_should_check_refund) + _fmtDash(m.row34_should_check_refund_ytd) + '</tr>';
   // row 35
   h += '<tr><td>即征即退实际退税额</td><td style="text-align:center">35</td>';
