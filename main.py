@@ -5409,8 +5409,14 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate, company_id: in
     e = db.query(JournalEntry).filter(JournalEntry.company_id == company_id, JournalEntry.id == entry_id).first()
     if not e:
         raise HTTPException(404, detail="记录不存在")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    submitted = data.model_dump(exclude_unset=True)
+    old_voucher_no = e.voucher_no
+    old_voucher_word = e.voucher_word
+    for k, v in submitted.items():
         setattr(e, k, v)
+    # 凭证号或凭证字变化 → 同步业务表
+    if ('voucher_no' in submitted or 'voucher_word' in submitted) and (e.voucher_no != old_voucher_no or e.voucher_word != old_voucher_word):
+        _sync_biz_voucher_no(db, company_id, e, f"{e.voucher_word}-{e.voucher_no}")
     db.commit()
     return {"message": "更新成功"}
 
@@ -5445,30 +5451,47 @@ def _renumber_archive(db, company_id, model_cls, prefix):
     db.flush()
 
 
+def _sync_biz_voucher_no(db, company_id, entry, new_voucher_str):
+    """同步更新单条分录关联的业务表凭证号
+    注意：仅 bank_transactions / input_vat_deductions / fixed_assets / intangible_assets
+    有凭证号字段；purchase/sales/salary/ss/hf 等表没有"""
+    if not entry.ref_id or not entry.source:
+        return
+    if entry.source == "银行流水":
+        db.query(BankTransaction).filter(
+            BankTransaction.company_id == company_id,
+            BankTransaction.id == entry.ref_id
+        ).update({"journal_voucher_no": new_voucher_str}, synchronize_session=False)
+    elif entry.source == "进项抵扣":
+        db.query(InputVATDeduction).filter(
+            InputVATDeduction.company_id == company_id,
+            InputVATDeduction.id == entry.ref_id
+        ).update({"voucher_no": new_voucher_str}, synchronize_session=False)
+    # 取得发票 / 销项发票 / 工资 / 社保 / 公积金 — 这些表没有 voucher_no 字段，无需同步
+
+
 def _renumber_vouchers(db, company_id, period, voucher_word):
-    """删除后自动重排同一期间+凭证字下的凭证号"""
+    """删除后自动重排同一期间+凭证字下的凭证号，并同步业务表"""
     entries = db.query(JournalEntry).filter(
         JournalEntry.company_id == company_id,
         JournalEntry.period == period,
         JournalEntry.voucher_word == voucher_word,
     ).order_by(JournalEntry.voucher_no.asc(), JournalEntry.id.asc()).all()
-    # 按 voucher_no 分组保持完整性，逐组重编号
-    seen = set()
-    groups = []
+    if not entries:
+        return
+    # 按 voucher_no 分组
+    groups = {}
     for e in entries:
-        if e.voucher_no not in seen:
-            seen.add(e.voucher_no)
-            groups.append(e.voucher_no)
-    # 重新分配 voucher_no: 按原有顺序从1开始
+        groups.setdefault(e.voucher_no, []).append(e)
+    # 重新分配 voucher_no: 按原有顺序从1开始，同步业务表
     new_no = 1
-    for old_no in groups:
-        db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period == period,
-            JournalEntry.voucher_word == voucher_word,
-            JournalEntry.voucher_no == old_no,
-        ).update({JournalEntry.voucher_no: new_no}, synchronize_session=False)
+    for old_no in sorted(groups.keys()):
+        voucher_str_new = f"{voucher_word}-{new_no}"
+        for e in groups[old_no]:
+            e.voucher_no = new_no
+            _sync_biz_voucher_no(db, company_id, e, voucher_str_new)
         new_no += 1
+    db.flush()
 
 
 def _clear_source_voucher_no(db, company_id, entry):
@@ -5490,7 +5513,7 @@ def _clear_source_voucher_no(db, company_id, entry):
         BankTransaction.journal_voucher_no == voucher_str
     ).update({"journal_voucher_no": None}, synchronize_session=False)
 
-    # ── 进项抵扣：双保险清除 ──
+    # ── 进项抵扣 ──
     if entry.source == "进项抵扣" and entry.ref_id:
         db.query(InputVATDeduction).filter(
             InputVATDeduction.company_id == company_id,
@@ -5500,6 +5523,8 @@ def _clear_source_voucher_no(db, company_id, entry):
         InputVATDeduction.company_id == company_id,
         InputVATDeduction.voucher_no == voucher_str
     ).update({"voucher_no": None}, synchronize_session=False)
+
+    # 取得发票 / 销项发票 / 工资 / 社保 / 公积金 — 这些表没有 voucher_no 字段，无需清除
 
 
 @app.post("/api/journal-entries/batch-delete")

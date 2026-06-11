@@ -137,13 +137,11 @@ function onVATDetailPeriodChange() {
   const mSel = document.getElementById('vat-detail-month');
   if (!ySel || !mSel) return;
   const period = ySel.value + '-' + mSel.value;
-  const found = vatDeclarations.find(d => d.period === period);
-  if (found) {
-    openVATDetailInline(found.id);
-  } else {
-    // 无申报表时渲染空状态，避免残留旧数据
-    renderVATPeriodEmpty(period);
-  }
+  vatFilterPeriod = period;
+  vatSelectedId = null;
+  vatCurrentData = null;
+  vatInlineDisplayId = null;
+  loadVATDeclarationList(period);
 }
 
 // 渲染"该期间暂无申报表"的空状态，保留期间选择器

@@ -94,9 +94,11 @@ function onCCFDetailPeriodChange() {
   var mSel = document.getElementById('ccf-detail-month');
   if (!ySel || !mSel) return;
   var period = ySel.value + '-' + mSel.value;
-  var found = ccfDeclarations.find(function(d) { return d.period === period; });
-  if (found) { openCCFDetailInline(found.id); }
-  else { ccfCurrentData = null; renderCCFPeriodEmpty(period); renderCCFStats(period); }
+  ccfFilterPeriod = period;
+  ccfCurrentData = null;
+  ccfSelectedId = null;
+  ccfInlineDisplayId = null;
+  loadCCFDeclarationList(period);
 }
 
 function renderCCFPeriodEmpty(period) {
