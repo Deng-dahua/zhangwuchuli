@@ -78,19 +78,25 @@ def _parse_vat_main_form(data_2d):
     
     result = {}
     
-    # ===== 提取纳税人信息（前10行扫描） =====
+    # ===== 提取纳税人信息（前10行扫描，搜索所有列） =====
     for row in data_2d[:10]:
-        if not row or not row[0]:
+        if not row:
             continue
-        key = str(row[0]).strip() if row[0] else ""
-        val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-        # 也可能在其他列
-        if not val and len(row) > 2:
-            val = str(row[2]).strip() if row[2] else ""
-        if "纳税人名称" in key and val:
-            result["_taxpayer_name"] = val
-        elif ("纳税人识别号" in key or "统一社会信用代码" in key) and val:
-            result["_taxpayer_id"] = val
+        for j, cell in enumerate(row):
+            if not cell:
+                continue
+            cell_str = str(cell).strip()
+            # 找右边相邻的非空单元格作为值
+            val = ""
+            for k in range(j + 1, min(j + 4, len(row))):
+                if row[k]:
+                    val = str(row[k]).strip()
+                    if val:
+                        break
+            if "纳税人名称" in cell_str and val:
+                result["_taxpayer_name"] = val
+            elif ("纳税人识别号" in cell_str or "统一社会信用代码" in cell_str) and val:
+                result["_taxpayer_id"] = val
     
     # ===== 关键字 → 字段映射 =====
     # (关键字, 字段基名)
@@ -147,75 +153,89 @@ def _parse_vat_main_form(data_2d):
     unpaid_check_seen = False
     
     for row in data_2d:
-        if not row or not row[0]:
+        if not row:
             continue
-        cell_a = _clean_text(str(row[0]))
         
+        # 搜索整行所有单元格，找到含有关键字的单元格
         matched_field = None
-        for keyword, field in keyword_map:
-            k = _clean_text(keyword)
-            if k not in cell_a:
+        matched_col = -1
+        cell_a = ""
+        for col_idx, cell in enumerate(row):
+            if not cell or not isinstance(cell, str):
                 continue
+            cell_clean = _clean_text(str(cell))
+            cell_a = cell_clean
             
-            # === 特殊处理 ===
-            # 1. "纳税检查调整的销售额"出现两次(row4=按适用税率下, row6=简易办法下)
-            if field == "row16_actual_deduct_by_item" and (
-                "简易计税办法" in cell_a or "简易办法" in cell_a
-            ):
-                continue  # 这实际是 row22，不是 row16
-            
-            if "纳税检查调整的销售额" in cell_a and "简易计税" not in cell_a and "简易办法" not in cell_a:
-                if tax_check_count == 0:
-                    matched_field = "row4_tax_check"
-                    tax_check_count += 1
-                elif tax_check_count == 1:
-                    # 第二个"纳税检查调整的销售额"，但属于简易办法下一行的缩进行
-                    # 如果 cell_a 前面有缩进，并且上一行是"按简易办法计税销售额"
-                    matched_field = "row6_exempt_sales"
-                    tax_check_count += 1
-                break
-            
-            # 2. "期末未缴税额"有两组
-            if field == "row32_check_tax_should":
-                continue  # 跳过"期末未缴税额"，后面会有更精确的
-            if "期末未缴税额" in cell_a and "查补" in cell_a:
-                matched_field = "row38_end_check"
-                break
-            if "期末未缴税额" in cell_a and "查补" not in cell_a and not unpaid_check_seen:
-                matched_field = "row32_check_tax_should"
-                unpaid_check_seen = True
-                break
-            
-            # 3. "欠缴税额"：如果有"查补"跳过
-            if field == "row33_check_prepaid" and "查补" in cell_a:
-                continue
-            
-            # 4. "应纳税额" 不要匹配到 "应纳税额合计" 或 "应纳税额减征额"
-            if field == "row19_tax_payable":
-                if "合计" in cell_a or "减征" in cell_a:
+            for keyword, field in keyword_map:
+                k = _clean_text(keyword)
+                if k not in cell_clean:
                     continue
+                
+                # === 特殊处理 ===
+                if field == "row16_actual_deduct_by_item" and (
+                    "简易计税办法" in cell_clean or "简易办法" in cell_clean
+                ):
+                    continue
+                
+                if "纳税检查调整的销售额" in cell_clean and "简易计税" not in cell_clean and "简易办法" not in cell_clean:
+                    if tax_check_count == 0:
+                        matched_field = "row4_tax_check"
+                        tax_check_count += 1
+                    elif tax_check_count == 1:
+                        matched_field = "row6_exempt_sales"
+                        tax_check_count += 1
+                    break
+                
+                if field == "row32_check_tax_should":
+                    continue
+                if "期末未缴税额" in cell_clean and "查补" in cell_clean:
+                    matched_field = "row38_end_check"
+                    break
+                if "期末未缴税额" in cell_clean and "查补" not in cell_clean and not unpaid_check_seen:
+                    matched_field = "row32_check_tax_should"
+                    unpaid_check_seen = True
+                    break
+                
+                if field == "row33_check_prepaid" and "查补" in cell_clean:
+                    continue
+                
+                if field == "row19_tax_payable":
+                    if "合计" in cell_clean or "减征" in cell_clean:
+                        continue
+                
+                if field == "row11_output_tax" and "进项" in cell_clean:
+                    continue
+                
+                if field == "row12_input_tax" and "转出" in cell_clean:
+                    continue
+                
+                matched_field = field
+                matched_col = col_idx
+                break
             
-            # 5. "销项税额" 不要匹配到"进项税额转出"等
-            if field == "row11_output_tax" and "进项" in cell_a:
-                continue
-            
-            # 6. "进项税额" 不要匹配到"进项税额转出"
-            if field == "row12_input_tax" and "转出" in cell_a:
-                continue
-            
-            # 默认匹配
-            matched_field = field
-            break
+            if matched_field:
+                break
         
-        if matched_field:
-            if len(row) > 1:
-                result[matched_field] = _to_num(row[1])
-            if len(row) > 2:
-                result[matched_field + "_ytd"] = _to_num(row[2])
-            if len(row) > 3:
-                result[matched_field + "_refund"] = _to_num(row[3])
-            if len(row) > 4:
-                result[matched_field + "_refund_ytd"] = _to_num(row[4])
+        if matched_field and matched_col >= 0:
+            # 动态扫描取值列：跳过栏次列和空列，取前4个有效数值
+            value_cols = []
+            for j in range(matched_col + 1, min(matched_col + 7, len(row))):
+                val = row[j]
+                if val is None:
+                    continue
+                # 如果值是小整数（1-99），且在栏次列位置，跳过
+                try:
+                    iv = int(str(val).replace(',', '').replace(' ', ''))
+                    if 1 <= iv <= 99 and len(value_cols) == 0:
+                        continue  # 跳过栏次号
+                except (ValueError, TypeError):
+                    pass
+                value_cols.append(val)
+            
+            field_suffixes = ["", "_ytd", "_refund", "_refund_ytd"]
+            for idx, suffix in enumerate(field_suffixes):
+                if idx < len(value_cols):
+                    result[matched_field + suffix] = _to_num(value_cols[idx])
     
     return result
 
@@ -272,16 +292,21 @@ async def import_vat_declaration(
             import pdfplumber
             with pdfplumber.open(tmp_path) as pdf:
                 for i, page in enumerate(pdf.pages):
+                    # 提取页面文本（含标题、纳税人信息等表格外的内容）
+                    page_text = page.extract_text() or ""
+                    header_rows = []
+                    for line in page_text.split('\n'):
+                        line = line.strip()
+                        if line and len(line) > 1:
+                            header_rows.append([line])
                     tables = page.extract_tables()
                     if tables:
                         for j, tbl in enumerate(tables):
-                            sheets.append({"name": f"第{i+1}页-表{j+1}", "data": tbl})
-                    else:
-                        # 无表格时提取文本行
-                        text = page.extract_text() or ""
-                        rows = [[line] for line in text.split('\n') if line.strip()]
-                        if rows:
-                            sheets.append({"name": f"第{i+1}页-文本", "data": rows})
+                            # 把页面文本行插入到表格数据前面（标题等关键字在这些文本里）
+                            merged_data = header_rows + tbl
+                            sheets.append({"name": f"第{i+1}页-表{j+1}", "data": merged_data})
+                    elif header_rows:
+                        sheets.append({"name": f"第{i+1}页-文本", "data": header_rows})
         else:
             from openpyxl import load_workbook as _lw
             wb = _lw(tmp_path, data_only=True)
@@ -298,7 +323,7 @@ async def import_vat_declaration(
                 if not row:
                     continue
                 for j, cell in enumerate(row):
-                    if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
+                    if cell and isinstance(cell, str) and (('所属' in cell and '期' in cell) or '申报期' in cell):
                         # 1. 先在当前单元格内找日期（如"所属期：2026年05月"）
                         m = re.search(r'(\d{4})[年\-](\d{1,2})', str(cell))
                         if m:
@@ -426,7 +451,17 @@ async def import_vat_declaration(
             elif _sheet_contains(sn, data, '主表', '申报表'):
                 form_main = data
         
+        # 兜底：如果没匹配到主表，把最大的表格当主表
+        if not form_main and sheets:
+            # 找数据行最多的表格（排除附列表）
+            candidates = [(len(sh["data"]), sh["data"]) for sh in sheets 
+                         if len(sh["data"]) > 5]
+            if candidates:
+                candidates.sort(key=lambda x: -x[0])
+                form_main = candidates[0][1]
+        
         # 保存到数据库
+        parsed_main = None
         if form_main:
             # 把 2D 数组解析成结构化对象（前端 renderMainForm 需要结构化字段）
             parsed_main = _parse_vat_main_form(form_main)
@@ -462,10 +497,20 @@ async def import_vat_declaration(
         db.commit()
         
         # 调试信息
+        sheet_titles = []
+        for sh in sheets:
+            sn = _sheet_title(sh)
+            rows_count = len(sh["data"])
+            # 截取标题前60字符
+            short_title = sn[:60] if isinstance(sn, str) else str(sn)[:60]
+            sheet_titles.append(f"{short_title}({rows_count}行)")
+        
         debug = {
             "sheets_count": len(sheets),
+            "sheet_titles": sheet_titles,
             "period": period,
             "form_main_parsed": bool(form_main),
+            "form_main_fields": len(parsed_main) if parsed_main else 0,
             "form_sales_parsed": bool(form_sales),
             "form_input_parsed": bool(form_input),
             "form_deduction_parsed": bool(form_deduction),
