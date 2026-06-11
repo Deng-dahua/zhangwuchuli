@@ -667,7 +667,7 @@ function vatImportFile() {
     fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.id = 'vat-import-file-input';
-    fileInput.accept = '.xls,.xlsx,.xlsm';
+    fileInput.accept = '.xls,.xlsx,.xlsm,.xltm';
     fileInput.style.display = 'none';
     fileInput.addEventListener('change', handleVatFileImport);
     document.body.appendChild(fileInput);
@@ -678,6 +678,14 @@ function vatImportFile() {
 async function handleVatFileImport(event) {
   const file = event.target.files[0];
   if (!file) return;
+
+  // 校验文件格式
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['xls', 'xlsx', 'xlsm', 'xltm'].includes(ext)) {
+    toast('不支持此文件格式。请从电子税务局下载 Excel 格式（.xlsx）的申报表，不支持 PDF 格式', 'error');
+    event.target.value = '';
+    return;
+  }
 
   const formData = new FormData();
   formData.append('file', file);
@@ -705,7 +713,13 @@ async function handleVatFileImport(event) {
       await vatLoadDeclarationDetail(vatSelectedId);
     }
   } catch (e) {
-    toast('导入失败: ' + e.message, 'error');
+    // 友好提示：区分格式错误和其他错误
+    const msg = e.message || '';
+    if (msg.toLowerCase().includes('pdf')) {
+      toast('不支持 PDF 格式。请从电子税务局下载 Excel 版本（.xlsx）的申报表后重新导入', 'error');
+    } else {
+      toast('导入失败: ' + msg, 'error');
+    }
   }
   // 清空input
   event.target.value = '';

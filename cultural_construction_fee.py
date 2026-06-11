@@ -44,7 +44,19 @@ async def import_ccf_declaration(
     from datetime import datetime
     
     # 保存上传的文件到临时目录
-    suffix = file.filename.rsplit('.', 1)[-1] if '.' in file.filename else 'xlsx'
+    suffix = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'xlsx'
+    
+    # 拒绝 PDF 文件，给出友好提示
+    if suffix == 'pdf':
+        raise HTTPException(
+            status_code=400,
+            detail="不支持 PDF 格式。请从电子税务局申报系统下载 Excel 版本（.xlsx）的已申报表格后重新导入。"
+        )
+    if suffix not in ('xls', 'xlsx', 'xlsm', 'xltm', 'xlsb'):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持 .{suffix} 格式，请上传 Excel 文件（.xlsx/.xls/.xlsm）。"
+        )
     with tempfile.NamedTemporaryFile(suffix='.' + suffix, delete=False) as tmp:
         content = await file.read()
         tmp.write(content)
