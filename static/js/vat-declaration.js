@@ -1303,7 +1303,7 @@ function renderSchedule1(data) {
     // Row 1: 13%货物 (rowspan 大类=7, 子类=5)
     + '<tr>'
     + '<td rowspan="7" style="'+catStyle+'">一般计税<br>方法计税</td>'
-    + '<td rowspan="5" style="'+subStyle+'">全部征税项目</td>'
+    + '<td rowspan="5" style="'+subStyle+'">全部<br>征税项目</td>'
     + '<td>13%税率的货物及加工修理修配劳务</td><td style="text-align:center">1</td>'
     + Rg(1,s.row1_13_special_sales,s.row1_13_special_tax,s.row1_13_other_sales,s.row1_13_other_tax,
          s.row1_13_no_invoice_sales,s.row1_13_no_invoice_tax,s.row1_13_check_sales,s.row1_13_check_tax)
@@ -1339,7 +1339,7 @@ function renderSchedule1(data) {
     + '</tr>'
     // Row 6: 即征即退货物
     + '<tr>'
-    + '<td rowspan="2" style="'+subStyle+'">其中：即征即退项目</td>'
+    + '<td rowspan="2" style="'+subStyle+'">其中：即征<br>即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">6</td>'
     + Rjg(6,s.row6_refund_goods_total_sales||0,s.row6_refund_goods_total_tax||0)
     + '</tr>'
@@ -1353,7 +1353,7 @@ function renderSchedule1(data) {
     // Row 8: 6%征收率
     + '<tr>'
     + '<td rowspan="11" style="'+catStyle+'">简易计税<br>方法计税</td>'
-    + '<td rowspan="9" style="'+subStyle+'">全部征税项目</td>'
+    + '<td rowspan="9" style="'+subStyle+'">全部<br>征税项目</td>'
     + '<td>6%征收率</td><td style="text-align:center">8</td>'
     + Rg(8,s.row8_6_collect_sales,s.row8_6_collect_tax,s.row8_6_collect_other_sales,s.row8_6_collect_other_tax,
          s.row8_6_collect_no_invoice_sales,s.row8_6_collect_no_invoice_tax)
@@ -1402,7 +1402,7 @@ function renderSchedule1(data) {
     + '</tr>'
     // Row 17: 即征即退货物
     + '<tr>'
-    + '<td rowspan="2" style="'+subStyle+'">其中：即征即退项目</td>'
+    + '<td rowspan="2" style="'+subStyle+'">其中：即征<br>即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">14</td>'
     + Rjg(17,s.row14_refund_goods_total_sales||0,s.row14_refund_goods_total_tax||0)
     + '</tr>'
