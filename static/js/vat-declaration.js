@@ -2170,9 +2170,9 @@ function renderSchedule5(data) {
       r += '<td colspan="2" style="'+B+';'+P+';text-align:center">'+Dash()+'</td>';
       r += Td(Calc(pf+'_tax',scf[pf+'_tax']));
       r += Td(Dash());
-      r += Td(Calc(pf+'_reduction_amount',scf[pf+'_reduction_amount']));
+      r += Td(Calc(pf+'_reduction',scf[pf+'_reduction']));
       r += Td(Dash());
-      r += Td(Calc(pf+'_six_tax_amount',scf[pf+'_six_tax_amount']));
+      r += Td(Calc(pf+'_six_tax_reduction',scf[pf+'_six_tax_reduction']));
       r += Td(Dash());
       r += Td(Calc(pf+'_edu_pilot',scf[pf+'_edu_pilot']));
       r += Td(Calc(pf+'_paid',scf[pf+'_paid']));
