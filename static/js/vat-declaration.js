@@ -2470,8 +2470,8 @@ function renderSchedule5(data) {
   var html = '';
 
   // ===== 标题 =====
-  html += '<div style="text-align:center;font-size:15px;font-weight:700;margin-bottom:2px">增值税及附加税费申报表</div>';
-  html += '<div style="text-align:center;font-size:13px;margin-bottom:6px">附列资料（五）（附加税费情况表）</div>';
+  html += '<div style="text-align:center;font-size:15px;font-weight:700;margin-bottom:2px">增值税及附加税费申报表附列资料（五）</div>';
+  html += '<div style="text-align:center;font-size:13px;margin-bottom:6px">（附加税费情况表）</div>';
 
   // ===== 主表格 =====
   html += '<table class="vat-form-table">';
