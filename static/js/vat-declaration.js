@@ -2067,22 +2067,22 @@ function renderSchedule5(data) {
 
   html += '<div style="overflow-x:auto"><table class="vat-form-table sch5-compact" style="font-size:10px">';
   html += '<colgroup>';
-  html += '<col style="width:70px">';   // 税种名称
-  html += '<col style="width:22px">';   // 序号
-  html += '<col style="width:58px">';   // 1:增值税税额
-  html += '<col style="width:50px">';   // 2:免抵税额
-  html += '<col style="width:52px">';   // 3:留抵退税扣除
-  html += '<col style="width:18px">';   // 税率(左半)
-  html += '<col style="width:18px">';   // 税率(右半)
-  html += '<col style="width:62px">';   // 5:应纳税额
-  html += '<col style="width:52px">';   // 6:减免代码
-  html += '<col style="width:52px">';   // 7:减免税额
-  html += '<col style="width:22px">';   // 8:减征比例%
-  html += '<col style="width:52px">';   // 9:减征额
-  html += '<col style="width:52px">';   // 10:试点代码
-  html += '<col style="width:45px">';   // 11:抵免金额
-  html += '<col style="width:48px">';   // 12:已缴
-  html += '<col style="width:56px">';   // 13:应补退
+  html += '<col style="width:58px">';   // 税种名称
+  html += '<col style="width:20px">';   // 序号
+  html += '<col style="width:50px">';   // 1:增值税税额
+  html += '<col style="width:45px">';   // 2:免抵税额
+  html += '<col style="width:48px">';   // 3:留抵退税扣除
+  html += '<col style="width:16px">';   // 税率(左半)
+  html += '<col style="width:16px">';   // 税率(右半)
+  html += '<col style="width:54px">';   // 5:应纳税额
+  html += '<col style="width:48px">';   // 6:减免代码
+  html += '<col style="width:50px">';   // 7:减免税额
+  html += '<col style="width:24px">';   // 8:减征比例%
+  html += '<col style="width:50px">';   // 9:减征额
+  html += '<col style="width:48px">';   // 10:试点代码
+  html += '<col style="width:46px">';   // 11:抵免金额
+  html += '<col style="width:46px">';   // 12:已缴
+  html += '<col style="width:52px">';   // 13:应补退
   html += '</colgroup><thead>';
 
   // 小微企业六税两费减免政策信息

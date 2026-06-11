@@ -492,12 +492,13 @@
       background: #fef9c4; outline: 1px solid #1a56db; outline-offset: -1px;
     }
 
-    /* 附表五专用 — 紧凑布局 */
+    /* 附表五专用 — 紧凑布局 + 固定列宽 */
+    .vat-form-table.sch5-compact { table-layout: fixed; }
     .vat-form-table.sch5-compact thead th {
       padding: 4px 3px; font-size: 9px; line-height: 1.2;
     }
     .vat-form-table.sch5-compact td {
-      padding: 3px 3px; font-size: 10px;
+      padding: 3px 3px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;
     }
     .vat-form-table.sch5-compact input[type="number"],
     .vat-form-table.sch5-compact input[type="text"] {
