@@ -2047,33 +2047,26 @@ function calculateSchedule4() {
 // ==================== 附表五：附加税费情况表（官方模板还原） ====================
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
-  var T = 'width:1989px;table-layout:fixed;white-space:nowrap';
-  var TdStyle = 'overflow:hidden;text-overflow:ellipsis';
+  var InpNum = 'width:100%;text-align:right;font-size:11px;padding:2px 4px';
+  var InpTxt = 'width:100%;text-align:center;font-size:11px;padding:2px 4px';
 
   // ---- helpers ----
-  var B = 'border:1px solid #a0a0a0', P='padding:2px 3px', bgHead='#d9e2f3', bgSub='#e8edf5';
-  function N(id,val,w) {
+  function N(id,val) {
     var v = (val!=null && val!=='' && !isNaN(val)) ? parseFloat(val) : '';
-    return '<input type="number" step="0.01" id="sch5-'+id+'" value="'+v+'" style="width:100%;text-align:right;border:none;background:transparent;font-size:11px;padding:1px 2px" onchange="calculateSchedule5()">';
+    return '<input type="number" step="0.01" id="sch5-'+id+'" value="'+v+'" style="'+InpNum+'" onchange="calculateSchedule5()">';
   }
   function Pct(id,val) {
     var v = (val!=null && !isNaN(val)) ? Math.round(val*100) : '';
-    return '<input type="number" step="1" min="0" max="100" id="sch5-'+id+'" value="'+v+'" style="width:100%;text-align:right;border:none;background:transparent;font-size:11px;padding:0 2px" onchange="calculateSchedule5()">';
+    return '<input type="number" step="1" min="0" max="100" id="sch5-'+id+'" value="'+v+'" style="'+InpNum+'" onchange="calculateSchedule5()">';
   }
   function Txt(id,val) {
-    return '<input type="text" id="sch5-'+id+'" value="'+(val||'')+'" style="width:100%;border:none;background:transparent;font-size:11px;padding:0 2px;text-align:center">';
+    return '<input type="text" id="sch5-'+id+'" value="'+(val||'')+'" style="'+InpTxt+'">';
   }
   function Calc(id,val) {
     var v = (val!=null && val!=='' && !isNaN(val)) ? parseFloat(val) : '';
-    return '<input type="number" step="0.01" id="sch5-'+id+'" value="'+v+'" style="width:100%;text-align:right;border:none;background:transparent;font-size:11px;font-weight:700;padding:1px 2px" onchange="calculateSchedule5()">';
+    return '<input type="number" step="0.01" id="sch5-'+id+'" value="'+v+'" style="'+InpNum+';font-weight:700" onchange="calculateSchedule5()">';
   }
-  function Dash() { return '<span style="color:#9ca3af;font-size:11px">——</span>'; }
-  function Td(inner,st) {
-    return '<td style="'+B+';'+P+';'+TdStyle+';'+(st||'')+'">'+inner+'</td>';
-  }
-  function Th(inner,st) {
-    return '<th style="'+B+';'+P+';'+TdStyle+';'+(st||'')+'">'+inner+'</th>';
-  }
+  function Dash() { return '<span style="color:#9ca3af">——</span>'; }
 
   // ---- micro policy data ----
   var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
@@ -2083,101 +2076,73 @@ function renderSchedule5(data) {
 
   var html = '';
 
-  // ===== 统一容器 =====
-  html += '<div style="max-width:1989px;margin:0 auto">';
-  // 标题：同在一行
-  html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:6px 0 6px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）（附加税费情况表）</div>';
+  // ===== 标题 =====
+  html += '<div style="text-align:center;font-size:15px;font-weight:700;margin-bottom:2px">增值税及附加税费申报表</div>';
+  html += '<div style="text-align:center;font-size:13px;margin-bottom:6px">附列资料（五）（附加税费情况表）</div>';
 
-  // ===== 主表格（含政策行+数据行，无缝隙） =====
-  html += '<div style="overflow-x:auto">';
-  html += '<style>.sch5-table td,.sch5-table th{overflow:hidden;text-overflow:ellipsis}</style>';
-  html += '<table class="vat-form-table sch5-table" style="'+T+';font-size:11px;border-collapse:collapse;border:1px solid #a0a0a0">';
-
-  // colgroup: 16列 — 全部×1.5
-  html += '<colgroup>';
-  html += '<col style="width:127px"><col style="width:42px">';    // 1税种 2序号
-  html += '<col style="width:120px"><col style="width:132px"><col style="width:158px">';  // 3增值税 4免抵 5留抵
-  html += '<col style="width:45px"><col style="width:52px">';    // 6-7税率 merged=97px
-  html += '<col style="width:165px">';   // 8 应纳税
-  html += '<col style="width:127px">';   // 9 减免代码
-  html += '<col style="width:120px">';   // 10 减免额
-  html += '<col style="width:120px">';   // 11 减征%
-  html += '<col style="width:150px">';   // 12 减征额
-  html += '<col style="width:128px">';   // 13 试点代码
-  html += '<col style="width:120px">';   // 14 抵免
-  html += '<col style="width:150px">';   // 15 已缴
-  html += '<col style="width:233px">';   // 16 应补退
-  html += '</colgroup>';
-  // verify: 127+42+120+132+158+45+52+165+127+120+120+150+128+120+150+233 = 1989
+  // ===== 主表格 =====
+  html += '<table class="vat-form-table">';
 
   // ===== thead: 表头5行（政策 → 主分组 → 子列名 → 列号） =====
   html += '<thead>';
 
-  var polCols = 'border:1px solid #a0a0a0;padding:2px 4px;white-space:nowrap';
-
   // --- Row 1: 小微企业政策 ---
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="6" style="'+polCols+'">本期是否适用小微企业"六税两费"减免政策</td>';
-  html += '<td colspan="2" style="'+polCols+';text-align:center">'+microYes+'是　'+(microYes=='☑'?'□':'□')+'否</td>';
-  html += '<td colspan="3" style="'+polCols+'">减免政策适用主体</td>';
-  html += '<td colspan="5" style="'+polCols+'">'+zt+'</td>';
+  html += '<tr style="background:#fefce8">';
+  html += '<td colspan="6">本期是否适用小微企业"六税两费"减免政策</td>';
+  html += '<td colspan="2" style="text-align:center">'+microYes+'是　'+(microYes=='☑'?'□':'□')+'否</td>';
+  html += '<td colspan="3">减免政策适用主体</td>';
+  html += '<td colspan="5">'+zt+'</td>';
   html += '</tr>';
 
   // --- Row 2: 起止时间 ---
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="6" style="'+polCols+'">适用减免政策起止时间</td>';
-  html += '<td colspan="2" style="'+polCols+'">'+(rs||'　　年　月　日')+'</td>';
-  html += '<td colspan="3" style="'+polCols+';text-align:center">至</td>';
-  html += '<td colspan="5" style="'+polCols+'">'+(re||'　　年　月　日')+'</td>';
+  html += '<tr style="background:#fefce8">';
+  html += '<td colspan="6">适用减免政策起止时间</td>';
+  html += '<td colspan="2">'+(rs||'　　年　月　日')+'</td>';
+  html += '<td colspan="3" style="text-align:center">至</td>';
+  html += '<td colspan="5">'+(re||'　　年　月　日')+'</td>';
   html += '</tr>';
 
   // --- Row 3: 主分组 ---
-  html += '<tr style="background:'+bgHead+';font-size:11px;font-weight:600;text-align:center">';
-  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）种</th>';
-  html += '<th colspan="3" style="'+B+';'+P+'">计税（费）依据</th>';
-  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）率（%）</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应纳税（费）额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">本期减免税（费）额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">小微企业"六税两费"减免政策</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">试点建设培育产教融合型企业</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期已缴税（费）额</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应补（退）税（费）额</th>';
+  html += '<tr style="background:#d9e2f3" class="vat-bold">';
+  html += '<th colspan="2">税（费）种</th>';
+  html += '<th colspan="3">计税（费）依据</th>';
+  html += '<th colspan="2">税（费）率（%）</th>';
+  html += '<th>本期应纳税（费）额</th>';
+  html += '<th colspan="2">本期减免税（费）额</th>';
+  html += '<th colspan="2">小微企业"六税两费"减免政策</th>';
+  html += '<th colspan="2">试点建设培育产教融合型企业</th>';
+  html += '<th>本期已缴税（费）额</th>';
+  html += '<th>本期应补（退）税（费）额</th>';
   html += '</tr>';
 
   // --- Row 4: 子列名 ---
-  html += '<tr style="background:'+bgSub+';font-size:10px;text-align:center">';
-  html += '<th colspan="2" style="'+B+';'+P+'">税（费）种</th>';
-  html += '<th style="'+B+';'+P+'">增值税税额</th>';
-  html += '<th style="'+B+';'+P+'">增值税免抵税额</th>';
-  html += '<th style="'+B+';'+P+'">留抵退税本期扣除额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">税（费）率（%）</th>';
-  html += '<th style="'+B+';'+P+'">本期应纳税（费）额</th>';
-  html += '<th style="'+B+';'+P+'">减免性质代码</th>';
-  html += '<th style="'+B+';'+P+'">减免税（费）额</th>';
-  html += '<th style="'+B+';'+P+'">减征比例（%）</th>';
-  html += '<th style="'+B+';'+P+'">减征额</th>';
-  html += '<th style="'+B+';'+P+'">减免性质代码</th>';
-  html += '<th style="'+B+';'+P+'">本期抵免金额</th>';
-  html += '<th style="'+B+';'+P+'">本期已缴税（费）额</th>';
-  html += '<th style="'+B+';'+P+'">本期应补（退）税（费）额</th>';
+  html += '<tr style="background:#e8edf5;font-size:10px;text-align:center">';
+  html += '<th colspan="2">税（费）种</th>';
+  html += '<th>增值税税额</th>';
+  html += '<th>增值税免抵税额</th>';
+  html += '<th>留抵退税本期扣除额</th>';
+  html += '<th colspan="2">税（费）率（%）</th>';
+  html += '<th>本期应纳税（费）额</th>';
+  html += '<th>减免性质代码</th>';
+  html += '<th>减免税（费）额</th>';
+  html += '<th>减征比例（%）</th>';
+  html += '<th>减征额</th>';
+  html += '<th>减免性质代码</th>';
+  html += '<th>本期抵免金额</th>';
+  html += '<th>本期已缴税（费）额</th>';
+  html += '<th>本期应补（退）税（费）额</th>';
   html += '</tr>';
 
   // --- Row 5: 列号/公式 ---
   html += '<tr style="background:#f0f4ff;font-size:9px;color:#6b7280;text-align:center">';
-  html += '<td colspan="2" style="'+B+';padding:1px 2px"></td>';
-  html += '<td style="'+B+';padding:1px 2px">1</td>';
-  html += '<td style="'+B+';padding:1px 2px">2</td>';
-  html += '<td style="'+B+';padding:1px 2px">3</td>';
-  html += '<td colspan="2" style="'+B+';padding:1px 2px">4</td>';
-  html += '<td style="'+B+';padding:1px 2px">5=(1+2-3)×4</td>';
-  html += '<td style="'+B+';padding:1px 2px">6</td>';
-  html += '<td style="'+B+';padding:1px 2px">7</td>';
-  html += '<td style="'+B+';padding:1px 2px">8</td>';
-  html += '<td style="'+B+';padding:1px 2px">9=(5-7)×8</td>';
-  html += '<td style="'+B+';padding:1px 2px">10</td>';
-  html += '<td style="'+B+';padding:1px 2px">11</td>';
-  html += '<td style="'+B+';padding:1px 2px">12</td>';
-  html += '<td style="'+B+';padding:1px 2px">13=5-7-9-11-12</td>';
+  html += '<td colspan="2"></td>';
+  html += '<td>1</td><td>2</td><td>3</td>';
+  html += '<td colspan="2">4</td>';
+  html += '<td>5=(1+2-3)×4</td>';
+  html += '<td>6</td><td>7</td><td>8</td>';
+  html += '<td>9=(5-7)×8</td>';
+  html += '<td>10</td><td>11</td><td>12</td>';
+  html += '<td>13=5-7-9-11-12</td>';
   html += '</tr>';
 
   html += '</thead>';
@@ -2189,35 +2154,38 @@ function renderSchedule5(data) {
   function row(name,seq,pf,opts) {
     opts = opts || {};
     var dash13 = opts.dash13, dash14 = opts.dash14, isTotal = opts.isTotal;
-    var r = '<tr'+(isTotal?' style="background:#f0fdf4;font-weight:700"':'')+'>';
-    r += Td(name,'') + Td(seq,'text-align:center;font-weight:600');
+    var r = '<tr'+(isTotal?' class="vat-bold"':'')+'>';
+    r += '<td>'+name+'</td>';
+    r += '<td style="text-align:center;font-weight:600">'+seq+'</td>';
 
     if (isTotal) {
-      r += Td(Dash()) + Td(Dash()) + Td(Dash());
-      r += '<td colspan="2" style="'+B+';'+P+';text-align:center">'+Dash()+'</td>';
-      r += Td(Calc(pf+'_tax',scf[pf+'_tax']));
-      r += Td(Dash());
-      r += Td(Calc(pf+'_reduction',scf[pf+'_reduction']));
-      r += Td(Dash());
-      r += Td(Calc(pf+'_six_tax_reduction',scf[pf+'_six_tax_reduction']));
-      r += Td(Dash());
-      r += Td(Calc(pf+'_edu_pilot',scf[pf+'_edu_pilot']));
-      r += Td(Calc(pf+'_paid',scf[pf+'_paid']));
-      r += Td(Calc(pf+'_final',scf[pf+'_final']));
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td colspan="2" class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Calc(pf+'_tax',scf[pf+'_tax'])+'</td>';
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Calc(pf+'_reduction',scf[pf+'_reduction'])+'</td>';
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Calc(pf+'_six_tax_reduction',scf[pf+'_six_tax_reduction'])+'</td>';
+      r += '<td class="num">'+Dash()+'</td>';
+      r += '<td class="num">'+Calc(pf+'_edu_pilot',scf[pf+'_edu_pilot'])+'</td>';
+      r += '<td class="num">'+Calc(pf+'_paid',scf[pf+'_paid'])+'</td>';
+      r += '<td class="num">'+Calc(pf+'_final',scf[pf+'_final'])+'</td>';
     } else {
-      r += Td(N(pf+'_base',scf[pf+'_base']));
-      r += Td(N(pf+'_exempt_credit',scf[pf+'_exempt_credit']));
-      r += Td(N(pf+'_vat_refund_deduct',scf[pf+'_vat_refund_deduct']));
-      r += '<td colspan="2" style="'+B+';'+P+'">'+Pct(pf+'_rate',scf[pf+'_rate'])+'</td>';
-      r += Td(Calc(pf+'_tax',scf[pf+'_tax']));
-      r += Td(Txt(pf+'_reduction_code',scf[pf+'_reduction_code']));
-      r += Td(N(pf+'_reduction_amount',scf[pf+'_reduction_amount']));
-      r += Td(Pct(pf+'_reduction_rate',scf[pf+'_reduction_rate']));
-      r += Td(Calc(pf+'_six_tax_amount',scf[pf+'_six_tax_amount']));
-      r += Td(dash13 ? Dash() : Txt(pf+'_edu_pilot_code',scf[pf+'_edu_pilot_code']));
-      r += Td(dash14 ? Dash() : N(pf+'_edu_pilot_amount',scf[pf+'_edu_pilot_amount']));
-      r += Td(N(pf+'_paid',scf[pf+'_paid']));
-      r += Td(Calc(pf+'_final',scf[pf+'_final']));
+      r += '<td class="num">'+N(pf+'_base',scf[pf+'_base'])+'</td>';
+      r += '<td class="num">'+N(pf+'_exempt_credit',scf[pf+'_exempt_credit'])+'</td>';
+      r += '<td class="num">'+N(pf+'_vat_refund_deduct',scf[pf+'_vat_refund_deduct'])+'</td>';
+      r += '<td colspan="2" class="num">'+Pct(pf+'_rate',scf[pf+'_rate'])+'</td>';
+      r += '<td class="num">'+Calc(pf+'_tax',scf[pf+'_tax'])+'</td>';
+      r += '<td>'+Txt(pf+'_reduction_code',scf[pf+'_reduction_code'])+'</td>';
+      r += '<td class="num">'+N(pf+'_reduction_amount',scf[pf+'_reduction_amount'])+'</td>';
+      r += '<td class="num">'+Pct(pf+'_reduction_rate',scf[pf+'_reduction_rate'])+'</td>';
+      r += '<td class="num">'+Calc(pf+'_six_tax_amount',scf[pf+'_six_tax_amount'])+'</td>';
+      r += '<td>'+(dash13 ? Dash() : Txt(pf+'_edu_pilot_code',scf[pf+'_edu_pilot_code']))+'</td>';
+      r += '<td class="num">'+(dash14 ? Dash() : N(pf+'_edu_pilot_amount',scf[pf+'_edu_pilot_amount']))+'</td>';
+      r += '<td class="num">'+N(pf+'_paid',scf[pf+'_paid'])+'</td>';
+      r += '<td class="num">'+Calc(pf+'_final',scf[pf+'_final'])+'</td>';
     }
     r += '</tr>';
     return r;
@@ -2228,16 +2196,16 @@ function renderSchedule5(data) {
   html += row('地方教育附加','3','local_edu');
   html += row('合计','4','total',{isTotal:true});
 
-  // ===== 产教融合 & 留抵退税（Row 12-17） =====
+  // ===== 产教融合 & 留抵退税 =====
   function pilotRow(s1,s2,seq,col1) {
-    var r = '<tr style="background:#dbeafe;font-size:11px">';
+    var r = '<tr style="background:#dbeafe">';
     if (s1) {
-      r += '<td '+(s2?'rowspan="3"':'')+' colspan="5" style="'+B+';'+P+';text-align:left;font-weight:600">'+s1+'</td>';
-      r += '<td '+(s2?'rowspan="3"':'')+' colspan="2" style="'+B+';'+P+';text-align:center">□是 □否</td>';
+      r += '<td '+(s2?'rowspan="3"':'')+' colspan="5" style="text-align:left;font-weight:600">'+s1+'</td>';
+      r += '<td '+(s2?'rowspan="3"':'')+' colspan="2" style="text-align:center">□是 □否</td>';
     }
-    r += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
-    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
-    r += '<td colspan="2" style="'+B+';'+P+'">'+N('sch5_pilot_'+seq,scf['pilot_'+seq])+'</td>';
+    r += '<td colspan="5" style="text-align:left">'+col1+'</td>';
+    r += '<td colspan="2" style="text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
+    r += '<td colspan="2" class="num">'+N('sch5_pilot_'+seq,scf['pilot_'+seq])+'</td>';
     r += '</tr>';
     return r;
   }
@@ -2246,13 +2214,13 @@ function renderSchedule5(data) {
   html += pilotRow('',false,'7','结转下期可抵免金额');
 
   function vatRefundRow(s1,s2,seq,col1) {
-    var r = '<tr style="background:#dbeafe;font-size:11px">';
+    var r = '<tr style="background:#dbeafe">';
     if (s1) {
-      r += '<td '+(s2?'rowspan="3"':'')+' colspan="7" style="'+B+';'+P+';text-align:left;font-weight:600">'+s1+'</td>';
+      r += '<td '+(s2?'rowspan="3"':'')+' colspan="7" style="text-align:left;font-weight:600">'+s1+'</td>';
     }
-    r += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
-    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
-    r += '<td colspan="2" style="'+B+';'+P+'">'+N('sch5_vat_refund_'+seq,scf['vat_refund_'+seq])+'</td>';
+    r += '<td colspan="5" style="text-align:left">'+col1+'</td>';
+    r += '<td colspan="2" style="text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
+    r += '<td colspan="2" class="num">'+N('sch5_vat_refund_'+seq,scf['vat_refund_'+seq])+'</td>';
     r += '</tr>';
     return r;
   }
@@ -2260,8 +2228,7 @@ function renderSchedule5(data) {
   html += vatRefundRow('',false,'9','上期结存可用于扣除的留抵退税额');
   html += vatRefundRow('',false,'10','结转下期可用于扣除的留抵退税额');
 
-  html += '</tbody></table></div>';
-  html += '</div>';  // 关闭统一外层容器
+  html += '</tbody></table>';
   return html;
 }
 
