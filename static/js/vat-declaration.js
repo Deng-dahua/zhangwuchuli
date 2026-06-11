@@ -2061,31 +2061,6 @@ function renderSchedule5(data) {
   html += '<div style="text-align:center;font-size:14px;font-weight:700;padding:10px 0 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>';
   html += '<div style="text-align:center;font-size:12px;color:#374151;padding-bottom:10px">（附加税费情况表）</div>';
 
-  // === 小微企业"六税两费"减免政策信息（表格上方） ===
-  var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
-  var fmtDate = function(d) { if(!d) return ''; var p=d.split('-'); return p[0]+'年'+(p[1]||'')+'月'+(p[2]||'')+'日'; };
-  var rs = fmtDate(data.reduction_start), re = fmtDate(data.reduction_end);
-  var 主体 = (data.micro_enterprise && data.six_tax_reduction) ? '☑个体工商户　☑小型微利企业' : '□个体工商户　□小型微利企业';
-
-  html += '<table style="width:960px;table-layout:fixed;border-collapse:collapse;margin:0 auto 8px;font-size:11px;border:1px solid #d1d5db">';
-  html += '<colgroup>';
-  html += '<col style="width:480px"><col style="width:480px">';
-  html += '</colgroup>';
-  html += '<tr style="background:#fefce8">';
-  html += '<td style="border:1px solid #d1d5db;padding:4px 6px">';
-  html += '本期是否适用小微企业"六税两费"减免政策　' + microYes + '是　' + (microYes=='☑'?'□':'□') + '否';
-  html += '</td>';
-  html += '<td style="border:1px solid #d1d5db;padding:4px 6px">';
-  html += '减免政策适用主体：' + 主体;
-  html += '</td></tr>';
-  html += '<tr style="background:#fefce8">';
-  html += '<td style="border:1px solid #d1d5db;padding:4px 6px">';
-  html += '适用减免政策起止时间';
-  html += '</td>';
-  html += '<td style="border:1px solid #d1d5db;padding:4px 6px">';
-  html += (rs||'　　年　月　日') + ' 至 ' + (re||'　　年　月　日');
-  html += '</td></tr></table>';
-
   // === 主表格：16列，完全按照官方模板 ===
   html += '<div style="overflow-x:auto">';
   html += '<table class="vat-form-table" style="' + T + ';font-size:11px;border:1px solid #d1d5db;border-collapse:collapse">';
@@ -2160,6 +2135,27 @@ function renderSchedule5(data) {
   html += '<td style="border:1px solid #d1d5db;padding:1px 2px;text-align:center">13=5-7-9-11-12</td>';
   html += '<td style="border:1px solid #d1d5db;padding:1px 2px;text-align:center">-</td>';
   html += '</tr></thead><tbody>';
+
+  // 小微企业政策（表格内部，官方模板Row 3-4）
+  var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
+  var fmtDate = function(d) { if(!d) return ''; var p=d.split('-'); return p[0]+'年'+(p[1]||'')+'月'+(p[2]||'')+'日'; };
+  var rs = fmtDate(data.reduction_start), re = fmtDate(data.reduction_end);
+  var 主体 = (data.micro_enterprise && data.six_tax_reduction) ? '☑个体工商户　☑小型微利企业' : '□个体工商户　□小型微利企业';
+
+  html += '<tr style="background:#fefce8;font-size:11px">';
+  html += '<td colspan="8" style="border:1px solid #d1d5db;padding:4px 6px;text-align:left">';
+  html += '本期是否适用小微企业"六税两费"减免政策　' + microYes + '是　' + (microYes=='☑'?'□':'□') + '否';
+  html += '</td>';
+  html += '<td colspan="8" style="border:1px solid #d1d5db;padding:4px 6px;text-align:left">';
+  html += '减免政策适用主体：' + 主体;
+  html += '</td></tr>';
+  html += '<tr style="background:#fefce8;font-size:11px">';
+  html += '<td colspan="8" style="border:1px solid #d1d5db;padding:4px 6px;text-align:left">';
+  html += '适用减免政策起止时间';
+  html += '</td>';
+  html += '<td colspan="8" style="border:1px solid #d1d5db;padding:4px 6px;text-align:left">';
+  html += (rs||'　　年　月　日') + ' 至 ' + (re||'　　年　月　日');
+  html += '</td></tr>';
 
   // === 数据行：城市维护建设税、教育费附加、地方教育附加、合计 ===
   function surRow(name, seq, pf, isTotal) {
