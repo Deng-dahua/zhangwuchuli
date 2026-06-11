@@ -1543,7 +1543,8 @@ function renderSchedule2(data) {
 
     // 一、申报抵扣的进项税额
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:900px"><colgroup>'
+    + '<col style="width:450px"><col style="width:90px"><col style="width:120px"><col style="width:120px"><col style="width:120px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
 
     // Row 1 = 2+3
@@ -1614,7 +1615,8 @@ function renderSchedule2(data) {
 
     // 二、进项税额转出额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
-    + '<table class="vat-form-table"><colgroup><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:900px"><colgroup>'
+    + '<col style="width:700px"><col style="width:100px"><col style="width:100px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
 
     // Row 13 = 14+...+23b
@@ -1636,7 +1638,8 @@ function renderSchedule2(data) {
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
-    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:900px"><colgroup>'
+    + '<col style="width:450px"><col style="width:90px"><col style="width:120px"><col style="width:120px"><col style="width:120px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
 
     // Row 24
@@ -1693,7 +1696,8 @@ function renderSchedule2(data) {
 
     // 四、其他
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
-    + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:900px"><colgroup>'
+    + '<col style="width:450px"><col style="width:90px"><col style="width:120px"><col style="width:120px"><col style="width:120px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
 
     // Row 35
