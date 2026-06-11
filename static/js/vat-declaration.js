@@ -22,6 +22,50 @@ const VAT_PAGES = [
   { id: 'reduction', label: '减免税申报明细表' },
 ];
 
+// ==================== 增值税报表公式定义 ====================
+// vatManualOverrides: 记录被手动覆盖的公式单元格 { cellId: true }
+var vatManualOverrides = {};
+
+// VAT_FORMULAS: 所有报表的公式单元格定义
+//   formula: 公式说明（显示用）
+//   deps: 依赖的源单元格ID列表
+//   calc: 计算函数（接收getVal函数，返回计算值）
+var VAT_FORMULAS = {
+  // ===== 主表 — 本月数 =====
+  'vat-row17_total_deductible':      { formula:'12+13-14-15+16', deps:['vat-row12_input_tax','vat-row13_prior_credit','vat-row14_input_transfer_out','vat-row15_exempt_refund','vat-row16_actual_deduct_by_item'], type:'main' },
+  'vat-row18_actual_deduct':        { formula:'MIN(17,11)',      deps:['vat-row17_total_deductible','vat-row11_output_tax'], type:'main' },
+  'vat-row19_tax_payable':         { formula:'11-18',           deps:['vat-row11_output_tax','vat-row18_actual_deduct'], type:'main' },
+  'vat-row20_end_credit':           { formula:'17-18',           deps:['vat-row17_total_deductible','vat-row18_actual_deduct'], type:'main' },
+  'vat-row24_tax_payable_total':   { formula:'19+21-23',       deps:['vat-row19_tax_payable','vat-row21_simple_tax','vat-row23_reduction'], type:'main' },
+  'vat-row27_installment_prepaid':  { formula:'28+29+30+31',    deps:['vat-row28_export_tax_refund','vat-row29_remote_prepaid','vat-row30_already_paid_total','vat-row31_should_pay_refund'], type:'main' },
+  'vat-row32_check_tax_should':    { formula:'24+25+26-27',    deps:['vat-row24_tax_payable_total','vat-row25_prior_unpaid','vat-row26_real_paid_during','vat-row27_installment_prepaid'], type:'main' },
+  'vat-row34_should_check':        { formula:'24-28-29',       deps:['vat-row24_tax_payable_total','vat-row28_export_tax_refund','vat-row29_remote_prepaid'], type:'main' },
+  // ===== 主表 — 本年累计 =====
+  'vat-row17_total_deductible_ytd': { formula:'12+13-14-15+16(YTD)', deps:['vat-row12_input_tax_ytd','vat-row13_prior_credit_ytd','vat-row14_input_transfer_out_ytd','vat-row15_exempt_refund_ytd','vat-row16_actual_deduct_by_item_ytd'], type:'main' },
+  'vat-row18_actual_deduct_ytd':   { formula:'MIN(17,11)(YTD)', deps:['vat-row17_total_deductible_ytd','vat-row11_output_tax_ytd'], type:'main' },
+  'vat-row19_tax_payable_ytd':    { formula:'11-18(YTD)',    deps:['vat-row11_output_tax_ytd','vat-row18_actual_deduct_ytd'], type:'main' },
+  'vat-row20_end_credit_ytd':      { formula:'17-18(YTD)',    deps:['vat-row17_total_deductible_ytd','vat-row18_actual_deduct_ytd'], type:'main' },
+  'vat-row24_tax_payable_total_ytd':{ formula:'19+21-23(YTD)',deps:['vat-row19_tax_payable_ytd','vat-row21_simple_tax_ytd','vat-row23_reduction_ytd'], type:'main' },
+  'vat-row27_installment_prepaid_ytd':{formula:'28+29+30+31(YTD)',deps:['vat-row28_export_tax_refund_ytd','vat-row29_remote_prepaid_ytd','vat-row30_already_paid_total_ytd','vat-row31_should_pay_refund_ytd'], type:'main' },
+  'vat-row32_check_tax_should_ytd':{ formula:'24+25+26-27(YTD)',deps:['vat-row24_tax_payable_total_ytd','vat-row25_prior_unpaid_ytd','vat-row26_real_paid_during_ytd','vat-row27_installment_prepaid_ytd'], type:'main' },
+  'vat-row34_should_check_ytd':    { formula:'24-28-29(YTD)', deps:['vat-row24_tax_payable_total_ytd','vat-row28_export_tax_refund_ytd','vat-row29_remote_prepaid_ytd'], type:'main' },
+  // ===== 附表五 — 附加税费 =====
+  'sch5-city_calc':  { formula:'主表34×7%',  deps:['sch5-base'], type:'sch5' },
+  'sch5-edu_calc':   { formula:'主表34×3%',  deps:['sch5-base'], type:'sch5' },
+  'sch5-local_edu_calc':{ formula:'主表34×2%',  deps:['sch5-base'], type:'sch5' },
+};
+
+// 公式单元格样式
+var VAT_FORMULA_CSS = '.vat-formula-cell{background:#e8f0fe!important;cursor:pointer}.vat-formula-cell:focus{background:#dbeafe!important}.vat-override{background:#fff3cd!important;border:1px solid #f59e0b!important}';
+
+// 注入公式样式
+if (!document.getElementById('vat-formula-style')) {
+  var _fs = document.createElement('style');
+  _fs.id = 'vat-formula-style';
+  _fs.textContent = VAT_FORMULA_CSS;
+  document.head.appendChild(_fs);
+}
+
 async function stepVATPeriod(type, delta) {
   // 获取当前显示的年月（优先从页面 select 控件读，其次从缓存的 declaration）
   const ySel = document.getElementById('vat-detail-year');
@@ -669,6 +713,19 @@ function _fmt0_2(v) {
 function _inp(id, val, cls) {
   var v = (val !== null && val !== undefined && val !== '') ? parseFloat(val) : '';
   if (v !== '' && isNaN(v)) v = '';
+  // 判断是否为公式单元格
+  var info = VAT_FORMULAS[id];
+  if (info) {
+    var isOver = vatManualOverrides[id];
+    var clsName = 'vat-formula-cell' + (isOver ? ' vat-override' : '');
+    var title = '公式：' + info.formula + (isOver ? '（已手动覆盖，双击恢复）' : '（可手动输入覆盖，双击恢复公式）');
+    return '<input type="number" step="0.01" id="' + id + '" value="' + v + '" '
+      + 'class="' + clsName + '" '
+      + 'data-vat-formula="' + info.formula + '" '
+      + 'title="' + title + '" '
+      + 'onchange="vatFormulaManualChange(this)" '
+      + 'ondblclick="vatResetFormula(\'' + id + '\')">';
+  }
   return '<input type="number" step="0.01" id="' + id + '" value="' + v + '" onchange="vatFieldChanged()">';
 }
 // 即征即退列输入（无 onchange，不触发主表计算）
@@ -700,6 +757,7 @@ function renderVATToolbar(yearOpts, monthOpts) {
     + '<button class="btn-toolbar" onclick="vatClearFilter()" title="清除筛选条件">清除</button>'
     + '<button class="btn-toolbar" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">生成凭证</button>'
     + '<button class="btn-toolbar" onclick="vatSaveManualData()" title="保存手动填列的数据" style="background:#059669;color:#fff">保存数据</button>'
+    + '<button class="btn-toolbar" onclick="vatResetAllFormulas()" title="重置所有公式单元格，恢复自动计算" style="background:#f59e0b;color:#fff">重置公式</button>'
     + '<button class="btn-toolbar-danger" onclick="vatDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
@@ -727,8 +785,9 @@ function calculateVATMainForm() {
     var v = parseFloat(el.value);
     return isNaN(v) ? 0 : v;
   }
-  // 辅助：设置只读单元格文本
+  // 辅助：设置公式单元格值（跳过手动覆盖）
   function setText(id, val) {
+    if (vatManualOverrides[id]) return; // 手动覆盖的单元格不更新
     var el = document.getElementById(id);
     if (!el) return;
     el.value = (val === 0 || val === -0) ? '' : parseFloat(val).toFixed(2);
@@ -805,6 +864,46 @@ function calculateVATMainForm() {
   setText('vat-row27_installment_prepaid_ytd', r27ytd);
   setText('vat-row32_check_tax_should_ytd', r32ytd);
   setText('vat-row34_should_check_ytd', r34ytd);
+}
+
+// ==================== 公式单元格手动覆盖 / 重置 ====================
+function vatFormulaManualChange(el) {
+  // 用户手动修改了公式单元格，标记为覆盖
+  vatManualOverrides[el.id] = true;
+  el.classList.add('vat-override');
+  el.title = '公式：' + (el.getAttribute('data-vat-formula') || '') + '（已手动覆盖，双击恢复公式）';
+  vatFieldChanged();
+}
+
+function vatResetFormula(id) {
+  // 恢复单个公式单元格
+  delete vatManualOverrides[id];
+  var el = document.getElementById(id);
+  if (el) {
+    var info = VAT_FORMULAS[id];
+    if (info) {
+      el.classList.remove('vat-override');
+      el.title = '公式：' + info.formula + '（可手动输入覆盖，双击恢复公式）';
+    }
+  }
+  calculateVATMainForm();
+}
+
+function vatResetAllFormulas() {
+  // 重置所有公式单元格
+  vatManualOverrides = {};
+  for (var id in VAT_FORMULAS) {
+    if (VAT_FORMULAS.hasOwnProperty(id)) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('vat-override');
+        var info = VAT_FORMULAS[id];
+        el.title = '公式：' + info.formula + '（可手动输入覆盖，双击恢复公式）';
+      }
+    }
+  }
+  calculateVATMainForm();
+  toast('已恢复所有公式', 'success');
 }
 
 function vatCollectFormData() {
@@ -1038,8 +1137,8 @@ function renderMainForm(data) {
   h += _refundTd(m.row19_tax_payable_refund) + _refundTd(m.row19_tax_payable_refund_ytd) + '</tr>';
   // row 20
   h += '<tr><td>期末留抵税额</td><td style="text-align:center;font-size:10px;color:#6b7280">20=17-18</td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row20_end_credit" value="' + (m.row20_end_credit != null ? m.row20_end_credit : '') + '" style="width:100%;text-align:right;font-size:11px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row20_end_credit_ytd" value="' + (m.row20_end_credit_ytd != null ? m.row20_end_credit_ytd : '') + '" style="width:100%;text-align:right;font-size:11px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
+  h += '<td class="num">' + _inp('vat-row20_end_credit', m.row20_end_credit) + '</td>';
+  h += '<td class="num">' + _inp('vat-row20_end_credit_ytd', m.row20_end_credit_ytd) + '</td>';
   h += _refundTd(m.row20_end_credit_refund) + _refundTd(m.row20_end_credit_refund_ytd) + '</tr>';
   // row 21
   h += '<tr><td>简易计税办法计算的应纳税额</td><td style="text-align:center">21</td>';
@@ -1075,8 +1174,8 @@ function renderMainForm(data) {
   h += _refundTd(m.row26_real_paid_during_refund) + _refundTd(m.row26_real_paid_during_refund_ytd) + '</tr>';
   // row 27
   h += '<tr><td>本期已缴税额</td><td style="text-align:center;font-size:10px;color:#6b7280">27=28+29+30+31</td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row27_installment_prepaid" value="' + (m.row27_installment_prepaid != null ? m.row27_installment_prepaid : '') + '" style="width:100%;text-align:right;font-size:11px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
-  h += '<td class="num"><input type="number" step="0.01" id="vat-row27_installment_prepaid_ytd" value="' + (m.row27_installment_prepaid_ytd != null ? m.row27_installment_prepaid_ytd : '') + '" style="width:100%;text-align:right;font-size:11px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
+  h += '<td class="num">' + _inp('vat-row27_installment_prepaid', m.row27_installment_prepaid) + '</td>';
+  h += '<td class="num">' + _inp('vat-row27_installment_prepaid_ytd', m.row27_installment_prepaid_ytd) + '</td>';
   h += _refundTd(m.row27_installment_prepaid_refund) + _refundTd(m.row27_installment_prepaid_refund_ytd) + '</tr>';
   // row 28
   h += '<tr><td style="padding-left:18px">①分次预缴税额</td><td style="text-align:center">28</td>';
@@ -1428,6 +1527,66 @@ function renderSchedule1(data) {
 }
 
 // ==================== 附表一计算函数 ====================
+// 通用公式单元格更新（用于附表二/五等已经是<input>的表格）
+// id: 元素ID（不含前缀，自动加前缀）
+// val: 计算结果
+// formula: 公式描述
+// prefix: ID前缀（如'sch5-', 'sch2-'）
+function _vatCalcUpdate(id, val, formula, prefix) {
+  var fullId = (prefix || '') + id;
+  var el = document.getElementById(fullId);
+  if (!el) return;
+  // 如果手动覆盖了，跳过更新
+  if (vatManualOverrides[fullId]) return;
+  // 设置值
+  el.value = (val === 0 || val === -0) ? '' : _fm0(val);
+  // 添加公式样式
+  if (!VAT_FORMULAS[fullId]) {
+    VAT_FORMULAS[fullId] = { formula: formula, deps: [], type: prefix || 'sch' };
+  }
+  el.classList.remove('vat-formula-cell', 'vat-override');
+  el.classList.add('vat-formula-cell');
+  el.setAttribute('data-vat-formula', formula);
+  el.title = '公式：' + formula + '（可手动输入覆盖，双击恢复公式）';
+  el.onchange = function() { vatFormulaManualChange(el); };
+  el.ondblclick = function() { vatResetFormula(fullId); };
+}
+
+// 辅助：将附表一公式列(<td>)转为可编辑<input>并设置值，支持手动覆盖
+function _sch1SetFormula(id, val, formula, deps) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  // 如果是 <td>，转为 <input>
+  if (el.tagName !== 'INPUT') {
+    var td = el;
+    var inp = document.createElement('input');
+    inp.type = 'number';
+    inp.step = '0.01';
+    inp.id = id;
+    inp.style.cssText = 'width:100%;text-align:right;font-size:11px;border:none;padding:2px 4px';
+    // 添加公式定义
+    VAT_FORMULAS[id] = { formula: formula, deps: deps.split(','), type: 'sch1' };
+    td.innerHTML = '';
+    td.appendChild(inp);
+    el = inp;
+  }
+  // 补充公式定义（如果是动态创建的）
+  if (!VAT_FORMULAS[id]) {
+    VAT_FORMULAS[id] = { formula: formula, deps: deps.split(','), type: 'sch1' };
+  }
+  // 如果手动覆盖了，跳过更新
+  if (vatManualOverrides[id]) return;
+  // 设置值
+  el.value = (val === 0 || val === -0) ? '' : _fm0(val);
+  // 添加公式样式（先remove再add以确保样式正确）
+  el.classList.remove('vat-formula-cell', 'vat-override');
+  el.classList.add('vat-formula-cell');
+  el.setAttribute('data-vat-formula', formula);
+  el.title = '公式：' + formula + '（可手动输入覆盖，双击恢复公式）';
+  el.onchange = function() { vatFormulaManualChange(el); };
+  el.ondblclick = function() { vatResetFormula(id); };
+}
+
 function calculateSchedule1() {
   // 行配置：rowNumber: { type: 'goods'|'service'|'refund_goods'|'refund_service', taxRate: 税率 }
   var rowConfig = {
@@ -1472,13 +1631,10 @@ function calculateSchedule1() {
     // 第11列 = 第9列 + 第10列（价税合计）
     var col11 = col9 + col10;
 
-    // 更新第9/10/11列（只读显示）
-    var el9 = document.getElementById('sch1-row' + row + '_col9');
-    var el10 = document.getElementById('sch1-row' + row + '_col10');
-    var el11 = document.getElementById('sch1-row' + row + '_col11');
-    if (el9) el9.value = _fm0(col9);
-    if (el10) el10.value = _fm0(col10);
-    if (el11) el11.value = _fm0(col11);
+    // 更新第9/10/11列（可手动覆盖的公式列）
+    _sch1SetFormula('sch1-row' + row + '_col9', col9, '1+3+5+7', 'sch1-row'+row+'_col1,sch1-row'+row+'_col3,sch1-row'+row+'_col5,sch1-row'+row+'_col7');
+    _sch1SetFormula('sch1-row' + row + '_col10', col10, '2+4+6+8', 'sch1-row'+row+'_col2,sch1-row'+row+'_col4,sch1-row'+row+'_col6,sch1-row'+row+'_col8');
+    _sch1SetFormula('sch1-row' + row + '_col11', col11, '9+10', 'sch1-row'+row+'_col9,sch1-row'+row+'_col10');
 
     // 服务行和即征即退服务行：计算第13/14列
     if (cfg.type === 'service' || cfg.type === 'refund_service') {
@@ -1491,10 +1647,8 @@ function calculateSchedule1() {
         col14 = col13 / (1 + cfg.taxRate) * cfg.taxRate;
       }
 
-      var el13 = document.getElementById('sch1-row' + row + '_col13');
-      var el14 = document.getElementById('sch1-row' + row + '_col14');
-      if (el13) el13.value = _fm0(col13);
-      if (el14) el14.value = _fm0(col14);
+      _sch1SetFormula('sch1-row' + row + '_col13', col13, '11-12', 'sch1-row'+row+'_col11,sch1-row'+row+'_col12');
+      _sch1SetFormula('sch1-row' + row + '_col14', col14, '13÷(1+'+(cfg.taxRate||0)+')×'+(cfg.taxRate||0), 'sch1-row'+row+'_col13');
     }
   }
   // 附表 → 主表同步
@@ -1720,11 +1874,15 @@ function calculateSchedule2() {
     var v = parseFloat(el.value);
     return isNaN(v) ? 0 : v;
   }
-  // 更新计算结果显示
-  function uCalc(id, val, decimals) {
+  // 更新计算结果显示（支持手动覆盖 + 公式显示）
+  function uCalc(id, val, decimals, formula) {
     if (decimals === undefined) decimals = 2;
-    var el = document.getElementById('sch2-' + id);
-    if (el) el.value = (val !== 0) ? (decimals === 0 ? val : _fm0(val)) : '';
+    if (formula) {
+      _vatCalcUpdate(id, val, formula, 'sch2-');
+    } else {
+      var el = document.getElementById('sch2-' + id);
+      if (el) el.value = (val !== 0) ? (decimals === 0 ? val : _fm0(val)) : '';
+    }
   }
 
   // ===== 一、申报抵扣的进项税额 =====
@@ -1740,9 +1898,9 @@ function calculateSchedule2() {
   var r1_cnt = r2_cnt + r3_cnt;
   var r1_amt = r2_amt + r3_amt;
   var r1_tax = r2_tax + r3_tax;
-  uCalc('row1_certified_count', r1_cnt, 0);
-  uCalc('row1_certified_amount', r1_amt);
-  uCalc('row1_certified_tax', r1_tax);
+  uCalc('row1_certified_count', r1_cnt, 0, '2+3');
+  uCalc('row1_certified_amount', r1_amt, 2, '2+3');
+  uCalc('row1_certified_tax', r1_tax, 2, '2+3');
 
   // Rows 5-8b
   var r5_cnt = gv('row5_customs_count');
@@ -1766,9 +1924,9 @@ function calculateSchedule2() {
   var r4_cnt = r5_cnt + r6_cnt + r7_cnt + r8b_cnt;
   var r4_amt = r5_amt + r6_amt + r8b_amt;
   var r4_tax = r5_tax + r6_tax + r7_tax + r8a_tax + r8b_tax;
-  uCalc('row4_other_count', r4_cnt, 0);
-  uCalc('row4_other_amount', r4_amt);
-  uCalc('row4_other_tax', r4_tax);
+  uCalc('row4_other_count', r4_cnt, 0, '5+6+7+8a+8b');
+  uCalc('row4_other_amount', r4_amt, 2, '5+6+7+8a+8b');
+  uCalc('row4_other_tax', r4_tax, 2, '5+6+7+8a+8b');
 
   // Row 11
   var r11_tax = gv('row11_foreign_trade_tax');
@@ -1777,9 +1935,9 @@ function calculateSchedule2() {
   var r12_cnt = r1_cnt + r4_cnt;
   var r12_amt = r1_amt + r4_amt;
   var r12_tax = r1_tax + r4_tax + r11_tax;
-  uCalc('row12_total_count', r12_cnt, 0);
-  uCalc('row12_total_amount', r12_amt);
-  uCalc('row12_total_tax', r12_tax);
+  uCalc('row12_total_count', r12_cnt, 0, '1+4+11');
+  uCalc('row12_total_amount', r12_amt, 2, '1+4+11');
+  uCalc('row12_total_tax', r12_tax, 2, '1+4+11');
 
   // ===== 二、进项税额转出额 =====
   var r14 = gv('row14_exempt_transfer');
@@ -1795,7 +1953,7 @@ function calculateSchedule2() {
   var r23b = gv('row23b_other_transfer');
 
   var r13 = r14 + r15 + r16 + r17 + r18 + r19 + r20 + r21 + r22 + r23a + r23b;
-  uCalc('row13_transfer_out_total', r13);
+  uCalc('row13_transfer_out_total', r13, 2, '14+15+...+23b');
 
   // ===== 三、待抵扣进项税额 =====
   var r30_cnt = gv('row30_customs_pending_count');
@@ -1817,9 +1975,9 @@ function calculateSchedule2() {
   var r29_cnt = r30_cnt + r31_cnt + r32_cnt + r33_cnt;
   var r29_amt = r30_amt + r31_amt + r33_amt;
   var r29_tax = r30_tax + r31_tax + r32_tax + r33_tax;
-  uCalc('row29_other_pending_count', r29_cnt, 0);
-  uCalc('row29_other_pending_amount', r29_amt);
-  uCalc('row29_other_pending_tax', r29_tax);
+  uCalc('row29_other_pending_count', r29_cnt, 0, '30+31+32+33');
+  uCalc('row29_other_pending_amount', r29_amt, 2, '30+31+32+33');
+  uCalc('row29_other_pending_tax', r29_tax, 2, '30+31+32+33');
 
   // 附表 → 主表同步
   syncMainFromSchedules();
@@ -2240,9 +2398,8 @@ function calculateSchedule5() {
     var v = parseFloat(el.value);
     return isNaN(v) ? 0 : v;
   }
-  function uc(id, val) {
-    var el = document.getElementById('sch5-' + id);
-    if (el) el.value = (val !== 0) ? _fm0(val) : '';
+  function uc(id, val, formula) {
+    _vatCalcUpdate(id, val, formula || '', 'sch5-');
   }
 
   var types = ['city','edu','local_edu'];
@@ -2266,9 +2423,9 @@ function calculateSchedule5() {
     // 13 = 5-7-9-11-12
     var final = tax - redAmt - sixAmt - pilotAmt - paid;
 
-    uc(pf + '_tax', tax);
-    uc(pf + '_six_tax_amount', sixAmt);
-    uc(pf + '_final', final);
+    uc(pf + '_tax', tax, '(1+2-3)×4');
+    uc(pf + '_six_tax_amount', sixAmt, '(5-7)×8');
+    uc(pf + '_final', final, '5-7-9-11-12');
 
     totalTax += tax;
     totalRed += redAmt;
@@ -2279,12 +2436,12 @@ function calculateSchedule5() {
   }
 
   // 合计行
-  uc('total_tax', totalTax);
-  uc('total_reduction', totalRed);
-  uc('total_six_tax_reduction', totalSix);
-  uc('total_edu_pilot', totalPilot);
-  uc('total_paid', totalPaid);
-  uc('total_final', totalFinal);
+  uc('total_tax', totalTax, 'SUM(1-4行5列)');
+  uc('total_reduction', totalRed, 'SUM(1-4行7列)');
+  uc('total_six_tax_reduction', totalSix, 'SUM(1-4行9列)');
+  uc('total_edu_pilot', totalPilot, 'SUM(1-4行11列)');
+  uc('total_paid', totalPaid, 'SUM(1-4行12列)');
+  uc('total_final', totalFinal, 'SUM(1-4行13列)');
 
   // 附表 → 主表同步
   syncMainFromSchedules();
