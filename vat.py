@@ -357,6 +357,46 @@ def recompute_vat_declaration(declaration_id: int, company_id: int = Query(), db
     db.commit()
     return {"msg": "重新计算完成"}
 
+
+@router.get("/prior-data")
+def get_prior_period_data(company_id: int = Query(), period: str = Query(...), db: Session = Depends(get_db)):
+    """获取上期申报表数据，供主表第13行(上期留抵税额)和第25行(期初未缴税额)自动填列。
+    
+    取数逻辑：
+    - 主表第13行(上期留抵税额) = 上期主表第20行(期末留抵税额)
+    - 主表第25行(期初未缴税额) = 上期主表第32行(期末未缴税额)
+    """
+    # 计算上期期间
+    y, m = map(int, period.split("-"))
+    m -= 1
+    if m == 0:
+        m = 12
+        y -= 1
+    prev_period = f"{y:04d}-{m:02d}"
+
+    prev_vd = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period == prev_period
+    ).first()
+
+    result = {
+        "current_period": period,
+        "prev_period": prev_period,
+        "has_prev": False,
+        "row13_prior_credit": 0.0,
+        "row25_prior_unpaid": 0.0,
+    }
+
+    if prev_vd and prev_vd.form_main:
+        prev_main = json.loads(prev_vd.form_main)
+        result["has_prev"] = True
+        result["row13_prior_credit"] = float(prev_main.get("row20_end_credit", 0) or 0)
+        result["row25_prior_unpaid"] = float(prev_main.get("row32_end_unpaid", 0) or 0)
+        result["prev_declaration_id"] = prev_vd.id
+
+    return result
+
+
 # ========== 计算逻辑 ==========
 
 def _compute_vat_forms(db: Session, vd: VATDeclaration):

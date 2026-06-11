@@ -527,9 +527,19 @@ function renderVATTemplateViewInline(data) {
     vatInlineDisplayId = data.id;
   }
 
-  // 主表自动计算
+  // 主表自动计算 + 上期数据自动填列
   if (vatActivePage === 'main') {
-    setTimeout(calculateVATMainForm, 100);
+    setTimeout(function() {
+      calculateVATMainForm();
+      // 如果row13或row25为空/0，自动从上期取数
+      var el13 = document.getElementById('vat-row13_prior_credit');
+      var el25 = document.getElementById('vat-row25_prior_unpaid');
+      var v13 = el13 ? parseFloat(el13.value) : NaN;
+      var v25 = el25 ? parseFloat(el25.value) : NaN;
+      if ((isNaN(v13) || v13 === 0) && (isNaN(v25) || v25 === 0)) {
+        fetchPriorPeriodData();
+      }
+    }, 100);
   }
   // 附表自动计算
   if (vatActivePage === 'schedule1') {
@@ -856,6 +866,41 @@ function vatDeleteCurrent() {
 
 
 
+// ========== 上期数据自动填列 ==========
+async function fetchPriorPeriodData() {
+  if (!vatCurrentData || !vatCurrentData.period) return;
+  var period = vatCurrentData.period;
+  var companyId = currentCompanyId || 1;
+  try {
+    var resp = await fetch('/api/vat/prior-data?company_id=' + companyId + '&period=' + encodeURIComponent(period));
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '获取失败');
+
+    // 填列第13行：上期留抵税额
+    var el13 = document.getElementById('vat-row13_prior_credit');
+    if (el13) {
+      el13.value = data.row13_prior_credit || 0;
+      el13.style.background = data.has_prev ? '#e8f5e9' : '';
+    }
+
+    // 填列第25行：期初未缴税额
+    var el25 = document.getElementById('vat-row25_prior_unpaid');
+    if (el25) {
+      el25.value = data.row25_prior_unpaid || 0;
+      el25.style.background = data.has_prev ? '#e8f5e9' : '';
+    }
+
+    // 触发表间同步和主表计算
+    if (typeof vatFieldChanged === 'function') vatFieldChanged();
+
+    if (data.has_prev) {
+      toast('已从上期(' + data.prev_period + ')申报表自动填列', 'success');
+    }
+  } catch (e) {
+    console.error('获取上期数据失败:', e);
+  }
+}
+
 function renderMainForm(data) {
   const m = safeJSON(data.form_main, {});
   const s = safeJSON(data.form_surcharge, {});
@@ -950,7 +995,7 @@ function renderMainForm(data) {
   h += '<td class="num"><input type="number" step="0.01" id="vat-row12_input_tax_ytd" value="' + (m.row12_input_tax_ytd != null ? m.row12_input_tax_ytd : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
   h += _fmtDash(m.row12_input_tax_refund) + _fmtDash(m.row12_input_tax_refund_ytd) + '</tr>';
   // row 13
-  h += '<tr><td>上期留抵税额</td><td style="text-align:center">13</td>';
+  h += '<tr><td>上期留抵税额 <span style="font-size:10px;color:#1a56db;cursor:pointer;white-space:nowrap" onclick="fetchPriorPeriodData()" title="从上期申报表取数">⟳ 取数</span></td><td style="text-align:center">13</td>';
   h += '<td class="num"><input type="number" step="0.01" id="vat-row13_prior_credit" value="' + (m.row13_prior_credit != null ? m.row13_prior_credit : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
   h += '<td class="num"><input type="number" step="0.01" id="vat-row13_prior_credit_ytd" value="' + (m.row13_prior_credit_ytd != null ? m.row13_prior_credit_ytd : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
   h += _fmtDash(m.row13_prior_credit_refund) + _fmtDash(m.row13_prior_credit_refund_ytd) + '</tr>';
@@ -1012,7 +1057,7 @@ function renderMainForm(data) {
 
   // --- 三、税款缴纳 ---
   // row 25
-  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款缴纳</td><td>期初未缴税额（多缴为负数）</td><td style="text-align:center">25</td>';
+  h += '<tr><td rowspan="14" style="text-align:center;vertical-align:middle;font-weight:700;font-size:13px;background:#f7f8fc;writing-mode:vertical-lr;letter-spacing:2px">税款缴纳</td><td>期初未缴税额（多缴为负数） <span style="font-size:10px;color:#1a56db;cursor:pointer;white-space:nowrap" onclick="fetchPriorPeriodData()" title="从上期申报表取数">⟳ 取数</span></td><td style="text-align:center">25</td>';
   h += '<td class="num"><input type="number" step="0.01" id="vat-row25_prior_unpaid" value="' + (m.row25_prior_unpaid != null ? m.row25_prior_unpaid : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
   h += '<td class="num"><input type="number" step="0.01" id="vat-row25_prior_unpaid_ytd" value="' + (m.row25_prior_unpaid_ytd != null ? m.row25_prior_unpaid_ytd : '') + '" style="width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px" onchange="vatFieldChanged()"></td>';
   h += _fmtDash(m.row25_prior_unpaid_refund) + _fmtDash(m.row25_prior_unpaid_refund_ytd) + '</tr>';
