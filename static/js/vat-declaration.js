@@ -700,11 +700,15 @@ async function handleVatFileImport(event) {
     // 显示调试信息
     if (result.debug) {
       const d = result.debug;
-      let msg = `期间: ${d.period || '未识别'}\n`;
-      msg += `表格数: ${d.sheets_count}\n`;
-      msg += `主表: ${d.form_main_parsed ? '已解析' : '未解析'}\n`;
-      msg += `附列一: ${d.form_sales_parsed ? '已解析' : '未解析'}\n`;
-      msg += `附列二: ${d.form_input_parsed ? '已解析' : '未解析'}`;
+      let msg = `期间: ${d.period || '未识别'}\\n`;
+      msg += `表格数: ${d.sheets_count}\\n`;
+      msg += `主表: ${d.form_main_parsed ? '已解析('+d.form_main_fields+'字段)' : '未解析'}\\n`;
+      msg += `附列一(销售): ${d.form_sales_parsed ? '已解析' : '未解析'}\\n`;
+      msg += `附列二(进项): ${d.form_input_parsed ? '已解析' : '未解析'}\\n`;
+      msg += `附列三(扣除): ${d.form_deduction_parsed ? '已解析' : '未解析'}\\n`;
+      msg += `附列四(抵减): ${d.form_credit_parsed ? '已解析' : '未解析'}\\n`;
+      msg += `附列五(附加): ${d.form_surcharge_parsed ? '已解析' : '未解析'}\\n`;
+      msg += `减免税明细: ${d.form_reduction_parsed ? '已解析' : '未解析'}`;
       if (!d.form_main_parsed) {
         msg += '\n\n主表未解析，可能原因：\n1. PDF是扫描版\n2. 表格格式不标准\n建议：请从电子税务局下载Excel版本导入';
       }

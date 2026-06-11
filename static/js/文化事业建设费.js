@@ -640,6 +640,14 @@ async function handleCcfFileImport(event) {
     if (!resp.ok) throw new Error(result.detail || '导入失败');
 
     toast('申报表导入成功', 'success');
+    // 显示调试信息
+    if (result.debug) {
+      const d = result.debug;
+      let msg = '期间: ' + (d.period || '未识别') + '\\n';
+      msg += '表格数: ' + d.sheets_count + '\\n';
+      msg += '主表: ' + (d.form_main_parsed ? '已解析(' + d.parsed_fields + '字段)' : '未解析') + '\\n';
+      alert(msg);
+    }
     // 刷新申报表列表
     await loadCCFDeclarationList();
     // 如果返回了declaration_id，自动选中

@@ -240,14 +240,387 @@ def _parse_vat_main_form(data_2d):
     return result
 
 
+# ===== 通用取值辅助函数 =====
+def _row_match_col(row, keyword):
+    """在行中查找关键字（处理pdfplumber拆分长文本到多列），返回匹配的结束列索引。
+    优先用合并文本匹配（返回正确的结束列），再回退到逐列匹配。返回 (end_col, unused) 或 (-1, '')"""
+    if not row: return -1, ''
+    kwc = _clean_text(keyword)
+    import re
+    # 方法1: 合并前几列文本（第1列保留原始含百分比，后续列去除栏次号数字）
+    parts = []
+    last_col = -1
+    for j, cell in enumerate(row[:5]):
+        if cell and isinstance(cell, str):
+            s = str(cell)
+            if j == 0:
+                s_clean = s  # 第1列保留完整文本
+            else:
+                s_clean = re.sub(r'\d+', '', s)  # 后续列去除数字
+            if s_clean.strip():
+                parts.append(s_clean)
+                last_col = j
+        else:
+            if parts:
+                break
+    if parts:
+        combined = _clean_text("".join(parts))
+        if kwc in combined:
+            return last_col, ''
+    # 方法2: 回退到逐列检查
+    for j, cell in enumerate(row[:5]):
+        if cell and isinstance(cell, str) and kwc in _clean_text(str(cell)):
+            return j, ''
+    return -1, ''
+
+
+def _extract_vals(row, start_col, count, skip_row_num=True):
+    """从row的start_col开始提取count个有效数值。
+    当skip_row_num=True时跳过栏次号(小整数1-99)。"""
+    vals = []
+    for j in range(start_col, min(start_col + count + 5, len(row))):
+        val = row[j]
+        if val is None:
+            vals.append(0.0); continue  # None也占位
+        if skip_row_num:
+            try:
+                s = str(val).replace(',', '').replace(' ', '').replace('　', '')
+                iv = int(s)
+                if 1 <= iv <= 99 and len(vals) <= 1:
+                    continue  # 跳过栏次号
+            except (ValueError, TypeError):
+                pass
+        vals.append(_to_num(val))
+        if len(vals) >= count:
+            break
+    while len(vals) < count:
+        vals.append(0.0)
+    return vals
+
+
 def _parse_vat_schedule1(data_2d):
-    """附列资料一：本期销售情况明细 — 暂不自动解析，保留原始数据"""
-    return {}
+    """附列资料一：本期销售情况明细"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {}
+    
+    # 字段后缀 => 适用于退货行(仅2列)、货物行(10列)、服务行(13列)
+    GOODS_FIELDS = ["special_sales","special_tax","other_sales","other_tax",
+                    "no_invoice_sales","no_invoice_tax","check_sales","check_tax",
+                    "total_sales","total_tax"]
+    SVC_EXTRA   = ["deduct","after_sales","after_tax"]
+    # 即征即退(仅total列): 货物2个, 服务5个
+    REFUND_G    = ["total_sales","total_tax"]
+    REFUND_S    = ["total_sales","total_tax","deduct","after_sales","after_tax"]
+    # 简易计税用 "sales" 而非 "special_sales" 作为第一列前缀
+    SIMPLE_FIRST = ["sales","tax","other_sales","other_tax",
+                    "no_invoice_sales","no_invoice_tax","check_sales","check_tax",
+                    "total_sales","total_tax"]
+    
+    # Row configs: (keyword, prefix, field_list, is_simple_naming)
+    configs = [
+        ("13%税率的货物",                   "row1_13",            GOODS_FIELDS, False),
+        ("13%税率的服务",                   "row2_13_service",    GOODS_FIELDS + SVC_EXTRA, False),
+        ("9%税率的货物",                    "row3_9",             GOODS_FIELDS, False),
+        ("9%税率的服务",                    "row4_9_service",     SIMPLE_FIRST + SVC_EXTRA, True),
+        ("6%税率",                          "row5_6",             GOODS_FIELDS + SVC_EXTRA, False),
+        ("即征即退货物",                     "row6_refund_goods",  REFUND_G, False),
+        ("即征即退服务",                     "row7_refund_service",REFUND_S, False),
+        ("6%征收率",                        "row8_6_collect",     SIMPLE_FIRST, True),
+        ("5%征收率的货物",                   "row9a_5_goods",      SIMPLE_FIRST, True),
+        ("5%征收率的服务",                   "row9b_5_service",    SIMPLE_FIRST + SVC_EXTRA, True),
+        ("4%征收率",                        "row10_4_collect",    SIMPLE_FIRST, True),
+        ("3%征收率的货物",                   "row11_3_goods",      SIMPLE_FIRST, True),
+        ("3%征收率的服务",                   "row12_3_service",    SIMPLE_FIRST + SVC_EXTRA, True),
+    ]
+    
+    yuzheng_cnt = 0
+    for row in data_2d:
+        if not row:
+            continue
+        # 预征率 行（最多3条）
+        matched_col, _ = _row_match_col(row, "预征率")
+        if matched_col >= 0 and yuzheng_cnt < 3:
+            yuzheng_cnt += 1
+            pfx = {1:"row13a_rate",2:"row13b_rate",3:"row13c_rate"}[yuzheng_cnt]
+            vals = _extract_vals(row, matched_col + 1, 10, skip_row_num=False)
+            for i, fn in enumerate(SIMPLE_FIRST):
+                result[f"{pfx}_{fn}"] = vals[i] if i < len(vals) else 0.0
+            continue
+        for kw, pfx, fnames, is_simple in configs:
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, len(fnames), skip_row_num=False)
+                for i, fn in enumerate(fnames):
+                    result[f"{pfx}_{fn}"] = vals[i] if i < len(vals) else 0.0
+                break
+    return result
 
 
 def _parse_vat_schedule2(data_2d):
-    """附列资料二：本期进项税额明细 — 暂不自动解析，保留原始数据"""
-    return {}
+    """附列资料二：本期进项税额明细"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {}
+    
+    # 关键字 -> (field_base, 取值数量, 字段后缀)
+    # 后缀: "" → 单字段, "cnt_amt_tax" → [count, amount, tax], "cnt_tax" → [count, _, tax]
+    mappings = [
+        # 一、申报抵扣的进项税额（列: 份数+金额+税额）
+        ("认证相符的增值税专用发票",            "row1_certified",          3,  ["count","amount","tax"]),
+        ("本期认证相符且本期申报抵扣",          "row2_certified_curr",     3,  ["count","amount","tax"]),
+        ("前期认证相符且本期申报抵扣",          "row3_certified_prior",    3,  ["count","amount","tax"]),
+        ("其他扣税凭证",                       "row4_other",              3,  ["count","amount","tax"]),
+        ("海关进口增值税专用缴款书",            "row5_customs",            3,  ["count","amount","tax"]),
+        ("农产品收购发票或者销售发票",          "row6_agri",               3,  ["count","amount","tax"]),
+        ("代扣代缴税收缴款凭证",               "row7_wht",                2,  ["count","tax"]),  # 无金额列
+        ("加计扣除农产品进项税额",              "row8a_agri_extra",        1,  [""]),
+        ("其他",                              None,                      0,  []),  # row8b, 在第2次匹配
+        ("本期用于购建不动产的扣税凭证",        "row9_real_estate",        3,  ["count","amount","tax"]),
+        ("本期用于抵扣的旅客运输服务扣税凭证",   "row10_travel",            3,  ["count","amount","tax"]),
+        ("外贸企业进项税额抵扣证明",            "row11_foreign_trade",     1,  ["tax"]),
+        # 二、进项税额转出（列: 税额 单列）
+        ("本期进项税额转出额",                 "row13_transfer_out_total",1,  [""]),
+        ("免税项目用",                         "row14_exempt_transfer",   1,  [""]),
+        ("集体福利、个人消费",                  "row15_collective_transfer",1,[""]),
+        ("非正常损失",                         "row16_abnormal_loss",     1,  [""]),
+        ("简易计税方法征税项目用",              "row17_simple_tax_transfer",1,[""]),
+        ("免抵退税办法不得抵扣的进项税额",       "row18_exempt_credit_transfer",1,[""]),
+        ("纳税检查调减进项税额",               "row19_tax_check_transfer",1,  [""]),
+        ("红字专用发票信息表注明的进项税额",     "row20_red_letter_transfer",1,[""]),
+        ("上期留抵税额抵减欠税",               "row21_prior_credit_arrears",1,[""]),
+        ("上期留抵税额退税",                   "row22_prior_credit_refund",1,[""]),
+        ("异常凭证转出进项税额",               "row23a_abnormal_transfer",1,  [""]),
+        ("其他应作进项税额转出的情形",          "row23b_other_transfer",  1,  [""]),
+        # 三、待抵扣（列: 份数+金额+税额）
+        ("期初已认证相符但未申报抵扣",          "row25_pending_begin",     3,  ["count","amount","tax"]),
+        ("本期认证相符且本期未申报抵扣",        "row26_pending_curr",      3,  ["count","amount","tax"]),
+        ("期末已认证相符但未申报抵扣",          "row27_pending_end",       3,  ["count","amount","tax"]),
+        ("按照税法规定不允许抵扣",              "row28_not_allowed",       3,  ["count","amount","tax"]),
+        ("海关进口增值税专用缴款书(待)",        "row30_customs_pending",   3,  ["count","amount","tax"]),
+        ("农产品收购发票或者销售发票(待)",      "row31_agri_pending",      3,  ["count","amount","tax"]),
+        ("代扣代缴税收缴款凭证(待)",           "row32_wht_pending",       2,  ["count","tax"]),
+        ("其他(待)",                           "row33_other_pending",     3,  ["count","amount","tax"]),
+        # 四、其他
+        ("本期认证相符的增值税专用发票(其他)",   "row35_cert",             3,  ["count","amount","tax"]),
+        ("代扣代缴税额",                       "row36_wht_total_tax",     1,  [""]),
+    ]
+    
+    # 需要跟踪出现次数的关键字
+    other_count = 0    # "其他" 出现次数 → row8b(第2次), row29(第1次), row33(第3次)
+    customs_pending = 0
+    agri_pending = 0
+    wht_pending = 0
+    cert35_seen = False
+    
+    for row in data_2d:
+        if not row:
+            continue
+        
+        # 特殊处理 "其他" 关键字（出现多次，用精确匹配）
+        matched_col, _ = _row_match_col(row, "其他")
+        if matched_col >= 0:
+            # 检查 col[0] 是否精确为 "其他"（不含其他修饰词）
+            col0 = _clean_text(str(row[0])) if row[0] else ""
+            if col0 == "其他":
+                vals = _extract_vals(row, matched_col + 1, 3, skip_row_num=False)
+                result["row8b_other_count"] = vals[0]
+                result["row8b_other_amount"] = vals[1]
+                result["row8b_other_tax"] = vals[2]
+                continue
+        
+        # 标准映射匹配
+        for kw, base, n_fields, suffixes in mappings:
+            if not base:
+                continue
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, n_fields, skip_row_num=False)
+                for i, sfx in enumerate(suffixes):
+                    if sfx:
+                        result[f"{base}_{sfx}"] = vals[i] if i < len(vals) else 0.0
+                    else:
+                        result[base] = vals[0] if vals else 0.0
+                break
+    return result
+
+
+def _parse_vat_schedule3(data_2d):
+    """附列资料三：服务、不动产和无形资产扣除项目明细"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {}
+    FIELDS = ["price_tax","begin","occur","should","actual","end"]
+    configs = [
+        ("13%税率的项目",   "row1_13"),
+        ("9%税率的项目",    "row2_9"),
+        ("6%税率的项目（不含", "row3_6"),     # 不含金融商品转让
+        ("6%税率的金融",    "row4_6_fin"),     # 金融商品转让项目
+        ("5%征收率的项目",  "row5_5"),
+        ("3%征收率的项目",  "row6_3"),
+        ("免抵退税的项目",  "row7_exempt_credit"),
+        ("免税的项目",      "row8_exempt"),
+    ]
+    for row in data_2d:
+        if not row:
+            continue
+        for kw, pfx in configs:
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, 6, skip_row_num=False)
+                for i, fn in enumerate(FIELDS):
+                    result[f"{pfx}_{fn}"] = vals[i] if i < len(vals) else 0.0
+    return result
+
+
+def _parse_vat_schedule4(data_2d):
+    """附列资料四：税额抵减情况表"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {}
+    FE = ["begin","occur","should","actual","end"]
+    
+    # 一、税额抵减
+    configs_a = [
+        ("增值税税控系统",        "tax_control"),
+        ("分支机构预征缴纳税款",   "branch"),
+        ("建筑服务预征缴纳税款",   "construction"),
+        ("销售不动产预征缴纳税款", "real_estate"),
+        ("出租不动产预征缴纳税款", "rental"),
+    ]
+    # 二、加计抵减
+    configs_b = [
+        ("一般项目加计抵减",      "item1"),
+        ("即征即退项目加计抵减",   "item2"),
+    ]
+    
+    for row in data_2d:
+        if not row:
+            continue
+        for kw, pfx in configs_a:
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, 5, skip_row_num=False)
+                for i, fn in enumerate(FE):
+                    result[f"{pfx}_{fn}"] = vals[i] if i < len(vals) else 0.0
+        for kw, pfx in configs_b:
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, 6, skip_row_num=False)
+                for i, fn in enumerate(FE + ["can_deduct"]):
+                    val = vals[i] if i < len(vals) else 0.0
+                    if i < 5:
+                        result[f"{pfx}_{fn}"] = val
+                    elif i == 5:
+                        result[f"{pfx}_can_deduct"] = val
+                if len(vals) >= 5:
+                    result[f"{pfx}_adjust"] = vals[2] if len(vals) > 2 else 0.0
+    return result
+
+
+def _parse_vat_schedule5(data_2d):
+    """附列资料五：附加税费情况表"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {}
+    
+    # 三类附加税费，关键字 -> 前缀
+    tax_types = [
+        ("城市维护建设税", "city"),
+        ("教育费附加",     "edu"),
+        ("地方教育附加",   "local_edu"),
+    ]
+    
+    # 提取计税基数（增值税应纳税额）- 通常是全局的
+    for row in data_2d[:20]:
+        if not row:
+            continue
+        matched_col, _ = _row_match_col(row, "计税依据")
+        if matched_col < 0:
+            matched_col, _ = _row_match_col(row, "增值税税额")
+        if matched_col < 0:
+            matched_col, _ = _row_match_col(row, "计税基数")
+        if matched_col >= 0:
+            vals = _extract_vals(row, matched_col + 1, 3, skip_row_num=False)
+            if vals[0]:
+                result["_vat_tax_base"] = vals[0]
+    
+    vat_base = result.get("_vat_tax_base", 0.0)
+    
+    for row in data_2d:
+        if not row:
+            continue
+        for kw, pfx in tax_types:
+            matched_col, _ = _row_match_col(row, kw)
+            if matched_col >= 0:
+                vals = _extract_vals(row, matched_col + 1, 9, skip_row_num=False)
+                result[f"{pfx}_base"] = vals[0] if len(vals) > 0 else vat_base
+                result[f"{pfx}_rate"] = vals[1] if len(vals) > 1 else 0.0
+                result[f"{pfx}_tax"] = vals[2] if len(vals) > 2 else 0.0
+                result[f"{pfx}_full"] = vals[3] if len(vals) > 3 else 0.0
+                result[f"{pfx}_reduction_amount"] = vals[4] if len(vals) > 4 else 0.0
+                result[f"{pfx}_final"] = vals[5] if len(vals) > 5 else 0.0
+                result[f"{pfx}_paid"] = vals[8] if len(vals) > 8 else 0.0
+    return result
+
+
+def _parse_vat_reduction(data_2d):
+    """增值税减免税申报明细表"""
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    result = {"tax_reduction_items": [], "exempt_items": []}
+    
+    in_reduction = False
+    in_exempt = False
+    
+    for row in data_2d:
+        if not row:
+            continue
+        row_text = "".join([str(c) for c in row if isinstance(c, str)])
+        clean_row = _clean_text(row_text)
+        
+        if "减税项目" in clean_row:
+            in_reduction = True; in_exempt = False; continue
+        if "免税项目" in clean_row:
+            in_reduction = False; in_exempt = True; continue
+        
+        # 跳过合计行和表头
+        if "合计" in clean_row or "栏次" in clean_row or "性质代码" in clean_row:
+            continue
+        
+        if in_reduction:
+            # 尝试解析为减税项目行
+            vals = _extract_vals(row, 0, 5)
+            if any(v != 0 for v in vals):
+                result["tax_reduction_items"].append({
+                    "name": str(row[0])[:30] if row[0] else "",
+                    "begin_balance": vals[0],
+                    "current_amount": vals[1], 
+                    "should_reduce": vals[2],
+                    "actual_reduce": vals[3],
+                    "end_balance": vals[4],
+                })
+                result["tax_reduction_total_occur"] = result.get("tax_reduction_total_occur", 0) + vals[1]
+                result["tax_reduction_total_should"] = result.get("tax_reduction_total_should", 0) + vals[2]
+                result["tax_reduction_total_actual"] = result.get("tax_reduction_total_actual", 0) + vals[3]
+                result["tax_reduction_total_end"] = result.get("tax_reduction_total_end", 0) + vals[4]
+        
+        if in_exempt:
+            vals = _extract_vals(row, 0, 5)
+            if any(v != 0 for v in vals):
+                result["exempt_items"].append({
+                    "name": str(row[0])[:30] if row[0] else "",
+                    "exempt_sales": vals[0],
+                    "deduction_amount": vals[1],
+                    "after_deduction": vals[2],
+                    "input_tax": vals[3],
+                    "exempt_amount": vals[4],
+                })
+                result["exempt_total_exempt_sales"] = result.get("exempt_total_exempt_sales", 0) + vals[0]
+                result["exempt_total_exempt_tax"] = result.get("exempt_total_exempt_tax", 0) + vals[3]
+                result["exempt_total_exempt_amount"] = result.get("exempt_total_exempt_amount", 0) + vals[4]
+    
+    return result
 
 
 router = APIRouter(prefix="/api/vat", tags=["增值税申报"])
@@ -416,39 +789,54 @@ async def import_vat_declaration(
                     return " ".join(title_parts[:3])  # 取前3个有意义的部分
             return name
         
-        def _sheet_contains(sn, data, *keywords):
-            """检查标题或表格数据前10行是否包含任意关键字"""
-            for kw in keywords:
-                if kw in sn:
-                    return True
-            for row in data[:10]:
+        def _table_contains(data, *keywords):
+            """在表格数据行中检查关键字（跳过单列页面文本行，合并同行单元格处理拆分文本）"""
+            for row in data:
                 if not row:
                     continue
-                for cell in row:
-                    if cell and isinstance(cell, str):
-                        for kw in keywords:
-                            if kw in cell:
-                                return True
+                non_none = [c for c in row if c is not None]
+                if len(non_none) <= 1:
+                    continue
+                # 方法1：先检查col[0]（最可靠，标签开头总在第一列）
+                col0 = str(row[0]) if row[0] and isinstance(row[0], str) else ""
+                for kw in keywords:
+                    if kw in col0 or kw in _clean_text(col0):
+                        return True
+                # 方法2：合并同行文本单元格（第1列保留原始文本含百分比，后续列去除数字）
+                parts = []
+                for idx, c in enumerate(row):
+                    if c and isinstance(c, str):
+                        s = str(c)
+                        if idx == 0:
+                            parts.append(s)  # 第1列保留完整文本（含13%等百分比）
+                        else:
+                            s_no_digits = re.sub(r'\d+', '', s)  # 后续列去除数字
+                            if s_no_digits.strip():
+                                parts.append(s_no_digits)
+                combined = "".join(parts)
+                clean_combined = _clean_text(combined)
+                for kw in keywords:
+                    if _clean_text(kw) in clean_combined:
+                        return True
             return False
         
         for sh in sheets:
             sn = _sheet_title(sh)
             data = sh["data"]
-            if _sheet_contains(sn, data, '附列资料（一）', '附列资料一', '销项'):
+            # 用表体数据的唯一关键字识别，if not form_X 防止同一页多表覆盖
+            if not form_sales and _table_contains(data, '货物及加工修理修配劳务', '开具增值税专用发票'):
                 form_sales = data
-            elif _sheet_contains(sn, data, '附列资料（二）', '附列资料二', '进项'):
+            if not form_input and _table_contains(data, '认证相符的增值税专用发票', '进项税额转出额'):
                 form_input = data
-            elif _sheet_contains(sn, data, '附列资料（三）', '附列资料三', '扣除', 'deduction'):
+            if not form_deduction and _table_contains(data, '金融商品转让项目', '价税合计额'):
                 form_deduction = data
-            elif _sheet_contains(sn, data, '附列资料（四）', '附列资料四', '减免', 'reduction'):
-                form_reduction = data
-            elif _sheet_contains(sn, data, '附列资料（五）', '附列资料五', '附加税费', 'surcharge'):
-                # 排除主表（主表也含"附加税费申报表"字样）
-                if not _sheet_contains(sn, data, '申报表（主表）', '主表适用'):
-                    form_surcharge = data
-            elif _sheet_contains(sn, data, '抵扣', 'credit'):
+            if not form_credit and _table_contains(data, '税控系统专用设备费', '预征缴纳税款'):
                 form_credit = data
-            elif _sheet_contains(sn, data, '主表', '申报表'):
+            if not form_surcharge and _table_contains(data, '城市维护建设税', '教育费附加', '地方教育附加'):
+                form_surcharge = data
+            if not form_reduction and (_table_contains(data, '减税项目') or _table_contains(data, '免税项目')):
+                form_reduction = data
+            if not form_main and _table_contains(data, '按适用税率计税销售额', '期初未缴税额'):
                 form_main = data
         
         # 兜底：如果没匹配到主表，把最大的表格当主表
@@ -483,13 +871,21 @@ async def import_vat_declaration(
             parsed_input["_raw"] = form_input
             decl.form_input = json.dumps(parsed_input, ensure_ascii=False, default=str)
         if form_deduction:
-            decl.form_deduction = json.dumps({"_raw": form_deduction}, ensure_ascii=False, default=str)
+            parsed_deduction = _parse_vat_schedule3(form_deduction)
+            parsed_deduction["_raw"] = form_deduction
+            decl.form_deduction = json.dumps(parsed_deduction, ensure_ascii=False, default=str)
         if form_credit:
-            decl.form_credit = json.dumps({"_raw": form_credit}, ensure_ascii=False, default=str)
+            parsed_credit = _parse_vat_schedule4(form_credit)
+            parsed_credit["_raw"] = form_credit
+            decl.form_credit = json.dumps(parsed_credit, ensure_ascii=False, default=str)
         if form_surcharge:
-            decl.form_surcharge = json.dumps({"_raw": form_surcharge}, ensure_ascii=False, default=str)
+            parsed_surcharge = _parse_vat_schedule5(form_surcharge)
+            parsed_surcharge["_raw"] = form_surcharge
+            decl.form_surcharge = json.dumps(parsed_surcharge, ensure_ascii=False, default=str)
         if form_reduction:
-            decl.form_reduction = json.dumps({"_raw": form_reduction}, ensure_ascii=False, default=str)
+            parsed_reduction = _parse_vat_reduction(form_reduction)
+            parsed_reduction["_raw"] = form_reduction
+            decl.form_reduction = json.dumps(parsed_reduction, ensure_ascii=False, default=str)
         
         decl.status = "已导入"
         decl.updated_at = datetime.now()
