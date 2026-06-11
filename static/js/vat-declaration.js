@@ -2208,9 +2208,9 @@ function renderSchedule5(data) {
       r += '<td '+(s2?'rowspan="3"':'')+' colspan="5" style="'+B+';'+P+';text-align:left;font-weight:600">'+s1+'</td>';
       r += '<td '+(s2?'rowspan="3"':'')+' colspan="2" style="'+B+';'+P+';text-align:center">□是 □否</td>';
     }
-    r += '<td colspan="6" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
-    r += Td(N('sch5_pilot_'+seq,scf['pilot_'+seq]),'');
-    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600">'+seq+'</td>';
+    r += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
+    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
+    r += '<td colspan="2" style="'+B+';'+P+'">'+N('sch5_pilot_'+seq,scf['pilot_'+seq])+'</td>';
     r += '</tr>';
     return r;
   }
@@ -2223,9 +2223,9 @@ function renderSchedule5(data) {
     if (s1) {
       r += '<td '+(s2?'rowspan="3"':'')+' colspan="7" style="'+B+';'+P+';text-align:left;font-weight:600">'+s1+'</td>';
     }
-    r += '<td colspan="6" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
-    r += Td(N('sch5_vat_refund_'+seq,scf['vat_refund_'+seq]),'');
-    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600">'+seq+'</td>';
+    r += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+col1+'</td>';
+    r += '<td colspan="2" style="'+B+';'+P+';text-align:center;font-weight:600;font-size:13px">'+seq+'</td>';
+    r += '<td colspan="2" style="'+B+';'+P+'">'+N('sch5_vat_refund_'+seq,scf['vat_refund_'+seq])+'</td>';
     r += '</tr>';
     return r;
   }
