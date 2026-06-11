@@ -1260,10 +1260,17 @@ function renderSchedule1(data) {
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
     + '<style>#sch1-table td,#sch1-table th{white-space:nowrap;}</style>'
-    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px">'
+    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1958px">'
     + '<colgroup>'
-    + '<col><col><col><col><col><col><col><col><col><col>'
-    + '<col><col><col><col><col><col><col><col></colgroup>'
+    + '<col style="width:60px"><col style="width:50px"><col style="width:140px"><col style="width:28px">'  // 项目及栏次
+    + '<col style="width:165px"><col style="width:85px">'   // 专票: 销售额+税额
+    + '<col style="width:165px"><col style="width:85px">'   // 其他发票: 销售额+税额
+    + '<col style="width:165px"><col style="width:85px">'   // 未开票: 销售额+税额
+    + '<col style="width:165px"><col style="width:85px">'   // 纳税检查: 销售额+税额
+    + '<col style="width:165px"><col style="width:85px"><col style="width:95px">'  // 合计: 销售额+税额+价税合计
+    + '<col style="width:85px">'   // 扣除项目
+    + '<col style="width:165px"><col style="width:85px">'   // 扣除后: 销售额+税额
+    + '</colgroup>'
     + '<thead>'
     + '<tr style="background:#d9e2f3">'
     + '<th colspan="4" rowspan="3">项目及栏次</th>'
@@ -2033,7 +2040,7 @@ function calculateSchedule4() {
 // ==================== 附表五：附加税费情况表（官方模板还原） ====================
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
-  var T = 'width:1170px;table-layout:fixed;white-space:nowrap';
+  var T = 'width:1326px;table-layout:fixed;white-space:nowrap';
   var TdStyle = 'overflow:hidden;text-overflow:ellipsis';
 
   // ---- helpers ----
@@ -2070,7 +2077,7 @@ function renderSchedule5(data) {
   var html = '';
 
   // ===== 统一容器：全文 1170px 居中 =====
-  html += '<div style="max-width:1170px;margin:0 auto">';
+  html += '<div style="max-width:1326px;margin:0 auto">';
   // 标题
   html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:4px 0 0">增值税及附加税费申报表（一般纳税人适用）</div>';
   html += '<div style="text-align:center;font-size:14px;font-weight:600;padding:2px 0 6px">附列资料（五）（附加税费情况表）</div>';
@@ -2093,22 +2100,22 @@ function renderSchedule5(data) {
   html += '<style>.sch5-table td,.sch5-table th{overflow:hidden;text-overflow:ellipsis}</style>';
   html += '<table class="vat-form-table sch5-table" style="'+T+';font-size:11px;border-collapse:collapse;border:1px solid #a0a0a0">';
 
-  // colgroup: 16列 (1170px total) — nowrap, each col fits its longest single-line text
+  // colgroup: 16列 — 按实际单行文字宽度分配
   html += '<colgroup>';
-  html += '<col style="width:90px"><col style="width:30px">';   // 1税种 2序号 (120)
-  html += '<col style="width:62px"><col style="width:62px"><col style="width:62px">';  // 3增值税 4免抵 5留抵 (186)
-  html += '<col style="width:30px"><col style="width:50px">';   // 6-7税率 merged=80px
-  html += '<col style="width:115px">';  // 8 应纳税
-  html += '<col style="width:60px">';   // 9 减免代码
-  html += '<col style="width:68px">';   // 10 减免额
-  html += '<col style="width:70px">';   // 11 减征%
-  html += '<col style="width:90px">';   // 12 减征额
-  html += '<col style="width:60px">';   // 13 试点代码
-  html += '<col style="width:65px">';   // 14 抵免
-  html += '<col style="width:110px">';  // 15 已缴
-  html += '<col style="width:146px">';  // 16 应补退
+  html += '<col style="width:85px"><col style="width:28px">';   // 1税种 2序号
+  html += '<col style="width:80px"><col style="width:88px"><col style="width:105px">';  // 3增值税 4免抵 5留抵
+  html += '<col style="width:30px"><col style="width:35px">';   // 6-7税率 merged=65px
+  html += '<col style="width:110px">';  // 8 应纳税
+  html += '<col style="width:85px">';   // 9 减免代码
+  html += '<col style="width:80px">';   // 10 减免额
+  html += '<col style="width:80px">';   // 11 减征%
+  html += '<col style="width:100px">';  // 12 减征额
+  html += '<col style="width:85px">';   // 13 试点代码
+  html += '<col style="width:80px">';   // 14 抵免
+  html += '<col style="width:100px">';  // 15 已缴
+  html += '<col style="width:155px">';  // 16 应补退
   html += '</colgroup>';
-  // verify: 90+30+62+62+62+30+50+115+60+68+70+90+60+65+110+146 = 1170
+  // verify: 85+28+80+88+105+30+35+110+85+80+80+100+85+80+100+155 = 1326
 
   // ===== thead: 表头3行 =====
   html += '<thead>';
