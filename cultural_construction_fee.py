@@ -40,22 +40,15 @@ async def import_ccf_declaration(
     接收用户上传的已填好的申报表Excel文件，解析并保存到数据库。
     """
     import tempfile, os, re
-    from openpyxl import load_workbook
     from datetime import datetime
     
     # 保存上传的文件到临时目录
     suffix = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'xlsx'
     
-    # 拒绝 PDF 文件，给出友好提示
-    if suffix == 'pdf':
+    if suffix not in ('xls', 'xlsx', 'xlsm', 'xltm', 'xlsb', 'pdf'):
         raise HTTPException(
             status_code=400,
-            detail="不支持 PDF 格式。请从电子税务局申报系统下载 Excel 版本（.xlsx）的已申报表格后重新导入。"
-        )
-    if suffix not in ('xls', 'xlsx', 'xlsm', 'xltm', 'xlsb'):
-        raise HTTPException(
-            status_code=400,
-            detail=f"不支持 .{suffix} 格式，请上传 Excel 文件（.xlsx/.xls/.xlsm）。"
+            detail=f"不支持 .{suffix} 格式，请上传 Excel 文件（.xlsx）或 PDF 文件。"
         )
     with tempfile.NamedTemporaryFile(suffix='.' + suffix, delete=False) as tmp:
         content = await file.read()
@@ -63,7 +56,65 @@ async def import_ccf_declaration(
         tmp_path = tmp.name
     
     try:
-        wb = load_workbook(tmp_path, data_only=True)
+        # ===== 统一解析入口：PDF 或 Excel =====
+        sheets = []
+        if suffix == 'pdf':
+            import pdfplumber
+            with pdfplumber.open(tmp_path) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    tables = page.extract_tables()
+                    if tables:
+                        for j, tbl in enumerate(tables):
+                            sheets.append({"name": f"第{i+1}页-表{j+1}", "data": tbl})
+                    else:
+                        text = page.extract_text() or ""
+                        rows = [[line] for line in text.split('\n') if line.strip()]
+                        if rows:
+                            sheets.append({"name": f"第{i+1}页-文本", "data": rows})
+        else:
+            from openpyxl import load_workbook as _lw
+            wb = _lw(tmp_path, data_only=True)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                data = [list(row) for row in ws.iter_rows(values_only=True)]
+                sheets.append({"name": sheet_name, "data": data})
+        
+        # 从所有页/表中提取期间
+        period = None
+        for sh in sheets:
+            rows = sh["data"]
+            for i, row in enumerate(rows[:30]):
+                if not row:
+                    continue
+                for j, cell in enumerate(row):
+                    if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
+                        for k in range(j + 1, min(j + 4, len(row))):
+                            val = row[k]
+                            if val:
+                                m = re.search(r'(\d{4})[年\-](\d{1,2})', str(val))
+                                if m:
+                                    period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                                    break
+                        if not period and i + 1 < len(rows):
+                            next_row = rows[i + 1]
+                            if j < len(next_row) and next_row[j]:
+                                m = re.search(r'(\d{4})[年\-](\d{1,2})', str(next_row[j]))
+                                if m:
+                                    period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                    if period:
+                        break
+                if period:
+                    break
+            if period:
+                break
+        
+        if not period:
+            match = re.search(r'(\d{4})[年\-](\d{1,2})', file.filename)
+            if match:
+                period = f"{match.group(1)}-{match.group(2).zfill(2)}"
+            else:
+                now = datetime.now()
+                period = f"{now.year}-{now.month:02d}"
         
         # 获取或创建申报表记录
         decl = None
@@ -78,42 +129,6 @@ async def import_ccf_declaration(
                 pass
         
         if not decl:
-            # 从文件名或Excel内容推断期间
-            period = None
-            for sheet_name in wb.sheetnames:
-                ws = wb[sheet_name]
-                rows = list(ws.iter_rows(values_only=True))
-                for i, row in enumerate(rows[:30]):
-                    for j, cell in enumerate(row):
-                        if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
-                            for k in range(j + 1, min(j + 4, len(row))):
-                                val = row[k]
-                                if val:
-                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', str(val))
-                                    if m:
-                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
-                                        break
-                            if not period and i + 1 < len(rows):
-                                next_row = rows[i + 1]
-                                if j < len(next_row) and next_row[j]:
-                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', str(next_row[j]))
-                                    if m:
-                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
-                        if period:
-                            break
-                    if period:
-                        break
-                if period:
-                    break
-            
-            if not period:
-                match = re.search(r'(\d{4})[年\-](\d{1,2})', file.filename)
-                if match:
-                    period = f"{match.group(1)}-{match.group(2).zfill(2)}"
-                else:
-                    now = datetime.now()
-                    period = f"{now.year}-{now.month:02d}"
-            
             # 创建新申报表
             max_id = db.query(func.max(CulturalConstructionFeeDeclaration.id)).filter(
                 CulturalConstructionFeeDeclaration.company_id == company_id
@@ -130,20 +145,23 @@ async def import_ccf_declaration(
             db.add(decl)
             db.flush()
         
-        # 解析Excel文件，提取申报表数据
+        # 解析工作表，分槽存储
         form_main = None
         form_deduction = None
         
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            
-            # 将工作表转换为2D数组
-            data = []
-            for row in ws.iter_rows(values_only=True):
-                data.append(list(row))
-            
-            # 根据工作表名称判断类型（精确匹配：扣除清单优先，主表最后匹配）
-            sn = sheet_name
+        def _sheet_title(sh):
+            name = sh.get("name", "")
+            data = sh.get("data", [])
+            if name.startswith("第") and data:
+                for row in data[:3]:
+                    for cell in (row or []):
+                        if cell and isinstance(cell, str) and len(cell) > 4:
+                            return cell
+            return name
+        
+        for sh in sheets:
+            sn = _sheet_title(sh)
+            data = sh["data"]
             if '扣除' in sn or 'deduction' in sn.lower() or '清单' in sn:
                 form_deduction = data
             elif '主表' in sn or '申报表' in sn or '文化' in sn:

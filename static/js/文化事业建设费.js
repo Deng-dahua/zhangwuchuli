@@ -610,7 +610,7 @@ function ccfImportFile() {
     fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.id = 'ccf-import-file-input';
-    fileInput.accept = '.xls,.xlsx,.xlsm,.xltm';
+    fileInput.accept = '.xls,.xlsx,.xlsm,.xltm,.pdf';
     fileInput.style.display = 'none';
     fileInput.addEventListener('change', handleCcfFileImport);
     document.body.appendChild(fileInput);
@@ -621,14 +621,6 @@ function ccfImportFile() {
 async function handleCcfFileImport(event) {
   const file = event.target.files[0];
   if (!file) return;
-
-  // 校验文件格式
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (!['xls', 'xlsx', 'xlsm', 'xltm'].includes(ext)) {
-    toast('不支持此文件格式。请从电子税务局下载 Excel 格式（.xlsx）的申报表，不支持 PDF 格式', 'error');
-    event.target.value = '';
-    return;
-  }
 
   const formData = new FormData();
   formData.append('file', file);
@@ -656,12 +648,7 @@ async function handleCcfFileImport(event) {
       await ccfLoadDeclarationDetail(ccfSelectedId);
     }
   } catch (e) {
-    const msg = e.message || '';
-    if (msg.toLowerCase().includes('pdf')) {
-      toast('不支持 PDF 格式。请从电子税务局下载 Excel 版本（.xlsx）的申报表后重新导入', 'error');
-    } else {
-      toast('导入失败: ' + msg, 'error');
-    }
+    toast('导入失败: ' + (e.message || '未知错误'), 'error');
   }
   // 清空input
   event.target.value = '';
