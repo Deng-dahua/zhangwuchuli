@@ -2033,7 +2033,8 @@ function calculateSchedule4() {
 // ==================== 附表五：附加税费情况表（官方模板还原） ====================
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
-  var T = 'width:960px;table-layout:fixed';
+  var T = 'width:1170px;table-layout:fixed;white-space:nowrap';
+  var TdStyle = 'overflow:hidden;text-overflow:ellipsis';
 
   // ---- helpers ----
   var B = 'border:1px solid #a0a0a0', P='padding:2px 3px', bgHead='#d9e2f3', bgSub='#e8edf5';
@@ -2054,10 +2055,10 @@ function renderSchedule5(data) {
   }
   function Dash() { return '<span style="color:#9ca3af;font-size:11px">——</span>'; }
   function Td(inner,st) {
-    return '<td style="'+B+';'+P+';'+(st||'')+'">'+inner+'</td>';
+    return '<td style="'+B+';'+P+';'+TdStyle+';'+(st||'')+'">'+inner+'</td>';
   }
   function Th(inner,st) {
-    return '<th style="'+B+';'+P+';'+(st||'')+'">'+inner+'</th>';
+    return '<th style="'+B+';'+P+';'+TdStyle+';'+(st||'')+'">'+inner+'</th>';
   }
 
   // ---- micro policy data ----
@@ -2070,24 +2071,25 @@ function renderSchedule5(data) {
 
   // ===== 表格 =====
   html += '<div style="overflow-x:auto">';
-  html += '<table class="vat-form-table" style="'+T+';font-size:11px;border-collapse:collapse;border:1px solid #a0a0a0">';
+  html += '<style>.sch5-table td,.sch5-table th{overflow:hidden;text-overflow:ellipsis}</style>';
+  html += '<table class="vat-form-table sch5-table" style="'+T+';font-size:11px;border-collapse:collapse;border:1px solid #a0a0a0">';
 
-  // colgroup: 16列 (960px total)
-  // 1税种 2序号 3增值税 4免抵 5留抵 6-7税率 8应纳税 9减免代码 10减免额 11减征% 12减征额 13试点代码 14抵免 15已缴 16应补退
+  // colgroup: 16列 (1170px total) — nowrap, each col fits its longest single-line text
   html += '<colgroup>';
-  html += '<col style="width:100px"><col style="width:35px">';
-  html += '<col style="width:62px"><col style="width:62px"><col style="width:62px">';
-  html += '<col style="width:32px"><col style="width:38px">';  // 6-7 merged → 税率 70px
-  html += '<col style="width:72px">';   // 8 应纳税
-  html += '<col style="width:58px">';   // 9 减免代码
-  html += '<col style="width:62px">';   // 10 减免额
-  html += '<col style="width:52px">';   // 11 减征%
-  html += '<col style="width:62px">';   // 12 减征额
-  html += '<col style="width:58px">';   // 13 试点代码
-  html += '<col style="width:60px">';   // 14 抵免
-  html += '<col style="width:52px">';   // 15 已缴
-  html += '<col style="width:73px">';   // 16 应补退 = 960
+  html += '<col style="width:90px"><col style="width:30px">';   // 1税种 2序号 (120)
+  html += '<col style="width:62px"><col style="width:62px"><col style="width:62px">';  // 3增值税 4免抵 5留抵 (186)
+  html += '<col style="width:30px"><col style="width:50px">';   // 6-7税率 merged=80px
+  html += '<col style="width:115px">';  // 8 应纳税
+  html += '<col style="width:60px">';   // 9 减免代码
+  html += '<col style="width:68px">';   // 10 减免额
+  html += '<col style="width:70px">';   // 11 减征%
+  html += '<col style="width:90px">';   // 12 减征额
+  html += '<col style="width:60px">';   // 13 试点代码
+  html += '<col style="width:65px">';   // 14 抵免
+  html += '<col style="width:110px">';  // 15 已缴
+  html += '<col style="width:146px">';  // 16 应补退
   html += '</colgroup>';
+  // verify: 90+30+62+62+62+30+50+115+60+68+70+90+60+65+110+146 = 1170
 
   // ===== Row 1: 标题 =====
   html += '<tr><td colspan="16" style="'+B+';text-align:center;font-size:14px;font-weight:700;padding:8px 4px 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</td></tr>';
@@ -2115,26 +2117,26 @@ function renderSchedule5(data) {
   html += '<tr style="background:'+bgHead+';font-size:11px;font-weight:600;text-align:center">';
   html += '<th colspan="2" rowspan="3" style="'+B+';'+P+';vertical-align:middle">税（费）种</th>';
   html += '<th colspan="3" style="'+B+';'+P+'">计税（费）依据</th>';
-  html += '<th colspan="2" rowspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）率<br>（%）</th>';
-  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期应纳税<br>（费）额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">本期减免税（费）<br>额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">小微企业"六税两费"<br>减免政策</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">试点建设培育<br>产教融合型企业</th>';
-  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期已缴<br>税（费）额</th>';
-  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期应补（退）<br>税（费）额</th>';
+  html += '<th colspan="2" rowspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）率（%）</th>';
+  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期应纳税（费）额</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">本期减免税（费）额</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">小微企业"六税两费"减免政策</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">试点建设培育产教融合型企业</th>';
+  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期已缴税（费）额</th>';
+  html += '<th rowspan="2" style="'+B+';'+P+';vertical-align:middle">本期应补（退）税（费）额</th>';
   html += '</tr>';
 
   // --- 表头Row 6: 子列名 ---
   html += '<tr style="background:'+bgSub+';font-size:10px;text-align:center">';
-  html += '<th style="'+B+';'+P+'">增值税<br>税额</th>';
-  html += '<th style="'+B+';'+P+'">增值税<br>免抵税额</th>';
-  html += '<th style="'+B+';'+P+'">留抵退税<br>本期扣除额</th>';
-  html += '<th style="'+B+';'+P+'">减免<br>性质代码</th>';
-  html += '<th style="'+B+';'+P+'">减免税<br>（费）额</th>';
-  html += '<th style="'+B+';'+P+'">减征比例<br>（%）</th>';
+  html += '<th style="'+B+';'+P+'">增值税税额</th>';
+  html += '<th style="'+B+';'+P+'">增值税免抵税额</th>';
+  html += '<th style="'+B+';'+P+'">留抵退税本期扣除额</th>';
+  html += '<th style="'+B+';'+P+'">减免性质代码</th>';
+  html += '<th style="'+B+';'+P+'">减免税（费）额</th>';
+  html += '<th style="'+B+';'+P+'">减征比例（%）</th>';
   html += '<th style="'+B+';'+P+'">减征额</th>';
-  html += '<th style="'+B+';'+P+'">减免<br>性质代码</th>';
-  html += '<th style="'+B+';'+P+'">本期抵免<br>金额</th>';
+  html += '<th style="'+B+';'+P+'">减免性质代码</th>';
+  html += '<th style="'+B+';'+P+'">本期抵免金额</th>';
   html += '</tr>';
 
   // --- 表头Row 7: 列号/公式 ---
