@@ -113,10 +113,11 @@ function onCCFDetailPeriodChange() {
   var period = ySel.value + '-' + mSel.value;
   var found = ccfDeclarations.find(function(d) { return d.period === period; });
   if (found) { openCCFDetailInline(found.id); }
-  else { renderCCFPeriodEmpty(period); }
+  else { ccfCurrentData = null; renderCCFPeriodEmpty(period); renderCCFStats(period); }
 }
 
 function renderCCFPeriodEmpty(period) {
+  ccfCurrentData = null;
   var container = document.getElementById('ccf-forms-inline');
   if (!container) return;
   var parts = period.split('-');
@@ -178,6 +179,7 @@ async function loadCCFDeclarationList(emptyPeriod) {
     var now = new Date();
     var defaultPeriod = emptyPeriod || ccfFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
     renderCCFPeriodEmpty(defaultPeriod);
+    renderCCFStats(defaultPeriod);
     return;
   }
 
@@ -198,7 +200,7 @@ async function loadCCFDeclarationList(emptyPeriod) {
 
 // ==================== 统计卡片 ====================
 
-function renderCCFStats() {
+function renderCCFStats(forcePeriod) {
   var el = document.getElementById('ccf-stats-row'); if (!el) return;
 
   function card(label, value, color) {
@@ -206,7 +208,7 @@ function renderCCFStats() {
     return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + c + '">' + fmt(value) + '</div></div>';
   }
 
-  // 优先使用当前申报表数据，否则汇总全部
+  // 优先使用当前申报表数据
   if (ccfCurrentData) {
     var main = safeJSON(ccfCurrentData.form_main, {});
     var row1 = main.row1_taxable_income_current || 0;
@@ -216,6 +218,10 @@ function renderCCFStats() {
     el.innerHTML = card('应征收入（' + periodLabel + '）', row1, '#0f766e')
       + card('应缴费额（' + periodLabel + '）', row10, '#d97706')
       + card('应补(退)费额（' + periodLabel + '）', row18, '#dc2626');
+  } else if (forcePeriod) {
+    el.innerHTML = card('应征收入（' + forcePeriod + '）', 0, '#0f766e')
+      + card('应缴费额（' + forcePeriod + '）', 0, '#d97706')
+      + card('应补(退)费额（' + forcePeriod + '）', 0, '#dc2626');
   } else {
     el.innerHTML = card('应征收入（汇总）', 0, '#0f766e')
       + card('应缴费额（汇总）', 0, '#d97706')
@@ -346,6 +352,7 @@ function ccfClearFilter() {
   ccfFilterPeriod = '';
   ccfCurrentData = null;
   loadCCFDeclarationList();
+  renderCCFStats();
 }
 
 // ==================== 主表渲染 ====================
