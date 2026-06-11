@@ -30,14 +30,15 @@ const CCF_ROWS = [
   { key: 'row8_taxable_sales',               label: '计费销售额',                       category: '费额计算',   calc: '1-5' },
   { key: 'row9_fee_rate',                    label: '费率',                            category: '费额计算',   calc: null },
   { key: 'row10_payable_fee',                label: '应缴费额',                        category: '费额计算',   calc: '8×9' },
+  { key: 'row10a_fee_reduction',             label: '减征额（财税〔2025〕7号 减半征收）',   category: '费额计算',   calc: '10×减免比例' },
   { key: 'row11_unpaid_beginning',           label: '期初未缴费额（多缴为负）',          category: '费额缴纳',   calc: null },
   { key: 'row12_paid_current_period',         label: '本期已缴费额',                     category: '费额缴纳',   calc: '13+14+15' },
   { key: 'row13_prepaid',                    label: '其中：本期预缴费额',               category: '费额缴纳',   calc: null },
   { key: 'row14_paid_last_period',           label: '本期缴纳上期费额',                 category: '费额缴纳',   calc: null },
   { key: 'row15_paid_arrears',               label: '本期缴纳欠费额',                   category: '费额缴纳',   calc: null },
-  { key: 'row16_unpaid_ending',              label: '期末未缴费额（多缴为负）',          category: '费额缴纳',   calc: '10+11-12' },
+  { key: 'row16_unpaid_ending',              label: '期末未缴费额（多缴为负）',          category: '费额缴纳',   calc: '(10-10a)+11-12' },
   { key: 'row17_arrears',                    label: '其中：欠缴费额（≥0）',            category: '费额缴纳',   calc: '11-14-15' },
-  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               category: '费额缴纳',   calc: '10-13' },
+  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               category: '费额缴纳',   calc: '(10-10a)-13' },
   { key: 'row19_inspected_supplement',       label: '本期检查已补缴费额',               category: '费额缴纳',   calc: null },
 ];
 
@@ -352,6 +353,16 @@ function renderCCFMainForm(data, main) {
   // 标题
   h += '<div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:8px">文化事业建设费申报表</div>';
 
+  // 减半征收政策选项
+  var feeRate = parseFloat(main.fee_reduction_rate) || 0.5;
+  var halfChecked = feeRate > 0 ? 'checked' : '';
+  h += '<div style="text-align:center;margin-bottom:10px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:6px 12px;font-size:12px">';
+  h += '<label style="cursor:pointer">';
+  h += '<input type="checkbox" id="ccf-half-reduction" ' + halfChecked + ' onchange="ccfOnHalfReductionChange()" style="vertical-align:middle;margin-right:4px">';
+  h += '适用财税〔2025〕7号减半征收政策（减免比例 <input type="number" id="ccf-reduction-rate" value="' + (feeRate * 100).toFixed(0) + '" min="0" max="100" step="1" onchange="ccfOnHalfReductionChange()" style="width:40px;text-align:center;border:1px solid #e5e7eb;border-radius:3px;font-size:12px;padding:1px 2px" ' + (feeRate > 0 ? '' : 'disabled') + '>%）';
+  h += '</label>';
+  h += '</div>';
+
   // 先计算每个分类的行数（用于 rowspan）
   var catSpans = {}, catOrder = [];
   for (var i = 0; i < CCF_ROWS.length; i++) {
@@ -496,14 +507,34 @@ function ccfOnMainChange() {
   // 栏次10 = 8×9
   var rate = g('ccf-cur-row9_fee_rate') || 0.03;
   s('ccf-cur-row10_payable_fee', g('ccf-cur-row8_taxable_sales') * rate);
+  // 栏次10a = 10 × 减免比例
+  var halfCb = document.getElementById('ccf-half-reduction');
+  if (halfCb && halfCb.checked) {
+    var redRate = (g('ccf-reduction-rate') || 50) / 100;
+    s('ccf-cur-row10a_fee_reduction', g('ccf-cur-row10_payable_fee') * redRate);
+  } else {
+    s('ccf-cur-row10a_fee_reduction', 0);
+  }
+  // 净应缴费额
+  var netFee = g('ccf-cur-row10_payable_fee') - g('ccf-cur-row10a_fee_reduction');
   // 栏次12 = 13+14+15
   s('ccf-cur-row12_paid_current_period', g('ccf-cur-row13_prepaid') + g('ccf-cur-row14_paid_last_period') + g('ccf-cur-row15_paid_arrears'));
-  // 栏次16 = 10+11-12
-  s('ccf-cur-row16_unpaid_ending', g('ccf-cur-row10_payable_fee') + g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row12_paid_current_period'));
+  // 栏次16 = 净应缴 + 11 - 12
+  s('ccf-cur-row16_unpaid_ending', netFee + g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row12_paid_current_period'));
   // 栏次17 = 11-14-15
   s('ccf-cur-row17_arrears', g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row14_paid_last_period') - g('ccf-cur-row15_paid_arrears'));
-  // 栏次18 = 10-13
-  s('ccf-cur-row18_fill_refund', g('ccf-cur-row10_payable_fee') - g('ccf-cur-row13_prepaid'));
+  // 栏次18 = 净应缴 - 13
+  s('ccf-cur-row18_fill_refund', netFee - g('ccf-cur-row13_prepaid'));
+}
+
+function ccfOnHalfReductionChange() {
+  var cb = document.getElementById('ccf-half-reduction');
+  var rateInp = document.getElementById('ccf-reduction-rate');
+  if (cb && rateInp) {
+    rateInp.disabled = !cb.checked;
+    if (!cb.checked) rateInp.value = '0';
+  }
+  ccfOnMainChange();
 }
 
 // ==================== 扣除项目操作 ====================
@@ -558,6 +589,14 @@ async function ccfSaveCurrent() {
     mainData[row.key + '_current'] = curEl ? parseFloat(curEl.value || 0) : 0;
     mainData[row.key + '_ytd'] = ytdEl ? parseFloat(ytdEl.value || 0) : 0;
   });
+  // 收集减半征收策略
+  var halfCb = document.getElementById('ccf-half-reduction');
+  var rateInp = document.getElementById('ccf-reduction-rate');
+  var feeReductionRate = 0;
+  if (halfCb && halfCb.checked && rateInp) {
+    feeReductionRate = (parseFloat(rateInp.value) || 50) / 100;
+  }
+  mainData.fee_reduction_rate = feeReductionRate;
 
   var payload = {
     period: ccfCurrentData.period,
@@ -566,6 +605,7 @@ async function ccfSaveCurrent() {
     form_main: mainData,
     form_deduction: {},
     deductions: ccfCurrentData.deductions || [],
+    fee_reduction_rate: feeReductionRate,
   };
   // 同时填充 row 字段（兼容后端非 JSON 模式）
   CCF_ROWS.forEach(function(row) {
@@ -669,7 +709,11 @@ async function ccfAIAutoFill() {
       var msg = '✅ AI 自动处理完成！\n\n';
       msg += '📊 应征收入：¥' + summary.taxable_income.toLocaleString() + '\n';
       msg += '📋 扣除项目：' + summary.deduction_count + ' 项，共 ¥' + summary.deduction_total.toLocaleString() + '\n';
-      msg += '🧮 应缴费额：¥' + summary.payable_fee.toLocaleString() + '\n';
+      msg += '🧮 应缴费额：¥' + summary.payable_fee.toLocaleString();
+      if (summary.reduction_amount > 0) {
+        msg += '（全额），减征额：¥' + summary.reduction_amount.toLocaleString() + '（减征' + (summary.fee_reduction_rate * 100).toFixed(0) + '%），净应缴：¥' + summary.net_payable.toLocaleString();
+      }
+      msg += '\n';
       msg += '💰 应补退费额：¥' + summary.fill_refund.toLocaleString() + '\n\n';
       msg += '📝 操作日志：\n' + resp.log.join('\n');
 

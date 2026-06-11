@@ -290,6 +290,7 @@ def create_declaration(payload: DeclarationCreate, company_id: int = Query(), db
         "row7_deduction_ending_balance_current", "row7_deduction_ending_balance_ytd",
         "row8_taxable_sales_current", "row8_taxable_sales_ytd",
         "row10_payable_fee_current", "row10_payable_fee_ytd",
+        "row10a_fee_reduction_current", "row10a_fee_reduction_ytd",
         "row11_unpaid_beginning_current", "row11_unpaid_beginning_ytd",
         "row12_paid_current_period_current", "row12_paid_current_period_ytd",
         "row13_prepaid_current", "row13_prepaid_ytd",
@@ -305,6 +306,8 @@ def create_declaration(payload: DeclarationCreate, company_id: int = Query(), db
 
     if hasattr(payload, "row9_fee_rate"):
         decl.row9_fee_rate = payload.row9_fee_rate or 0.03
+    if hasattr(payload, "fee_reduction_rate"):
+        decl.fee_reduction_rate = payload.fee_reduction_rate or 0.5
 
     # 保存 JSON 表单
     if payload.form_main:
@@ -375,6 +378,9 @@ def update_declaration(declaration_id: int, payload: dict, company_id: int = Que
         "row9_fee_rate": "row9_fee_rate",
         "row10_payable_fee_current": "row10_payable_fee_current",
         "row10_payable_fee_ytd": "row10_payable_fee_ytd",
+        "row10a_fee_reduction_current": "row10a_fee_reduction_current",
+        "row10a_fee_reduction_ytd": "row10a_fee_reduction_ytd",
+        "fee_reduction_rate": "fee_reduction_rate",
         "row11_unpaid_beginning_current": "row11_unpaid_beginning_current",
         "row11_unpaid_beginning_ytd": "row11_unpaid_beginning_ytd",
         "row12_paid_current_period_current": "row12_paid_current_period_current",
@@ -476,6 +482,17 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
         2
     )
 
+    # 栏次10a = 10 × 减免比例（财税〔2025〕7号 减半征收）
+    reduction_rate = float(decl.fee_reduction_rate or 0.5)
+    if reduction_rate > 0:
+        decl.row10a_fee_reduction_current = round(
+            float(decl.row10_payable_fee_current or 0) * reduction_rate, 2
+        )
+    else:
+        decl.row10a_fee_reduction_current = 0.0
+    # 净应缴费额
+    net_fee = float(decl.row10_payable_fee_current or 0) - float(decl.row10a_fee_reduction_current or 0)
+
     # 栏次12 = 13 + 14 + 15
     decl.row12_paid_current_period_current = round(
         (decl.row13_prepaid_current or 0)
@@ -484,9 +501,9 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
         2
     )
 
-    # 栏次16 = 10 + 11 - 12
+    # 栏次16 = 净应缴 + 11 - 12
     decl.row16_unpaid_ending_current = round(
-        (decl.row10_payable_fee_current or 0)
+        net_fee
         + (decl.row11_unpaid_beginning_current or 0)
         - (decl.row12_paid_current_period_current or 0),
         2
@@ -500,9 +517,9 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
         2
     )
 
-    # 栏次18 = 10 - 13
+    # 栏次18 = 净应缴 - 13
     decl.row18_fill_refund_current = round(
-        (decl.row10_payable_fee_current or 0)
+        net_fee
         - (decl.row13_prepaid_current or 0),
         2
     )
@@ -933,6 +950,19 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     )
     decl.row10_payable_fee_ytd = decl.row10_payable_fee_current
 
+    # 栏次10a = 10 × 减免比例（财税〔2025〕7号 减半征收）
+    reduction_rate = float(decl.fee_reduction_rate or 0.5)
+    if reduction_rate > 0:
+        decl.row10a_fee_reduction_current = round(
+            float(decl.row10_payable_fee_current or 0) * reduction_rate, 2
+        )
+        decl.row10a_fee_reduction_ytd = decl.row10a_fee_reduction_current
+    else:
+        decl.row10a_fee_reduction_current = 0.0
+        decl.row10a_fee_reduction_ytd = 0.0
+    # 净应缴费额
+    net_fee = float(decl.row10_payable_fee_current or 0) - float(decl.row10a_fee_reduction_current or 0)
+
     # 栏次11 = 前期期末未缴费
     decl.row11_unpaid_beginning_current = float(prior_decl.row16_unpaid_ending_current or 0) if prior_decl else 0
     decl.row11_unpaid_beginning_ytd = decl.row11_unpaid_beginning_current
@@ -945,9 +975,9 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     )
     decl.row12_paid_current_period_ytd = decl.row12_paid_current_period_current
 
-    # 栏次16 = 10+11-12
+    # 栏次16 = 净应缴 + 11 - 12
     decl.row16_unpaid_ending_current = round(
-        (decl.row10_payable_fee_current or 0)
+        net_fee
         + (decl.row11_unpaid_beginning_current or 0)
         - (decl.row12_paid_current_period_current or 0), 2
     )
@@ -961,9 +991,9 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     )
     decl.row17_arrears_ytd = decl.row17_arrears_current
 
-    # 栏次18 = 10-13
+    # 栏次18 = 净应缴 - 13
     decl.row18_fill_refund_current = round(
-        (decl.row10_payable_fee_current or 0)
+        net_fee
         - (decl.row13_prepaid_current or 0), 2
     )
     decl.row18_fill_refund_ytd = decl.row18_fill_refund_current
@@ -977,18 +1007,20 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     decl.updated_at = datetime.now()
 
     fee_amount = float(decl.row10_payable_fee_current or 0)
-    log.append(f"🧮 应缴费额 = {fee_amount:,.2f}（计费销售额 × 3%）")
+    reduction_amount = float(decl.row10a_fee_reduction_current or 0)
+    net_fee_amount = fee_amount - reduction_amount
+    log.append(f"🧮 应缴费额 = {fee_amount:,.2f}（计费销售额 × 3%），减免额 = {reduction_amount:,.2f}（减半征收 {decl.fee_reduction_rate*100:.0f}%），净应缴 = {net_fee_amount:,.2f}")
 
-    # ========== 4. 生成计提凭证到序时账 ==========
-    if fee_amount > 0:
-        voucher_result = _generate_ccf_voucher(db, company_id, decl, fee_amount, entry_date, period)
+    # ========== 4. 生成计提凭证到序时账（按净额） ==========
+    if net_fee_amount != 0:
+        voucher_result = _generate_ccf_voucher(db, company_id, decl, net_fee_amount, entry_date, period)
         log.append(f"📝 计提凭证：{voucher_result['message']}")
     else:
-        log.append("📝 应缴费额为 0，跳过凭证生成")
+        log.append("📝 净应缴费额为 0，跳过凭证生成")
 
-    # ========== 5. 自动匹配银行流水生成缴纳凭证 ==========
-    if fee_amount > 0:
-        payment_result = _match_ccf_payment_voucher(db, company_id, decl, fee_amount, entry_date, period)
+    # ========== 5. 自动匹配银行流水生成缴纳凭证（按净额） ==========
+    if net_fee_amount > 0:
+        payment_result = _match_ccf_payment_voucher(db, company_id, decl, net_fee_amount, entry_date, period)
         if payment_result.get("matched") and payment_result.get("results"):
             for r in payment_result["results"]:
                 log.append(f"💰 缴纳凭证：{r['message']}")
@@ -1013,6 +1045,9 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
             "taxable_sales": float(decl.row8_taxable_sales_current or 0),
             "fee_rate": 0.03,
             "payable_fee": fee_amount,
+            "reduction_amount": reduction_amount,
+            "fee_reduction_rate": float(decl.fee_reduction_rate or 0),
+            "net_payable": net_fee_amount,
             "unpaid_ending": float(decl.row16_unpaid_ending_current or 0),
             "fill_refund": float(decl.row18_fill_refund_current or 0),
         },
