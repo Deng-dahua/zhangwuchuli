@@ -493,7 +493,10 @@ function switchVATPage(pageId) {
 // ==================== 内联展示（页面直接显示） ====================
 async function openVATDetailInline(id) {
   vatSelectedId = id;
-  vatActivePage = 'main';
+  // 如果是新的申报表，重置到主表；同一申报表（如保存后刷新）保留当前页签
+  if (vatInlineDisplayId !== id) {
+    vatActivePage = 'main';
+  }
   try {
     const data = await api('/api/vat/declarations/' + id);
     // 将完整数据合入缓存
@@ -611,6 +614,8 @@ function closeVATInline() {
 }
 
 function switchVATPageInline(pageId, id) {
+  // 切换页签前：将当前页的DOM数据同步回缓存，防止未保存数据丢失
+  vatSyncCurrentPageToCache();
   vatActivePage = pageId;
   // 从缓存获取数据并补充完整字段（若缺失则重新从 API 获取）
   let data = vatDeclarations.find(d => d.id === id);
@@ -906,11 +911,27 @@ function vatResetAllFormulas() {
   toast('已恢复所有公式', 'success');
 }
 
+// 页签→表单数据键名+DOM前缀映射
+var VAT_PAGE_DATA_MAP = {
+  'main':      { key: 'form_main',      prefix: 'vat-' },
+  'schedule1': { key: 'form_sales',     prefix: 'sch1-' },
+  'schedule2': { key: 'form_input',     prefix: 'sch2-' },
+  'schedule3': { key: 'form_deduction', prefix: 'sch3-' },
+  'schedule4': { key: 'form_credit',    prefix: 'sch4-' },
+  'schedule5': { key: 'form_surcharge', prefix: 'sch5-' },
+  'reduction': { key: 'form_reduction', prefix: 'red-' }
+};
+
+// 将当前活动页的DOM数据同步回vatCurrentData（切换页签前调用，防止未保存数据丢失）
+function vatSyncCurrentPageToCache() {
+  if (!vatCurrentData) return;
+  var map = VAT_PAGE_DATA_MAP[vatActivePage];
+  if (!map) return;
+  vatCurrentData[map.key] = vatCollectFormData()[map.key];
+}
+
 function vatCollectFormData() {
-  // 收集所有输入框的值，按表单分配
-  var allData = {};
-  
-  // 辅助：收集指定前缀的输入框
+  // 辅助：从DOM收集指定前缀的输入框
   function collect(prefix) {
     var inputs = document.querySelectorAll('[id^="' + prefix + '"][type="number"]');
     var data = {};
@@ -923,13 +944,24 @@ function vatCollectFormData() {
     return data;
   }
   
-  allData.form_main = collect('vat-');
-  allData.form_sales = collect('sch1-');
-  allData.form_input = collect('sch2-');
-  allData.form_deduction = collect('sch3-');
-  allData.form_credit = collect('sch4-');
-  allData.form_surcharge = collect('sch5-');
-  allData.form_reduction = collect('red-');
+  // 以vatCurrentData为基础（保留非当前页的数据），只从DOM覆盖当前活动页
+  var allData = {};
+  var FORM_KEYS = ['form_main','form_sales','form_input','form_deduction','form_credit','form_surcharge','form_reduction'];
+  for (var i = 0; i < FORM_KEYS.length; i++) {
+    var fk = FORM_KEYS[i];
+    // safeJSON确保既处理对象也处理JSON字符串
+    allData[fk] = safeJSON((vatCurrentData && vatCurrentData[fk]) ? vatCurrentData[fk] : {}, {});
+  }
+  
+  // 当前活动页：从DOM采集并覆盖
+  var map = VAT_PAGE_DATA_MAP[vatActivePage];
+  if (map) {
+    var domData = collect(map.prefix);
+    // 只覆盖DOM中实际存在的字段（避免空DOM把数据清空）
+    if (Object.keys(domData).length > 0) {
+      allData[map.key] = domData;
+    }
+  }
   
   return allData;
 }
