@@ -299,7 +299,12 @@ async def import_vat_declaration(
                     continue
                 for j, cell in enumerate(row):
                     if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
-                        # 先检查同行右侧的单元格
+                        # 1. 先在当前单元格内找日期（如"所属期：2026年05月"）
+                        m = re.search(r'(\d{4})[年\-](\d{1,2})', str(cell))
+                        if m:
+                            period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                            break
+                        # 2. 再检查同行右侧的单元格
                         for k in range(j + 1, min(j + 4, len(row))):
                             val = row[k]
                             if val:
