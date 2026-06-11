@@ -87,15 +87,34 @@ async def import_vat_declaration(
                 pass
         
         if not decl:
-            # 从Excel中读取期间信息
+            # 从Excel中读取期间信息（扫描主表前30行，找 "所属期" 相关字段）
             period = None
+            import re
             for sheet_name in wb.sheetnames:
                 ws = wb[sheet_name]
-                for row in ws.iter_rows(values_only=True):
-                    for cell in row:
-                        if cell and isinstance(cell, str) and ('期' in cell or '期间' in cell):
-                            # 尝试提取期间
-                            pass
+                rows = list(ws.iter_rows(values_only=True))
+                for i, row in enumerate(rows[:30]):
+                    for j, cell in enumerate(row):
+                        if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
+                            # 先检查同行右侧的单元格
+                            for k in range(j + 1, min(j + 4, len(row))):
+                                val = row[k]
+                                if val:
+                                    val_str = str(val)
+                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', val_str)
+                                    if m:
+                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                                        break
+                            if not period and i + 1 < len(rows):
+                                # 检查下一行同列
+                                next_row = rows[i + 1]
+                                if j < len(next_row) and next_row[j]:
+                                    val_str = str(next_row[j])
+                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', val_str)
+                                    if m:
+                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                        if period:
+                            break
                     if period:
                         break
                 if period:
@@ -103,8 +122,7 @@ async def import_vat_declaration(
             
             if not period:
                 # 从文件名推断期间
-                import re
-                match = re.search(r'(\d{4})[\u5e74\-](\d{1,2})', file.filename)
+                match = re.search(r'(\d{4})[年\-](\d{1,2})', file.filename)
                 if match:
                     period = f"{match.group(1)}-{match.group(2).zfill(2)}"
                 else:
@@ -145,21 +163,23 @@ async def import_vat_declaration(
             for row in ws.iter_rows(values_only=True):
                 data.append(list(row))
             
-            # 根据工作表名称判断类型
-            if '主表' in sheet_name or '申报表' in sheet_name:
-                form_main = data
-            elif '一' in sheet_name or '销项' in sheet_name or 'sales' in sheet_name.lower():
+            # 根据工作表名称判断类型（精确匹配优先，避免"附列资料一"也含"申报表"导致覆盖主表）
+            sn = sheet_name
+            if '附列资料（一）' in sn or '附列资料一' in sn or '销项' in sn:
                 form_sales = data
-            elif '二' in sheet_name or '进项' in sheet_name or 'input' in sheet_name.lower():
+            elif '附列资料（二）' in sn or '附列资料二' in sn or '进项' in sn:
                 form_input = data
-            elif '扣除' in sheet_name or 'deduction' in sheet_name.lower():
+            elif '附列资料（三）' in sn or '附列资料三' in sn or '扣除' in sn or 'deduction' in sn.lower():
                 form_deduction = data
-            elif '减免' in sheet_name or 'reduction' in sheet_name.lower():
+            elif '附列资料（四）' in sn or '附列资料四' in sn or '减免' in sn or 'reduction' in sn.lower():
                 form_reduction = data
-            elif '附加' in sheet_name or 'surcharge' in sheet_name.lower():
+            elif '附列资料（五）' in sn or '附列资料五' in sn or '附加税费申报表附列资料' in sn or ('附加' in sn and '申报表' not in sn) or 'surcharge' in sn.lower():
                 form_surcharge = data
-            elif '抵扣' in sheet_name or 'credit' in sheet_name.lower():
+            elif '抵扣' in sn or 'credit' in sn.lower():
                 form_credit = data
+            elif '主表' in sn or '申报表' in sn:
+                # 最后匹配主表，避免被附列资料名字覆盖
+                form_main = data
         
         # 保存到数据库
         if form_main:

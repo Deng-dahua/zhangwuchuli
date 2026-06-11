@@ -66,14 +66,41 @@ async def import_ccf_declaration(
                 pass
         
         if not decl:
-            # 从文件名推断期间
+            # 从文件名或Excel内容推断期间
             period = None
-            match = re.search(r'(\d{4})[年\-](\d{1,2})', file.filename)
-            if match:
-                period = f"{match.group(1)}-{match.group(2).zfill(2)}"
-            else:
-                now = datetime.now()
-                period = f"{now.year}-{now.month:02d}"
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                rows = list(ws.iter_rows(values_only=True))
+                for i, row in enumerate(rows[:30]):
+                    for j, cell in enumerate(row):
+                        if cell and isinstance(cell, str) and ('所属期' in cell or '申报期' in cell):
+                            for k in range(j + 1, min(j + 4, len(row))):
+                                val = row[k]
+                                if val:
+                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', str(val))
+                                    if m:
+                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                                        break
+                            if not period and i + 1 < len(rows):
+                                next_row = rows[i + 1]
+                                if j < len(next_row) and next_row[j]:
+                                    m = re.search(r'(\d{4})[年\-](\d{1,2})', str(next_row[j]))
+                                    if m:
+                                        period = f"{m.group(1)}-{m.group(2).zfill(2)}"
+                        if period:
+                            break
+                    if period:
+                        break
+                if period:
+                    break
+            
+            if not period:
+                match = re.search(r'(\d{4})[年\-](\d{1,2})', file.filename)
+                if match:
+                    period = f"{match.group(1)}-{match.group(2).zfill(2)}"
+                else:
+                    now = datetime.now()
+                    period = f"{now.year}-{now.month:02d}"
             
             # 创建新申报表
             max_id = db.query(func.max(CulturalConstructionFeeDeclaration.id)).filter(
@@ -103,11 +130,12 @@ async def import_ccf_declaration(
             for row in ws.iter_rows(values_only=True):
                 data.append(list(row))
             
-            # 根据工作表名称判断类型
-            if '主表' in sheet_name or '申报表' in sheet_name or '文化' in sheet_name:
-                form_main = data
-            elif '扣除' in sheet_name or 'deduction' in sheet_name.lower() or '清单' in sheet_name:
+            # 根据工作表名称判断类型（精确匹配：扣除清单优先，主表最后匹配）
+            sn = sheet_name
+            if '扣除' in sn or 'deduction' in sn.lower() or '清单' in sn:
                 form_deduction = data
+            elif '主表' in sn or '申报表' in sn or '文化' in sn:
+                form_main = data
         
         # 保存到数据库
         if form_main:
