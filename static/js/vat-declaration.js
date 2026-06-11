@@ -424,6 +424,10 @@ function renderVATTemplateView(data) {
   if (vatActivePage === 'main') setTimeout(calculateVATMainForm, 100);
   if (vatActivePage === 'schedule1') setTimeout(calculateSchedule1, 100);
   if (vatActivePage === 'schedule2') setTimeout(calculateSchedule2, 100);
+  if (vatActivePage === 'schedule3') setTimeout(calculateSchedule3, 100);
+  if (vatActivePage === 'schedule4') setTimeout(calculateSchedule4, 100);
+  if (vatActivePage === 'schedule5') setTimeout(calculateSchedule5, 100);
+  if (vatActivePage === 'reduction') setTimeout(calculateReductionForm, 100);
 }
 
 function switchVATPage(pageId) {
@@ -533,6 +537,18 @@ function renderVATTemplateViewInline(data) {
   }
   if (vatActivePage === 'schedule2') {
     setTimeout(calculateSchedule2, 100);
+  }
+  if (vatActivePage === 'schedule3') {
+    setTimeout(calculateSchedule3, 100);
+  }
+  if (vatActivePage === 'schedule4') {
+    setTimeout(calculateSchedule4, 100);
+  }
+  if (vatActivePage === 'schedule5') {
+    setTimeout(calculateSchedule5, 100);
+  }
+  if (vatActivePage === 'reduction') {
+    setTimeout(calculateReductionForm, 100);
   }
 }
 
@@ -1743,29 +1759,27 @@ function calculateSchedule2() {
 function renderSchedule3(data) {
   const d = safeJSON(data.form_deduction, {});
 
-  function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+  var inputStyle = 'width:90px;text-align:right;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px';
 
-  // 项目名称列表（按行）
+  function ti(field, val) {
+    var id = 'sch3-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val).toFixed(2) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + inputStyle + '" onchange="calculateSchedule3()"></td>';
+  }
+  function tc(id, val) {
+    return '<td class="num"><span id="' + id + '">' + (val ? _fm0(val) : '') + '</span></td>';
+  }
+
+  // 项目名称及字段前缀
   const projects = [
-    '13%税率的项目',
-    '9%税率的项目',
-    '6%税率的项目（不含金融商品转让）',
-    '6%税率的金融商品转让项目',
-    '5%征收率的项目',
-    '3%征收率的项目',
-    '免抵退税的项目',
-    '免税的项目',
-  ];
-
-  const rows = [
-    { price_tax: d.row1_13_price_tax, begin: d.row1_13_begin, occur: d.row1_13_occur, should: d.row1_13_should, actual: d.row1_13_actual, end: d.row1_13_end },
-    { price_tax: d.row2_9_price_tax, begin: d.row2_9_begin, occur: d.row2_9_occur, should: d.row2_9_should, actual: d.row2_9_actual, end: d.row2_9_end },
-    { price_tax: d.row3_6_price_tax, begin: d.row3_6_begin, occur: d.row3_6_occur, should: d.row3_6_should, actual: d.row3_6_actual, end: d.row3_6_end },
-    { price_tax: d.row4_6_fin_price_tax, begin: d.row4_6_fin_begin, occur: d.row4_6_fin_occur, should: d.row4_6_fin_should, actual: d.row4_6_fin_actual, end: d.row4_6_fin_end },
-    { price_tax: d.row5_5_price_tax, begin: d.row5_5_begin, occur: d.row5_5_occur, should: d.row5_5_should, actual: d.row5_5_actual, end: d.row5_5_end },
-    { price_tax: d.row6_3_price_tax, begin: d.row6_3_begin, occur: d.row6_3_occur, should: d.row6_3_should, actual: d.row6_3_actual, end: d.row6_3_end },
-    { price_tax: d.row7_exempt_credit_price_tax, begin: d.row7_exempt_credit_begin, occur: d.row7_exempt_credit_occur, should: d.row7_exempt_credit_should, actual: d.row7_exempt_credit_actual, end: d.row7_exempt_credit_end },
-    { price_tax: d.row8_exempt_price_tax, begin: d.row8_exempt_begin, occur: d.row8_exempt_occur, should: d.row8_exempt_should, actual: d.row8_exempt_actual, end: d.row8_exempt_end },
+    { name: '13%税率的项目', pf: 'row1_13' },
+    { name: '9%税率的项目', pf: 'row2_9' },
+    { name: '6%税率的项目（不含金融商品转让）', pf: 'row3_6' },
+    { name: '6%税率的金融商品转让项目', pf: 'row4_6_fin' },
+    { name: '5%征收率的项目', pf: 'row5_5' },
+    { name: '3%征收率的项目', pf: 'row6_3' },
+    { name: '免抵退税的项目', pf: 'row7_exempt_credit' },
+    { name: '免税的项目', pf: 'row8_exempt' },
   ];
 
   let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（三）</div>'
@@ -1782,9 +1796,15 @@ function renderSchedule3(data) {
     + '<tbody>';
 
   for (let i = 0; i < projects.length; i++) {
-    const r = rows[i];
-    html += '<tr><td>' + projects[i] + '</td><td style="text-align:center">' + (i+1) + '</td>'
-      + td(r.price_tax) + td(r.begin) + td(r.occur) + td(r.should) + td(r.actual) + td(r.end)
+    const p = projects[i];
+    const pf = p.pf;
+    html += '<tr><td>' + p.name + '</td><td style="text-align:center">' + (i+1) + '</td>'
+      + ti(pf + '_price_tax', d[pf + '_price_tax'])        // 列1: 价税合计（可编辑）
+      + ti(pf + '_begin', d[pf + '_begin'])                // 列2: 期初余额（可编辑）
+      + ti(pf + '_occur', d[pf + '_occur'])                // 列3: 本期发生额（可编辑）
+      + tc('sch3-' + pf + '_should', d[pf + '_should'])    // 列4: 应扣除=2+3（计算）
+      + ti(pf + '_actual', d[pf + '_actual'])              // 列5: 实际扣除（可编辑）
+      + tc('sch3-' + pf + '_end', d[pf + '_end'])          // 列6: 期末余额=4-5（计算）
       + '</tr>';
   }
 
@@ -1792,10 +1812,46 @@ function renderSchedule3(data) {
   return html;
 }
 
+// ==================== 附表三计算函数 ====================
+function calculateSchedule3() {
+  function gv(field) {
+    var el = document.getElementById('sch3-' + field);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function uCalc(id, val) {
+    var el = document.getElementById('sch3-' + id);
+    if (el) el.textContent = (val !== 0) ? _fm0(val) : '';
+  }
+
+  var prefixes = ['row1_13','row2_9','row3_6','row4_6_fin','row5_5','row6_3','row7_exempt_credit','row8_exempt'];
+  for (var i = 0; i < prefixes.length; i++) {
+    var pf = prefixes[i];
+    var begin = gv(pf + '_begin');
+    var occur = gv(pf + '_occur');
+    var actual = gv(pf + '_actual');
+    var should = begin + occur;
+    var end = should - actual;
+    uCalc(pf + '_should', should);
+    uCalc(pf + '_end', end);
+  }
+}
+
 // ==================== 附表四：税额抵减情况表 ====================
 function renderSchedule4(data) {
   const c = safeJSON(data.form_credit, {});
-  function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+
+  var inputStyle = 'width:90px;text-align:right;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px';
+
+  function ti(field, val) {
+    var id = 'sch4-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val).toFixed(2) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + inputStyle + '" onchange="calculateSchedule4()"></td>';
+  }
+  function tc(id, val) {
+    return '<td class="num"><span id="sch4-' + id + '">' + (val ? _fm0(val) : '') + '</span></td>';
+  }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（四）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（税额抵减情况表）</div>'
@@ -1805,11 +1861,32 @@ function renderSchedule4(data) {
     + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
-    + '<tr><td style="text-align:center">1</td><td style="white-space:nowrap">增值税税控系统专用设备费及技术维护费</td>' + td(c.tax_control_begin) + td(c.tax_control_occur) + td(c.tax_control_should) + td(c.tax_control_actual) + td(c.tax_control_end) + '</tr>'
-    + '<tr><td style="text-align:center">2</td><td style="white-space:nowrap">分支机构预征缴纳税款</td>' + td(c.branch_begin) + td(c.branch_occur) + td(c.branch_should) + td(c.branch_actual) + td(c.branch_end) + '</tr>'
-    + '<tr><td style="text-align:center">3</td><td style="white-space:nowrap">建筑服务预征缴纳税款</td>' + td(c.construction_begin) + td(c.construction_occur) + td(c.construction_should) + td(c.construction_actual) + td(c.construction_end) + '</tr>'
-    + '<tr><td style="text-align:center">4</td><td style="white-space:nowrap">销售不动产预征缴纳税款</td>' + td(c.real_estate_begin) + td(c.real_estate_occur) + td(c.real_estate_should) + td(c.real_estate_actual) + td(c.real_estate_end) + '</tr>'
-    + '<tr><td style="text-align:center">5</td><td style="white-space:nowrap">出租不动产预征缴纳税款</td>' + td(c.rental_begin) + td(c.rental_occur) + td(c.rental_should) + td(c.rental_actual) + td(c.rental_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">1</td><td style="white-space:nowrap">增值税税控系统专用设备费及技术维护费</td>'
+    + ti('tax_control_begin', c.tax_control_begin) + ti('tax_control_occur', c.tax_control_occur)
+    + tc('tax_control_should', c.tax_control_should) + ti('tax_control_actual', c.tax_control_actual)
+    + tc('tax_control_end', c.tax_control_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">2</td><td style="white-space:nowrap">分支机构预征缴纳税款</td>'
+    + ti('branch_begin', c.branch_begin) + ti('branch_occur', c.branch_occur)
+    + tc('branch_should', c.branch_should) + ti('branch_actual', c.branch_actual)
+    + tc('branch_end', c.branch_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">3</td><td style="white-space:nowrap">建筑服务预征缴纳税款</td>'
+    + ti('construction_begin', c.construction_begin) + ti('construction_occur', c.construction_occur)
+    + tc('construction_should', c.construction_should) + ti('construction_actual', c.construction_actual)
+    + tc('construction_end', c.construction_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">4</td><td style="white-space:nowrap">销售不动产预征缴纳税款</td>'
+    + ti('real_estate_begin', c.real_estate_begin) + ti('real_estate_occur', c.real_estate_occur)
+    + tc('real_estate_should', c.real_estate_should) + ti('real_estate_actual', c.real_estate_actual)
+    + tc('real_estate_end', c.real_estate_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">5</td><td style="white-space:nowrap">出租不动产预征缴纳税款</td>'
+    + ti('rental_begin', c.rental_begin) + ti('rental_occur', c.rental_occur)
+    + tc('rental_should', c.rental_should) + ti('rental_actual', c.rental_actual)
+    + tc('rental_end', c.rental_end) + '</tr>'
+
     + '</tbody></table>'
 
     // 二、加计抵减情况
@@ -1817,48 +1894,123 @@ function renderSchedule4(data) {
     + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:10px">6=4-5</th></tr></thead><tbody>'
-    + '<tr><td style="text-align:center">6</td><td>一般项目加计抵减额计算</td>' + td(c.item1_begin) + td(c.item1_occur) + td(c.item1_adjust) + td(c.item1_can_deduct) + td(c.item1_actual_deduct) + td(c.item1_end) + '</tr>'
-    + '<tr><td style="text-align:center">7</td><td>即征即退项目加计抵减额计算</td>' + td(c.item2_begin) + td(c.item2_occur) + td(c.item2_adjust) + td(c.item2_can_deduct) + td(c.item2_actual_deduct) + td(c.item2_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">6</td><td>一般项目加计抵减额计算</td>'
+    + ti('item1_begin', c.item1_begin) + ti('item1_occur', c.item1_occur) + ti('item1_adjust', c.item1_adjust)
+    + tc('item1_can_deduct', c.item1_can_deduct) + ti('item1_actual_deduct', c.item1_actual_deduct)
+    + tc('item1_end', c.item1_end) + '</tr>'
+
+    + '<tr><td style="text-align:center">7</td><td>即征即退项目加计抵减额计算</td>'
+    + ti('item2_begin', c.item2_begin) + ti('item2_occur', c.item2_occur) + ti('item2_adjust', c.item2_adjust)
+    + tc('item2_can_deduct', c.item2_can_deduct) + ti('item2_actual_deduct', c.item2_actual_deduct)
+    + tc('item2_end', c.item2_end) + '</tr>'
+
+    // Row 8 = 合计（计算）
     + '<tr style="background:#f0fdf4;font-weight:700"><td style="text-align:center">8</td><td>合计</td>'
-    + '<td class="num">' + _fmt((c.item1_begin || 0) + (c.item2_begin || 0)) + '</td>'
-    + '<td class="num">' + _fmt((c.item1_occur || 0) + (c.item2_occur || 0)) + '</td>'
-    + '<td class="num">' + _fmt((c.item1_adjust || 0) + (c.item2_adjust || 0)) + '</td>'
-    + '<td class="num">' + _fmt((c.item1_can_deduct || 0) + (c.item2_can_deduct || 0)) + '</td>'
-    + '<td class="num">' + _fmt((c.item1_actual_deduct || 0) + (c.item2_actual_deduct || 0)) + '</td>'
-    + '<td class="num">' + _fmt((c.item1_end || 0) + (c.item2_end || 0)) + '</td></tr>'
+    + tc('total_begin', (c.item1_begin || 0) + (c.item2_begin || 0))
+    + tc('total_occur', (c.item1_occur || 0) + (c.item2_occur || 0))
+    + tc('total_adjust', (c.item1_adjust || 0) + (c.item2_adjust || 0))
+    + tc('total_can_deduct', (c.item1_can_deduct || 0) + (c.item2_can_deduct || 0))
+    + tc('total_actual_deduct', (c.item1_actual_deduct || 0) + (c.item2_actual_deduct || 0))
+    + tc('total_end', (c.item1_end || 0) + (c.item2_end || 0)) + '</tr>'
     + '</tbody></table>';
 }
 
-// ==================== 附表五：附加税费情况表（16列统一大表格，按Excel模板列对齐） ====================
+// ==================== 附表四计算函数 ====================
+function calculateSchedule4() {
+  function gv(field) {
+    var el = document.getElementById('sch4-' + field);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function uc(id, val) {
+    var el = document.getElementById('sch4-' + id);
+    if (el) el.textContent = (val !== 0) ? _fm0(val) : '';
+  }
+
+  // 一、税额抵减: should=1+2, end=3-4
+  var items1 = ['tax_control','branch','construction','real_estate','rental'];
+  for (var i = 0; i < items1.length; i++) {
+    var p = items1[i];
+    var begin = gv(p + '_begin');
+    var occur = gv(p + '_occur');
+    var actual = gv(p + '_actual');
+    var should = begin + occur;
+    var end = should - actual;
+    uc(p + '_should', should);
+    uc(p + '_end', end);
+  }
+
+  // 二、加计抵减: can_deduct=1+2-3, end=4-5
+  var items2 = ['item1','item2'];
+  var tBeg=0, tOcc=0, tAdj=0, tCan=0, tAct=0, tEnd=0;
+  for (var j = 0; j < items2.length; j++) {
+    var p = items2[j];
+    var begin = gv(p + '_begin');
+    var occur = gv(p + '_occur');
+    var adjust = gv(p + '_adjust');
+    var actual = gv(p + '_actual_deduct');
+    var canDeduct = begin + occur - adjust;
+    var end = canDeduct - actual;
+    uc(p + '_can_deduct', canDeduct);
+    uc(p + '_end', end);
+
+    tBeg += begin; tOcc += occur; tAdj += adjust; tCan += canDeduct; tAct += actual; tEnd += end;
+  }
+  // Row 8 合计
+  uc('total_begin', tBeg);
+  uc('total_occur', tOcc);
+  uc('total_adjust', tAdj);
+  uc('total_can_deduct', tCan);
+  uc('total_actual_deduct', tAct);
+  uc('total_end', tEnd);
+}
+
+// ==================== 附表五：附加税费情况表（可手动填列） ====================
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
-  function td(v) { return '<td class="num">' + _fmt(v) + '</td>'; }
-  function td0(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+
+  var inputStyle = 'width:80px;text-align:right;padding:2px 3px;border:1px solid #d1d5db;border-radius:3px;font-size:10px';
+  var rateStyle = 'width:50px;text-align:right;padding:2px 3px;border:1px solid #d1d5db;border-radius:3px;font-size:10px';
+  var codeStyle = 'width:60px;padding:2px 3px;border:1px solid #d1d5db;border-radius:3px;font-size:10px';
+
+  function ti(field, val, sty) {
+    sty = sty || inputStyle;
+    var id = 'sch5-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val).toFixed(2) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + sty + '" onchange="calculateSchedule5()"></td>';
+  }
+  function tiPct(field, val) {
+    var id = 'sch5-' + field;
+    var pct = (val != null && !isNaN(val)) ? Math.round(val * 100) : '';
+    var v = pct !== '' ? ' value="' + pct + '"' : '';
+    return '<td class="num"><input type="number" step="1" min="0" max="100" id="' + id + '"' + v + ' style="' + rateStyle + '" onchange="calculateSchedule5()"></td>';
+  }
+  function tc(id, val) {
+    return '<td class="num"><span id="sch5-' + id + '">' + (val ? _fm0(val) : '') + '</span></td>';
+  }
+  function tt(field, val) {
+    var id = 'sch5-' + field;
+    return '<td class="num"><input type="text" id="' + id + '" value="' + (val || '') + '" style="' + codeStyle + '"></td>';
+  }
   function tdDash() { return '<td class="num">——</td>'; }
-  function tdTxt(v) { return '<td>' + (v || '') + '</td>'; }
-  function tdPct(v) { return '<td class="num">' + ((v||0)*100).toFixed(0) + '%</td>'; }
 
   var html = '';
 
-  // === 标题（表格外） ===
   html += '<div style="text-align:center;font-size:13px;font-weight:700;padding:8px 0 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>';
   html += '<div style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:8px">（附加税费情况表）</div>';
 
   html += '<div style="overflow-x:auto"><table class="vat-form-table" style="font-size:10px">';
   html += '<colgroup>';
   for (var i = 0; i < 16; i++) html += '<col>';
-  html += '</colgroup>';
+  html += '</colgroup><thead>';
 
-  html += '<thead>';
-
-  // === 小微企业六税两费减免政策信息（模板Row 3-4，在表头上方） ===
+  // 小微企业六税两费减免政策信息
   var microYes = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
   var microNo  = (data.micro_enterprise && data.six_tax_reduction) ? '□' : '☑';
   var 主体小型 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
   var 主体个体 = (data.micro_enterprise && data.six_tax_reduction) ? '☑' : '□';
-  var 减免起 = (data.reduction_start || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_start ? '日' : '');
-  var 减免止 = (data.reduction_end || '').replace(/-0?/g, '年').replace(/-/g, '月').replace('年', '年 ') + (data.reduction_end ? '日' : '');
-  // 简化显示：YYYY-MM-DD → YYYY年MM月DD日
   function fmtDate(d) {
     if (!d) return '';
     var parts = d.split('-');
@@ -1877,7 +2029,7 @@ function renderSchedule5(data) {
   html += '<td colspan="5">' + (rs || '　　　年　月　日') + ' 至 ' + (re || '　　　年　月　日') + '</td>';
   html += '</tr>';
 
-  // === 表头第1行（模板Row 5：大类标题） ===
+  // 表头
   html += '<tr style="background:#d9e2f3">';
   html += '<th colspan="2" rowspan="3">税（费）种</th>';
   html += '<th colspan="3">计税（费）依据</th>';
@@ -1889,16 +2041,12 @@ function renderSchedule5(data) {
   html += '<th rowspan="2">本期已缴<br>税（费）额</th>';
   html += '<th rowspan="2">本期应补（退）<br>税（费）额</th>';
   html += '</tr>';
-
-  // === 表头第2行（模板Row 6：细项列名） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<th>增值税税额</th><th>增值税<br>免抵税额</th><th>留抵退税<br>本期扣除额</th>';
   html += '<th>减免性质<br>代码</th><th>减免税<br>（费）额</th>';
   html += '<th>减征比例<br>（%）</th><th>减征额</th>';
   html += '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>';
   html += '</tr>';
-
-  // === 表头第3行（模板Row 7：栏次/公式） ===
   html += '<tr style="background:#e8edf5;font-size:9px">';
   html += '<th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th>';
   html += '<th colspan="2" style="text-align:center">4</th>';
@@ -1907,46 +2055,47 @@ function renderSchedule5(data) {
   html += '<th style="text-align:center">8</th><th style="text-align:center;font-size:9px">9=（5-7）×8</th>';
   html += '<th style="text-align:center">10</th><th style="text-align:center">11</th>';
   html += '<th style="text-align:center">12</th><th style="text-align:center;font-size:9px">13=5-7-9-11-12</th>';
-  html += '</tr></thead>';
+  html += '</tr></thead><tbody>';
 
-  // === 数据行 ===
-  function surRow(name, seq, base, exempt, refund, rate, tax,
-                  redCode, redAmt, sixRate, sixAmt, pilotCode, pilotAmt, paid, final, isTotal) {
+  // 数据行生成函数
+  function surRow(name, seq, pf, isTotal) {
     if (isTotal) {
+      // 合计行：只显示计算结果
+      // 注意：total_six_tax 字段名是 total_six_tax_reduction（而非 _amount）
+      var sixField = pf + '_six_tax_reduction';
       return '<tr style="background:#f0fdf4;font-weight:700"><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
         + tdDash() + tdDash() + tdDash() + '<td colspan="2" class="num">——</td>'
-        + td(tax) + tdDash() + td0(redAmt)
-        + tdDash() + td0(sixAmt)
-        + tdDash() + td0(pilotAmt) + td0(paid) + td0(final) + '</tr>';
+        + tc(pf + '_tax', scf[pf + '_tax'])
+        + tdDash() + tc(pf + '_reduction', scf[pf + '_reduction'])
+        + tdDash() + tc(pf + '_six_tax_reduction', scf[sixField])
+        + tdDash() + tc(pf + '_edu_pilot', scf[pf + '_edu_pilot'])
+        + tc(pf + '_paid', scf[pf + '_paid'])
+        + tc(pf + '_final', scf[pf + '_final']) + '</tr>';
     }
     return '<tr><td>' + name + '</td><td style="text-align:center">' + seq + '</td>'
-      + td(base) + td0(exempt) + td0(refund)
-      + '<td colspan="2" class="num">' + ((rate||0)*100).toFixed(0) + '%</td>'
-      + td(tax)
-      + tdTxt(redCode) + td0(redAmt)
-      + tdPct(sixRate) + td0(sixAmt)
-      + tdTxt(pilotCode) + td0(pilotAmt) + td0(paid) + td0(final) + '</tr>';
+      + ti(pf + '_base', scf[pf + '_base'])                    // 1: 增值税税额
+      + ti(pf + '_exempt_credit', scf[pf + '_exempt_credit'])  // 2: 免抵税额
+      + ti(pf + '_vat_refund_deduct', scf[pf + '_vat_refund_deduct'])  // 3: 留抵退税扣除额
+      + '<td colspan="2" class="num">' + tiPct(pf + '_rate', scf[pf + '_rate']) + '</td>'  // 4: 税率%
+      + tc(pf + '_tax', scf[pf + '_tax'])                   // 5: 应纳税额=（1+2-3）×4
+      + tt(pf + '_reduction_code', scf[pf + '_reduction_code'])  // 6: 减免代码
+      + ti(pf + '_reduction_amount', scf[pf + '_reduction_amount'])  // 7: 减免税额
+      + '<td class="num">' + tiPct(pf + '_reduction_rate', scf[pf + '_reduction_rate']) + '</td>'  // 8: 减征比例%
+      + tc(pf + '_six_tax_amount', scf[pf + '_six_tax_amount'])   // 9: 减征额=（5-7）×8
+      + tt(pf + '_edu_pilot_code', scf[pf + '_edu_pilot_code'])   // 10: 试点代码
+      + ti(pf + '_edu_pilot_amount', scf[pf + '_edu_pilot_amount'])  // 11: 抵免金额
+      + ti(pf + '_paid', scf[pf + '_paid'])                   // 12: 已缴税额
+      + tc(pf + '_final', scf[pf + '_final'])                 // 13: 应补退=5-7-9-11-12
+      + '</tr>';
   }
 
-  html += '<tbody>';
-  html += surRow('城市维护建设税', 1, scf.city_base, scf.vat_exempt_credit, scf.vat_refund_deduct,
-           scf.city_rate, scf.city_tax, scf.city_reduction_code, scf.city_reduction_amount,
-           scf.city_reduction_rate, scf.city_six_tax_amount,
-           scf.city_edu_pilot_code, scf.city_edu_pilot_amount, scf.city_paid, scf.city_final);
-  html += surRow('教育费附加', 2, scf.edu_base, scf.edu_exempt_credit, scf.edu_vat_refund_deduct,
-           scf.edu_rate, scf.edu_tax, scf.edu_reduction_code, scf.edu_reduction_amount,
-           scf.edu_reduction_rate, scf.edu_six_tax_amount,
-           scf.edu_edu_pilot_code, scf.edu_edu_pilot_amount, scf.edu_paid, scf.edu_final);
-  html += surRow('地方教育附加', 3, scf.local_edu_base, scf.local_edu_exempt_credit, scf.local_edu_vat_refund_deduct,
-           scf.local_edu_rate, scf.local_edu_tax, scf.local_edu_reduction_code, scf.local_edu_reduction_amount,
-           scf.local_edu_reduction_rate, scf.local_edu_six_tax_amount,
-           scf.local_edu_edu_pilot_code, scf.local_edu_edu_pilot_amount, scf.local_edu_paid, scf.local_edu_final);
-  html += surRow('合计', 4, null, null, null, null, scf.total_tax,
-           null, scf.total_reduction, null, scf.total_six_tax_reduction,
-           null, scf.total_edu_pilot, scf.total_paid, scf.total_final, true);
+  html += surRow('城市维护建设税', 1, 'city');
+  html += surRow('教育费附加', 2, 'edu');
+  html += surRow('地方教育附加', 3, 'local_edu');
+  html += surRow('合计', 4, 'total', true);
   html += '</tbody>';
 
-  // === 第12-14行：产教融合抵免政策（模板：A:E=政策 F:G=□是□否 H:M=项目 N=编号 O=金额 P=金额） ===
+  // 产教融合 & 留抵退税 基本不变（只是占位展示）
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="5" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
   html += '<td colspan="2" rowspan="3">□是<br>□否</td>';
@@ -1964,8 +2113,6 @@ function renderSchedule5(data) {
   html += '<td style="text-align:center">7</td>';
   html += '<td colspan="2" class="num"></td>';
   html += '</tr>';
-
-  // === 第15-17行：留抵退税额使用情况（模板：A:G=政策 H:M=项目 N=编号 O=金额 P=金额） ===
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
   html += '<td colspan="6">当期新增可用于扣除的留抵退税额</td>';
@@ -1987,10 +2134,75 @@ function renderSchedule5(data) {
   return html;
 }
 
+// ==================== 附表五计算函数 ====================
+function calculateSchedule5() {
+  function gv(field) {
+    var el = document.getElementById('sch5-' + field);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function uc(id, val) {
+    var el = document.getElementById('sch5-' + id);
+    if (el) el.textContent = (val !== 0) ? _fm0(val) : '';
+  }
+
+  var types = ['city','edu','local_edu'];
+  var totalTax = 0, totalRed = 0, totalSix = 0, totalPilot = 0, totalPaid = 0, totalFinal = 0;
+
+  for (var i = 0; i < types.length; i++) {
+    var pf = types[i];
+    var base = gv(pf + '_base');
+    var exempt = gv(pf + '_exempt_credit');
+    var refund = gv(pf + '_vat_refund_deduct');
+    var ratePct = gv(pf + '_rate') / 100;  // 输入的是百分比值（如7% → 输入7 → /100=0.07）
+    var redAmt = gv(pf + '_reduction_amount');
+    var sixRate = gv(pf + '_reduction_rate') / 100;
+    var pilotAmt = gv(pf + '_edu_pilot_amount');
+    var paid = gv(pf + '_paid');
+
+    // 5 = (1+2-3) × 4
+    var tax = (base + exempt - refund) * ratePct;
+    // 9 = (5-7) × 8
+    var sixAmt = (tax - redAmt) * sixRate;
+    // 13 = 5-7-9-11-12
+    var final = tax - redAmt - sixAmt - pilotAmt - paid;
+
+    uc(pf + '_tax', tax);
+    uc(pf + '_six_tax_amount', sixAmt);
+    uc(pf + '_final', final);
+
+    totalTax += tax;
+    totalRed += redAmt;
+    totalSix += sixAmt;
+    totalPilot += pilotAmt;
+    totalPaid += paid;
+    totalFinal += final;
+  }
+
+  // 合计行
+  uc('total_tax', totalTax);
+  uc('total_reduction', totalRed);
+  uc('total_six_tax_reduction', totalSix);
+  uc('total_edu_pilot', totalPilot);
+  uc('total_paid', totalPaid);
+  uc('total_final', totalFinal);
+}
+
 
 function renderReductionForm(data) {
   const r = safeJSON(data.form_reduction, {});
-  function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
+
+  var inputStyle = 'width:80px;text-align:right;padding:2px 3px;border:1px solid #d1d5db;border-radius:3px;font-size:10px';
+
+  function trd(field, val) {
+    var id = 'red-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val).toFixed(2) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + inputStyle + '" onchange="calculateReductionForm()"></td>';
+  }
+  function trc(id, val) {
+    return '<td class="num"><span id="red-' + id + '">' + (val ? _fm0(val) : '') + '</span></td>';
+  }
 
   let html = '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税减免税申报明细表</div>';
 
@@ -2000,14 +2212,19 @@ function renderReductionForm(data) {
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">减税性质代码及名称</th><th rowspan="2">栏次</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead>';
 
-  const taxReductionItems = (r.tax_reduction_items || r.reduction_items || []);
+  const taxReductionItems = r.tax_reduction_items || r.reduction_items || [];
   if (taxReductionItems.length === 0) {
-    html += '<tbody><tr><td>合计</td><td style="text-align:center">1</td>' + td(r.tax_reduction_1_begin) + td(r.tax_reduction_1_occur) + td(r.tax_reduction_1_should) + td(r.tax_reduction_1_actual) + td(r.tax_reduction_1_end) + '</tr></tbody>';
+    html += '<tbody><tr><td>合计</td><td style="text-align:center">1</td>'
+      + trd('tax_red_begin', r.tax_reduction_1_begin) + trd('tax_red_occur', r.tax_reduction_1_occur)
+      + trc('tax_red_should', r.tax_reduction_1_should) + trd('tax_red_actual', r.tax_reduction_1_actual)
+      + trc('tax_red_end', r.tax_reduction_1_end) + '</tr></tbody>';
   } else {
     html += '<tbody>';
     taxReductionItems.forEach((item, i) => {
       html += '<tr><td>' + escapeHtml(item.name || ('减税项目' + (i + 1))) + '</td><td style="text-align:center">' + (i + 1) + '</td>'
-        + td(item.begin_balance) + td(item.current_amount) + td(item.should_reduce) + td(item.actual_reduce) + td(item.end_balance) + '</tr>';
+        + trd('tax_red_' + i + '_begin', item.begin_balance) + trd('tax_red_' + i + '_occur', item.current_amount)
+        + trc('tax_red_' + i + '_should', item.should_reduce) + trd('tax_red_' + i + '_actual', item.actual_reduce)
+        + trc('tax_red_' + i + '_end', item.end_balance) + '</tr>';
     });
     html += '</tbody>';
   }
@@ -2021,16 +2238,75 @@ function renderReductionForm(data) {
 
   const exemptItems = r.exempt_items || [];
   if (exemptItems.length === 0) {
-    html += '<tr><td>合　计</td><td style="text-align:center">1</td>' + td(r.exempt_7_sales) + td(r.exempt_7_deduction) + td(r.exempt_7_after) + td(r.exempt_7_input_tax) + td(r.exempt_7_amount) + '</tr>'
-      + '<tr><td>出口免税</td><td style="text-align:center">2</td>' + td(r.exempt_8_sales) + '<td class="num"></td><td class="num"></td><td class="num"></td><td class="num">' + _fm0(r.exempt_8_amount) + '</td></tr>'
-      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>' + td(r.exempt_9_sales) + '<td class="num"></td><td class="num"></td><td class="num"></td><td class="num">' + _fm0(r.exempt_9_amount) + '</td></tr>';
+    html += '<tr><td>合　计</td><td style="text-align:center">1</td>'
+      + trd('exempt_1_sales', r.exempt_7_sales) + trd('exempt_1_deduction', r.exempt_7_deduction)
+      + trc('exempt_1_after', r.exempt_7_after) + trd('exempt_1_input_tax', r.exempt_7_input_tax)
+      + trc('exempt_1_amount', r.exempt_7_amount) + '</tr>'
+      + '<tr><td>出口免税</td><td style="text-align:center">2</td>'
+      + trd('exempt_2_sales', r.exempt_8_sales) + '<td class="num">——</td>'
+      + trc('exempt_2_after', '') + '<td class="num">——</td>'
+      + trd('exempt_2_amount', r.exempt_8_amount) + '</tr>'
+      + '<tr><td style="padding-left:16px">其中：跨境服务</td><td style="text-align:center">3</td>'
+      + trd('exempt_3_sales', r.exempt_9_sales) + '<td class="num">——</td>'
+      + trc('exempt_3_after', '') + '<td class="num">——</td>'
+      + trd('exempt_3_amount', r.exempt_9_amount) + '</tr>';
   } else {
     exemptItems.forEach((item, i) => {
       html += '<tr><td>' + escapeHtml(item.name || '') + '</td><td style="text-align:center">' + (i + 1) + '</td>'
-        + td(item.exempt_sales) + td(item.deduction_amount) + td(item.after_deduction) + td(item.input_tax) + td(item.exempt_amount) + '</tr>';
+        + trd('exempt_' + i + '_sales', item.exempt_sales) + trd('exempt_' + i + '_deduction', item.deduction_amount)
+        + trc('exempt_' + i + '_after', item.after_deduction) + trd('exempt_' + i + '_input_tax', item.input_tax)
+        + trc('exempt_' + i + '_amount', item.exempt_amount) + '</tr>';
     });
   }
   html += '</tbody></table>';
 
   return html;
+}
+
+// ==================== 减免税明细表计算函数 ====================
+function calculateReductionForm() {
+  function gv(field) {
+    var el = document.getElementById('red-' + field);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function uc(id, val) {
+    var el = document.getElementById('red-' + id);
+    if (el) el.textContent = (val !== 0) ? _fm0(val) : '';
+  }
+
+  // 一、减税项目: 3=1+2, 5=3-4
+  // 单行合计模式
+  var begin = gv('tax_red_begin');
+  var occur = gv('tax_red_occur');
+  var actual = gv('tax_red_actual');
+  if (begin !== 0 || occur !== 0 || actual !== 0) {
+    uc('tax_red_should', begin + occur);
+    uc('tax_red_end', begin + occur - actual);
+  }
+  // 多行模式（最多10行）
+  for (var i = 0; i < 10; i++) {
+    var b = gv('tax_red_' + i + '_begin');
+    var o = gv('tax_red_' + i + '_occur');
+    var a = gv('tax_red_' + i + '_actual');
+    if (b === 0 && o === 0 && a === 0) continue;
+    uc('tax_red_' + i + '_should', b + o);
+    uc('tax_red_' + i + '_end', b + o - a);
+  }
+
+  // 二、免税项目: 3=1-2
+  // Row 1
+  var s1 = gv('exempt_1_sales');
+  var d1 = gv('exempt_1_deduction');
+  var i1 = gv('exempt_1_input_tax');
+  uc('exempt_1_after', s1 - d1);
+  uc('exempt_1_amount', (s1 - d1) * 0.13);  // 默认13%税率换算
+
+  // Row 2 (出口免税)
+  var s2 = gv('exempt_2_sales');
+  uc('exempt_2_after', s2);
+  // Row 3 (跨境)
+  var s3 = gv('exempt_3_sales');
+  uc('exempt_3_after', s3);
 }
