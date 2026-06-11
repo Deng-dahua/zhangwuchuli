@@ -2430,6 +2430,11 @@ function calculateSchedule4() {
 // ==================== 附表五：附加税费情况表（官方模板还原） ====================
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
+  // 固定税率：城市维护建设税7%、教育费附加3%、地方教育附加2%
+  scf.city_rate = 0.07; scf.edu_rate = 0.03; scf.local_edu_rate = 0.02;
+  // 固定减征比例：50%（小微企业"六税两费"减半征收）
+  scf.city_reduction_rate = 0.50; scf.edu_reduction_rate = 0.50; scf.local_edu_reduction_rate = 0.50;
+
   var InpNum = 'width:100%;text-align:right;font-size:11px;padding:2px 4px';
   var InpTxt = 'width:100%;text-align:center;font-size:11px;padding:2px 4px';
 
@@ -2441,6 +2446,11 @@ function renderSchedule5(data) {
   function Pct(id,val) {
     var v = (val!=null && !isNaN(val)) ? Math.round(val*100) : '';
     return '<input type="number" step="1" min="0" max="100" id="sch5-'+id+'" value="'+v+'" style="'+InpNum+'" onchange="calculateSchedule5()">';
+  }
+  // 固定百分比（只读，灰底，不可修改）
+  function FixedPct(id,val) {
+    var v = (val!=null && !isNaN(val)) ? Math.round(val*100) : '';
+    return '<input type="number" step="1" id="sch5-'+id+'" value="'+v+'" style="'+InpNum+';background:#e5e7eb;color:#374151" readonly tabindex="-1">';
   }
   function Txt(id,val) {
     return '<input type="text" id="sch5-'+id+'" value="'+(val||'')+'" style="'+InpTxt+'">';
@@ -2559,11 +2569,11 @@ function renderSchedule5(data) {
       r += '<td class="num">'+N(pf+'_base',scf[pf+'_base'])+'</td>';
       r += '<td class="num">'+N(pf+'_exempt_credit',scf[pf+'_exempt_credit'])+'</td>';
       r += '<td class="num">'+N(pf+'_vat_refund_deduct',scf[pf+'_vat_refund_deduct'])+'</td>';
-      r += '<td colspan="2" class="num">'+Pct(pf+'_rate',scf[pf+'_rate'])+'</td>';
+      r += '<td colspan="2" class="num">'+FixedPct(pf+'_rate',scf[pf+'_rate'])+'</td>';
       r += '<td class="num">'+Calc(pf+'_tax',scf[pf+'_tax'])+'</td>';
       r += '<td>'+Txt(pf+'_reduction_code',scf[pf+'_reduction_code'])+'</td>';
       r += '<td class="num">'+N(pf+'_reduction_amount',scf[pf+'_reduction_amount'])+'</td>';
-      r += '<td class="num">'+Pct(pf+'_reduction_rate',scf[pf+'_reduction_rate'])+'</td>';
+      r += '<td class="num">'+FixedPct(pf+'_reduction_rate',scf[pf+'_reduction_rate'])+'</td>';
       r += '<td class="num">'+Calc(pf+'_six_tax_amount',scf[pf+'_six_tax_amount'])+'</td>';
       r += '<td>'+(dash13 ? Dash() : Txt(pf+'_edu_pilot_code',scf[pf+'_edu_pilot_code']))+'</td>';
       r += '<td class="num">'+(dash14 ? Dash() : N(pf+'_edu_pilot_amount',scf[pf+'_edu_pilot_amount']))+'</td>';
