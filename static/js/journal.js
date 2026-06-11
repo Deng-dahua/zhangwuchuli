@@ -577,12 +577,11 @@ function buildJePeriodBar() {
     });
   });
 
-  // 下拉变化时触发
+  // 下拉变化时仅做顺序约束，不自动查询
   bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
     sel.addEventListener('change', function() {
       var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
       _enforceJePeriodOrder(side);
-      onJePeriodChange();
     });
   });
 
@@ -630,7 +629,6 @@ function stepJeYear(side, delta) {
   let sel = document.getElementById('je-' + side + '-y');
   if (!sel || !sel.value) return;
   sel.value = parseInt(sel.value) + delta;
-  onJePeriodChange();
 }
 
 function stepJeMonth(side, delta) {
@@ -643,7 +641,6 @@ function stepJeMonth(side, delta) {
   else if (m < 1) { m = 12; y--; }
   ySel.value = y;
   mSel.value = String(m).padStart(2, '0');
-  onJePeriodChange();
 }
 
 function onJePeriodChange() {

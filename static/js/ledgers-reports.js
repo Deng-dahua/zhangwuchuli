@@ -250,16 +250,14 @@ function _buildStandardPeriodBar(prefix, options) {
       if (type === 'year') _stepStandardYear(prefix, side, delta);
       else _stepStandardMonth(prefix, side, delta);
       _enforcePeriodOrder(prefix, side);
-      if (options.onQuery) options.onQuery();
     });
   });
 
-  // 下拉变化时触发查询 + 约束检查
+  // 下拉变化时仅做顺序约束，不自动查询
   bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
     sel.addEventListener('change', function() {
       var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
       _enforcePeriodOrder(prefix, side);
-      if (options.onQuery) options.onQuery();
     });
   });
 
@@ -647,12 +645,11 @@ function _buildContactPeriodBar(apiPrefix) {
     });
   });
 
-  // 下拉变化时触发
+  // 下拉变化时仅做顺序约束，不自动查询
   bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
     sel.addEventListener('change', function() {
       var side = sel.id.indexOf('-from-') > -1 ? 'from' : 'to';
       _enforcePeriodOrder(apiPrefix + '-', side);
-      _onContactPeriodChange(apiPrefix);
     });
   });
 

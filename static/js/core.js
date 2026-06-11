@@ -396,7 +396,6 @@ function stepPeriodYear(delta) {
   const sel = document.getElementById('period-year');
   if (!sel || !sel.value) return;
   sel.value = parseInt(sel.value) + delta;
-  onPeriodSelectChange();
 }
 
 function stepPeriodMonth(delta) {
@@ -406,7 +405,6 @@ function stepPeriodMonth(delta) {
   if (m > 12) { m = 1; stepPeriodYear(1); }
   else if (m < 1) { m = 12; stepPeriodYear(-1); }
   sel.value = String(m).padStart(2, '0');
-  onPeriodSelectChange();
 }
 
 async function loadAllAccounts() {

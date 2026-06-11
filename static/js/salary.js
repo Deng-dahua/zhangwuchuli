@@ -92,10 +92,7 @@ function buildSalaryPeriodBar() {
         });
     });
 
-    // 下拉变化
-    bar.querySelectorAll('.period-selector-month, .period-selector-year').forEach(function(sel) {
-        sel.addEventListener('change', loadSalaryData);
-    });
+    // 下拉变化仅更新选择器状态，不自动查询（点击查询按钮才加载数据）
 
     // 清除按钮
     var clearBtn = bar.querySelector('.sal-clear-btn');
@@ -131,7 +128,6 @@ function _stepSalYear(delta) {
     let sel = document.getElementById('salary-y');
     if (!sel || !sel.value) return;
     sel.value = parseInt(sel.value) + delta;
-    loadSalaryData();
 }
 
 function _stepSalMonth(delta) {
@@ -144,7 +140,6 @@ function _stepSalMonth(delta) {
     else if (m < 1) { m = 12; y--; }
     ySel.value = y;
     mSel.value = String(m).padStart(2, '0');
-    loadSalaryData();
 }
 
 function _setSalPeriod(period) {
