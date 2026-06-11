@@ -2085,11 +2085,10 @@ function renderSchedule5(data) {
 
   // ===== 统一容器：全文 1170px 居中 =====
   html += '<div style="max-width:1989px;margin:0 auto">';
-  // 标题
-  html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:4px 0 0">增值税及附加税费申报表（一般纳税人适用）</div>';
-  html += '<div style="text-align:center;font-size:14px;font-weight:600;padding:2px 0 6px">附列资料（五）（附加税费情况表）</div>';
-  // 小微企业政策 — 独立小表格
-  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fefce8;border:1px solid #a0a0a0;margin-bottom:8px">';
+  // 标题：同在一行
+  html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:6px 0 6px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）（附加税费情况表）</div>';
+  // 小微企业政策 — 独立小表格，与主表同宽
+  html += '<table style="width:1989px;border-collapse:collapse;font-size:11px;background:#fefce8;border:1px solid #a0a0a0;margin-bottom:8px">';
   html += '<tr>';
   html += '<td style="'+B+';'+P+';width:38%">本期是否适用小微企业"六税两费"减免政策</td>';
   html += '<td style="'+B+';'+P+';width:16%;text-align:center">'+microYes+'是　'+ (microYes=='☑'?'□':'□') +'否</td>';
