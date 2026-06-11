@@ -198,24 +198,28 @@ async function loadCCFDeclarationList(emptyPeriod) {
 
 // ==================== 统计卡片 ====================
 
-async function renderCCFStats() {
+function renderCCFStats() {
   var el = document.getElementById('ccf-stats-row'); if (!el) return;
-  try {
-    var stats = await api('/api/cultural-construction-fee/stats?company_id=' + currentCompanyId);
-    var taxableIncome = stats.total_taxable_income || 0;
-    var payableFee = stats.total_fee || 0;
-    var fillRefund = stats.total_fill_refund || 0;
 
-    function card(label, value, color) {
-      var c = color || '#1a56db';
-      return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + c + '">' + fmt(value) + '</div></div>';
-    }
+  function card(label, value, color) {
+    var c = color || '#1a56db';
+    return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + c + '">' + fmt(value) + '</div></div>';
+  }
 
-    el.innerHTML = card('应征收入（汇总）', taxableIncome, '#0f766e')
-      + card('应缴费额（汇总）', payableFee, '#d97706')
-      + card('应补(退)费额（汇总）', fillRefund, '#dc2626');
-  } catch (e) {
-    console.error('加载统计卡片失败:', e);
+  // 优先使用当前申报表数据，否则汇总全部
+  if (ccfCurrentData) {
+    var main = safeJSON(ccfCurrentData.form_main, {});
+    var row1 = main.row1_taxable_income_current || 0;
+    var row10 = main.row10_payable_fee_current || 0;
+    var row18 = main.row18_fill_refund_current || 0;
+    var periodLabel = ccfCurrentData.period || '';
+    el.innerHTML = card('应征收入（' + periodLabel + '）', row1, '#0f766e')
+      + card('应缴费额（' + periodLabel + '）', row10, '#d97706')
+      + card('应补(退)费额（' + periodLabel + '）', row18, '#dc2626');
+  } else {
+    el.innerHTML = card('应征收入（汇总）', 0, '#0f766e')
+      + card('应缴费额（汇总）', 0, '#d97706')
+      + card('应补(退)费额（汇总）', 0, '#dc2626');
   }
 }
 
