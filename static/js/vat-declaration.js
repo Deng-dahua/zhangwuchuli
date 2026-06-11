@@ -419,6 +419,11 @@ function renderVATTemplateView(data) {
     }
   } catch (e) { formHtml = '<div style="padding:20px;color:#ef4444">渲染错误: ' + e.message + '</div>'; }
   el.innerHTML = tabs + '<div style="overflow-x:auto;padding:12px 0">' + formHtml + '</div>';
+
+  // 自动计算
+  if (vatActivePage === 'main') setTimeout(calculateVATMainForm, 100);
+  if (vatActivePage === 'schedule1') setTimeout(calculateSchedule1, 100);
+  if (vatActivePage === 'schedule2') setTimeout(calculateSchedule2, 100);
 }
 
 function switchVATPage(pageId) {
@@ -521,6 +526,13 @@ function renderVATTemplateViewInline(data) {
   // 主表自动计算
   if (vatActivePage === 'main') {
     setTimeout(calculateVATMainForm, 100);
+  }
+  // 附表自动计算
+  if (vatActivePage === 'schedule1') {
+    setTimeout(calculateSchedule1, 100);
+  }
+  if (vatActivePage === 'schedule2') {
+    setTimeout(calculateSchedule2, 100);
   }
 }
 
@@ -1415,9 +1427,37 @@ function calculateSchedule1() {
 function renderSchedule2(data) {
   const inp = safeJSON(data.form_input, {});
 
-  function tdNum(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash() { return '<td class="num"></td>'; }
-  function tdCnt(v) { return '<td class="num">' + ((v === 0 || v === null || v === undefined) ? '' : v) + '</td>'; }
+  var inputStyle = 'width:90px;text-align:right;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px';
+
+  // 份数输入（整数）
+  function tdS2Cnt(field, val) {
+    var id = 'sch2-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseInt(val) + '"' : '';
+    return '<td class="num"><input type="number" step="1" id="' + id + '"' + v + ' style="width:60px;' + inputStyle + '" onchange="calculateSchedule2()"></td>';
+  }
+  // 金额/税额输入
+  function tdS2Num(field, val) {
+    var id = 'sch2-' + field;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val).toFixed(2) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + inputStyle + '" onchange="calculateSchedule2()"></td>';
+  }
+  // 只读计算结果
+  function tdS2Calc(id, val) {
+    return '<td class="num"><span id="' + id + '">' + (val ? _fm0(val) : '') + '</span></td>';
+  }
+  // 份数+金额+税额 三列可编辑
+  function s3(cntF, amtF, taxF, cntV, amtV, taxV) {
+    return tdS2Cnt(cntF, cntV) + tdS2Num(amtF, amtV) + tdS2Num(taxF, taxV);
+  }
+  // 份数+税额 两列(无金额列)
+  function s2(cntF, taxF, cntV, taxV) {
+    return tdS2Cnt(cntF, cntV) + '<td class="num">——</td>' + tdS2Num(taxF, taxV);
+  }
+  // 仅税额一列
+  function s1(field, val) {
+    return '<td class="num">——</td><td class="num">——</td>' + tdS2Num(field, val);
+  }
+  function dash3() { return '<td class="num">——</td><td class="num">——</td><td class="num">——</td>'; }
 
   return '<div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:4px">增值税及附加税费申报表附列资料（二）</div>'
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期进项税额明细）</div>'
@@ -1426,56 +1466,149 @@ function renderSchedule2(data) {
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、申报抵扣的进项税额</div>'
     + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>' + tdCnt(inp.row1_certified_count) + tdNum(inp.row1_certified_amount) + tdNum(inp.row1_certified_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>' + tdCnt(inp.row2_certified_curr_count) + tdNum(inp.row2_certified_curr_amount) + tdNum(inp.row2_certified_curr_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　前期认证相符且本期申报抵扣</td><td style="text-align:center">3</td>' + tdCnt(inp.row3_certified_prior_count) + tdNum(inp.row3_certified_prior_amount) + tdNum(inp.row3_certified_prior_tax) + '</tr>'
-    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">4=5+6+7+8a+8b</td>' + tdCnt(inp.row4_other_count) + tdNum(inp.row4_other_amount) + tdNum(inp.row4_other_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">5</td>' + tdCnt(inp.row5_customs_count) + tdNum(inp.row5_customs_amount) + tdNum(inp.row5_customs_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">6</td>' + tdCnt(inp.row6_agri_count) + tdNum(inp.row6_agri_amount) + tdNum(inp.row6_agri_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">7</td>' + tdCnt(inp.row7_wht_count) + tdDash() + tdNum(inp.row7_wht_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　加计扣除农产品进项税额</td><td style="text-align:center">8a</td>' + tdDash() + tdDash() + tdNum(inp.row8a_agri_extra) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">8b</td>' + tdCnt(inp.row8b_other_count) + tdNum(inp.row8b_other_amount) + tdNum(inp.row8b_other_tax) + '</tr>'
-    + '<tr><td>（三）本期用于购建不动产的扣税凭证</td><td style="text-align:center">9</td>' + tdCnt(inp.row9_real_estate_count) + tdNum(inp.row9_real_estate_amount) + tdNum(inp.row9_real_estate_tax) + '</tr>'
-    + '<tr><td>（四）本期用于抵扣的旅客运输服务扣税凭证</td><td style="text-align:center">10</td>' + tdCnt(inp.row10_travel_count) + tdNum(inp.row10_travel_amount) + tdNum(inp.row10_travel_tax) + '</tr>'
-    + '<tr><td>（五）外贸企业进项税额抵扣证明</td><td style="text-align:center">11</td>' + tdDash() + tdDash() + tdNum(inp.row11_foreign_trade_tax) + '</tr>'
+
+    // Row 1 = 2+3
+    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">1=2+3</td>'
+    + tdS2Calc('sch2-row1_certified_count', inp.row1_certified_count)
+    + tdS2Calc('sch2-row1_certified_amount', inp.row1_certified_amount)
+    + tdS2Calc('sch2-row1_certified_tax', inp.row1_certified_tax) + '</tr>'
+
+    // Row 2
+    + '<tr><td style="padding-left:16px">其中：本期认证相符且本期申报抵扣</td><td style="text-align:center">2</td>'
+    + s3('row2_certified_curr_count','row2_certified_curr_amount','row2_certified_curr_tax',
+        inp.row2_certified_curr_count,inp.row2_certified_curr_amount,inp.row2_certified_curr_tax) + '</tr>'
+
+    // Row 3
+    + '<tr><td style="padding-left:16px">　　　前期认证相符且本期申报抵扣</td><td style="text-align:center">3</td>'
+    + s3('row3_certified_prior_count','row3_certified_prior_amount','row3_certified_prior_tax',
+        inp.row3_certified_prior_count,inp.row3_certified_prior_amount,inp.row3_certified_prior_tax) + '</tr>'
+
+    // Row 4 = 5+6+7+8a+8b
+    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">4=5+6+7+8a+8b</td>'
+    + tdS2Calc('sch2-row4_other_count', inp.row4_other_count)
+    + tdS2Calc('sch2-row4_other_amount', inp.row4_other_amount)
+    + tdS2Calc('sch2-row4_other_tax', inp.row4_other_tax) + '</tr>'
+
+    // Row 5
+    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">5</td>'
+    + s3('row5_customs_count','row5_customs_amount','row5_customs_tax',
+        inp.row5_customs_count,inp.row5_customs_amount,inp.row5_customs_tax) + '</tr>'
+
+    // Row 6
+    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">6</td>'
+    + s3('row6_agri_count','row6_agri_amount','row6_agri_tax',
+        inp.row6_agri_count,inp.row6_agri_amount,inp.row6_agri_tax) + '</tr>'
+
+    // Row 7 (无金额列)
+    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">7</td>'
+    + s2('row7_wht_count','row7_wht_tax',inp.row7_wht_count,inp.row7_wht_tax) + '</tr>'
+
+    // Row 8a (仅税额)
+    + '<tr><td style="padding-left:16px">　　　加计扣除农产品进项税额</td><td style="text-align:center">8a</td>'
+    + s1('row8a_agri_extra',inp.row8a_agri_extra) + '</tr>'
+
+    // Row 8b
+    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">8b</td>'
+    + s3('row8b_other_count','row8b_other_amount','row8b_other_tax',
+        inp.row8b_other_count,inp.row8b_other_amount,inp.row8b_other_tax) + '</tr>'
+
+    // Row 9
+    + '<tr><td>（三）本期用于购建不动产的扣税凭证</td><td style="text-align:center">9</td>'
+    + s3('row9_real_estate_count','row9_real_estate_amount','row9_real_estate_tax',
+        inp.row9_real_estate_count,inp.row9_real_estate_amount,inp.row9_real_estate_tax) + '</tr>'
+
+    // Row 10
+    + '<tr><td>（四）本期用于抵扣的旅客运输服务扣税凭证</td><td style="text-align:center">10</td>'
+    + s3('row10_travel_count','row10_travel_amount','row10_travel_tax',
+        inp.row10_travel_count,inp.row10_travel_amount,inp.row10_travel_tax) + '</tr>'
+
+    // Row 11 (仅税额)
+    + '<tr><td>（五）外贸企业进项税额抵扣证明</td><td style="text-align:center">11</td>'
+    + s1('row11_foreign_trade_tax',inp.row11_foreign_trade_tax) + '</tr>'
+
+    // Row 12 = 1+4+11
     + '<tr style="background:#f0fdf4;font-weight:700"><td>当期申报抵扣进项税额合计</td><td style="text-align:center">12=1+4+11</td>'
-    + '<td class="num">' + ((inp.row1_certified_count || 0) + (inp.row4_other_count || 0) || '') + '</td>'
-    + '<td class="num">' + _fmt((inp.row1_certified_amount || 0) + (inp.row4_other_amount || 0)) + '</td>'
-    + '<td class="num">' + _fmt((inp.row1_certified_tax || 0) + (inp.row4_other_tax || 0) + (inp.row11_foreign_trade_tax || 0)) + '</td></tr>'
+    + tdS2Calc('sch2-row12_total_count', inp.row12_total_count)
+    + tdS2Calc('sch2-row12_total_amount', inp.row12_total_amount)
+    + tdS2Calc('sch2-row12_total_tax', inp.row12_total_tax) + '</tr>'
     + '</tbody></table>'
 
     // 二、进项税额转出额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、进项税额转出额</div>'
     + '<table class="vat-form-table"><colgroup><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td><td class="num">' + _fmt(inp.row13_transfer_out_total) + '</td></tr>'
-    + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdNum(inp.row14_exempt_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　集体福利、个人消费</td><td style="text-align:center">15</td>' + tdNum(inp.row15_collective_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　非正常损失</td><td style="text-align:center">16</td>' + tdNum(inp.row16_abnormal_loss) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　简易计税方法征税项目用</td><td style="text-align:center">17</td>' + tdNum(inp.row17_simple_tax_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　免抵退税办法不得抵扣的进项税额</td><td style="text-align:center">18</td>' + tdNum(inp.row18_exempt_credit_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　纳税检查调减进项税额</td><td style="text-align:center">19</td>' + tdNum(inp.row19_tax_check_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　红字专用发票信息表注明的进项税额</td><td style="text-align:center">20</td>' + tdNum(inp.row20_red_letter_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　上期留抵税额抵减欠税</td><td style="text-align:center">21</td>' + tdNum(inp.row21_prior_credit_arrears) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　上期留抵税额退税</td><td style="text-align:center">22</td>' + tdNum(inp.row22_prior_credit_refund) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　异常凭证转出进项税额</td><td style="text-align:center">23a</td>' + tdNum(inp.row23a_abnormal_transfer) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他应作进项税额转出的情形</td><td style="text-align:center">23b</td>' + tdNum(inp.row23b_other_transfer) + '</tr>'
+
+    // Row 13 = 14+...+23b
+    + '<tr><td>本期进项税额转出额</td><td style="text-align:center">13=14至23之和</td>'
+    + tdS2Calc('sch2-row13_transfer_out_total', inp.row13_transfer_out_total) + '</tr>'
+
+    + '<tr><td style="padding-left:16px">其中：免税项目用</td><td style="text-align:center">14</td>' + tdS2Num('row14_exempt_transfer', inp.row14_exempt_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　集体福利、个人消费</td><td style="text-align:center">15</td>' + tdS2Num('row15_collective_transfer', inp.row15_collective_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　非正常损失</td><td style="text-align:center">16</td>' + tdS2Num('row16_abnormal_loss', inp.row16_abnormal_loss) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　简易计税方法征税项目用</td><td style="text-align:center">17</td>' + tdS2Num('row17_simple_tax_transfer', inp.row17_simple_tax_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　免抵退税办法不得抵扣的进项税额</td><td style="text-align:center">18</td>' + tdS2Num('row18_exempt_credit_transfer', inp.row18_exempt_credit_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　纳税检查调减进项税额</td><td style="text-align:center">19</td>' + tdS2Num('row19_tax_check_transfer', inp.row19_tax_check_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　红字专用发票信息表注明的进项税额</td><td style="text-align:center">20</td>' + tdS2Num('row20_red_letter_transfer', inp.row20_red_letter_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　上期留抵税额抵减欠税</td><td style="text-align:center">21</td>' + tdS2Num('row21_prior_credit_arrears', inp.row21_prior_credit_arrears) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　上期留抵税额退税</td><td style="text-align:center">22</td>' + tdS2Num('row22_prior_credit_refund', inp.row22_prior_credit_refund) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　异常凭证转出进项税额</td><td style="text-align:center">23a</td>' + tdS2Num('row23a_abnormal_transfer', inp.row23a_abnormal_transfer) + '</tr>'
+    + '<tr><td style="padding-left:16px">　　　其他应作进项税额转出的情形</td><td style="text-align:center">23b</td>' + tdS2Num('row23b_other_transfer', inp.row23b_other_transfer) + '</tr>'
     + '</tbody></table>'
 
     // 三、待抵扣进项税额
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">三、待抵扣进项税额</div>'
     + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + tdDash() + tdDash() + tdDash() + '</tr>'
-    + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>' + tdCnt(inp.row25_pending_begin_count) + tdNum(inp.row25_pending_begin_amount) + tdNum(inp.row25_pending_begin_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">本期认证相符且本期未申报抵扣</td><td style="text-align:center">26</td>' + tdCnt(inp.row26_pending_curr_count) + tdNum(inp.row26_pending_curr_amount) + tdNum(inp.row26_pending_curr_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">期末已认证相符但未申报抵扣</td><td style="text-align:center">27</td>' + tdCnt(inp.row27_pending_end_count) + tdNum(inp.row27_pending_end_amount) + tdNum(inp.row27_pending_end_tax) + '</tr>'
-    + '<tr><td style="padding-left:24px">其中：按照税法规定不允许抵扣</td><td style="text-align:center">28</td>' + tdCnt(inp.row28_not_allowed_count) + tdNum(inp.row28_not_allowed_amount) + tdNum(inp.row28_not_allowed_tax) + '</tr>'
-    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">29=30至33之和</td>' + tdCnt(inp.row29_other_pending_count) + tdNum(inp.row29_other_pending_amount) + tdNum(inp.row29_other_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">30</td>' + tdCnt(inp.row30_customs_pending_count) + tdNum(inp.row30_customs_pending_amount) + tdNum(inp.row30_customs_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">31</td>' + tdCnt(inp.row31_agri_pending_count) + tdNum(inp.row31_agri_pending_amount) + tdNum(inp.row31_agri_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">32</td>' + tdCnt(inp.row32_wht_pending_count) + tdDash() + tdNum(inp.row32_wht_pending_tax) + '</tr>'
-    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">33</td>' + tdCnt(inp.row33_other_pending_count) + tdNum(inp.row33_other_pending_amount) + tdNum(inp.row33_other_pending_tax) + '</tr>'
+
+    // Row 24
+    + '<tr><td>（一）认证相符的增值税专用发票</td><td style="text-align:center">24</td>' + dash3() + '</tr>'
+
+    // Row 25
+    + '<tr><td style="padding-left:16px">期初已认证相符但未申报抵扣</td><td style="text-align:center">25</td>'
+    + s3('row25_pending_begin_count','row25_pending_begin_amount','row25_pending_begin_tax',
+        inp.row25_pending_begin_count,inp.row25_pending_begin_amount,inp.row25_pending_begin_tax) + '</tr>'
+
+    // Row 26
+    + '<tr><td style="padding-left:16px">本期认证相符且本期未申报抵扣</td><td style="text-align:center">26</td>'
+    + s3('row26_pending_curr_count','row26_pending_curr_amount','row26_pending_curr_tax',
+        inp.row26_pending_curr_count,inp.row26_pending_curr_amount,inp.row26_pending_curr_tax) + '</tr>'
+
+    // Row 27
+    + '<tr><td style="padding-left:16px">期末已认证相符但未申报抵扣</td><td style="text-align:center">27</td>'
+    + s3('row27_pending_end_count','row27_pending_end_amount','row27_pending_end_tax',
+        inp.row27_pending_end_count,inp.row27_pending_end_amount,inp.row27_pending_end_tax) + '</tr>'
+
+    // Row 28
+    + '<tr><td style="padding-left:24px">其中：按照税法规定不允许抵扣</td><td style="text-align:center">28</td>'
+    + s3('row28_not_allowed_count','row28_not_allowed_amount','row28_not_allowed_tax',
+        inp.row28_not_allowed_count,inp.row28_not_allowed_amount,inp.row28_not_allowed_tax) + '</tr>'
+
+    // Row 29 = 30+31+32+33
+    + '<tr><td>（二）其他扣税凭证</td><td style="text-align:center">29=30至33之和</td>'
+    + tdS2Calc('sch2-row29_other_pending_count', inp.row29_other_pending_count)
+    + tdS2Calc('sch2-row29_other_pending_amount', inp.row29_other_pending_amount)
+    + tdS2Calc('sch2-row29_other_pending_tax', inp.row29_other_pending_tax) + '</tr>'
+
+    // Row 30
+    + '<tr><td style="padding-left:16px">其中：海关进口增值税专用缴款书</td><td style="text-align:center">30</td>'
+    + s3('row30_customs_pending_count','row30_customs_pending_amount','row30_customs_pending_tax',
+        inp.row30_customs_pending_count,inp.row30_customs_pending_amount,inp.row30_customs_pending_tax) + '</tr>'
+
+    // Row 31
+    + '<tr><td style="padding-left:16px">　　　农产品收购发票或者销售发票</td><td style="text-align:center">31</td>'
+    + s3('row31_agri_pending_count','row31_agri_pending_amount','row31_agri_pending_tax',
+        inp.row31_agri_pending_count,inp.row31_agri_pending_amount,inp.row31_agri_pending_tax) + '</tr>'
+
+    // Row 32 (无金额列)
+    + '<tr><td style="padding-left:16px">　　　代扣代缴税收缴款凭证</td><td style="text-align:center">32</td>'
+    + s2('row32_wht_pending_count','row32_wht_pending_tax',inp.row32_wht_pending_count,inp.row32_wht_pending_tax) + '</tr>'
+
+    // Row 33
+    + '<tr><td style="padding-left:16px">　　　其他</td><td style="text-align:center">33</td>'
+    + s3('row33_other_pending_count','row33_other_pending_amount','row33_other_pending_tax',
+        inp.row33_other_pending_count,inp.row33_other_pending_amount,inp.row33_other_pending_tax) + '</tr>'
+
+    // Row 34
     + '<tr><td></td><td style="text-align:center">34</td><td class="num"></td><td class="num"></td><td class="num"></td></tr>'
     + '</tbody></table>'
 
@@ -1483,9 +1616,127 @@ function renderSchedule2(data) {
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">四、其他</div>'
     + '<table class="vat-form-table"><colgroup><col><col><col><col><col></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th>项目</th><th>栏次</th><th>份数</th><th>金额</th><th>税额</th></tr></thead><tbody>'
-    + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>' + tdCnt(inp.row35_cert_count) + tdNum(inp.row35_cert_amount) + tdNum(inp.row35_cert_tax) + '</tr>'
-    + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>' + tdDash() + tdDash() + tdNum(inp.row36_wht_total_tax) + '</tr>'
+
+    // Row 35
+    + '<tr><td>本期认证相符的增值税专用发票</td><td style="text-align:center">35</td>'
+    + s3('row35_cert_count','row35_cert_amount','row35_cert_tax',
+        inp.row35_cert_count,inp.row35_cert_amount,inp.row35_cert_tax) + '</tr>'
+
+    // Row 36 (仅税额)
+    + '<tr><td>代扣代缴税额</td><td style="text-align:center">36</td>'
+    + s1('row36_wht_total_tax',inp.row36_wht_total_tax) + '</tr>'
     + '</tbody></table>';
+}
+
+// ==================== 附表二计算函数 ====================
+function calculateSchedule2() {
+  // 读取输入值
+  function gv(field) {
+    var el = document.getElementById('sch2-' + field);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  // 更新计算结果显示
+  function uCalc(id, val, decimals) {
+    if (decimals === undefined) decimals = 2;
+    var el = document.getElementById('sch2-' + id);
+    if (el) el.textContent = (val !== 0) ? (decimals === 0 ? val : _fm0(val)) : '';
+  }
+
+  // ===== 一、申报抵扣的进项税额 =====
+  var r2_cnt = gv('row2_certified_curr_count');
+  var r2_amt = gv('row2_certified_curr_amount');
+  var r2_tax = gv('row2_certified_curr_tax');
+
+  var r3_cnt = gv('row3_certified_prior_count');
+  var r3_amt = gv('row3_certified_prior_amount');
+  var r3_tax = gv('row3_certified_prior_tax');
+
+  // Row 1 = 2 + 3
+  var r1_cnt = r2_cnt + r3_cnt;
+  var r1_amt = r2_amt + r3_amt;
+  var r1_tax = r2_tax + r3_tax;
+  uCalc('row1_certified_count', r1_cnt, 0);
+  uCalc('row1_certified_amount', r1_amt);
+  uCalc('row1_certified_tax', r1_tax);
+
+  // Rows 5-8b
+  var r5_cnt = gv('row5_customs_count');
+  var r5_amt = gv('row5_customs_amount');
+  var r5_tax = gv('row5_customs_tax');
+
+  var r6_cnt = gv('row6_agri_count');
+  var r6_amt = gv('row6_agri_amount');
+  var r6_tax = gv('row6_agri_tax');
+
+  var r7_cnt = gv('row7_wht_count');
+  var r7_tax = gv('row7_wht_tax');
+
+  var r8a_tax = gv('row8a_agri_extra');
+
+  var r8b_cnt = gv('row8b_other_count');
+  var r8b_amt = gv('row8b_other_amount');
+  var r8b_tax = gv('row8b_other_tax');
+
+  // Row 4 = 5+6+7+8a+8b (份数不含8a, 金额不含7/8a, 税额全含)
+  var r4_cnt = r5_cnt + r6_cnt + r7_cnt + r8b_cnt;
+  var r4_amt = r5_amt + r6_amt + r8b_amt;
+  var r4_tax = r5_tax + r6_tax + r7_tax + r8a_tax + r8b_tax;
+  uCalc('row4_other_count', r4_cnt, 0);
+  uCalc('row4_other_amount', r4_amt);
+  uCalc('row4_other_tax', r4_tax);
+
+  // Row 11
+  var r11_tax = gv('row11_foreign_trade_tax');
+
+  // Row 12 = 1 + 4 + 11 (份数/金额仅含1+4, 税额含1+4+11)
+  var r12_cnt = r1_cnt + r4_cnt;
+  var r12_amt = r1_amt + r4_amt;
+  var r12_tax = r1_tax + r4_tax + r11_tax;
+  uCalc('row12_total_count', r12_cnt, 0);
+  uCalc('row12_total_amount', r12_amt);
+  uCalc('row12_total_tax', r12_tax);
+
+  // ===== 二、进项税额转出额 =====
+  var r14 = gv('row14_exempt_transfer');
+  var r15 = gv('row15_collective_transfer');
+  var r16 = gv('row16_abnormal_loss');
+  var r17 = gv('row17_simple_tax_transfer');
+  var r18 = gv('row18_exempt_credit_transfer');
+  var r19 = gv('row19_tax_check_transfer');
+  var r20 = gv('row20_red_letter_transfer');
+  var r21 = gv('row21_prior_credit_arrears');
+  var r22 = gv('row22_prior_credit_refund');
+  var r23a = gv('row23a_abnormal_transfer');
+  var r23b = gv('row23b_other_transfer');
+
+  var r13 = r14 + r15 + r16 + r17 + r18 + r19 + r20 + r21 + r22 + r23a + r23b;
+  uCalc('row13_transfer_out_total', r13);
+
+  // ===== 三、待抵扣进项税额 =====
+  var r30_cnt = gv('row30_customs_pending_count');
+  var r30_amt = gv('row30_customs_pending_amount');
+  var r30_tax = gv('row30_customs_pending_tax');
+
+  var r31_cnt = gv('row31_agri_pending_count');
+  var r31_amt = gv('row31_agri_pending_amount');
+  var r31_tax = gv('row31_agri_pending_tax');
+
+  var r32_cnt = gv('row32_wht_pending_count');
+  var r32_tax = gv('row32_wht_pending_tax');
+
+  var r33_cnt = gv('row33_other_pending_count');
+  var r33_amt = gv('row33_other_pending_amount');
+  var r33_tax = gv('row33_other_pending_tax');
+
+  // Row 29 = 30+31+32+33 (份数不含8a, 金额不含32, 税额全含)
+  var r29_cnt = r30_cnt + r31_cnt + r32_cnt + r33_cnt;
+  var r29_amt = r30_amt + r31_amt + r33_amt;
+  var r29_tax = r30_tax + r31_tax + r32_tax + r33_tax;
+  uCalc('row29_other_pending_count', r29_cnt, 0);
+  uCalc('row29_other_pending_amount', r29_amt);
+  uCalc('row29_other_pending_tax', r29_tax);
 }
 
 // ==================== 附表三：扣除项目明细 ====================
