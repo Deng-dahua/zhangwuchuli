@@ -30,15 +30,14 @@ const CCF_ROWS = [
   { key: 'row8_taxable_sales',               label: '计费销售额',                       category: '费额计算',   calc: '1-5' },
   { key: 'row9_fee_rate',                    label: '费率',                            category: '费额计算',   calc: null },
   { key: 'row10_payable_fee',                label: '应缴费额',                        category: '费额计算',   calc: '8×9' },
-  { key: 'row10a_fee_reduction',            label: '减征额（财税〔2025〕7号 50%）',    category: '费额计算',   calc: null },
   { key: 'row11_unpaid_beginning',           label: '期初未缴费额（多缴为负）',          category: '费额缴纳',   calc: null },
   { key: 'row12_paid_current_period',         label: '本期已缴费额',                     category: '费额缴纳',   calc: '13+14+15' },
   { key: 'row13_prepaid',                    label: '其中：本期预缴费额',               category: '费额缴纳',   calc: null },
   { key: 'row14_paid_last_period',           label: '本期缴纳上期费额',                 category: '费额缴纳',   calc: null },
   { key: 'row15_paid_arrears',               label: '本期缴纳欠费额',                   category: '费额缴纳',   calc: null },
-  { key: 'row16_unpaid_ending',              label: '期末未缴费额（多缴为负）',          category: '费额缴纳',   calc: '10+11-12-10a' },
+  { key: 'row16_unpaid_ending',              label: '期末未缴费额（多缴为负）',          category: '费额缴纳',   calc: '10+11-12' },
   { key: 'row17_arrears',                    label: '其中：欠缴费额（≥0）',            category: '费额缴纳',   calc: '11-14-15' },
-  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               category: '费额缴纳',   calc: '10-13-10a' },
+  { key: 'row18_fill_refund',                label: '本期应补（退）费额',               category: '费额缴纳',   calc: '10-13' },
   { key: 'row19_inspected_supplement',       label: '本期检查已补缴费额',               category: '费额缴纳',   calc: null },
 ];
 
@@ -353,15 +352,6 @@ function renderCCFMainForm(data, main) {
   // 标题
   h += '<div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:8px">文化事业建设费申报表</div>';
 
-  // 减半征收开关
-  var halfEnabled = !!(main && main.row10a_fee_reduction_current > 0);
-  h += '<div style="margin-bottom:8px;padding:6px 12px;background:#fef3c7;border-radius:6px;display:flex;align-items:center;gap:8px">';
-  h += '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px">';
-  h += '<input type="checkbox" id="ccf-half-reduction" onchange="ccfOnMainChange()"' + (halfEnabled ? ' checked' : '') + ' style="width:16px;height:16px">';
-  h += '<b>减半征收（财税〔2025〕7号）</b> 应缴费额 × 50%';
-  h += '</label>';
-  h += '</div>';
-
   // 先计算每个分类的行数（用于 rowspan）
   var catSpans = {}, catOrder = [];
   for (var i = 0; i < CCF_ROWS.length; i++) {
@@ -390,13 +380,7 @@ function renderCCFMainForm(data, main) {
   var renderedCats = {};
   for (var i = 0; i < CCF_ROWS.length; i++) {
     var row = CCF_ROWS[i];
-    // 栏次编号：row10a 不占编号，后续行号不变
-    var rn;
-    if (row.key === 'row10a_fee_reduction') {
-      rn = null; // 子行，无栏次编号
-    } else {
-      rn = i < CCF_ROWS.findIndex(function(r) { return r.key === 'row10a_fee_reduction'; }) ? i + 1 : i;
-    }
+    var rn = i + 1;
     var bg = i % 2 === 1 ? 'background:#f9fafb' : '';
     var isCalc = !!row.calc;
     var cat = row.category || '';
@@ -415,9 +399,12 @@ function renderCCFMainForm(data, main) {
     h += '<td style="padding:5px 8px;font-size:11px">';
     h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
+    if (row.key === 'row10_payable_fee' && _ccfIsReductionActive(data)) {
+      h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）</span>';
+    }
     h += '</td>';
     // 第三列：栏次
-    var colText = rn ? (row.calc ? (rn + '=' + row.calc) : rn) : '';
+    var colText = row.calc ? (rn + '=' + row.calc) : rn;
     h += '<td style="padding:5px 4px;text-align:center;font-size:11px;font-weight:600">' + colText + '</td>';
     // 第四列：本月数
     var curVal = _ccfGetVal(main, row.key + '_current');
@@ -510,21 +497,29 @@ function ccfOnMainChange() {
   s('ccf-cur-row7_deduction_ending_balance', g('ccf-cur-row3_deduction_beginning') + g('ccf-cur-row4_deduction_current_period') - g('ccf-cur-row5_taxable_income_deduction') - g('ccf-cur-row6_tax_exempt_deduction'));
   // 栏次8 = 1-5
   s('ccf-cur-row8_taxable_sales', g('ccf-cur-row1_taxable_income') - g('ccf-cur-row5_taxable_income_deduction'));
-  // 栏次10 = 8×9
+  // 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号，2025-2027适用）
   var rate = g('ccf-cur-row9_fee_rate') || 0.03;
-  s('ccf-cur-row10_payable_fee', g('ccf-cur-row8_taxable_sales') * rate);
-  // 栏次10a = 10×50%（减半征收，财税〔2025〕7号）
-  var halfChk = document.getElementById('ccf-half-reduction');
-  var enabled = halfChk && halfChk.checked;
-  s('ccf-cur-row10a_fee_reduction', enabled ? g('ccf-cur-row10_payable_fee') * 0.5 : 0);
+  var fee = g('ccf-cur-row8_taxable_sales') * rate;
+  if (_ccfIsReductionActive(ccfCurrentData)) fee = fee * 0.5;
+  s('ccf-cur-row10_payable_fee', fee);
   // 栏次12 = 13+14+15
   s('ccf-cur-row12_paid_current_period', g('ccf-cur-row13_prepaid') + g('ccf-cur-row14_paid_last_period') + g('ccf-cur-row15_paid_arrears'));
-  // 栏次16 = 10+11-12-10a
-  s('ccf-cur-row16_unpaid_ending', g('ccf-cur-row10_payable_fee') + g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row12_paid_current_period') - g('ccf-cur-row10a_fee_reduction'));
+  // 栏次16 = 10+11-12
+  s('ccf-cur-row16_unpaid_ending', g('ccf-cur-row10_payable_fee') + g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row12_paid_current_period'));
   // 栏次17 = 11-14-15
   s('ccf-cur-row17_arrears', g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row14_paid_last_period') - g('ccf-cur-row15_paid_arrears'));
-  // 栏次18 = 10-13-10a
-  s('ccf-cur-row18_fill_refund', g('ccf-cur-row10_payable_fee') - g('ccf-cur-row13_prepaid') - g('ccf-cur-row10a_fee_reduction'));
+  // 栏次18 = 10-13
+  s('ccf-cur-row18_fill_refund', g('ccf-cur-row10_payable_fee') - g('ccf-cur-row13_prepaid'));
+}
+
+// ==================== 减半征收判断 ====================
+
+function _ccfIsReductionActive(data) {
+  // 财税〔2025〕7号：2025.1.1-2027.12.31 减半征收
+  if (!data || !data.period) return true; // 无期间默认启用
+  var y = parseInt((data.period || '').substring(0, 4));
+  if (isNaN(y)) return true;
+  return y >= 2025 && y <= 2027;
 }
 
 // ==================== 扣除项目操作 ====================
