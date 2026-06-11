@@ -2069,13 +2069,13 @@ function renderSchedule5(data) {
 
   var html = '';
 
-  // ===== 顶部区域（标题+小微企业政策） =====
-  html += '<div style="max-width:1170px;margin:0 auto 8px">';
+  // ===== 统一容器：全文 1170px 居中 =====
+  html += '<div style="max-width:1170px;margin:0 auto">';
   // 标题
   html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:4px 0 0">增值税及附加税费申报表（一般纳税人适用）</div>';
   html += '<div style="text-align:center;font-size:14px;font-weight:600;padding:2px 0 6px">附列资料（五）（附加税费情况表）</div>';
   // 小微企业政策 — 独立小表格
-  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fefce8;border:1px solid #a0a0a0">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fefce8;border:1px solid #a0a0a0;margin-bottom:8px">';
   html += '<tr>';
   html += '<td style="'+B+';'+P+';width:38%">本期是否适用小微企业"六税两费"减免政策</td>';
   html += '<td style="'+B+';'+P+';width:16%;text-align:center">'+microYes+'是　'+ (microYes=='☑'?'□':'□') +'否</td>';
@@ -2086,7 +2086,7 @@ function renderSchedule5(data) {
   html += '<td style="'+B+';'+P+'">适用减免政策起止时间</td>';
   html += '<td colspan="3" style="'+B+';'+P+'">'+(rs||'　　年　月　日')+' 至 '+(re||'　　年　月　日')+'</td>';
   html += '</tr>';
-  html += '</table></div>';
+  html += '</table>';
 
   // ===== 主表格 =====
   html += '<div style="overflow-x:auto">';
@@ -2236,6 +2236,7 @@ function renderSchedule5(data) {
   html += vatRefundRow('',false,'10','结转下期可用于扣除的留抵退税额');
 
   html += '</tbody></table></div>';
+  html += '</div>';  // 关闭统一外层容器
   return html;
 }
 
