@@ -86,24 +86,7 @@ async function stepCCFPeriod(type, delta) {
     mSel2.value = targetMonth;
   }
 
-  // 缓存查找
-  var found = ccfDeclarations.find(function(d) { return d.period === targetPeriod; });
-  if (found) { openCCFDetailInline(found.id); return; }
-
-  // 后端查找
-  try {
-    var list = await api('/api/cultural-construction-fee/declarations?period=' + encodeURIComponent(targetPeriod));
-    if (list && list.items && list.items.length > 0) {
-      var item = list.items[0];
-      var idx = ccfDeclarations.findIndex(function(d) { return d.period === targetPeriod; });
-      if (idx < 0) ccfDeclarations.push(item);
-      openCCFDetailInline(item.id);
-      return;
-    }
-  } catch (e) { /* ignore */ }
-
-  // 空状态
-  renderCCFPeriodEmpty(targetPeriod);
+  // 只更新下拉框，不自动查询——用户需点击"查询"按钮
 }
 
 function onCCFDetailPeriodChange() {
@@ -327,14 +310,14 @@ function renderCCFToolbar(yearOpts, monthOpts) {
   return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">'
     + '<div class="period-selector-bar" style="display:flex;gap:4px;align-items:center">'
     + '<div class="period-stepper">'
-    + '<select id="ccf-detail-year" class="period-selector-year" onchange="onCCFDetailPeriodChange()">'
+    + '<select id="ccf-detail-year" class="period-selector-year">'
     + yearOpts + '</select>'
     + '<div class="stepper-arrows">'
     + '<button class="stepper-btn stepper-up" onclick="stepCCFPeriod(\'year\',1)" title="下一年">▲</button>'
     + '<button class="stepper-btn stepper-down" onclick="stepCCFPeriod(\'year\',-1)" title="上一年">▼</button>'
     + '</div></div>'
     + '<div class="period-stepper">'
-    + '<select id="ccf-detail-month" class="period-selector-month" onchange="onCCFDetailPeriodChange()">'
+    + '<select id="ccf-detail-month" class="period-selector-month">'
     + monthOpts + '</select>'
     + '<div class="stepper-arrows">'
     + '<button class="stepper-btn stepper-up" onclick="stepCCFPeriod(\'month\',1)" title="下一月">▲</button>'
