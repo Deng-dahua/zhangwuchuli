@@ -400,7 +400,11 @@ function renderCCFMainForm(data, main) {
     h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
     if (row.key === 'row10_payable_fee' && _ccfIsReductionActive(data)) {
-      h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）</span>';
+      if (_ccfNeedsPolicyReview(data)) {
+        h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）<br><span style="color:#d97706">⚠ 2028年起需确认政策是否延续</span></span>';
+      } else {
+        h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）</span>';
+      }
     }
     h += '</td>';
     // 第三列：栏次
@@ -497,7 +501,7 @@ function ccfOnMainChange() {
   s('ccf-cur-row7_deduction_ending_balance', g('ccf-cur-row3_deduction_beginning') + g('ccf-cur-row4_deduction_current_period') - g('ccf-cur-row5_taxable_income_deduction') - g('ccf-cur-row6_tax_exempt_deduction'));
   // 栏次8 = 1-5
   s('ccf-cur-row8_taxable_sales', g('ccf-cur-row1_taxable_income') - g('ccf-cur-row5_taxable_income_deduction'));
-  // 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号，2025-2027适用）
+  // 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号）
   var rate = g('ccf-cur-row9_fee_rate') || 0.03;
   var fee = g('ccf-cur-row8_taxable_sales') * rate;
   if (_ccfIsReductionActive(ccfCurrentData)) fee = fee * 0.5;
@@ -510,16 +514,42 @@ function ccfOnMainChange() {
   s('ccf-cur-row17_arrears', g('ccf-cur-row11_unpaid_beginning') - g('ccf-cur-row14_paid_last_period') - g('ccf-cur-row15_paid_arrears'));
   // 栏次18 = 10-13
   s('ccf-cur-row18_fill_refund', g('ccf-cur-row10_payable_fee') - g('ccf-cur-row13_prepaid'));
+
+  // ==================== 本年累计同步计算 ====================
+  // 栏次7_ytd = 3+4-5-6
+  s('ccf-ytd-row7_deduction_ending_balance', g('ccf-ytd-row3_deduction_beginning') + g('ccf-ytd-row4_deduction_current_period') - g('ccf-ytd-row5_taxable_income_deduction') - g('ccf-ytd-row6_tax_exempt_deduction'));
+  // 栏次8_ytd = 1-5
+  s('ccf-ytd-row8_taxable_sales', g('ccf-ytd-row1_taxable_income') - g('ccf-ytd-row5_taxable_income_deduction'));
+  // 栏次10_ytd = 8×9 × 50%（减半征收）
+  var feeYtd = g('ccf-ytd-row8_taxable_sales') * rate;
+  if (_ccfIsReductionActive(ccfCurrentData)) feeYtd = feeYtd * 0.5;
+  s('ccf-ytd-row10_payable_fee', feeYtd);
+  // 栏次12_ytd = 13+14+15
+  s('ccf-ytd-row12_paid_current_period', g('ccf-ytd-row13_prepaid') + g('ccf-ytd-row14_paid_last_period') + g('ccf-ytd-row15_paid_arrears'));
+  // 栏次16_ytd = 10+11-12
+  s('ccf-ytd-row16_unpaid_ending', g('ccf-ytd-row10_payable_fee') + g('ccf-ytd-row11_unpaid_beginning') - g('ccf-ytd-row12_paid_current_period'));
+  // 栏次17_ytd = 11-14-15
+  s('ccf-ytd-row17_arrears', g('ccf-ytd-row11_unpaid_beginning') - g('ccf-ytd-row14_paid_last_period') - g('ccf-ytd-row15_paid_arrears'));
+  // 栏次18_ytd = 10-13
+  s('ccf-ytd-row18_fill_refund', g('ccf-ytd-row10_payable_fee') - g('ccf-ytd-row13_prepaid'));
 }
 
 // ==================== 减半征收判断 ====================
 
 function _ccfIsReductionActive(data) {
-  // 财税〔2025〕7号：2025.1.1-2027.12.31 减半征收
-  if (!data || !data.period) return true; // 无期间默认启用
+  // 财税〔2025〕7号：2025.1.1 起减半征收，无截止日期（到期需确认续期）
+  if (!data || !data.period) return true;
   var y = parseInt((data.period || '').substring(0, 4));
   if (isNaN(y)) return true;
-  return y >= 2025 && y <= 2027;
+  return y >= 2025; // 不限截止，2028+ 需确认政策延续
+}
+
+function _ccfNeedsPolicyReview(data) {
+  // 返回 true 表示当前期间需要确认政策是否延续
+  if (!data || !data.period) return false;
+  var y = parseInt((data.period || '').substring(0, 4));
+  if (isNaN(y)) return false;
+  return y >= 2028;
 }
 
 // ==================== 扣除项目操作 ====================

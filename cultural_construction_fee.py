@@ -470,10 +470,10 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
         2
     )
 
-    # 栏次10 = 8 × 9 × 50%（减半征收，财税〔2025〕7号，2025-2027适用）
+    # 栏次10 = 8 × 9 × 50%（减半征收，财税〔2025〕7号）
     fee = (decl.row8_taxable_sales_current or 0) * (decl.row9_fee_rate or 0.03)
     period_year = int((decl.period or '')[:4]) if decl.period else 0
-    if 2025 <= period_year <= 2027:
+    if period_year >= 2025:
         fee = fee * 0.5
     decl.row10_payable_fee_current = round(fee, 2)
 
@@ -928,10 +928,10 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     # 费率
     decl.row9_fee_rate = 0.03
 
-    # 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号，2025-2027适用）
+    # 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号）
     fee = round(float(decl.row8_taxable_sales_current or 0) * 0.03, 2)
     period_year = int((period or '')[:4]) if period else 0
-    if 2025 <= period_year <= 2027:
+    if period_year >= 2025:
         fee = round(fee * 0.5, 2)
     decl.row10_payable_fee_current = fee
     decl.row10_payable_fee_ytd = fee
@@ -982,7 +982,7 @@ def ai_auto_fill(declaration_id: int, company_id: int = Query(),
     fee_amount = float(decl.row10_payable_fee_current or 0)
     period_year = int((period or '')[:4]) if period else 0
     log.append(f"🧮 应缴费额 = {fee_amount:,.2f}（计费销售额 × 3%）")
-    if 2025 <= period_year <= 2027:
+    if period_year >= 2025:
         log.append(f"🔻 已适用减半征收（财税〔2025〕7号）")
 
     # ========== 4. 生成计提凭证到序时账 ==========
