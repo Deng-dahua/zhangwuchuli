@@ -763,16 +763,31 @@ function calculateVATMainForm() {
 }
 
 function vatCollectFormData() {
-  // 收集所有输入框的值到 form_main JSON
-  var inputs = document.querySelectorAll('[id^="vat-"][type="number"]');
-  var data = {};
-  for (var i = 0; i < inputs.length; i++) {
-    var inp = inputs[i];
-    var key = inp.id.replace('vat-', '');
-    var val = parseFloat(inp.value);
-    data[key] = isNaN(val) ? 0 : val;
+  // 收集所有输入框的值，按表单分配
+  var allData = {};
+  
+  // 辅助：收集指定前缀的输入框
+  function collect(prefix) {
+    var inputs = document.querySelectorAll('[id^="' + prefix + '"][type="number"]');
+    var data = {};
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      var key = inp.id.replace(prefix, '');
+      var val = parseFloat(inp.value);
+      data[key] = isNaN(val) ? 0 : val;
+    }
+    return data;
   }
-  return data;
+  
+  allData.form_main = collect('vat-');
+  allData.form_sales = collect('sch1-');
+  allData.form_input = collect('sch2-');
+  allData.form_deduction = collect('sch3-');
+  allData.form_credit = collect('sch4-');
+  allData.form_surcharge = collect('sch5-');
+  allData.form_reduction = collect('red-');
+  
+  return allData;
 }
 
 async function vatSaveManualData() {
@@ -781,11 +796,11 @@ async function vatSaveManualData() {
     return;
   }
   try {
-    var formData = vatCollectFormData();
+    var allFormData = vatCollectFormData();
     var resp = await fetch('/api/vat/declarations/' + vatCurrentData.id + '?company_id=' + (currentCompanyId || 1), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ form_main: formData })
+      body: JSON.stringify(allFormData)
     });
     var result = await resp.json();
     if (!resp.ok) throw new Error(result.detail || '保存失败');
