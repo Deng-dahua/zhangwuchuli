@@ -1063,38 +1063,100 @@ function renderMainForm(data) {
 function renderSchedule1(data) {
   const s = safeJSON(data.form_sales, {});
 
-  function td(v) { return '<td class="num">' + _fm0(v) + '</td>'; }
-  function tdDash(n) { n = n || 1; var d = '<td class="num"></td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
+  // 输入字段样式
+  var inputStyle = 'width:90%;text-align:right;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px';
+
+  // 生成可输入的 td (input number)
+  function tdInput(row, col, val) {
+    var id = 'sch1-row' + row + '_col' + col;
+    var v = (val != null && val !== '' && !isNaN(val)) ? ' value="' + parseFloat(val) + '"' : '';
+    return '<td class="num"><input type="number" step="0.01" id="' + id + '"' + v + ' style="' + inputStyle + '" onchange="calculateSchedule1()"></td>';
+  }
+
+  // 生成只读的 td (计算结果)
+  function tdCalc(colId, val) {
+    var v = (val != null && val !== '' && !isNaN(val)) ? _fm0(val) : '';
+    return '<td class="num" id="' + colId + '">' + v + '</td>';
+  }
+
+  function tdDash(n) { n = n || 1; var d = '<td class="num">——</td>'; return n === 1 ? d : Array(n).fill(d).join(''); }
   // 大类列样式
   var catStyle = 'text-align:center;vertical-align:middle;font-weight:700;font-size:11px;background:#f0f4fa;writing-mode:vertical-lr;letter-spacing:2px;padding:4px 3px';
   var subStyle = 'text-align:center;vertical-align:middle;font-weight:600;font-size:10px;background:#f5f7fb';
 
   // ---- helper: 生成完整数据行(14个数值列: cols 4-17) ----
   // 销售额/税额按列号顺序: 第1列(销售额) 第2列(税额) ... 交替排列
-  // 货物行（无扣除项目）: cols 4-13 正常, col 14价税合计, cols 15-17=——
-  function Rg(spS,spT,otS,otT,niS,niT,ckS,ckT,toS,toT) {
-    var pt = (parseFloat(toS||0))+(parseFloat(toT||0));
-    return td(spS)+td(spT)+td(otS)+td(otT)+td(niS)+td(niT)+td(ckS)+td(ckT)+td(toS)+td(toT)
-          +'<td class="num">'+_fm0(pt)+'</td>'
-          +tdDash(3);
+  // 货物行（无扣除项目）: cols 1-8 输入, cols 9-10 计算, col 11价税合计, cols 12-14=——
+  function Rg(row, spS,spT,otS,otT,niS,niT,ckS,ckT) {
+    var cells = '';
+    // 第1-8列：手动输入
+    cells += tdInput(row, 1, spS);
+    cells += tdInput(row, 2, spT);
+    cells += tdInput(row, 3, otS);
+    cells += tdInput(row, 4, otT);
+    cells += tdInput(row, 5, niS);
+    cells += tdInput(row, 6, niT);
+    cells += tdInput(row, 7, ckS);
+    cells += tdInput(row, 8, ckT);
+    // 第9-10列：计算结果（合计）
+    cells += '<td class="num" id="sch1-row' + row + '_col9">——</td>';
+    cells += '<td class="num" id="sch1-row' + row + '_col10">——</td>';
+    // 第11列：价税合计（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col11">——</td>';
+    // 第12-14列：————
+    cells += tdDash(3);
+    return cells;
   }
   // 服务行（含扣除项目）
-  function Rs(spS,spT,otS,otT,niS,niT,ckS,ckT,toS,toT,ded,afS,afT) {
-    return td(spS)+td(spT)+td(otS)+td(otT)+td(niS)+td(niT)+td(ckS)+td(ckT)+td(toS)+td(toT)
-          +'<td class="num">'+_fm0((parseFloat(toS||0))+(parseFloat(toT||0)))+'</td>'
-          +td(ded)+td(afS)+td(afT);
+  function Rs(row, spS,spT,otS,otT,niS,niT,ckS,ckT, ded, afS,afT) {
+    var cells = '';
+    // 第1-8列：手动输入
+    cells += tdInput(row, 1, spS);
+    cells += tdInput(row, 2, spT);
+    cells += tdInput(row, 3, otS);
+    cells += tdInput(row, 4, otT);
+    cells += tdInput(row, 5, niS);
+    cells += tdInput(row, 6, niT);
+    cells += tdInput(row, 7, ckS);
+    cells += tdInput(row, 8, ckT);
+    // 第9-10列：计算结果（合计）
+    cells += '<td class="num" id="sch1-row' + row + '_col9">——</td>';
+    cells += '<td class="num" id="sch1-row' + row + '_col10">——</td>';
+    // 第11列：价税合计（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col11">——</td>';
+    // 第12列：扣除项目本期实际扣除金额（手动输入）
+    cells += tdInput(row, 12, ded);
+    // 第13-14列：扣除后（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col13">——</td>';
+    cells += '<td class="num" id="sch1-row' + row + '_col14">——</td>';
+    return cells;
   }
   // 即征即退服务行: 前8列=——,后6列正常
-  function Rj(toS,toT,ded,afS,afT) {
-    var pt = (parseFloat(toS||0))+(parseFloat(toT||0));
-    return tdDash(8)
-          +td(toS)+td(toT)+'<td class="num">'+_fm0(pt)+'</td>'
-          +td(ded)+td(afS)+td(afT);
+  function Rj(row, toS,toT,ded,afS,afT) {
+    var cells = tdDash(8);
+    // 第9-10列：输入（即征即退行的合计列可输入）
+    cells += tdInput(row, 9, toS);
+    cells += tdInput(row, 10, toT);
+    // 第11列：价税合计（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col11">——</td>';
+    // 第12列：扣除项目（输入）
+    cells += tdInput(row, 12, ded);
+    // 第13-14列：扣除后（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col13">——</td>';
+    cells += '<td class="num" id="sch1-row' + row + '_col14">——</td>';
+    return cells;
   }
   // 即征即退货物行: 前8列=——，后3列=——
-  function Rjg(toS,toT) {
-    var pt = (parseFloat(toS||0))+(parseFloat(toT||0));
-    return tdDash(8)+td(toS)+td(toT)+'<td class="num">'+_fm0(pt)+'</td>'+tdDash(3);
+  function Rjg(row, toS,toT) {
+    var cells = tdDash(8);
+    // 第9-10列：输入
+    cells += tdInput(row, 9, toS);
+    cells += tdInput(row, 10, toT);
+    // 第11列：价税合计（计算）
+    cells += '<td class="num" id="sch1-row' + row + '_col11">——</td>';
+    // 第12-14列：————
+    cells += tdDash(3);
+    return cells;
   }
   // 全 —— 行
   function RD() { return tdDash(14); }
@@ -1140,52 +1202,47 @@ function renderSchedule1(data) {
     + '<td rowspan="7" style="'+catStyle+'">一般计税<br>方法计税</td>'
     + '<td rowspan="5" style="'+subStyle+'">全部征税项目</td>'
     + '<td>13%税率的货物及加工修理修配劳务</td><td style="text-align:center">1</td>'
-    + Rg(s.row1_13_special_sales,s.row1_13_special_tax,s.row1_13_other_sales,s.row1_13_other_tax,
-         s.row1_13_no_invoice_sales,s.row1_13_no_invoice_tax,s.row1_13_check_sales,s.row1_13_check_tax,
-         s.row1_13_total_sales,s.row1_13_total_tax)
+    + Rg(1,s.row1_13_special_sales,s.row1_13_special_tax,s.row1_13_other_sales,s.row1_13_other_tax,
+         s.row1_13_no_invoice_sales,s.row1_13_no_invoice_tax,s.row1_13_check_sales,s.row1_13_check_tax)
     + '</tr>'
     // Row 2: 13%服务
     + '<tr><td>13%税率的服务、不动产和无形资产</td><td style="text-align:center">2</td>'
-    + Rs(s.row2_13_service_special_sales,s.row2_13_service_special_tax,
+    + Rs(2,s.row2_13_service_special_sales,s.row2_13_service_special_tax,
          s.row2_13_service_other_sales,s.row2_13_service_other_tax,
          s.row2_13_service_no_invoice_sales,s.row2_13_service_no_invoice_tax,
          s.row2_13_service_check_sales,s.row2_13_service_check_tax,
-         s.row2_13_service_total_sales,s.row2_13_service_total_tax,
          s.row2_13_service_deduct||0,s.row2_13_service_after_sales||0,s.row2_13_service_after_tax||0)
     + '</tr>'
     // Row 3: 9%货物
     + '<tr><td>9%税率的货物及加工修理修配劳务</td><td style="text-align:center">3</td>'
-    + Rg(s.row3_9_special_sales,s.row3_9_special_tax,s.row3_9_other_sales,s.row3_9_other_tax,
-         s.row3_9_no_invoice_sales,s.row3_9_no_invoice_tax,s.row3_9_check_sales,s.row3_9_check_tax,
-         s.row3_9_total_sales,s.row3_9_total_tax)
+    + Rg(3,s.row3_9_special_sales,s.row3_9_special_tax,s.row3_9_other_sales,s.row3_9_other_tax,
+         s.row3_9_no_invoice_sales,s.row3_9_no_invoice_tax,s.row3_9_check_sales,s.row3_9_check_tax)
     + '</tr>'
     // Row 4: 9%服务
     + '<tr><td>9%税率的服务、不动产和无形资产</td><td style="text-align:center">4</td>'
-    + Rs(s.row4_9_service_sales,s.row4_9_service_tax,
+    + Rs(4,s.row4_9_service_sales,s.row4_9_service_tax,
          s.row4_9_service_other_sales,s.row4_9_service_other_tax,
          s.row4_9_service_no_invoice_sales,s.row4_9_service_no_invoice_tax,
          s.row4_9_service_check_sales,s.row4_9_service_check_tax,
-         s.row4_9_service_total_sales,s.row4_9_service_total_tax,
          s.row4_9_service_deduct||0,s.row4_9_service_after_sales||0,s.row4_9_service_after_tax||0)
     + '</tr>'
     // Row 5: 6%税率
     + '<tr><td>6%税率</td><td style="text-align:center">5</td>'
-    + Rs(s.row5_6_special_sales,s.row5_6_special_tax,
+    + Rs(5,s.row5_6_special_sales,s.row5_6_special_tax,
          s.row5_6_other_sales,s.row5_6_other_tax,
          s.row5_6_no_invoice_sales,s.row5_6_no_invoice_tax,
          s.row5_6_check_sales,s.row5_6_check_tax,
-         s.row5_6_total_sales,s.row5_6_total_tax,
          s.row5_6_deduct||0,s.row5_6_after_sales||0,s.row5_6_after_tax||0)
     + '</tr>'
     // Row 6: 即征即退货物
     + '<tr>'
     + '<td rowspan="2" style="'+subStyle+'">其中：即征即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">6</td>'
-    + Rjg(s.row6_refund_goods_total_sales||0,s.row6_refund_goods_total_tax||0)
+    + Rjg(6,s.row6_refund_goods_total_sales||0,s.row6_refund_goods_total_tax||0)
     + '</tr>'
     // Row 7: 即征即退服务
     + '<tr><td>即征即退服务、不动产和无形资产</td><td style="text-align:center">7</td>'
-    + Rj(s.row7_refund_service_total_sales||0,s.row7_refund_service_total_tax||0,
+    + Rj(7,s.row7_refund_service_total_sales||0,s.row7_refund_service_total_tax||0,
          s.row7_refund_service_deduct||0,s.row7_refund_service_after_sales||0,s.row7_refund_service_after_tax||0)
     + '</tr>'
 
@@ -1195,78 +1252,60 @@ function renderSchedule1(data) {
     + '<td rowspan="11" style="'+catStyle+'">简易计税<br>方法计税</td>'
     + '<td rowspan="9" style="'+subStyle+'">全部征税项目</td>'
     + '<td>6%征收率</td><td style="text-align:center">8</td>'
-    + Rg(s.row8_6_collect_sales,s.row8_6_collect_tax,s.row8_6_collect_other_sales,s.row8_6_collect_other_tax,
-         s.row8_6_collect_no_invoice_sales,s.row8_6_collect_no_invoice_tax,
-         s.row8_6_collect_check_sales,s.row8_6_collect_check_tax,
-         s.row8_6_collect_total_sales,s.row8_6_collect_total_tax)
+    + Rg(8,s.row8_6_collect_sales,s.row8_6_collect_tax,s.row8_6_collect_other_sales,s.row8_6_collect_other_tax,
+         s.row8_6_collect_no_invoice_sales,s.row8_6_collect_no_invoice_tax)
     + '</tr>'
     // Row 9: 5%货物
     + '<tr><td>5%征收率的货物及加工修理修配劳务</td><td style="text-align:center">9a</td>'
-    + Rg(s.row9a_5_goods_sales,s.row9a_5_goods_tax,s.row9a_5_goods_other_sales,s.row9a_5_goods_other_tax,
-         s.row9a_5_goods_no_invoice_sales,s.row9a_5_goods_no_invoice_tax,
-         s.row9a_5_goods_check_sales,s.row9a_5_goods_check_tax,
-         s.row9a_5_goods_total_sales,s.row9a_5_goods_total_tax)
+    + Rg(9,s.row9a_5_goods_sales,s.row9a_5_goods_tax,s.row9a_5_goods_other_sales,s.row9a_5_goods_other_tax,
+         s.row9a_5_goods_no_invoice_sales,s.row9a_5_goods_no_invoice_tax)
     + '</tr>'
     // Row 10: 5%服务
     + '<tr><td>5%征收率的服务、不动产和无形资产</td><td style="text-align:center">9b</td>'
-    + Rs(s.row9b_5_service_sales,s.row9b_5_service_tax,
+    + Rs(10,s.row9b_5_service_sales,s.row9b_5_service_tax,
          s.row9b_5_service_other_sales,s.row9b_5_service_other_tax,
          s.row9b_5_service_no_invoice_sales,s.row9b_5_service_no_invoice_tax,
-         s.row9b_5_service_check_sales,s.row9b_5_service_check_tax,
-         s.row9b_5_service_total_sales,s.row9b_5_service_total_tax,
          s.row9b_5_service_deduct||0,s.row9b_5_service_after_sales||0,s.row9b_5_service_after_tax||0)
     + '</tr>'
     // Row 11: 4%征收率
     + '<tr><td>4%征收率</td><td style="text-align:center">10</td>'
-    + Rg(s.row10_4_collect_sales,s.row10_4_collect_tax,s.row10_4_collect_other_sales,s.row10_4_collect_other_tax,
-         s.row10_4_collect_no_invoice_sales,s.row10_4_collect_no_invoice_tax,
-         s.row10_4_collect_check_sales,s.row10_4_collect_check_tax,
-         s.row10_4_collect_total_sales,s.row10_4_collect_total_tax)
+    + Rg(11,s.row10_4_collect_sales,s.row10_4_collect_tax,s.row10_4_collect_other_sales,s.row10_4_collect_other_tax,
+         s.row10_4_collect_no_invoice_sales,s.row10_4_collect_no_invoice_tax)
     + '</tr>'
     // Row 12: 3%货物
     + '<tr><td>3%征收率的货物及加工修理修配劳务</td><td style="text-align:center">11</td>'
-    + Rg(s.row11_3_goods_sales,s.row11_3_goods_tax,s.row11_3_goods_other_sales,s.row11_3_goods_other_tax,
-         s.row11_3_goods_no_invoice_sales,s.row11_3_goods_no_invoice_tax,
-         s.row11_3_goods_check_sales,s.row11_3_goods_check_tax,
-         s.row11_3_goods_total_sales,s.row11_3_goods_total_tax)
+    + Rg(12,s.row11_3_goods_sales,s.row11_3_goods_tax,s.row11_3_goods_other_sales,s.row11_3_goods_other_tax,
+         s.row11_3_goods_no_invoice_sales,s.row11_3_goods_no_invoice_tax)
     + '</tr>'
     // Row 13: 3%服务
     + '<tr><td>3%征收率的服务、不动产和无形资产</td><td style="text-align:center">12</td>'
-    + Rs(s.row12_3_service_sales,s.row12_3_service_tax,
+    + Rs(13,s.row12_3_service_sales,s.row12_3_service_tax,
          s.row12_3_service_other_sales,s.row12_3_service_other_tax,
          s.row12_3_service_no_invoice_sales,s.row12_3_service_no_invoice_tax,
-         s.row12_3_service_check_sales,s.row12_3_service_check_tax,
-         s.row12_3_service_total_sales,s.row12_3_service_total_tax,
          s.row12_3_service_deduct||0,s.row12_3_service_after_sales||0,s.row12_3_service_after_tax||0)
     + '</tr>'
     // Row 14-16: 预征率 13a/13b/13c
     + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13a</td>'
-    + Rg(s.row13a_rate_sales,s.row13a_rate_tax,s.row13a_rate_other_sales,s.row13a_rate_other_tax,
-         s.row13a_rate_no_invoice_sales,s.row13a_rate_no_invoice_tax,
-         s.row13a_rate_check_sales,s.row13a_rate_check_tax,
-         s.row13a_rate_total_sales,s.row13a_rate_total_tax)
+    + Rg(14,s.row13a_rate_sales,s.row13a_rate_tax,s.row13a_rate_other_sales,s.row13a_rate_other_tax,
+         s.row13a_rate_no_invoice_sales,s.row13a_rate_no_invoice_tax)
     + '</tr>'
     + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13b</td>'
-    + Rg(s.row13b_rate_sales,s.row13b_rate_tax,s.row13b_rate_other_sales,s.row13b_rate_other_tax,
-         s.row13b_rate_no_invoice_sales,s.row13b_rate_no_invoice_tax,
-         s.row13b_rate_check_sales,s.row13b_rate_check_tax,
-         s.row13b_rate_total_sales,s.row13b_rate_total_tax)
+    + Rg(15,s.row13b_rate_sales,s.row13b_rate_tax,s.row13b_rate_other_sales,s.row13b_rate_other_tax,
+         s.row13b_rate_no_invoice_sales,s.row13b_rate_no_invoice_tax)
     + '</tr>'
     + '<tr><td>预征率&nbsp;%</td><td style="text-align:center">13c</td>'
-    + Rg(s.row13c_rate_sales,s.row13c_rate_tax,s.row13c_rate_other_sales,s.row13c_rate_other_tax,
-         s.row13c_rate_no_invoice_sales,s.row13c_rate_no_invoice_tax,
-         s.row13c_rate_check_sales,s.row13c_rate_check_tax,
-         s.row13c_rate_total_sales,s.row13c_rate_total_tax)
+    + Rg(16,s.row13c_rate_sales,s.row13c_rate_tax,s.row13c_rate_other_sales,s.row13c_rate_other_tax,
+         s.row13c_rate_no_invoice_sales,s.row13c_rate_no_invoice_tax)
     + '</tr>'
     // Row 17: 即征即退货物
     + '<tr>'
     + '<td rowspan="2" style="'+subStyle+'">其中：即征即退项目</td>'
     + '<td>即征即退货物及加工修理修配劳务</td><td style="text-align:center">14</td>'
-    + Rjg(s.row14_refund_goods_total_sales||0,s.row14_refund_goods_total_tax||0)
+    + Rjg(17,s.row14_refund_goods_total_sales||0,s.row14_refund_goods_total_tax||0)
     + '</tr>'
     // Row 18: 即征即退服务
     + '<tr><td>即征即退服务、不动产和无形资产</td><td style="text-align:center">15</td>'
-    + Rj(s.row15_refund_service_total_sales||0,s.row15_refund_service_total_tax||0,
+    + Rj(18,s.row15_refund_service_total_sales||0,s.row15_refund_service_total_tax||0,
          s.row15_refund_service_deduct||0,s.row15_refund_service_after_sales||0,s.row15_refund_service_after_tax||0)
     + '</tr>'
 
@@ -1283,6 +1322,78 @@ function renderSchedule1(data) {
     + '<tr><td colspan="2">服务、不动产和无形资产</td><td style="text-align:center">19</td>' + RD() + '</tr>'
 
     + '</tbody></table></div>';
+}
+
+// ==================== 附表一计算函数 ====================
+function calculateSchedule1() {
+  // 行配置：rowNumber: { type: 'goods'|'service'|'refund_goods'|'refund_service', taxRate: 税率 }
+  var rowConfig = {
+    1: { type: 'goods' },
+    2: { type: 'service', taxRate: 0.13 },
+    3: { type: 'goods' },
+    4: { type: 'service', taxRate: 0.09 },
+    5: { type: 'service', taxRate: 0.06 },
+    6: { type: 'refund_goods' },
+    7: { type: 'refund_service', taxRate: 0.13 },
+    8: { type: 'goods' },
+    9: { type: 'goods' },
+    10: { type: 'service', taxRate: 0.05 },
+    11: { type: 'goods' },
+    12: { type: 'goods' },
+    13: { type: 'service', taxRate: 0.03 },
+    14: { type: 'goods' },
+    15: { type: 'goods' },
+    16: { type: 'goods' },
+    17: { type: 'refund_goods' },
+    18: { type: 'refund_service' }
+  };
+
+  for (var row = 1; row <= 18; row++) {
+    var cfg = rowConfig[row];
+    if (!cfg) continue;
+
+    // 获取第1-8列的值
+    var col1 = parseFloat(document.getElementById('sch1-row' + row + '_col1')?.value) || 0;
+    var col2 = parseFloat(document.getElementById('sch1-row' + row + '_col2')?.value) || 0;
+    var col3 = parseFloat(document.getElementById('sch1-row' + row + '_col3')?.value) || 0;
+    var col4 = parseFloat(document.getElementById('sch1-row' + row + '_col4')?.value) || 0;
+    var col5 = parseFloat(document.getElementById('sch1-row' + row + '_col5')?.value) || 0;
+    var col6 = parseFloat(document.getElementById('sch1-row' + row + '_col6')?.value) || 0;
+    var col7 = parseFloat(document.getElementById('sch1-row' + row + '_col7')?.value) || 0;
+    var col8 = parseFloat(document.getElementById('sch1-row' + row + '_col8')?.value) || 0;
+
+    // 第9列 = 第1列 + 第3列 + 第5列 + 第7列
+    var col9 = col1 + col3 + col5 + col7;
+    // 第10列 = 第2列 + 第4列 + 第6列 + 第8列
+    var col10 = col2 + col4 + col6 + col8;
+    // 第11列 = 第9列 + 第10列（价税合计）
+    var col11 = col9 + col10;
+
+    // 更新第9/10/11列（只读显示）
+    var el9 = document.getElementById('sch1-row' + row + '_col9');
+    var el10 = document.getElementById('sch1-row' + row + '_col10');
+    var el11 = document.getElementById('sch1-row' + row + '_col11');
+    if (el9) el9.textContent = _fm0(col9);
+    if (el10) el10.textContent = _fm0(col10);
+    if (el11) el11.textContent = _fm0(col11);
+
+    // 服务行和即征即退服务行：计算第13/14列
+    if (cfg.type === 'service' || cfg.type === 'refund_service') {
+      var col12 = parseFloat(document.getElementById('sch1-row' + row + '_col12')?.value) || 0;
+      // 第13列 = 第11列 - 第12列
+      var col13 = col11 - col12;
+      // 第14列 = 第13列 / (100% + 税率) × 税率
+      var col14 = 0;
+      if (cfg.taxRate && col13 !== 0) {
+        col14 = col13 / (1 + cfg.taxRate) * cfg.taxRate;
+      }
+
+      var el13 = document.getElementById('sch1-row' + row + '_col13');
+      var el14 = document.getElementById('sch1-row' + row + '_col14');
+      if (el13) el13.textContent = _fm0(col13);
+      if (el14) el14.textContent = _fm0(col14);
+    }
+  }
 }
 
 // ==================== 附表二：进项税额明细 ====================
