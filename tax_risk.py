@@ -2542,7 +2542,7 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
             BankTransaction.summary.contains("物流"),
             BankTransaction.summary.contains("快递"),
             BankTransaction.summary.contains("货运"),
-            BankTransaction.counterparty.contains("物流"),
+            BankTransaction.counterparty_name.contains("物流"),
         )
     ).scalar() or 0
 
