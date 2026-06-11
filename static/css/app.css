@@ -492,6 +492,18 @@
       background: #fef9c4; outline: 1px solid #1a56db; outline-offset: -1px;
     }
 
+    /* 附表五专用 — 紧凑布局 */
+    .vat-form-table.sch5-compact thead th {
+      padding: 4px 3px; font-size: 9px; line-height: 1.2;
+    }
+    .vat-form-table.sch5-compact td {
+      padding: 3px 3px; font-size: 10px;
+    }
+    .vat-form-table.sch5-compact input[type="number"],
+    .vat-form-table.sch5-compact input[type="text"] {
+      font-size: 10px; padding: 1px 2px;
+    }
+
     /* ====== 登录/注册/选择公司页面样式 ====== */
     .reg-card-title { margin: 0 0 12px 0; font-size: 20px; font-weight: 700; }
     .reg-card-subtitle { margin: 0 0 20px 0; color: #6b7280; font-size: 14px; }

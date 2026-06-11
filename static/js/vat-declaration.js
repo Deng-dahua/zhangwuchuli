@@ -2034,9 +2034,9 @@ function calculateSchedule4() {
 function renderSchedule5(data) {
   const scf = safeJSON(data.form_surcharge, {});
 
-  var inputStyle = 'width:100%;text-align:right;font-size:11px;border:none;background:transparent;padding:2px 4px';
-  var rateStyle = 'width:50px;text-align:right;padding:2px 3px;font-size:10px';
-  var codeStyle = 'width:60px;padding:2px 3px;font-size:10px';
+  var inputStyle = 'width:100%;text-align:right;font-size:11px;border:none;background:transparent;padding:2px 2px';
+  var rateStyle = 'width:100%;text-align:right;padding:1px 2px;font-size:11px;border:none;background:transparent';
+  var codeStyle = 'width:100%;padding:1px 2px;font-size:10px;border:none;background:transparent;text-align:center';
 
   function ti(field, val, sty) {
     sty = sty || inputStyle;
@@ -2052,22 +2052,37 @@ function renderSchedule5(data) {
   }
   function tc(id, val) {
     var v = (val != null && val !== '' && !isNaN(val)) ? parseFloat(val) : 0;
-    return '<td class="num"><input type="number" step="0.01" id="sch5-' + id + '" value="' + v + '" style="width:100%;text-align:right;font-size:11px;border:none;background:transparent;padding:2px 4px" onchange="calculateSchedule5()"></td>';
+    return '<td class="num"><input type="number" step="0.01" id="sch5-' + id + '" value="' + v + '" style="width:100%;text-align:right;font-size:11px;border:none;background:transparent;padding:2px 2px" onchange="calculateSchedule5()"></td>';
   }
   function tt(field, val) {
     var id = 'sch5-' + field;
     return '<td class="num"><input type="text" id="' + id + '" value="' + (val || '') + '" style="' + codeStyle + '"></td>';
   }
-  function tdDash() { return '<td class="num">——</td>'; }
+  function tdDash() { return '<td class="num" style="color:#9ca3af;text-align:center;font-size:10px">——</td>'; }
 
   var html = '';
 
   html += '<div style="text-align:center;font-size:13px;font-weight:700;padding:8px 0 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</div>';
   html += '<div style="text-align:center;font-size:11px;color:#6b7280;padding-bottom:8px">（附加税费情况表）</div>';
 
-  html += '<div style="overflow-x:auto"><table class="vat-form-table" style="font-size:10px">';
+  html += '<div style="overflow-x:auto"><table class="vat-form-table sch5-compact" style="font-size:10px">';
   html += '<colgroup>';
-  for (var i = 0; i < 16; i++) html += '<col>';
+  html += '<col style="width:70px">';   // 税种名称
+  html += '<col style="width:22px">';   // 序号
+  html += '<col style="width:58px">';   // 1:增值税税额
+  html += '<col style="width:50px">';   // 2:免抵税额
+  html += '<col style="width:52px">';   // 3:留抵退税扣除
+  html += '<col style="width:18px">';   // 税率(左半)
+  html += '<col style="width:18px">';   // 税率(右半)
+  html += '<col style="width:62px">';   // 5:应纳税额
+  html += '<col style="width:52px">';   // 6:减免代码
+  html += '<col style="width:52px">';   // 7:减免税额
+  html += '<col style="width:22px">';   // 8:减征比例%
+  html += '<col style="width:52px">';   // 9:减征额
+  html += '<col style="width:52px">';   // 10:试点代码
+  html += '<col style="width:45px">';   // 11:抵免金额
+  html += '<col style="width:48px">';   // 12:已缴
+  html += '<col style="width:56px">';   // 13:应补退
   html += '</colgroup><thead>';
 
   // 小微企业六税两费减免政策信息
@@ -2084,41 +2099,41 @@ function renderSchedule5(data) {
   var re = fmtDate(data.reduction_end);
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="6" rowspan="2" style="text-align:left;padding-left:4px">本期是否适用小微企业"六税两费" 减免政策</td>';
-  html += '<td colspan="2" rowspan="2">' + microYes + '是　' + microNo + '否</td>';
+  html += '<td colspan="2" rowspan="2" style="white-space:nowrap">' + microYes + '是　' + microNo + '否</td>';
   html += '<td colspan="3">减免政策适用主体</td>';
-  html += '<td colspan="5">' +主体个体 + '个体工商户　' +主体小型 + '小型微利企业</td>';
+  html += '<td colspan="5" style="white-space:nowrap">' +主体个体 + '个体工商户　' +主体小型 + '小型微利企业</td>';
   html += '</tr>';
   html += '<tr style="background:#d9e2f3">';
   html += '<td colspan="3">适用减免政策起止时间</td>';
-  html += '<td colspan="5">' + (rs || '　　　年　月　日') + ' 至 ' + (re || '　　　年　月　日') + '</td>';
+  html += '<td colspan="5" style="white-space:nowrap">' + (rs || '　　　年　月　日') + ' 至 ' + (re || '　　　年　月　日') + '</td>';
   html += '</tr>';
 
-  // 表头
+  // 表头 — 三层，缩简文字避免挤压
   html += '<tr style="background:#d9e2f3">';
-  html += '<th colspan="2" rowspan="3">税（费）种</th>';
-  html += '<th colspan="3">计税（费）依据</th>';
-  html += '<th colspan="2" rowspan="2">税（费）<br>率（%）</th>';
-  html += '<th rowspan="2">本期应纳税<br>（费）额</th>';
-  html += '<th colspan="2">本期减免税<br>（费）额</th>';
-  html += '<th colspan="2">小微企业"六税两费"<br>减免政策</th>';
-  html += '<th colspan="2">试点建设培育<br>产教融合型企业</th>';
-  html += '<th rowspan="2">本期已缴<br>税（费）额</th>';
-  html += '<th rowspan="2">本期应补（退）<br>税（费）额</th>';
+  html += '<th colspan="2" rowspan="3">税种</th>';
+  html += '<th colspan="3">计税依据</th>';
+  html += '<th colspan="2" rowspan="2">税率<br>（%）</th>';
+  html += '<th rowspan="2">应纳税<br>（费）额</th>';
+  html += '<th colspan="2">减免税<br>（费）额</th>';
+  html += '<th colspan="2">六税两费<br>减免</th>';
+  html += '<th colspan="2">产教融合<br>抵免</th>';
+  html += '<th rowspan="2">已缴<br>税额</th>';
+  html += '<th rowspan="2">应补<br>（退）</th>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
-  html += '<th>增值税税额</th><th>增值税<br>免抵税额</th><th>留抵退税<br>本期扣除额</th>';
-  html += '<th>减免性质<br>代码</th><th>减免税<br>（费）额</th>';
-  html += '<th>减征比例<br>（%）</th><th>减征额</th>';
-  html += '<th>减免性质<br>代码</th><th>本期抵免<br>金额</th>';
+  html += '<tr style="background:#d9e2f3;font-size:9px">';
+  html += '<th>增值税额</th><th>免抵额</th><th>留抵退税<br>扣除额</th>';
+  html += '<th>减免代码</th><th>减免额</th>';
+  html += '<th>减征<br>比例%</th><th>减征额</th>';
+  html += '<th>减免代码</th><th>抵免额</th>';
   html += '</tr>';
-  html += '<tr style="background:#e8edf5;font-size:9px">';
-  html += '<th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th>';
-  html += '<th colspan="2" style="text-align:center">4</th>';
-  html += '<th style="text-align:center;font-size:9px">5=（1+2-3）×4</th>';
-  html += '<th style="text-align:center">6</th><th style="text-align:center">7</th>';
-  html += '<th style="text-align:center">8</th><th style="text-align:center;font-size:9px">9=（5-7）×8</th>';
-  html += '<th style="text-align:center">10</th><th style="text-align:center">11</th>';
-  html += '<th style="text-align:center">12</th><th style="text-align:center;font-size:9px">13=5-7-9-11-12</th>';
+  html += '<tr style="background:#e8edf5;font-size:8px">';
+  html += '<th>1</th><th>2</th><th>3</th>';
+  html += '<th colspan="2">4</th>';
+  html += '<th title="5=(1+2-3)×4">5=(1+2-3)×4</th>';
+  html += '<th>6</th><th>7</th>';
+  html += '<th>8</th><th title="9=(5-7)×8">9=(5-7)×8</th>';
+  html += '<th>10</th><th>11</th>';
+  html += '<th>12</th><th title="13=5-7-9-11-12">13=5-7-9-11-12</th>';
   html += '</tr></thead><tbody>';
 
   // 数据行生成函数
@@ -2159,39 +2174,39 @@ function renderSchedule5(data) {
   html += surRow('合计', 4, 'total', true);
   html += '</tbody>';
 
-  // 产教融合 & 留抵退税 基本不变（只是占位展示）
-  html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="5" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
-  html += '<td colspan="2" rowspan="3">□是<br>□否</td>';
-  html += '<td colspan="6">当期新增投资额</td>';
-  html += '<td style="text-align:center">5</td>';
-  html += '<td colspan="2" class="num"></td>';
+  // 产教融合 & 留抵退税 — 紧凑占位
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
+  html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
+  html += '<td colspan="2" rowspan="3" style="text-align:center">□是 / □否</td>';
+  html += '<td colspan="5">当期新增投资额</td>';
+  html += '<td style="text-align:center;font-size:10px">5</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="6">上期留抵可抵免金额</td>';
-  html += '<td style="text-align:center">6</td>';
-  html += '<td colspan="2" class="num"></td>';
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
+  html += '<td colspan="5">上期留抵可抵免金额</td>';
+  html += '<td style="text-align:center;font-size:10px">6</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="6">结转下期可抵免金额</td>';
-  html += '<td style="text-align:center">7</td>';
-  html += '<td colspan="2" class="num"></td>';
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
+  html += '<td colspan="5">结转下期可抵免金额</td>';
+  html += '<td style="text-align:center;font-size:10px">7</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
   html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">可用于扣除的增值税留抵退税额使用情况</td>';
-  html += '<td colspan="6">当期新增可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">8</td>';
-  html += '<td colspan="2" class="num"></td>';
+  html += '<td colspan="7">当期新增可用于扣除的留抵退税额</td>';
+  html += '<td style="text-align:center;font-size:10px">8</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="6">上期结存可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">9</td>';
-  html += '<td colspan="2" class="num"></td>';
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
+  html += '<td colspan="7">上期结存可用于扣除的留抵退税额</td>';
+  html += '<td style="text-align:center;font-size:10px">9</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
-  html += '<tr style="background:#d9e2f3">';
-  html += '<td colspan="6">结转下期可用于扣除的留抵退税额</td>';
-  html += '<td style="text-align:center">10</td>';
-  html += '<td colspan="2" class="num"></td>';
+  html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
+  html += '<td colspan="7">结转下期可用于扣除的留抵退税额</td>';
+  html += '<td style="text-align:center;font-size:10px">10</td>';
+  html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
 
   html += '</table></div>';
