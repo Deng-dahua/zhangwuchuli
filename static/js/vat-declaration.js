@@ -2097,8 +2097,10 @@ function renderSchedule5(data) {
   html += '<td style="'+B+';'+P+';width:30%">'+zt+'</td>';
   html += '</tr>';
   html += '<tr>';
-  html += '<td style="'+B+';'+P+'">适用减免政策起止时间</td>';
-  html += '<td colspan="3" style="'+B+';'+P+'">'+(rs||'　　年　月　日')+' 至 '+(re||'　　年　月　日')+'</td>';
+  html += '<td style="'+B+';'+P+';width:38%">适用减免政策起止时间</td>';
+  html += '<td style="'+B+';'+P+';width:16%">'+(rs||'　　年　月　日')+'</td>';
+  html += '<td style="'+B+';'+P+';width:16%;text-align:center">至</td>';
+  html += '<td style="'+B+';'+P+';width:30%">'+(re||'　　年　月　日')+'</td>';
   html += '</tr>';
   html += '</table>';
 
