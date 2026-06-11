@@ -2069,7 +2069,26 @@ function renderSchedule5(data) {
 
   var html = '';
 
-  // ===== 表格 =====
+  // ===== 顶部区域（标题+小微企业政策） =====
+  html += '<div style="max-width:1170px;margin:0 auto 8px">';
+  // 标题
+  html += '<div style="text-align:center;font-size:16px;font-weight:700;padding:4px 0 0">增值税及附加税费申报表（一般纳税人适用）</div>';
+  html += '<div style="text-align:center;font-size:14px;font-weight:600;padding:2px 0 6px">附列资料（五）（附加税费情况表）</div>';
+  // 小微企业政策 — 独立小表格
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fefce8;border:1px solid #a0a0a0">';
+  html += '<tr>';
+  html += '<td style="'+B+';'+P+';width:38%">本期是否适用小微企业"六税两费"减免政策</td>';
+  html += '<td style="'+B+';'+P+';width:16%;text-align:center">'+microYes+'是　'+ (microYes=='☑'?'□':'□') +'否</td>';
+  html += '<td style="'+B+';'+P+';width:16%">减免政策适用主体</td>';
+  html += '<td style="'+B+';'+P+';width:30%">'+zt+'</td>';
+  html += '</tr>';
+  html += '<tr>';
+  html += '<td style="'+B+';'+P+'">适用减免政策起止时间</td>';
+  html += '<td colspan="3" style="'+B+';'+P+'">'+(rs||'　　年　月　日')+' 至 '+(re||'　　年　月　日')+'</td>';
+  html += '</tr>';
+  html += '</table></div>';
+
+  // ===== 主表格 =====
   html += '<div style="overflow-x:auto">';
   html += '<style>.sch5-table td,.sch5-table th{overflow:hidden;text-overflow:ellipsis}</style>';
   html += '<table class="vat-form-table sch5-table" style="'+T+';font-size:11px;border-collapse:collapse;border:1px solid #a0a0a0">';
@@ -2090,25 +2109,6 @@ function renderSchedule5(data) {
   html += '<col style="width:146px">';  // 16 应补退
   html += '</colgroup>';
   // verify: 90+30+62+62+62+30+50+115+60+68+70+90+60+65+110+146 = 1170
-
-  // ===== Row 1: 标题 =====
-  html += '<tr><td colspan="16" style="'+B+';text-align:center;font-size:14px;font-weight:700;padding:8px 4px 2px">增值税及附加税费申报表（一般纳税人适用）附列资料（五）</td></tr>';
-  // ===== Row 2: 副标题 =====
-  html += '<tr><td colspan="16" style="'+B+';text-align:center;font-size:12px;color:#374151;padding:0 4px 8px">（附加税费情况表）</td></tr>';
-
-  // ===== Row 3: 小微企业政策第1行 =====
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="6" rowspan="2" style="'+B+';'+P+';text-align:left">本期是否适用小微企业"六税两费"减免政策</td>';
-  html += '<td colspan="2" rowspan="2" style="'+B+';'+P+';text-align:center">'+microYes+'是　'+ (microYes=='☑'?'□':'□') +'否</td>';
-  html += '<td colspan="3" style="'+B+';'+P+';text-align:left">减免政策适用主体</td>';
-  html += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+zt+'</td>';
-  html += '</tr>';
-
-  // ===== Row 4: 小微企业政策第2行 =====
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="3" style="'+B+';'+P+';text-align:left">适用减免政策起止时间</td>';
-  html += '<td colspan="5" style="'+B+';'+P+';text-align:left">'+(rs||'　　年　月　日')+' 至 '+(re||'　　年　月　日')+'</td>';
-  html += '</tr>';
 
   // ===== thead: 表头3行 =====
   html += '<thead>';
