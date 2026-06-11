@@ -207,6 +207,9 @@ def get_declaration(declaration_id: int, company_id: int = Query(), db: Session 
     if not decl:
         raise HTTPException(404, "申报记录不存在")
 
+    # ★ YTD 跨期累加
+    _ccf_aggregate_ytd(decl, db, company_id)
+
     # ★ 从ORM列重建 form_main（确保所有字段完整），再统一重算公式栏次
     decl.form_main = json.dumps(_ccf_build_form_main_from_db(decl), ensure_ascii=False)
     _ccf_recompute(decl, db)
@@ -449,7 +452,12 @@ def _ccf_recompute(decl, db=None):
     """
     period = decl.period or ''
     period_year = int(period[:4]) if period else 0
+    period_month = int(period[5:7]) if len(period) >= 7 else 0
     rate = float(decl.row9_fee_rate or 0.03)
+
+    # 减半征收判断：财税〔2019〕46号（2019.7-2024.12）+ 财税〔2025〕7号（2025+）
+    # 2019年仅7月及以后减半，2020年起全年减半
+    _halving = period_year > 2019 or (period_year == 2019 and period_month >= 7)
 
     # 辅助：安全取 float（SQLAlchemy 可能返回 Decimal，不能直接和 float 运算）
     def _f(v): return float(v or 0)
@@ -467,9 +475,9 @@ def _ccf_recompute(decl, db=None):
         _f(decl.row1_taxable_income_current)
         - _f(decl.row5_taxable_income_deduction_current), 2
     )
-    # 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号）
+    # 栏次10 = 8×9 × 50%（减半征收）
     fee = _f(decl.row8_taxable_sales_current) * rate
-    if period_year >= 2025:
+    if _halving:
         fee = fee * 0.5
     decl.row10_payable_fee_current = round(fee, 2)
     # 栏次12 = 13+14+15
@@ -508,7 +516,7 @@ def _ccf_recompute(decl, db=None):
         - _f(decl.row5_taxable_income_deduction_ytd), 2
     )
     fee_ytd = _f(decl.row8_taxable_sales_ytd) * rate
-    if period_year >= 2025:
+    if _halving:
         fee_ytd = fee_ytd * 0.5
     decl.row10_payable_fee_ytd = round(fee_ytd, 2)
     decl.row12_paid_current_period_ytd = round(
@@ -547,6 +555,61 @@ def _ccf_recompute(decl, db=None):
     return decl
 
 
+# ==================== YTD 跨期累加（helper） ====================
+
+def _ccf_aggregate_ytd(decl, db, company_id):
+    """
+    YTD 跨期累加：取本年1月至当前月所有申报表，
+    把本月数累加到本年累计。参照 vat.py 的 YTD 逻辑。
+    """
+    if not decl.period or len(decl.period) < 7:
+        return
+    try:
+        year = int(decl.period[:4])
+        month = int(decl.period[5:7])
+        # 需要累加的输入栏次（不含公式栏次）
+        ytd_fields = [
+            "row1_taxable_income",
+            "row2_tax_exempt_income",
+            "row4_deduction_current_period",
+            "row5_taxable_income_deduction",
+            "row6_tax_exempt_deduction",
+            "row13_prepaid",
+            "row14_paid_last_period",
+            "row15_paid_arrears",
+            "row19_inspected_supplement",
+        ]
+        # 历史各月（不含当前月）
+        hist_periods = [f"{year}-{m:02d}" for m in range(1, month)]
+        hist_decls = db.query(CulturalConstructionFeeDeclaration).filter(
+            CulturalConstructionFeeDeclaration.company_id == company_id,
+            CulturalConstructionFeeDeclaration.period.in_(hist_periods),
+        ).all() if hist_periods else []
+        def _f2(v): return float(v or 0)
+        ytd_sums = {f: 0.0 for f in ytd_fields}
+        for d in hist_decls:
+            for f in ytd_fields:
+                ytd_sums[f] += _f2(getattr(d, f + "_current", 0))
+        # 写回当前 decl 的 _ytd 列：YTD = 历史合计 + 本月数
+        for f in ytd_fields:
+            current_val = _f2(getattr(decl, f + "_current", 0))
+            ytd_val = round(ytd_sums[f] + current_val, 2)
+            orm_key = f + "_ytd"
+            if hasattr(decl, orm_key):
+                setattr(decl, orm_key, ytd_val)
+        # 余额类栏次：YTD = 本月余额（不累加）
+        for f in ["row3_deduction_beginning", "row11_unpaid_beginning"]:
+            v = _f2(getattr(decl, f + "_current", 0))
+            orm_key = f + "_ytd"
+            if hasattr(decl, orm_key):
+                setattr(decl, orm_key, v)
+        # row9 费率：YTD = 本月费率
+        decl.row9_fee_rate = _f2(getattr(decl, "row9_fee_rate", 0.03)) or 0.03
+    except Exception as e:
+        print(f"[CCF YTD] error: {e}")
+        import traceback; traceback.print_exc()
+
+
 # ==================== 自动计算 ====================
 
 @router.post("/declarations/{declaration_id}/auto-calculate")
@@ -558,6 +621,9 @@ def auto_calculate(declaration_id: int, company_id: int = Query(), db: Session =
     ).first()
     if not decl:
         raise HTTPException(404, "申报记录不存在")
+
+    # ★ YTD 跨期累加
+    _ccf_aggregate_ytd(decl, db, company_id)
 
     _ccf_recompute(decl, db)
     decl.updated_at = datetime.now()

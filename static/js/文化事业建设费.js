@@ -401,11 +401,8 @@ function renderCCFMainForm(data, main) {
     h += row.label;
     if (row.calc) h += ' <span style="color:#9ca3af;font-size:10px">（' + row.calc + '）</span>';
     if (row.key === 'row10_payable_fee' && _ccfIsReductionActive(data)) {
-      if (_ccfNeedsPolicyReview(data)) {
-        h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）<br><span style="color:#d97706">⚠ 2028年起需确认政策是否延续</span></span>';
-      } else {
-        h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">减半征收（财税〔2025〕7号）</span>';
-      }
+      var _pol = _ccfReductionPolicy(data);
+      h += ' <span style="color:#e53e3e;font-size:10px;font-weight:600">' + _pol + '</span>';
     }
     h += '</td>';
     // 第三列：栏次
@@ -538,11 +535,16 @@ function ccfOnMainChange() {
 // ==================== 减半征收判断 ====================
 
 function _ccfIsReductionActive(data) {
-  // 财税〔2025〕7号：2025.1.1 起减半征收，无截止日期（到期需确认续期）
+  // 财税〔2019〕46号（2019.7-2024.12）+ 财税〔2025〕7号（2025+）：连续减半征收
+  // 2019年仅7月及以后减半，2020年起全年减半
   if (!data || !data.period) return true;
-  var y = parseInt((data.period || '').substring(0, 4));
+  var period = data.period || '';
+  var y = parseInt(period.substring(0, 4));
+  var m = parseInt(period.substring(5, 7));
   if (isNaN(y)) return true;
-  return y >= 2025; // 不限截止，2028+ 需确认政策延续
+  if (y > 2019) return true;
+  if (y === 2019 && m >= 7) return true;
+  return false;
 }
 
 function _ccfNeedsPolicyReview(data) {
@@ -551,6 +553,19 @@ function _ccfNeedsPolicyReview(data) {
   var y = parseInt((data.period || '').substring(0, 4));
   if (isNaN(y)) return false;
   return y >= 2028;
+}
+
+function _ccfReductionPolicy(data) {
+  // 返回减半征收政策标注文字
+  var period = data ? (data.period || '') : '';
+  var y = parseInt(period.substring(0, 4));
+  if (isNaN(y)) y = 0;
+  // 财税〔2019〕46号：2019.7 - 2024.12；财税〔2025〕7号：2025+
+  var base = (y >= 2019 && y <= 2024) ? '减半征收（财税〔2019〕46号）' : '减半征收（财税〔2025〕7号）';
+  if (_ccfNeedsPolicyReview(data)) {
+    base += '<br><span style="color:#d97706">⚠ 2028年起需确认政策是否延续</span>';
+  }
+  return base;
 }
 
 // ==================== 扣除项目操作 ====================
