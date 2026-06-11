@@ -697,6 +697,19 @@ async function handleVatFileImport(event) {
     if (!resp.ok) throw new Error(result.detail || '导入失败');
 
     toast('申报表导入成功', 'success');
+    // 显示调试信息
+    if (result.debug) {
+      const d = result.debug;
+      let msg = `期间: ${d.period || '未识别'}\n`;
+      msg += `表格数: ${d.sheets_count}\n`;
+      msg += `主表: ${d.form_main_parsed ? '已解析' : '未解析'}\n`;
+      msg += `附列一: ${d.form_sales_parsed ? '已解析' : '未解析'}\n`;
+      msg += `附列二: ${d.form_input_parsed ? '已解析' : '未解析'}`;
+      if (!d.form_main_parsed) {
+        msg += '\n\n主表未解析，可能原因：\n1. PDF是扫描版\n2. 表格格式不标准\n建议：请从电子税务局下载Excel版本导入';
+      }
+      alert(msg);
+    }
     // 刷新申报表列表
     await loadVATDeclarationList();
     // 如果返回了declaration_id，自动选中

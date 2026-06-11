@@ -461,11 +461,25 @@ async def import_vat_declaration(
         
         db.commit()
         
+        # 调试信息
+        debug = {
+            "sheets_count": len(sheets),
+            "period": period,
+            "form_main_parsed": bool(form_main),
+            "form_sales_parsed": bool(form_sales),
+            "form_input_parsed": bool(form_input),
+            "form_deduction_parsed": bool(form_deduction),
+            "form_credit_parsed": bool(form_credit),
+            "form_surcharge_parsed": bool(form_surcharge),
+            "form_reduction_parsed": bool(form_reduction),
+        }
+        
         return {
             "success": True,
             "message": "申报表导入成功",
             "declaration_id": decl.id,
-            "period": decl.period
+            "period": decl.period,
+            "debug": debug
         }
     except Exception as e:
         import traceback
