@@ -492,8 +492,8 @@
       background: #fef9c4; outline: 1px solid #1a56db; outline-offset: -1px;
     }
 
-    /* 附表五专用 — 紧凑布局 + 固定列宽 */
-    .vat-form-table.sch5-compact { table-layout: fixed; }
+    /* 附表五专用 — 紧凑布局，min-width 防压缩 */
+    .vat-form-table.sch5-compact { table-layout: auto; min-width: 700px; }
     .vat-form-table.sch5-compact thead th {
       padding: 4px 3px; font-size: 9px; line-height: 1.2;
     }

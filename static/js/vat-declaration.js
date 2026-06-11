@@ -2172,9 +2172,9 @@ function renderSchedule5(data) {
   html += surRow('教育费附加', 2, 'edu');
   html += surRow('地方教育附加', 3, 'local_edu');
   html += surRow('合计', 4, 'total', true);
-  html += '</tbody>';
 
   // 产教融合 & 留抵退税 — 紧凑占位
+  html += '<tbody style="border-top:1px solid #d1d5db">';
   html += '<tr style="background:#d9e2f3;font-size:10px;height:26px">';
   html += '<td colspan="7" rowspan="3" style="text-align:left;padding-left:4px">本期是否适用试点建设培育产教融合型企业抵免政策</td>';
   html += '<td colspan="2" rowspan="3" style="text-align:center">□是 / □否</td>';
@@ -2208,6 +2208,7 @@ function renderSchedule5(data) {
   html += '<td style="text-align:center;font-size:10px">10</td>';
   html += '<td style="text-align:center;font-size:10px"></td>';
   html += '</tr>';
+  html += '</tbody>';
 
   html += '</table></div>';
   return html;
