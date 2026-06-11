@@ -207,7 +207,8 @@ def get_declaration(declaration_id: int, company_id: int = Query(), db: Session 
     if not decl:
         raise HTTPException(404, "申报记录不存在")
 
-    # ★ 统一重新计算所有公式栏次，确保返回的数据永远正确
+    # ★ 从ORM列重建 form_main（确保所有字段完整），再统一重算公式栏次
+    decl.form_main = json.dumps(_ccf_build_form_main_from_db(decl), ensure_ascii=False)
     _ccf_recompute(decl, db)
     decl.updated_at = datetime.now()
     db.commit()
@@ -450,88 +451,84 @@ def _ccf_recompute(decl, db=None):
     period_year = int(period[:4]) if period else 0
     rate = float(decl.row9_fee_rate or 0.03)
 
+    # 辅助：安全取 float（SQLAlchemy 可能返回 Decimal，不能直接和 float 运算）
+    def _f(v): return float(v or 0)
+
     # ---- 本月数 ----
     # 栏次7 = 3+4-5-6
     decl.row7_deduction_ending_balance_current = round(
-        (decl.row3_deduction_beginning_current or 0)
-        + (decl.row4_deduction_current_period_current or 0)
-        - (decl.row5_taxable_income_deduction_current or 0)
-        - (decl.row6_tax_exempt_deduction_current or 0), 2
+        _f(decl.row3_deduction_beginning_current)
+        + _f(decl.row4_deduction_current_period_current)
+        - _f(decl.row5_taxable_income_deduction_current)
+        - _f(decl.row6_tax_exempt_deduction_current), 2
     )
     # 栏次8 = 1-5
     decl.row8_taxable_sales_current = round(
-        (decl.row1_taxable_income_current or 0)
-        - (decl.row5_taxable_income_deduction_current or 0), 2
+        _f(decl.row1_taxable_income_current)
+        - _f(decl.row5_taxable_income_deduction_current), 2
     )
     # 栏次10 = 8×9 × 50%（减半征收，财税〔2025〕7号）
-    fee = (decl.row8_taxable_sales_current or 0) * rate
+    fee = _f(decl.row8_taxable_sales_current) * rate
     if period_year >= 2025:
         fee = fee * 0.5
     decl.row10_payable_fee_current = round(fee, 2)
     # 栏次12 = 13+14+15
     decl.row12_paid_current_period_current = round(
-        (decl.row13_prepaid_current or 0)
-        + (decl.row14_paid_last_period_current or 0)
-        + (decl.row15_paid_arrears_current or 0), 2
+        _f(decl.row13_prepaid_current)
+        + _f(decl.row14_paid_last_period_current)
+        + _f(decl.row15_paid_arrears_current), 2
     )
     # 栏次16 = 10+11-12
     decl.row16_unpaid_ending_current = round(
-        (decl.row10_payable_fee_current or 0)
-        + (decl.row11_unpaid_beginning_current or 0)
-        - (decl.row12_paid_current_period_current or 0), 2
+        _f(decl.row10_payable_fee_current)
+        + _f(decl.row11_unpaid_beginning_current)
+        - _f(decl.row12_paid_current_period_current), 2
     )
     # 栏次17 = 11-14-15
     decl.row17_arrears_current = round(
-        (decl.row11_unpaid_beginning_current or 0)
-        - (decl.row14_paid_last_period_current or 0)
-        - (decl.row15_paid_arrears_current or 0), 2
+        _f(decl.row11_unpaid_beginning_current)
+        - _f(decl.row14_paid_last_period_current)
+        - _f(decl.row15_paid_arrears_current), 2
     )
     # 栏次18 = 10-13
     decl.row18_fill_refund_current = round(
-        (decl.row10_payable_fee_current or 0)
-        - (decl.row13_prepaid_current or 0), 2
+        _f(decl.row10_payable_fee_current)
+        - _f(decl.row13_prepaid_current), 2
     )
 
     # ---- 本年累计（同公式）----
-    # 栏次7_ytd
     decl.row7_deduction_ending_balance_ytd = round(
-        (decl.row3_deduction_beginning_ytd or 0)
-        + (decl.row4_deduction_current_period_ytd or 0)
-        - (decl.row5_taxable_income_deduction_ytd or 0)
-        - (decl.row6_tax_exempt_deduction_ytd or 0), 2
+        _f(decl.row3_deduction_beginning_ytd)
+        + _f(decl.row4_deduction_current_period_ytd)
+        - _f(decl.row5_taxable_income_deduction_ytd)
+        - _f(decl.row6_tax_exempt_deduction_ytd), 2
     )
-    # 栏次8_ytd
     decl.row8_taxable_sales_ytd = round(
-        (decl.row1_taxable_income_ytd or 0)
-        - (decl.row5_taxable_income_deduction_ytd or 0), 2
+        _f(decl.row1_taxable_income_ytd)
+        - _f(decl.row5_taxable_income_deduction_ytd), 2
     )
-    # 栏次10_ytd
-    fee_ytd = (decl.row8_taxable_sales_ytd or 0) * rate
+    fee_ytd = _f(decl.row8_taxable_sales_ytd) * rate
     if period_year >= 2025:
         fee_ytd = fee_ytd * 0.5
     decl.row10_payable_fee_ytd = round(fee_ytd, 2)
-    # 栏次12_ytd
     decl.row12_paid_current_period_ytd = round(
-        (decl.row13_prepaid_ytd or 0)
-        + (decl.row14_paid_last_period_ytd or 0)
-        + (decl.row15_paid_arrears_ytd or 0), 2
+        _f(decl.row13_prepaid_ytd)
+        + _f(decl.row14_paid_last_period_ytd)
+        + _f(decl.row15_paid_arrears_ytd), 2
     )
-    # 栏次16_ytd
     decl.row16_unpaid_ending_ytd = round(
-        (decl.row10_payable_fee_ytd or 0)
-        + (decl.row11_unpaid_beginning_ytd or 0)
-        - (decl.row12_paid_current_period_ytd or 0), 2
+        _f(decl.row10_payable_fee_ytd)
+        + _f(decl.row11_unpaid_beginning_ytd)
+        - _f(decl.row12_paid_current_period_ytd), 2
     )
-    # 栏次17_ytd
     decl.row17_arrears_ytd = round(
-        (decl.row11_unpaid_beginning_ytd or 0)
-        - (decl.row14_paid_last_period_ytd or 0)
-        - (decl.row15_paid_arrears_ytd or 0), 2
+        _f(decl.row11_unpaid_beginning_ytd)
+        - _f(decl.row14_paid_last_period_ytd)
+        - _f(decl.row15_paid_arrears_ytd), 2
     )
-    # 栏次18_ytd
     decl.row18_fill_refund_ytd = round(
-        (decl.row10_payable_fee_ytd or 0)
-        - (decl.row13_prepaid_ytd or 0), 2
+        _f(decl.row10_payable_fee_ytd)
+        - _f(decl.row13_prepaid_ytd), 2
     )
 
     # ---- 同步写回 form_main JSON ----
@@ -539,14 +536,13 @@ def _ccf_recompute(decl, db=None):
         fm = json.loads(decl.form_main) if isinstance(decl.form_main, str) else (decl.form_main or {})
     except Exception:
         fm = {}
-    # 本月数
     for key in ['row7_deduction_ending_balance', 'row8_taxable_sales',
                 'row10_payable_fee', 'row12_paid_current_period',
                 'row16_unpaid_ending', 'row17_arrears', 'row18_fill_refund']:
         orm_key_cur = key + '_current'
         orm_key_ytd = key + '_ytd'
-        fm[orm_key_cur] = getattr(decl, orm_key_cur, 0)
-        fm[orm_key_ytd] = getattr(decl, orm_key_ytd, 0)
+        fm[orm_key_cur] = float(getattr(decl, orm_key_cur, 0) or 0)
+        fm[orm_key_ytd] = float(getattr(decl, orm_key_ytd, 0) or 0)
     decl.form_main = json.dumps(fm, ensure_ascii=False)
     return decl
 
