@@ -499,6 +499,11 @@ async function openVATDetailInline(id) {
   }
   try {
     const data = await api('/api/vat/declarations/' + id);
+    // 调试：打印从后端加载的数据
+    var _dbg = 'openVATDetailInline: id=' + id + ' vatActivePage=' + vatActivePage;
+    if (data.form_sales) _dbg += ' | form_sales字段数=' + Object.keys(data.form_sales).length;
+    if (data.form_reduction) _dbg += ' | form_reduction字段数=' + Object.keys(data.form_reduction).length;
+    console.log(_dbg, data);
     // 将完整数据合入缓存
     const idx = vatDeclarations.findIndex(d => d.id === id);
     if (idx >= 0) vatDeclarations[idx] = data;
@@ -972,7 +977,16 @@ async function vatSaveManualData() {
     return;
   }
   try {
+    // 切换页签前先同步当前页DOM数据到缓存，防止数据丢失
+    vatSyncCurrentPageToCache();
     var allFormData = vatCollectFormData();
+    // 调试日志：保存前打印各表数据条数
+    var debugMsg = 'vatSave: vatActivePage=' + vatActivePage;
+    for (var _fk in allFormData) {
+      var _keys = Object.keys(allFormData[_fk] || {});
+      debugMsg += ' | ' + _fk + '=' + _keys.length + '个字段';
+    }
+    console.log(debugMsg, allFormData);
     var resp = await fetch('/api/vat/declarations/' + vatCurrentData.id + '?company_id=' + (currentCompanyId || 1), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
