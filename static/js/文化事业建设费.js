@@ -287,6 +287,9 @@ function renderCCFTemplateViewInline(data) {
 
   container.innerHTML = html + '<div style="overflow-x:auto;padding:12px 0">' + formHtml + '</div>';
 
+  // 渲染完成后触发一次计算，确保减半征收和本年累计公式生效
+  if (ccfActivePage === 'main') setTimeout(function() { ccfOnMainChange(); }, 50);
+
   if (ccfInlineDisplayId !== data.id) {
     ccfInlineDisplayId = data.id;
   }
