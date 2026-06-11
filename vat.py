@@ -43,6 +43,193 @@ def _end_of_month(period: str) -> str:
     last_day = calendar.monthrange(int(y), int(m))[1]
     return f"{y}-{m}-{last_day:02d}"
 
+
+def _to_num(val):
+    """安全转数值"""
+    if val is None:
+        return 0
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        s = str(val).replace(",", "").replace("，", "").replace(" ", "").replace("　", "")
+        if s in ("", "-", "—", "——", "无", "零"):
+            return 0
+        return float(s)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _clean_text(s):
+    """清理文本，去除空格和特殊字符"""
+    return str(s).replace(" ", "").replace("　", "").replace("\n", "").replace("\r", "").replace("（", "(").replace("）", ")")
+
+
+def _parse_vat_main_form(data_2d):
+    """
+    把增值税申报表主表的 2D 数组解析成结构化对象。
+    主表列布局：A=项目说明, B=一般项目本月数, C=一般项目本年累计, D=即征即退本月数, E=即征即退本年累计
+    
+    返回: {row1_sales: xxx, row1_sales_ytd: yyy, _raw: [[...]], _taxpayer_name: ..., _taxpayer_id: ...}
+    """
+    import re
+    
+    if not data_2d or not isinstance(data_2d, list):
+        return {}
+    
+    result = {}
+    
+    # ===== 提取纳税人信息（前10行扫描） =====
+    for row in data_2d[:10]:
+        if not row or not row[0]:
+            continue
+        key = str(row[0]).strip() if row[0] else ""
+        val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+        # 也可能在其他列
+        if not val and len(row) > 2:
+            val = str(row[2]).strip() if row[2] else ""
+        if "纳税人名称" in key and val:
+            result["_taxpayer_name"] = val
+        elif ("纳税人识别号" in key or "统一社会信用代码" in key) and val:
+            result["_taxpayer_id"] = val
+    
+    # ===== 关键字 → 字段映射 =====
+    # (关键字, 字段基名)
+    # 注意：顺序很重要，先匹配更精确的关键字
+    keyword_map = [
+        # 销售额
+        ("按适用税率计税销售额", "row1_sales"),
+        ("应税货物销售额", "row2_other_invoice"),
+        ("应税劳务销售额", "row3_no_invoice"),
+        # row4/row6 都是"纳税检查调整的销售额"，用计数器区分
+        ("按简易办法计税销售额", "row5_simple_method"),
+        ("免抵退办法出口销售额", "row7_export_exempt"),
+        ("免税销售额", "row8_tax_free"),
+        ("免税货物销售额", "row9_exempt_goods"),
+        ("免税劳务销售额", "row10_exempt_service"),
+        # 税款计算
+        ("销项税额", "row11_output_tax"),
+        ("进项税额", "row12_input_tax"),
+        ("上期留抵税额", "row13_prior_credit"),
+        ("进项税额转出", "row14_input_transfer_out"),
+        ("免抵退应退税额", "row15_exempt_refund"),
+        ("纳税检查应补缴税额", "row16_actual_deduct_by_item"),
+        ("应抵扣税额合计", "row17_total_deductible"),
+        ("实际抵扣税额", "row18_actual_deduct"),
+        ("应纳税额", "row19_tax_payable"),
+        ("期末留抵税额", "row20_end_credit"),
+        ("简易计税办法计算的应纳税额", "row21_simple_tax"),
+        ("按简易计税办法计算的纳税检查应补缴税额", "row22_simple_tax_reduction"),
+        ("应纳税额减征额", "row23_reduction"),
+        ("应纳税额合计", "row24_tax_payable_total"),
+        # 税款缴纳
+        ("期初未缴税额", "row25_prior_unpaid"),
+        ("专用缴款书退税额", "row26_real_paid_during"),
+        ("本期已缴税额", "row27_installment_prepaid"),
+        ("分次预缴税额", "row28_export_tax_refund"),
+        ("出口开具专用缴款书预缴税额", "row29_remote_prepaid"),
+        ("本期缴纳上期应纳税额", "row30_already_paid_total"),
+        ("本期缴纳欠缴税额", "row31_should_pay_refund"),
+        ("欠缴税额", "row33_check_prepaid"),
+        ("本期应补", "row34_should_check"),
+        ("即征即退实际退税额", "row35"),
+        ("期初未缴查补税额", "row36_prior_unpaid_check"),
+        ("本期入库查补税额", "row37_check_paid"),
+        ("期末未缴查补税额", "row38_end_check"),
+        # 附加税费
+        ("城市维护建设税本期应补", "row39_city_maintenance_tax"),
+        ("教育费附加本期应补", "row40_education_surcharge"),
+        ("地方教育附加本期应补", "row41"),
+    ]
+    
+    # 特殊计数器："纳税检查调整的销售额"出现两次
+    tax_check_count = 0
+    # "期末未缴税额"可能出现两次（不含查补 + 含查补），用前缀区分
+    unpaid_check_seen = False
+    
+    for row in data_2d:
+        if not row or not row[0]:
+            continue
+        cell_a = _clean_text(str(row[0]))
+        
+        matched_field = None
+        for keyword, field in keyword_map:
+            k = _clean_text(keyword)
+            if k not in cell_a:
+                continue
+            
+            # === 特殊处理 ===
+            # 1. "纳税检查调整的销售额"出现两次(row4=按适用税率下, row6=简易办法下)
+            if field == "row16_actual_deduct_by_item" and (
+                "简易计税办法" in cell_a or "简易办法" in cell_a
+            ):
+                continue  # 这实际是 row22，不是 row16
+            
+            if "纳税检查调整的销售额" in cell_a and "简易计税" not in cell_a and "简易办法" not in cell_a:
+                if tax_check_count == 0:
+                    matched_field = "row4_tax_check"
+                    tax_check_count += 1
+                elif tax_check_count == 1:
+                    # 第二个"纳税检查调整的销售额"，但属于简易办法下一行的缩进行
+                    # 如果 cell_a 前面有缩进，并且上一行是"按简易办法计税销售额"
+                    matched_field = "row6_exempt_sales"
+                    tax_check_count += 1
+                break
+            
+            # 2. "期末未缴税额"有两组
+            if field == "row32_check_tax_should":
+                continue  # 跳过"期末未缴税额"，后面会有更精确的
+            if "期末未缴税额" in cell_a and "查补" in cell_a:
+                matched_field = "row38_end_check"
+                break
+            if "期末未缴税额" in cell_a and "查补" not in cell_a and not unpaid_check_seen:
+                matched_field = "row32_check_tax_should"
+                unpaid_check_seen = True
+                break
+            
+            # 3. "欠缴税额"：如果有"查补"跳过
+            if field == "row33_check_prepaid" and "查补" in cell_a:
+                continue
+            
+            # 4. "应纳税额" 不要匹配到 "应纳税额合计" 或 "应纳税额减征额"
+            if field == "row19_tax_payable":
+                if "合计" in cell_a or "减征" in cell_a:
+                    continue
+            
+            # 5. "销项税额" 不要匹配到"进项税额转出"等
+            if field == "row11_output_tax" and "进项" in cell_a:
+                continue
+            
+            # 6. "进项税额" 不要匹配到"进项税额转出"
+            if field == "row12_input_tax" and "转出" in cell_a:
+                continue
+            
+            # 默认匹配
+            matched_field = field
+            break
+        
+        if matched_field:
+            if len(row) > 1:
+                result[matched_field] = _to_num(row[1])
+            if len(row) > 2:
+                result[matched_field + "_ytd"] = _to_num(row[2])
+            if len(row) > 3:
+                result[matched_field + "_refund"] = _to_num(row[3])
+            if len(row) > 4:
+                result[matched_field + "_refund_ytd"] = _to_num(row[4])
+    
+    return result
+
+
+def _parse_vat_schedule1(data_2d):
+    """附列资料一：本期销售情况明细 — 暂不自动解析，保留原始数据"""
+    return {}
+
+
+def _parse_vat_schedule2(data_2d):
+    """附列资料二：本期进项税额明细 — 暂不自动解析，保留原始数据"""
+    return {}
+
+
 router = APIRouter(prefix="/api/vat", tags=["增值税申报"])
 
 
@@ -211,19 +398,33 @@ async def import_vat_declaration(
         
         # 保存到数据库
         if form_main:
-            decl.form_main = json.dumps(form_main, ensure_ascii=False, default=str)
+            # 把 2D 数组解析成结构化对象（前端 renderMainForm 需要结构化字段）
+            parsed_main = _parse_vat_main_form(form_main)
+            parsed_main["_raw"] = form_main  # 保留原始数据供备查
+            decl.form_main = json.dumps(parsed_main, ensure_ascii=False, default=str)
+            # 同时填列纳税人信息
+            if parsed_main.get("_taxpayer_name") and not decl.taxpayer_name:
+                decl.taxpayer_name = parsed_main["_taxpayer_name"]
+            if parsed_main.get("_taxpayer_id") and not decl.taxpayer_id:
+                decl.taxpayer_id = parsed_main["_taxpayer_id"]
         if form_sales:
-            decl.form_sales = json.dumps(form_sales, ensure_ascii=False, default=str)
+            # 附列资料一：按关键字提取销项税额明细
+            parsed_sales = _parse_vat_schedule1(form_sales)
+            parsed_sales["_raw"] = form_sales
+            decl.form_sales = json.dumps(parsed_sales, ensure_ascii=False, default=str)
         if form_input:
-            decl.form_input = json.dumps(form_input, ensure_ascii=False, default=str)
+            # 附列资料二：按关键字提取进项税额明细
+            parsed_input = _parse_vat_schedule2(form_input)
+            parsed_input["_raw"] = form_input
+            decl.form_input = json.dumps(parsed_input, ensure_ascii=False, default=str)
         if form_deduction:
-            decl.form_deduction = json.dumps(form_deduction, ensure_ascii=False, default=str)
+            decl.form_deduction = json.dumps({"_raw": form_deduction}, ensure_ascii=False, default=str)
         if form_credit:
-            decl.form_credit = json.dumps(form_credit, ensure_ascii=False, default=str)
+            decl.form_credit = json.dumps({"_raw": form_credit}, ensure_ascii=False, default=str)
         if form_surcharge:
-            decl.form_surcharge = json.dumps(form_surcharge, ensure_ascii=False, default=str)
+            decl.form_surcharge = json.dumps({"_raw": form_surcharge}, ensure_ascii=False, default=str)
         if form_reduction:
-            decl.form_reduction = json.dumps(form_reduction, ensure_ascii=False, default=str)
+            decl.form_reduction = json.dumps({"_raw": form_reduction}, ensure_ascii=False, default=str)
         
         decl.status = "已导入"
         decl.updated_at = datetime.now()
