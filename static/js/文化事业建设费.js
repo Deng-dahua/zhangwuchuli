@@ -350,6 +350,9 @@ function ccfClearFilter() {
 // ==================== 主表渲染 ====================
 
 function renderCCFMainForm(data, main) {
+  // ⚠️ 渲染前预计算所有公式值（确保减半征收+本年累计始终正确）
+  _ccfPrecompute(main, data);
+  main = main || {};
   var h = '';
 
   // 标题
@@ -429,6 +432,37 @@ function renderCCFMainForm(data, main) {
   h += '</tbody></table>';
 
   return h;
+}
+
+// 渲染前预计算：将公式行的值强制重算，确保减半征收+本年累计永远正确
+function _ccfPrecompute(main, data) {
+  var m = main || {};
+  var rate = parseFloat(m.row9_fee_rate || 0.03);
+  var reduction = _ccfIsReductionActive(data);
+
+  function v(key) { return parseFloat(m[key] || 0); }
+
+  // ---- 本月数 ----
+  m.row7_deduction_ending_balance_current = +(v('row3_deduction_beginning_current') + v('row4_deduction_current_period') - v('row5_taxable_income_deduction_current') - v('row6_tax_exempt_deduction_current')).toFixed(2);
+  m.row8_taxable_sales_current = +(v('row1_taxable_income_current') - v('row5_taxable_income_deduction_current')).toFixed(2);
+  var feeCur = v('row8_taxable_sales_current') * rate;
+  if (reduction) feeCur = feeCur * 0.5;
+  m.row10_payable_fee_current = +feeCur.toFixed(2);
+  m.row12_paid_current_period_current = +(v('row13_prepaid_current') + v('row14_paid_last_period_current') + v('row15_paid_arrears_current')).toFixed(2);
+  m.row16_unpaid_ending_current = +(v('row10_payable_fee_current') + v('row11_unpaid_beginning_current') - v('row12_paid_current_period_current')).toFixed(2);
+  m.row17_arrears_current = +(v('row11_unpaid_beginning_current') - v('row14_paid_last_period_current') - v('row15_paid_arrears_current')).toFixed(2);
+  m.row18_fill_refund_current = +(v('row10_payable_fee_current') - v('row13_prepaid_current')).toFixed(2);
+
+  // ---- 本年累计 ----
+  m.row7_deduction_ending_balance_ytd = +(v('row3_deduction_beginning_ytd') + v('row4_deduction_current_period_ytd') - v('row5_taxable_income_deduction_ytd') - v('row6_tax_exempt_deduction_ytd')).toFixed(2);
+  m.row8_taxable_sales_ytd = +(v('row1_taxable_income_ytd') - v('row5_taxable_income_deduction_ytd')).toFixed(2);
+  var feeYtd = v('row8_taxable_sales_ytd') * rate;
+  if (reduction) feeYtd = feeYtd * 0.5;
+  m.row10_payable_fee_ytd = +feeYtd.toFixed(2);
+  m.row12_paid_current_period_ytd = +(v('row13_prepaid_ytd') + v('row14_paid_last_period_ytd') + v('row15_paid_arrears_ytd')).toFixed(2);
+  m.row16_unpaid_ending_ytd = +(v('row10_payable_fee_ytd') + v('row11_unpaid_beginning_ytd') - v('row12_paid_current_period_ytd')).toFixed(2);
+  m.row17_arrears_ytd = +(v('row11_unpaid_beginning_ytd') - v('row14_paid_last_period_ytd') - v('row15_paid_arrears_ytd')).toFixed(2);
+  m.row18_fill_refund_ytd = +(v('row10_payable_fee_ytd') - v('row13_prepaid_ytd')).toFixed(2);
 }
 
 function _ccfGetVal(main, key) {
