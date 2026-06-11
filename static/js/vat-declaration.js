@@ -661,7 +661,54 @@ function vatClearFilter() {
 }
 
 function vatImportFile() {
-  toast('请先通过侧边栏【开具发票】【取得发票】【进项抵扣】【银行流水】导入数据，系统会自动生成申报表', 'info');
+  // 创建文件输入元素
+  let fileInput = document.getElementById('vat-import-file-input');
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'vat-import-file-input';
+    fileInput.accept = '.xls,.xlsx,.xlsm';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', handleVatFileImport);
+    document.body.appendChild(fileInput);
+  }
+  fileInput.click();
+}
+
+async function handleVatFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('company_id', currentCompanyId || 1);
+
+  if (vatCurrentData && vatCurrentData.id) {
+    formData.append('declaration_id', vatCurrentData.id);
+  }
+
+  try {
+    toast('正在上传并解析申报表...', 'info');
+    const resp = await fetch('/api/vat/declarations/import', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.detail || '导入失败');
+
+    toast('申报表导入成功', 'success');
+    // 刷新申报表列表
+    await loadVATDeclarationList();
+    // 如果返回了declaration_id，自动选中
+    if (result.declaration_id) {
+      vatSelectedId = result.declaration_id;
+      await vatLoadDeclarationDetail(vatSelectedId);
+    }
+  } catch (e) {
+    toast('导入失败: ' + e.message, 'error');
+  }
+  // 清空input
+  event.target.value = '';
 }
 
 function vatGenerateVoucher() {

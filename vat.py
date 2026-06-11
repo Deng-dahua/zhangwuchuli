@@ -2,13 +2,14 @@
 增值税申报表 API 路由
 使用 FastAPI APIRouter，在 main.py 中 include_router 加载。
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from datetime import datetime
 import calendar
 import json
+from typing import Optional
 
 from database import (
     VATDeclaration, Company, SalesInvoice, PurchaseInvoice,
@@ -43,6 +44,157 @@ def _end_of_month(period: str) -> str:
     return f"{y}-{m}-{last_day:02d}"
 
 router = APIRouter(prefix="/api/vat", tags=["增值税申报"])
+
+
+
+# ==================== 外部导入申报表 ====================
+
+@router.post("/declarations/import")
+async def import_vat_declaration(
+    company_id: int = Form(...),
+    file: UploadFile = File(...),
+    declaration_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    外部导入增值税申报表（Excel文件）
+    接收用户上传的已填好的申报表Excel文件，解析并保存到数据库。
+    """
+    import tempfile, os
+    from openpyxl import load_workbook
+    from datetime import datetime
+    
+    # 保存上传的文件到临时目录
+    suffix = file.filename.rsplit('.', 1)[-1] if '.' in file.filename else 'xlsx'
+    with tempfile.NamedTemporaryFile(suffix='.' + suffix, delete=False) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        wb = load_workbook(tmp_path, data_only=True)
+        
+        # 获取或创建申报表记录
+        decl = None
+        if declaration_id:
+            try:
+                decl_id = int(declaration_id)
+                decl = db.query(VATDeclaration).filter(
+                    VATDeclaration.id == decl_id,
+                    VATDeclaration.company_id == company_id
+                ).first()
+            except:
+                pass
+        
+        if not decl:
+            # 从Excel中读取期间信息
+            period = None
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                for row in ws.iter_rows(values_only=True):
+                    for cell in row:
+                        if cell and isinstance(cell, str) and ('期' in cell or '期间' in cell):
+                            # 尝试提取期间
+                            pass
+                    if period:
+                        break
+                if period:
+                    break
+            
+            if not period:
+                # 从文件名推断期间
+                import re
+                match = re.search(r'(\d{4})[\u5e74\-](\d{1,2})', file.filename)
+                if match:
+                    period = f"{match.group(1)}-{match.group(2).zfill(2)}"
+                else:
+                    from datetime import datetime
+                    now = datetime.now()
+                    period = f"{now.year}-{now.month:02d}"
+            
+            # 创建新申报表
+            max_id = db.query(func.max(VATDeclaration.id)).filter(
+                VATDeclaration.company_id == company_id
+            ).scalar() or 0
+            
+            decl = VATDeclaration(
+                id=max_id + 1,
+                company_id=company_id,
+                period=period,
+                status="已导入",
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            db.add(decl)
+            db.flush()
+        
+        # 解析Excel文件，提取申报表数据
+        form_main = None
+        form_sales = None
+        form_input = None
+        form_deduction = None
+        form_credit = None
+        form_surcharge = None
+        form_reduction = None
+        
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            
+            # 将工作表转换为2D数组
+            data = []
+            for row in ws.iter_rows(values_only=True):
+                data.append(list(row))
+            
+            # 根据工作表名称判断类型
+            if '主表' in sheet_name or '申报表' in sheet_name:
+                form_main = data
+            elif '一' in sheet_name or '销项' in sheet_name or 'sales' in sheet_name.lower():
+                form_sales = data
+            elif '二' in sheet_name or '进项' in sheet_name or 'input' in sheet_name.lower():
+                form_input = data
+            elif '扣除' in sheet_name or 'deduction' in sheet_name.lower():
+                form_deduction = data
+            elif '减免' in sheet_name or 'reduction' in sheet_name.lower():
+                form_reduction = data
+            elif '附加' in sheet_name or 'surcharge' in sheet_name.lower():
+                form_surcharge = data
+            elif '抵扣' in sheet_name or 'credit' in sheet_name.lower():
+                form_credit = data
+        
+        # 保存到数据库
+        if form_main:
+            decl.form_main = json.dumps(form_main, ensure_ascii=False, default=str)
+        if form_sales:
+            decl.form_sales = json.dumps(form_sales, ensure_ascii=False, default=str)
+        if form_input:
+            decl.form_input = json.dumps(form_input, ensure_ascii=False, default=str)
+        if form_deduction:
+            decl.form_deduction = json.dumps(form_deduction, ensure_ascii=False, default=str)
+        if form_credit:
+            decl.form_credit = json.dumps(form_credit, ensure_ascii=False, default=str)
+        if form_surcharge:
+            decl.form_surcharge = json.dumps(form_surcharge, ensure_ascii=False, default=str)
+        if form_reduction:
+            decl.form_reduction = json.dumps(form_reduction, ensure_ascii=False, default=str)
+        
+        decl.status = "已导入"
+        decl.updated_at = datetime.now()
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "申报表导入成功",
+            "declaration_id": decl.id,
+            "period": decl.period
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"文件解析失败: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @router.get("/declarations")
