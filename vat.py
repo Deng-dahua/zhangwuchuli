@@ -1,4 +1,4 @@
-"""
+﻿"""
 增值税申报表 API 路由
 使用 FastAPI APIRouter，在 main.py 中 include_router 加载。
 """
@@ -372,33 +372,58 @@ async def import_vat_declaration(
         form_reduction = None
         
         def _sheet_title(sh):
-            """提取工作表标题：优先取名字，PDF时尝试从首行数据找标题"""
+            """提取工作表标题：优先取名字，PDF时尝试从数据中提取标题关键字"""
             name = sh.get("name", "")
             data = sh.get("data", [])
-            # PDF 模式：首行可能包含真实表格名称
+            # PDF 模式：从数据中提取标题关键字，拼接成扩展标题
             if name.startswith("第") and data:
-                for row in data[:3]:
+                title_parts = []
+                for row in data[:5]:
                     for cell in (row or []):
-                        if cell and isinstance(cell, str) and len(cell) > 4:
-                            return cell
+                        if cell and isinstance(cell, str) and len(cell.strip()) > 3:
+                            stripped = cell.strip()
+                            # 收集可能是标题的文本（含关键字或足够长）
+                            if any(kw in stripped for kw in ['申报表', '主表', '附列', '销项', '进项', '抵扣', '减免', '附加', '增值税']):
+                                title_parts.append(stripped)
+                            elif len(stripped) > 8:
+                                title_parts.append(stripped)
+                if title_parts:
+                    return " ".join(title_parts[:3])  # 取前3个有意义的部分
             return name
+        
+        def _sheet_contains(sn, data, *keywords):
+            """检查标题或表格数据前10行是否包含任意关键字"""
+            for kw in keywords:
+                if kw in sn:
+                    return True
+            for row in data[:10]:
+                if not row:
+                    continue
+                for cell in row:
+                    if cell and isinstance(cell, str):
+                        for kw in keywords:
+                            if kw in cell:
+                                return True
+            return False
         
         for sh in sheets:
             sn = _sheet_title(sh)
             data = sh["data"]
-            if '附列资料（一）' in sn or '附列资料一' in sn or '销项' in sn:
+            if _sheet_contains(sn, data, '附列资料（一）', '附列资料一', '销项'):
                 form_sales = data
-            elif '附列资料（二）' in sn or '附列资料二' in sn or '进项' in sn:
+            elif _sheet_contains(sn, data, '附列资料（二）', '附列资料二', '进项'):
                 form_input = data
-            elif '附列资料（三）' in sn or '附列资料三' in sn or '扣除' in sn or 'deduction' in sn.lower():
+            elif _sheet_contains(sn, data, '附列资料（三）', '附列资料三', '扣除', 'deduction'):
                 form_deduction = data
-            elif '附列资料（四）' in sn or '附列资料四' in sn or '减免' in sn or 'reduction' in sn.lower():
+            elif _sheet_contains(sn, data, '附列资料（四）', '附列资料四', '减免', 'reduction'):
                 form_reduction = data
-            elif '附列资料（五）' in sn or '附列资料五' in sn or '附加税费申报表附列资料' in sn or ('附加' in sn and '申报表' not in sn) or 'surcharge' in sn.lower():
-                form_surcharge = data
-            elif '抵扣' in sn or 'credit' in sn.lower():
+            elif _sheet_contains(sn, data, '附列资料（五）', '附列资料五', '附加税费', 'surcharge'):
+                # 排除主表（主表也含"附加税费申报表"字样）
+                if not _sheet_contains(sn, data, '申报表（主表）', '主表适用'):
+                    form_surcharge = data
+            elif _sheet_contains(sn, data, '抵扣', 'credit'):
                 form_credit = data
-            elif '主表' in sn or '申报表' in sn:
+            elif _sheet_contains(sn, data, '主表', '申报表'):
                 form_main = data
         
         # 保存到数据库
