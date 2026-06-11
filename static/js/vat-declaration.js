@@ -1260,9 +1260,9 @@ function renderSchedule1(data) {
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
     + '<style>#sch1-table td,#sch1-table th{white-space:nowrap;}</style>'
-    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1650px">'
+    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1794px">'
     + '<colgroup>'
-    + '<col style="width:60px"><col style="width:50px"><col style="width:150px"><col style="width:28px">'  // 项目及栏次
+    + '<col style="width:90px"><col style="width:75px"><col style="width:225px"><col style="width:42px">'  // 项目及栏次 (×1.5)
     + '<col style="width:95px"><col style="width:85px">'    // 专票: 销售额+税额
     + '<col style="width:95px"><col style="width:85px">'    // 其他发票: 销售额+税额
     + '<col style="width:95px"><col style="width:85px">'    // 未开票: 销售额+税额
