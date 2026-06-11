@@ -332,8 +332,8 @@ function renderCCFToolbar(yearOpts, monthOpts) {
     + '</div></div></div>'
     + '<button class="btn-toolbar" onclick="onCCFDetailPeriodChange()" title="按所选期间查询">查询</button>'
     + '<button class="btn-toolbar" onclick="ccfClearFilter()" title="清除筛选条件">清除</button>'
-    + '<button class="btn-toolbar" onclick="ccfImportFile()" title="导入文化事业建设费申报数据">导入文件</button>'
     + '<button class="btn-toolbar" onclick="ccfGenerateVoucher()" title="生成文化事业建设费相关凭证">生成凭证</button>'
+    + '<button class="btn-toolbar" onclick="ccfSaveManualData()" title="保存手动填列的数据" style="background:#059669;color:#fff">保存数据</button>'
     + '<button class="btn-toolbar-danger" onclick="ccfDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
@@ -601,65 +601,37 @@ async function ccfDeleteCurrent() {
   } catch (e) { toast('删除失败：' + (e.message || e), 'error'); }
 }
 
-// ==================== 导入文件 ====================
+// ==================== 保存手动填列数据 ====================
 
-function ccfImportFile() {
-  // 创建文件输入元素
-  let fileInput = document.getElementById('ccf-import-file-input');
-  if (!fileInput) {
-    fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.id = 'ccf-import-file-input';
-    fileInput.accept = '.xls,.xlsx,.xlsm,.xltm,.pdf';
-    fileInput.style.display = 'none';
-    fileInput.addEventListener('change', handleCcfFileImport);
-    document.body.appendChild(fileInput);
+async function ccfSaveManualData() {
+  if (!ccfCurrentData || !ccfCurrentData.id) {
+    toast('请先查询并选择一份申报表', 'warning');
+    return;
   }
-  fileInput.click();
-}
-
-async function handleCcfFileImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('company_id', currentCompanyId || 1);
-
-  if (ccfCurrentData && ccfCurrentData.id) {
-    formData.append('declaration_id', ccfCurrentData.id);
+  // 收集主页面的输入值
+  var formData = {};
+  var inputs = document.querySelectorAll('[id^="ccf-cur-"], [id^="ccf-ytd-"]');
+  for (var i = 0; i < inputs.length; i++) {
+    var inp = inputs[i];
+    // ccf-cur-row1_taxable_income -> row1_taxable_income_current
+    // ccf-ytd-row1_taxable_income -> row1_taxable_income_ytd
+    var suffix = inp.id.indexOf('ccf-cur-') === 0 ? '_current' : '_ytd';
+    var key = inp.id.replace(/^ccf-(cur|ytd)-/, '') + suffix;
+    var val = parseFloat(inp.value);
+    formData[key] = isNaN(val) ? 0 : val;
   }
-
   try {
-    toast('正在上传并解析申报表...', 'info');
-    const resp = await fetch('/api/cultural-construction-fee/declarations/import', {
-      method: 'POST',
-      body: formData
+    var resp = await fetch('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id + '?company_id=' + (currentCompanyId || 1), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
     });
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.detail || '导入失败');
-
-    toast('申报表导入成功', 'success');
-    // 显示调试信息
-    if (result.debug) {
-      const d = result.debug;
-      let msg = '期间: ' + (d.period || '未识别') + '\\n';
-      msg += '表格数: ' + d.sheets_count + '\\n';
-      msg += '主表: ' + (d.form_main_parsed ? '已解析(' + d.parsed_fields + '字段)' : '未解析') + '\\n';
-      alert(msg);
-    }
-    // 刷新申报表列表
-    await loadCCFDeclarationList();
-    // 如果返回了declaration_id，自动选中
-    if (result.declaration_id) {
-      ccfSelectedId = result.declaration_id;
-      await openCCFDetailInline(ccfSelectedId);
-    }
-  } catch (e) {
-    toast('导入失败: ' + (e.message || '未知错误'), 'error');
-  }
-  // 清空input
-  event.target.value = '';
+    var result = await resp.json();
+    if (!resp.ok) throw new Error(result.detail || '保存失败');
+    toast('表单数据已保存', 'success');
+    // 重新加载
+    await openCCFDetailInline(ccfCurrentData.id);
+  } catch (e) { toast('保存失败: ' + (e.message || '未知错误'), 'error'); }
 }
 
 // ==================== 生成凭证 ====================
