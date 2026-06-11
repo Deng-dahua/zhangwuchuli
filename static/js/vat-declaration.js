@@ -1260,17 +1260,18 @@ function renderSchedule1(data) {
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
     + '<style>#sch1-table td,#sch1-table th{white-space:nowrap;}</style>'
-    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1958px">'
+    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1650px">'
     + '<colgroup>'
-    + '<col style="width:60px"><col style="width:50px"><col style="width:140px"><col style="width:28px">'  // 项目及栏次
-    + '<col style="width:165px"><col style="width:85px">'   // 专票: 销售额+税额
-    + '<col style="width:165px"><col style="width:85px">'   // 其他发票: 销售额+税额
-    + '<col style="width:165px"><col style="width:85px">'   // 未开票: 销售额+税额
-    + '<col style="width:165px"><col style="width:85px">'   // 纳税检查: 销售额+税额
-    + '<col style="width:165px"><col style="width:85px"><col style="width:95px">'  // 合计: 销售额+税额+价税合计
-    + '<col style="width:85px">'   // 扣除项目
-    + '<col style="width:165px"><col style="width:85px">'   // 扣除后: 销售额+税额
+    + '<col style="width:60px"><col style="width:50px"><col style="width:150px"><col style="width:28px">'  // 项目及栏次
+    + '<col style="width:95px"><col style="width:85px">'    // 专票: 销售额+税额
+    + '<col style="width:95px"><col style="width:85px">'    // 其他发票: 销售额+税额
+    + '<col style="width:95px"><col style="width:85px">'    // 未开票: 销售额+税额
+    + '<col style="width:95px"><col style="width:85px">'    // 纳税检查: 销售额+税额
+    + '<col style="width:90px"><col style="width:95px"><col style="width:75px">'   // 合计: 销售额(9=1+3+5+7)+税额(10=2+4+6+8)+价税合计(11=9+10)
+    + '<col style="width:105px">'   // 扣除项目(12): 服务、不动产和无形资产扣除项目本期实际扣除金额
+    + '<col style="width:105px"><col style="width:170px">'  // 扣除后: 含税销售额(13=11-12)+税额(14=...×税率)
     + '</colgroup>'
+    // 60+50+150+28+95+85+95+85+95+85+95+85+90+95+75+105+105+170 = 1648
     + '<thead>'
     + '<tr style="background:#d9e2f3">'
     + '<th colspan="4" rowspan="3">项目及栏次</th>'
@@ -1295,7 +1296,7 @@ function renderSchedule1(data) {
     + '<th style="font-size:9px">9=1+3+5+7</th><th style="font-size:9px">10=2+4+6+8</th><th style="font-size:9px">11=9+10</th>'
     + '<th>12</th>'
     + '<th style="font-size:8px">13=11-12</th>'
-    + '<th style="font-size:8px">14=13÷(100%+税率或征收率)×税率或征收率</th>'
+    + '<th style="font-size:7px">14=13÷(100%+税率或征收率)×税率或征收率</th>'
     + '</tr></thead><tbody>'
 
     // ============== 一、一般计税方法计税 (7 rows) ==============
