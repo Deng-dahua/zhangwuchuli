@@ -1260,7 +1260,7 @@ function renderSchedule1(data) {
     + '<div style="font-size:11px;color:#6b7280;text-align:center;margin-bottom:6px">（本期销售情况明细）</div>'
     + '<div style="overflow-x:auto">'
     + '<style>#sch1-table td,#sch1-table th{white-space:nowrap;}</style>'
-    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1794px">'
+    + '<table id="sch1-table" class="vat-form-table" style="font-size:10px;table-layout:fixed;width:1847px">'
     + '<colgroup>'
     + '<col style="width:90px"><col style="width:75px"><col style="width:225px"><col style="width:42px">'  // 项目及栏次 (×1.5)
     + '<col style="width:95px"><col style="width:85px">'    // 专票: 销售额+税额
@@ -1268,10 +1268,10 @@ function renderSchedule1(data) {
     + '<col style="width:95px"><col style="width:85px">'    // 未开票: 销售额+税额
     + '<col style="width:95px"><col style="width:85px">'    // 纳税检查: 销售额+税额
     + '<col style="width:90px"><col style="width:95px"><col style="width:75px">'   // 合计: 销售额(9=1+3+5+7)+税额(10=2+4+6+8)+价税合计(11=9+10)
-    + '<col style="width:105px">'   // 扣除项目(12): 服务、不动产和无形资产扣除项目本期实际扣除金额
+    + '<col style="width:158px">'   // 扣除项目(12) ×1.5: 服务、不动产和无形资产扣除项目本期实际扣除金额
     + '<col style="width:105px"><col style="width:170px">'  // 扣除后: 含税销售额(13=11-12)+税额(14=...×税率)
     + '</colgroup>'
-    // 60+50+150+28+95+85+95+85+95+85+95+85+90+95+75+105+105+170 = 1648
+    // 90+75+225+42+95+85+95+85+95+85+95+85+90+95+75+158+105+170 = 1847
     + '<thead>'
     + '<tr style="background:#d9e2f3">'
     + '<th colspan="4" rowspan="3">项目及栏次</th>'
