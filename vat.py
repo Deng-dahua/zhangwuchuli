@@ -363,25 +363,18 @@ def get_prior_period_data(company_id: int = Query(), period: str = Query(...), d
     """获取上期申报表数据，供主表第13行(上期留抵税额)和第25行(期初未缴税额)自动填列。
     
     取数逻辑：
-    - 主表第13行(上期留抵税额) = 上期主表第20行(期末留抵税额)
-    - 主表第25行(期初未缴税额) = 上期主表第32行(期末未缴税额)
+    - 主表第13行(上期留抵税额) = 最近一期申报表主表第20行(期末留抵税额)
+    - 主表第25行(期初未缴税额) = 最近一期申报表主表第32行(期末未缴税额)
     """
-    # 计算上期期间
-    y, m = map(int, period.split("-"))
-    m -= 1
-    if m == 0:
-        m = 12
-        y -= 1
-    prev_period = f"{y:04d}-{m:02d}"
-
+    # 取最近一期申报表（不限于上一个月，取最近一期）
     prev_vd = db.query(VATDeclaration).filter(
         VATDeclaration.company_id == company_id,
-        VATDeclaration.period == prev_period
-    ).first()
+        VATDeclaration.period < period
+    ).order_by(VATDeclaration.period.desc()).first()
 
     result = {
         "current_period": period,
-        "prev_period": prev_period,
+        "prev_period": prev_vd.period if prev_vd else None,
         "has_prev": False,
         "row13_prior_credit": 0.0,
         "row25_prior_unpaid": 0.0,
@@ -594,18 +587,11 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
             ytd_sums[f] += m.get(f, 0.0)
 
     # ====== 主表（会企02号）—— 41行完整字段 ======
-    # 取上期留抵：从同公司上期申报表取期末留抵
-    # 上期 = 当前期间往前1个月
-    prev_year = period_date.year
-    prev_month = period_date.month - 1
-    if prev_month == 0:
-        prev_year -= 1
-        prev_month = 12
-    prev_period = f"{prev_year}-{prev_month:02d}"
+    # 取上期留抵：从同公司最近一期申报表取期末留抵（不限于上一个月，取最近一期）
     prior_vd = db.query(VATDeclaration).filter(
         VATDeclaration.company_id == company_id,
-        VATDeclaration.period == prev_period
-    ).first()
+        VATDeclaration.period < period
+    ).order_by(VATDeclaration.period.desc()).first()
     prior_credit = 0.0
     if prior_vd and prior_vd.form_main:
         prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
@@ -1226,17 +1212,11 @@ def _compute_vat_forms(db: Session, vd: VATDeclaration):
     # ===== 主表计算（按官方填写说明公式）=====
     # 按正确顺序：先计算所有附表，再根据附表计算主表
     
-    # 取上期留抵：从同公司上期申报表取期末留抵
-    prev_year = period_date.year
-    prev_month = period_date.month - 1
-    if prev_month == 0:
-        prev_year -= 1
-        prev_month = 12
-    prev_period = f"{prev_year}-{prev_month:02d}"
+    # 取上期留抵：从同公司最近一期申报表取期末留抵（不限于上一个月，取最近一期）
     prior_vd = db.query(VATDeclaration).filter(
         VATDeclaration.company_id == company_id,
-        VATDeclaration.period == prev_period
-    ).first()
+        VATDeclaration.period < period
+    ).order_by(VATDeclaration.period.desc()).first()
     prior_credit = 0.0
     if prior_vd and prior_vd.form_main:
         prior_main = json.loads(prior_vd.form_main) if isinstance(prior_vd.form_main, str) else prior_vd.form_main
