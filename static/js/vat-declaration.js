@@ -147,7 +147,7 @@ async function renderVATDeclaration(container) {
 }
 
 // ==================== 列表加载 ====================
-async function loadVATDeclarationList() {
+async function loadVATDeclarationList(emptyPeriod) {
   try {
     let url = '/api/vat/declarations';
     if (vatFilterPeriod) url += '?period=' + encodeURIComponent(vatFilterPeriod);
@@ -161,7 +161,7 @@ async function loadVATDeclarationList() {
   if (vatDeclarations.length === 0) {
     // 有筛选条件时显示该期间的空状态；否则显示当前月份空状态
     const now = new Date();
-    const defaultPeriod = vatFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    const defaultPeriod = emptyPeriod || vatFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
     renderVATPeriodEmpty(defaultPeriod);
     return;
   }
@@ -596,7 +596,7 @@ async function deleteVATDeclaration(id, period) {
   try {
     await api('/api/vat/declarations/' + id, { method: 'DELETE' });
     closeVATModal();
-    await loadVATDeclarationList();
+    await loadVATDeclarationList(period);
   } catch (e) { handleError(e, '删除申报表'); }
 }
 

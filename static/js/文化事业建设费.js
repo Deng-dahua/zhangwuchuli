@@ -163,7 +163,7 @@ async function renderCulturalConstructionFee(container) {
 
 // ==================== 列表加载 ====================
 
-async function loadCCFDeclarationList() {
+async function loadCCFDeclarationList(emptyPeriod) {
   try {
     var url = '/api/cultural-construction-fee/declarations';
     if (ccfFilterPeriod) url += '?period=' + encodeURIComponent(ccfFilterPeriod);
@@ -176,7 +176,7 @@ async function loadCCFDeclarationList() {
 
   if (ccfDeclarations.length === 0) {
     var now = new Date();
-    var defaultPeriod = ccfFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    var defaultPeriod = emptyPeriod || ccfFilterPeriod || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
     renderCCFPeriodEmpty(defaultPeriod);
     return;
   }
@@ -591,13 +591,14 @@ async function ccfDeleteCurrent() {
     toast('没有可删除的申报表', 'warning');
     return;
   }
-  if (!confirm('确定删除「' + ccfCurrentData.period + '」的申报表吗？')) return;
+  var deletedPeriod = ccfCurrentData.period;
+  if (!confirm('确定删除「' + deletedPeriod + '」的申报表吗？')) return;
   try {
     await api('/api/cultural-construction-fee/declarations/' + ccfCurrentData.id, { method: 'DELETE' });
     toast('删除成功');
     ccfCurrentData = null;
     ccfSelectedId = null;
-    await loadCCFDeclarationList();
+    await loadCCFDeclarationList(deletedPeriod);
   } catch (e) { toast('删除失败：' + (e.message || e), 'error'); }
 }
 
