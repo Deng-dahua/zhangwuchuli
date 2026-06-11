@@ -702,7 +702,7 @@ async function handleVatFileImport(event) {
     // 如果返回了declaration_id，自动选中
     if (result.declaration_id) {
       vatSelectedId = result.declaration_id;
-      await vatLoadDeclarationDetail(vatSelectedId);
+      await openVATDetailInline(vatSelectedId);
     }
   } catch (e) {
     toast('导入失败: ' + (e.message || '未知错误'), 'error');

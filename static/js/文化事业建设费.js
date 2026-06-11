@@ -645,7 +645,7 @@ async function handleCcfFileImport(event) {
     // 如果返回了declaration_id，自动选中
     if (result.declaration_id) {
       ccfSelectedId = result.declaration_id;
-      await ccfLoadDeclarationDetail(ccfSelectedId);
+      await openCCFDetailInline(ccfSelectedId);
     }
   } catch (e) {
     toast('导入失败: ' + (e.message || '未知错误'), 'error');
