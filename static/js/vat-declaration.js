@@ -1930,7 +1930,8 @@ function renderSchedule4(data) {
 
     // 一、税额抵减情况
     + '<div style="font-size:12px;font-weight:600;margin-bottom:4px">一、税额抵减情况</div>'
-    + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:960px"><colgroup>'
+    + '<col style="width:60px"><col style="width:300px"><col style="width:120px"><col style="width:120px"><col style="width:120px"><col style="width:120px"><col style="width:120px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center;font-size:10px">3=1+2</th><th style="text-align:center;font-size:10px">4≤3</th><th style="text-align:center;font-size:10px">5=3-4</th></tr></thead><tbody>'
 
@@ -1963,7 +1964,8 @@ function renderSchedule4(data) {
 
     // 二、加计抵减情况
     + '<div style="font-size:12px;font-weight:600;margin:12px 0 4px 0">二、加计抵减情况</div>'
-    + '<table class="vat-form-table" style=""><colgroup><col><col><col><col><col><col><col><col></colgroup>'
+    + '<table class="vat-form-table" style="table-layout:fixed;width:960px"><colgroup>'
+    + '<col style="width:60px"><col style="width:180px"><col style="width:120px"><col style="width:120px"><col style="width:120px"><col style="width:120px"><col style="width:120px"><col style="width:120px"></colgroup>'
     + '<thead><tr style="background:#d9e2f3"><th rowspan="2">序号</th><th rowspan="2">加计抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期调减额</th><th>本期可抵减额</th><th>本期实际抵减额</th><th>期末余额</th></tr>'
     + '<tr style="background:#e8edf5"><th style="text-align:center">1</th><th style="text-align:center">2</th><th style="text-align:center">3</th><th style="text-align:center;font-size:10px">4=1+2-3</th><th style="text-align:center">5</th><th style="text-align:center;font-size:10px">6=4-5</th></tr></thead><tbody>'
 
