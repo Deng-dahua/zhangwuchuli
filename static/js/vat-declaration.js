@@ -916,6 +916,44 @@ function vatResetAllFormulas() {
   toast('已恢复所有公式', 'success');
 }
 
+// 减免税表多行模式：从DOM扁平键重建tax_reduction_items数组
+// DOM键格式: tax_red_0_begin, tax_red_0_occur, ... → [{begin_balance, current_amount, ...}]
+function _collectReductionItemLines(domData, prefix, maxCount) {
+  var items = [];
+  for (var i = 0; i < maxCount; i++) {
+    var b = domData[prefix + i + '_begin'];
+    var o = domData[prefix + i + '_occur'];
+    var s = domData[prefix + i + '_should'];
+    var a = domData[prefix + i + '_actual'];
+    var e = domData[prefix + i + '_end'];
+    // 至少有一个值才纳入
+    if ((b || 0) === 0 && (o || 0) === 0 && (s || 0) === 0 && (a || 0) === 0 && (e || 0) === 0) continue;
+    items.push({
+      name: ('减税项目' + (i + 1)),
+      begin_balance: b || 0, current_amount: o || 0,
+      should_reduce: s || 0, actual_reduce: a || 0, end_balance: e || 0
+    });
+  }
+  return items;
+}
+function _collectReductionItemLinesExempt(domData, prefix, maxCount) {
+  var items = [];
+  for (var i = 0; i < maxCount; i++) {
+    var s = domData[prefix + i + '_sales'];
+    var d = domData[prefix + i + '_deduction'];
+    var a = domData[prefix + i + '_after'];
+    var t = domData[prefix + i + '_input_tax'];
+    var amt = domData[prefix + i + '_amount'];
+    if ((s || 0) === 0 && (d || 0) === 0 && (t || 0) === 0 && (amt || 0) === 0) continue;
+    items.push({
+      name: ('免税项目' + (i + 1)),
+      exempt_sales: s || 0, deduction_amount: d || 0,
+      after_deduction: a || 0, input_tax: t || 0, exempt_amount: amt || 0
+    });
+  }
+  return items;
+}
+
 // 页签→表单数据键名+DOM前缀映射
 var VAT_PAGE_DATA_MAP = {
   'main':      { key: 'form_main',      prefix: 'vat-' },
@@ -925,6 +963,118 @@ var VAT_PAGE_DATA_MAP = {
   'schedule4': { key: 'form_credit',    prefix: 'sch4-' },
   'schedule5': { key: 'form_surcharge', prefix: 'sch5-' },
   'reduction': { key: 'form_reduction', prefix: 'red-' }
+};
+
+// ==================== 附表一：DOM扁平键 → 语义键映射 ====================
+// renderSchedule1用语义键读取，但DOM用的是rowN_colM扁平键，保存时必须转换
+var SCHEDULE1_KEY_MAP = {
+  // Row 1: 13%货物(Rg) — 读取: s.row1_13_special_sales 等
+  'row1_col1':'row1_13_special_sales','row1_col2':'row1_13_special_tax',
+  'row1_col3':'row1_13_other_sales','row1_col4':'row1_13_other_tax',
+  'row1_col5':'row1_13_no_invoice_sales','row1_col6':'row1_13_no_invoice_tax',
+  'row1_col7':'row1_13_check_sales','row1_col8':'row1_13_check_tax',
+  'row1_col9':'row1_13_goods_total_sales','row1_col10':'row1_13_goods_total_tax',
+  // Row 2: 13%服务(Rs) — 读取: s.row2_13_service_special_sales 等
+  'row2_col1':'row2_13_service_special_sales','row2_col2':'row2_13_service_special_tax',
+  'row2_col3':'row2_13_service_other_sales','row2_col4':'row2_13_service_other_tax',
+  'row2_col5':'row2_13_service_no_invoice_sales','row2_col6':'row2_13_service_no_invoice_tax',
+  'row2_col7':'row2_13_service_check_sales','row2_col8':'row2_13_service_check_tax',
+  'row2_col9':'row2_13_service_total_sales','row2_col10':'row2_13_service_total_tax',
+  'row2_col12':'row2_13_service_deduct',
+  // Row 3: 9%货物(Rg) — 读取: s.row3_9_special_sales 等
+  'row3_col1':'row3_9_special_sales','row3_col2':'row3_9_special_tax',
+  'row3_col3':'row3_9_other_sales','row3_col4':'row3_9_other_tax',
+  'row3_col5':'row3_9_no_invoice_sales','row3_col6':'row3_9_no_invoice_tax',
+  'row3_col7':'row3_9_check_sales','row3_col8':'row3_9_check_tax',
+  'row3_col9':'row3_9_goods_total_sales','row3_col10':'row3_9_goods_total_tax',
+  // Row 4: 9%服务(Rs) — 读取: s.row4_9_service_sales 等
+  'row4_col1':'row4_9_service_sales','row4_col2':'row4_9_service_tax',
+  'row4_col3':'row4_9_service_other_sales','row4_col4':'row4_9_service_other_tax',
+  'row4_col5':'row4_9_service_no_invoice_sales','row4_col6':'row4_9_service_no_invoice_tax',
+  'row4_col7':'row4_9_service_check_sales','row4_col8':'row4_9_service_check_tax',
+  'row4_col9':'row4_9_service_total_sales','row4_col10':'row4_9_service_total_tax',
+  'row4_col12':'row4_9_service_deduct',
+  // Row 5: 6%税率(Rs) — 读取: s.row5_6_special_sales 等
+  'row5_col1':'row5_6_special_sales','row5_col2':'row5_6_special_tax',
+  'row5_col3':'row5_6_other_sales','row5_col4':'row5_6_other_tax',
+  'row5_col5':'row5_6_no_invoice_sales','row5_col6':'row5_6_no_invoice_tax',
+  'row5_col7':'row5_6_check_sales','row5_col8':'row5_6_check_tax',
+  'row5_col9':'row5_6_service_total_sales','row5_col10':'row5_6_service_total_tax',
+  'row5_col12':'row5_6_deduct',
+  // Row 6: 即征即退货物(Rjg) — 读取: s.row6_refund_goods_total_sales 等
+  'row6_col9':'row6_refund_goods_total_sales','row6_col10':'row6_refund_goods_total_tax',
+  // Row 7: 即征即退服务(Rj) — 读取: s.row7_refund_service_total_sales 等
+  'row7_col9':'row7_refund_service_total_sales','row7_col10':'row7_refund_service_total_tax',
+  'row7_col12':'row7_refund_service_deduct',
+  // Row 8: 6%征收率(Rg, 6列) — 读取: s.row8_6_collect_sales 等
+  'row8_col1':'row8_6_collect_sales','row8_col2':'row8_6_collect_tax',
+  'row8_col3':'row8_6_collect_other_sales','row8_col4':'row8_6_collect_other_tax',
+  'row8_col5':'row8_6_collect_no_invoice_sales','row8_col6':'row8_6_collect_no_invoice_tax',
+  'row8_col9':'row8_6_collect_total_sales','row8_col10':'row8_6_collect_total_tax',
+  // Row 9: 5%货物(Rg, 6列) — 读取: s.row9a_5_goods_sales 等
+  'row9_col1':'row9a_5_goods_sales','row9_col2':'row9a_5_goods_tax',
+  'row9_col3':'row9a_5_goods_other_sales','row9_col4':'row9a_5_goods_other_tax',
+  'row9_col5':'row9a_5_goods_no_invoice_sales','row9_col6':'row9a_5_goods_no_invoice_tax',
+  'row9_col9':'row9a_5_goods_total_sales','row9_col10':'row9a_5_goods_total_tax',
+  // Row 10: 5%服务(Rs, 6列) — 读取: s.row9b_5_service_sales 等
+  'row10_col1':'row9b_5_service_sales','row10_col2':'row9b_5_service_tax',
+  'row10_col3':'row9b_5_service_other_sales','row10_col4':'row9b_5_service_other_tax',
+  'row10_col5':'row9b_5_service_no_invoice_sales','row10_col6':'row9b_5_service_no_invoice_tax',
+  'row10_col9':'row9b_5_service_total_sales','row10_col10':'row9b_5_service_total_tax',
+  'row10_col12':'row9b_5_service_deduct',
+  // Row 11: 4%征收率(Rg, 6列) — 读取: s.row10_4_collect_sales 等
+  'row11_col1':'row10_4_collect_sales','row11_col2':'row10_4_collect_tax',
+  'row11_col3':'row10_4_collect_other_sales','row11_col4':'row10_4_collect_other_tax',
+  'row11_col5':'row10_4_collect_no_invoice_sales','row11_col6':'row10_4_collect_no_invoice_tax',
+  'row11_col9':'row10_4_collect_total_sales','row11_col10':'row10_4_collect_total_tax',
+  // Row 12: 3%货物(Rg, 6列) — 读取: s.row11_3_goods_sales 等
+  'row12_col1':'row11_3_goods_sales','row12_col2':'row11_3_goods_tax',
+  'row12_col3':'row11_3_goods_other_sales','row12_col4':'row11_3_goods_other_tax',
+  'row12_col5':'row11_3_goods_no_invoice_sales','row12_col6':'row11_3_goods_no_invoice_tax',
+  'row12_col9':'row11_3_goods_total_sales','row12_col10':'row11_3_goods_total_tax',
+  // Row 13: 3%服务(Rs, 6列) — 读取: s.row12_3_service_sales 等
+  'row13_col1':'row12_3_service_sales','row13_col2':'row12_3_service_tax',
+  'row13_col3':'row12_3_service_other_sales','row13_col4':'row12_3_service_other_tax',
+  'row13_col5':'row12_3_service_no_invoice_sales','row13_col6':'row12_3_service_no_invoice_tax',
+  'row13_col9':'row12_3_service_total_sales','row13_col10':'row12_3_service_total_tax',
+  'row13_col12':'row12_3_service_deduct',
+  // Row 14-16: 预征率(Rg, 6列) — 读取: s.row13a_rate_sales / row13b / row13c
+  'row14_col1':'row13a_rate_sales','row14_col2':'row13a_rate_tax',
+  'row14_col3':'row13a_rate_other_sales','row14_col4':'row13a_rate_other_tax',
+  'row14_col5':'row13a_rate_no_invoice_sales','row14_col6':'row13a_rate_no_invoice_tax',
+  'row14_col9':'row13a_rate_total_sales','row14_col10':'row13a_rate_total_tax',
+  'row15_col1':'row13b_rate_sales','row15_col2':'row13b_rate_tax',
+  'row15_col3':'row13b_rate_other_sales','row15_col4':'row13b_rate_other_tax',
+  'row15_col5':'row13b_rate_no_invoice_sales','row15_col6':'row13b_rate_no_invoice_tax',
+  'row15_col9':'row13b_rate_total_sales','row15_col10':'row13b_rate_total_tax',
+  'row16_col1':'row13c_rate_sales','row16_col2':'row13c_rate_tax',
+  'row16_col3':'row13c_rate_other_sales','row16_col4':'row13c_rate_other_tax',
+  'row16_col5':'row13c_rate_no_invoice_sales','row16_col6':'row13c_rate_no_invoice_tax',
+  'row16_col9':'row13c_rate_total_sales','row16_col10':'row13c_rate_total_tax',
+};
+
+// ==================== 减免税申报明细表：DOM扁平键 → 语义键映射 ====================
+var REDUCTION_KEY_MAP = {
+  // 减税项目 — trd/trc生成ID: red-tax_red_begin, render读: r.tax_reduction_1_begin
+  'tax_red_begin': 'tax_reduction_1_begin',
+  'tax_red_occur': 'tax_reduction_1_occur',
+  'tax_red_should': 'tax_reduction_1_should',
+  'tax_red_actual': 'tax_reduction_1_actual',
+  'tax_red_end': 'tax_reduction_1_end',
+  // 免税项目Row1 — trd读: r.exempt_7_sales(合计行)
+  'exempt_1_sales': 'exempt_7_sales',
+  'exempt_1_deduction': 'exempt_7_deduction',
+  'exempt_1_after': 'exempt_7_after',
+  'exempt_1_input_tax': 'exempt_7_input_tax',
+  'exempt_1_amount': 'exempt_7_amount',
+  // 免税项目Row2(出口免税) — trd读: r.exempt_8_sales
+  'exempt_2_sales': 'exempt_8_sales',
+  'exempt_2_after': 'exempt_8_after',
+  'exempt_2_amount': 'exempt_8_amount',
+  // 免税项目Row3(跨境) — trd读: r.exempt_9_sales
+  'exempt_3_sales': 'exempt_9_sales',
+  'exempt_3_after': 'exempt_9_after',
+  'exempt_3_amount': 'exempt_9_amount',
 };
 
 // 将当前活动页的DOM数据同步回vatCurrentData（切换页签前调用，防止未保存数据丢失）
@@ -964,7 +1114,36 @@ function vatCollectFormData() {
     var domData = collect(map.prefix);
     // 只覆盖DOM中实际存在的字段（避免空DOM把数据清空）
     if (Object.keys(domData).length > 0) {
-      allData[map.key] = domData;
+      // 附表一/减免税表：扁平键映射到语义键（DOM用row1_col1，render/后端用row1_13_special_sales）
+      if (map.key === 'form_sales') {
+        var mapped = {};
+        for (var _k in domData) { mapped[SCHEDULE1_KEY_MAP[_k] || _k] = domData[_k]; }
+        Object.assign(allData[map.key], mapped);
+        console.log('vatCollectFormData: schedule1 mappato, raw=' + Object.keys(domData).length + ' mapped=' + Object.keys(mapped).length, { raw: Object.keys(domData).slice(0,5), mapped: Object.keys(mapped).slice(0,5) });
+      } else if (map.key === 'form_reduction') {
+        var mappedR = {};
+        // 检测是否多行模式（DOM含 tax_red_0_begin / exempt_0_sales）
+        var hasMultiLine = ('tax_red_0_begin' in domData) || ('exempt_0_sales' in domData);
+        if (hasMultiLine) {
+          // 多行模式：重建tax_reduction_items和exempt_items数组
+          var taxItems = _collectReductionItemLines(domData, 'tax_red_', 10);
+          var exemptItems = _collectReductionItemLinesExempt(domData, 'exempt_', 10);
+          if (taxItems.length > 0) mappedR['tax_reduction_items'] = taxItems;
+          if (exemptItems.length > 0) mappedR['exempt_items'] = exemptItems;
+        }
+        // 单行模式 + 静态字段：映射扁平键到语义键
+        for (var _k3 in domData) {
+          if (REDUCTION_KEY_MAP[_k3]) mappedR[REDUCTION_KEY_MAP[_k3]] = domData[_k3];
+          else if (_k3.indexOf('tax_red_') !== 0 && _k3.indexOf('exempt_') !== 0) {
+            // 非多行相关字段，保留原键
+            if (!mappedR[_k3]) mappedR[_k3] = domData[_k3];
+          }
+        }
+        Object.assign(allData[map.key], mappedR);
+        console.log('vatCollectFormData: reduction mappato, raw=' + Object.keys(domData).length + ' mapped=' + Object.keys(mappedR).length);
+      } else {
+        allData[map.key] = domData;
+      }
     }
   }
   
