@@ -2110,10 +2110,41 @@ function renderSchedule5(data) {
   html += '</colgroup>';
   // verify: 127+42+120+132+158+45+52+165+127+120+120+150+128+120+150+233 = 1989
 
-  // ===== thead: 表头5行（重排: 原4→1, 原5→2, 原1→3, 原2→4, 原3→5） =====
+  // ===== thead: 表头5行（政策 → 主分组 → 子列名 → 列号） =====
   html += '<thead>';
 
-  // --- Row 1 (原Row 4): 子列名 ---
+  var polCols = 'border:1px solid #a0a0a0;padding:2px 4px;white-space:nowrap';
+
+  // --- Row 1: 小微企业政策 ---
+  html += '<tr style="background:#fefce8;font-size:11px">';
+  html += '<td colspan="6" style="'+polCols+'">本期是否适用小微企业"六税两费"减免政策</td>';
+  html += '<td colspan="2" style="'+polCols+';text-align:center">'+microYes+'是　'+(microYes=='☑'?'□':'□')+'否</td>';
+  html += '<td colspan="3" style="'+polCols+'">减免政策适用主体</td>';
+  html += '<td colspan="5" style="'+polCols+'">'+zt+'</td>';
+  html += '</tr>';
+
+  // --- Row 2: 起止时间 ---
+  html += '<tr style="background:#fefce8;font-size:11px">';
+  html += '<td colspan="6" style="'+polCols+'">适用减免政策起止时间</td>';
+  html += '<td colspan="2" style="'+polCols+'">'+(rs||'　　年　月　日')+'</td>';
+  html += '<td colspan="3" style="'+polCols+';text-align:center">至</td>';
+  html += '<td colspan="5" style="'+polCols+'">'+(re||'　　年　月　日')+'</td>';
+  html += '</tr>';
+
+  // --- Row 3: 主分组 ---
+  html += '<tr style="background:'+bgHead+';font-size:11px;font-weight:600;text-align:center">';
+  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）种</th>';
+  html += '<th colspan="3" style="'+B+';'+P+'">计税（费）依据</th>';
+  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）率（%）</th>';
+  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应纳税（费）额</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">本期减免税（费）额</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">小微企业"六税两费"减免政策</th>';
+  html += '<th colspan="2" style="'+B+';'+P+'">试点建设培育产教融合型企业</th>';
+  html += '<th style="'+B+';'+P+';vertical-align:middle">本期已缴税（费）额</th>';
+  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应补（退）税（费）额</th>';
+  html += '</tr>';
+
+  // --- Row 4: 子列名 ---
   html += '<tr style="background:'+bgSub+';font-size:10px;text-align:center">';
   html += '<th colspan="2" style="'+B+';'+P+'">税（费）种</th>';
   html += '<th style="'+B+';'+P+'">增值税税额</th>';
@@ -2131,7 +2162,7 @@ function renderSchedule5(data) {
   html += '<th style="'+B+';'+P+'">本期应补（退）税（费）额</th>';
   html += '</tr>';
 
-  // --- Row 2 (原Row 5): 列号/公式 ---
+  // --- Row 5: 列号/公式 ---
   html += '<tr style="background:#f0f4ff;font-size:9px;color:#6b7280;text-align:center">';
   html += '<td colspan="2" style="'+B+';padding:1px 2px"></td>';
   html += '<td style="'+B+';padding:1px 2px">1</td>';
@@ -2147,36 +2178,6 @@ function renderSchedule5(data) {
   html += '<td style="'+B+';padding:1px 2px">11</td>';
   html += '<td style="'+B+';padding:1px 2px">12</td>';
   html += '<td style="'+B+';padding:1px 2px">13=5-7-9-11-12</td>';
-  html += '</tr>';
-
-  // --- Row 3 (原Row 1): 小微企业政策 ---
-  var polCols = 'border:1px solid #a0a0a0;padding:2px 4px;white-space:nowrap';
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="6" style="'+polCols+'">本期是否适用小微企业"六税两费"减免政策</td>';
-  html += '<td colspan="2" style="'+polCols+';text-align:center">'+microYes+'是　'+(microYes=='☑'?'□':'□')+'否</td>';
-  html += '<td colspan="3" style="'+polCols+'">减免政策适用主体</td>';
-  html += '<td colspan="5" style="'+polCols+'">'+zt+'</td>';
-  html += '</tr>';
-
-  // --- Row 4 (原Row 2): 起止时间 ---
-  html += '<tr style="background:#fefce8;font-size:11px">';
-  html += '<td colspan="6" style="'+polCols+'">适用减免政策起止时间</td>';
-  html += '<td colspan="2" style="'+polCols+'">'+(rs||'　　年　月　日')+'</td>';
-  html += '<td colspan="3" style="'+polCols+';text-align:center">至</td>';
-  html += '<td colspan="5" style="'+polCols+'">'+(re||'　　年　月　日')+'</td>';
-  html += '</tr>';
-
-  // --- Row 5 (原Row 3): 主分组（rowspan已移除，每行独立） ---
-  html += '<tr style="background:'+bgHead+';font-size:11px;font-weight:600;text-align:center">';
-  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）种</th>';
-  html += '<th colspan="3" style="'+B+';'+P+'">计税（费）依据</th>';
-  html += '<th colspan="2" style="'+B+';'+P+';vertical-align:middle">税（费）率（%）</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应纳税（费）额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">本期减免税（费）额</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">小微企业"六税两费"减免政策</th>';
-  html += '<th colspan="2" style="'+B+';'+P+'">试点建设培育产教融合型企业</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期已缴税（费）额</th>';
-  html += '<th style="'+B+';'+P+';vertical-align:middle">本期应补（退）税（费）额</th>';
   html += '</tr>';
 
   html += '</thead>';
