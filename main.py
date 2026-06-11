@@ -40,7 +40,7 @@ from database import (
     auto_generate_input_vat_for_period, auto_generate_input_vat_journals,
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
-    _match_ss_payment_journals,
+    _match_ss_payment_journals, _match_tax_payment_journals,
     auto_generate_purchase_journal,
 )
 
@@ -1265,6 +1265,14 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
     except Exception:
         pass
 
+    # ── 第五步：税费组合缴纳匹配（国家金库）──
+    tax_result = {"generated": 0}
+    try:
+        tax_result = _match_tax_payment_journals(db, company_id)
+        db.commit()
+    except Exception:
+        pass
+
     return {
         "step1_suppliers": supp_result,
         "step2_purchase_invoices": {
@@ -1275,6 +1283,7 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
         },
         "step3_bank_transactions": bank_result,
         "step4_social_security": ss_result,
+        "step5_tax_payment": tax_result,
     }
 
 

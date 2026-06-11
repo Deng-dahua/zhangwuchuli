@@ -7,6 +7,7 @@ from sqlalchemy import (
     func, distinct, or_, and_
 )
 from sqlalchemy.orm import declarative_base, relationship, Session, sessionmaker
+import json
 from typing import Optional, List
 from datetime import datetime, date
 
@@ -2383,25 +2384,75 @@ def _classify_bank_tx(db, company_id, tx, entity_index=None, hf_period_totals=No
                 return (rule.account_code, rule.account_name or rule.account_code, "rule", None)
 
     # 4. 税费识别（匹配增值税/文化事业建设费申报表）
-    # 4a. 国家金库/国库 缴费 → 匹配申报表
+    # 4a. 国家金库/国库缴费 → 匹配申报表（当月/上月税费）
     if any(kw in full_text_lower for kw in ["国家金库", "国库"]):
         tx_period = tx.transaction_date.strftime("%Y-%m") if tx.transaction_date else ""
-        payment_amount = (tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0)
+        payment_amount = float((tx.debit_amount or 0) if is_debit else (tx.credit_amount or 0))
         if payment_amount > 0 and tx_period:
-            # 匹配增值税申报表
-            vat_decl = db.query(VATDeclaration).filter(
-                VATDeclaration.company_id == company_id,
-                VATDeclaration.period == tx_period
-            ).first()
-            if vat_decl and abs(payment_amount - (vat_decl.row15 or 0)) < 0.01:
-                return ("221004", "未交增值税", "vat_payment", None)
-            # 匹配文化事业建设费申报表
-            ccf_decl = db.query(CulturalConstructionFeeDeclaration).filter(
-                CulturalConstructionFeeDeclaration.company_id == company_id,
-                CulturalConstructionFeeDeclaration.period == tx_period
-            ).first()
-            if ccf_decl and abs(payment_amount - (ccf_decl.row12 or 0)) < 0.01:
-                return ("221016", "应交文化事业建设费", "ccf_payment", None)
+            # 上月期间（税款所属期通常为上月，本月缴纳）
+            tx_date = tx.transaction_date
+            if tx_date:
+                if tx_date.month == 1:
+                    prev_period = f"{tx_date.year - 1}-12"
+                else:
+                    prev_period = f"{tx_date.year}-{tx_date.month - 1:02d}"
+            else:
+                prev_period = None
+
+            # 先查当月申报、再查上月申报（税款通常跨期间缴纳）
+            for check_period in [tx_period, prev_period]:
+                if not check_period:
+                    continue
+                vat_decl = db.query(VATDeclaration).filter(
+                    VATDeclaration.company_id == company_id,
+                    VATDeclaration.period == check_period
+                ).first()
+                if vat_decl:
+                    # 增值税应纳税额（主表 row19）
+                    vat_main = json.loads(vat_decl.form_main or '{}')
+                    vat_tax_payable = float(vat_main.get('row19_tax_payable', 0) or 0)
+                    if vat_tax_payable > 0 and abs(payment_amount - vat_tax_payable) < 0.01:
+                        return ("221004", "未交增值税", "vat_payment", None)
+
+                    # 附加税各分项（附表五，减半征收后的 _final 字段）
+                    vat_scf = json.loads(vat_decl.form_surcharge or '{}')
+                    city_final = float(vat_scf.get('city_final', 0) or 0)
+                    if city_final > 0 and abs(payment_amount - city_final) < 0.01:
+                        return ("221005", "应交城市维护建设税", "urban_tax_payment", None)
+                    edu_final = float(vat_scf.get('edu_final', 0) or 0)
+                    if edu_final > 0 and abs(payment_amount - edu_final) < 0.01:
+                        return ("221006", "应交教育费附加", "edu_surcharge_payment", None)
+                    local_edu_final = float(vat_scf.get('local_edu_final', 0) or 0)
+                    if local_edu_final > 0 and abs(payment_amount - local_edu_final) < 0.01:
+                        return ("221007", "应交地方教育附加", "local_edu_payment", None)
+                    total_final = float(vat_scf.get('total_final', 0) or 0)
+                    if total_final > 0 and abs(payment_amount - total_final) < 0.01:
+                        return ("221005", "应交城市维护建设税等附加税费", "surcharge_total_payment", None)
+
+                # 个人所得税（工资薪金 tax_refund 合计）
+                salary_tax = db.query(func.sum(SalaryRecord.tax_refund)).filter(
+                    SalaryRecord.company_id == company_id,
+                    SalaryRecord.period == check_period
+                ).scalar() or 0
+                salary_tax = float(salary_tax)
+                if salary_tax > 0 and abs(payment_amount - salary_tax) < 0.01:
+                    return ("221003", "应交个人所得税", "salary_tax_payment", None)
+
+                # 文化事业建设费（应缴费额 / 减征后净额）
+                ccf_decl = db.query(CulturalConstructionFeeDeclaration).filter(
+                    CulturalConstructionFeeDeclaration.company_id == company_id,
+                    CulturalConstructionFeeDeclaration.period == check_period
+                ).first()
+                if ccf_decl:
+                    ccf_payable = float(ccf_decl.row10_payable_fee_current or 0)
+                    ccf_reduction = float(ccf_decl.row10a_fee_reduction_current or 0)
+                    ccf_net = ccf_payable - ccf_reduction
+                    if ccf_payable > 0 and abs(payment_amount - ccf_payable) < 0.01:
+                        return ("221016", "应交文化事业建设费", "ccf_payment", None)
+                    if ccf_net > 0 and abs(payment_amount - ccf_net) < 0.01:
+                        return ("221016", "应交文化事业建设费", "ccf_payment", None)
+
+        # 未匹配到单一税费 → 交给 _match_tax_payment_journals 处理组合支付
         return None
 
     # 4b. 缴税/缴款书 → 跳过，等待人工确认
@@ -3100,6 +3151,168 @@ def _match_ss_payment_journals(db: Session, company_id: int):
         generated += 1
 
     return {"matched": matched, "generated": generated}
+
+
+def _match_tax_payment_journals(db: Session, company_id: int):
+    """税费缴纳匹配（国家金库组合支付）：
+    匹配国家金库银行流水中组合支付（一笔流水=多税种合计）的场景。
+    单税种匹配由 _classify_bank_tx 金库段处理，此函数处理组合支付。
+
+    逻辑：
+    1. 扫描未匹配的金库流水
+    2. 对上月申报表各税费项目求精确组合匹配
+    3. 匹配成功后生成多行分录：借各税费科目 / 贷银行存款
+    """
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.journal_voucher_no.is_(None),
+        or_(
+            BankTransaction.counterparty_name.contains("国家金库"),
+            BankTransaction.counterparty_name.contains("国库"),
+        ),
+    ).all()
+
+    if not txs:
+        return {"matched": 0, "generated": 0}
+
+    matched = 0
+    generated = 0
+
+    for tx in txs:
+        is_debit = tx.amount is not None and tx.amount < 0
+        payment_amount = abs(float(tx.amount) if tx.amount else 0)
+        if payment_amount <= 0:
+            continue
+
+        tx_date = tx.transaction_date
+        if not tx_date:
+            continue
+        tx_period = tx_date.strftime("%Y-%m")
+        if tx_date.month == 1:
+            prev_period = f"{tx_date.year - 1}-12"
+        else:
+            prev_period = f"{tx_date.year}-{tx_date.month - 1:02d}"
+
+        # 优先匹配上月的税费组合（税是上月所属期，本月缴纳）
+        for check_period in [prev_period, tx_period]:
+            # 收集所有可能的税费项目 (科目编码, 科目名称, 金额, match_type)
+            tax_items = []
+
+            vat_decl = db.query(VATDeclaration).filter(
+                VATDeclaration.company_id == company_id,
+                VATDeclaration.period == check_period
+            ).first()
+            if vat_decl:
+                vat_main = json.loads(vat_decl.form_main or '{}')
+                vat_tax = float(vat_main.get('row19_tax_payable', 0) or 0)
+                if vat_tax > 0:
+                    tax_items.append(("221004", "未交增值税", vat_tax))
+
+                vat_scf = json.loads(vat_decl.form_surcharge or '{}')
+                city_final = float(vat_scf.get('city_final', 0) or 0)
+                if city_final > 0:
+                    tax_items.append(("221005", "应交城市维护建设税", city_final))
+                edu_final = float(vat_scf.get('edu_final', 0) or 0)
+                if edu_final > 0:
+                    tax_items.append(("221006", "应交教育费附加", edu_final))
+                local_edu_final = float(vat_scf.get('local_edu_final', 0) or 0)
+                if local_edu_final > 0:
+                    tax_items.append(("221007", "应交地方教育附加", local_edu_final))
+
+            # 个人所得税（工资薪金 tax_refund）
+            salary_tax = db.query(func.sum(SalaryRecord.tax_refund)).filter(
+                SalaryRecord.company_id == company_id,
+                SalaryRecord.period == check_period
+            ).scalar() or 0
+            salary_tax = float(salary_tax)
+            if salary_tax > 0:
+                tax_items.append(("221003", "应交个人所得税", salary_tax))
+
+            # 文化事业建设费（净额）
+            ccf_decl = db.query(CulturalConstructionFeeDeclaration).filter(
+                CulturalConstructionFeeDeclaration.company_id == company_id,
+                CulturalConstructionFeeDeclaration.period == check_period
+            ).first()
+            if ccf_decl:
+                ccf_payable = float(ccf_decl.row10_payable_fee_current or 0)
+                ccf_reduction = float(ccf_decl.row10a_fee_reduction_current or 0)
+                ccf_net = ccf_payable - ccf_reduction
+                if ccf_net > 0:
+                    tax_items.append(("221016", "应交文化事业建设费", ccf_net))
+
+            if not tax_items:
+                continue
+
+            # 尝试任意子集精确组合匹配（位掩码枚举，n≤6 → 64种组合）
+            n = len(tax_items)
+            best_mask = None
+            best_count = 0
+            for mask in range(1, 1 << n):
+                subset_sum = 0
+                cnt = 0
+                for i in range(n):
+                    if mask & (1 << i):
+                        subset_sum += tax_items[i][2]
+                        cnt += 1
+                if abs(subset_sum - payment_amount) < 0.01 and cnt >= 2:
+                    if cnt > best_count:
+                        best_mask = mask
+                        best_count = cnt
+
+            if best_mask:
+                matched_items = [tax_items[i] for i in range(n) if best_mask & (1 << i)]
+                _do_create_tax_payment_journals(
+                    db, company_id, tx, matched_items, payment_amount, check_period
+                )
+                matched += 1
+                generated += 1
+                break
+
+    return {"matched": matched, "generated": generated}
+
+
+def _do_create_tax_payment_journals(db, company_id, tx, tax_items, payment_amount, match_period):
+    """为组合税费支付生成多行序时账凭证
+    借：各税费科目（多行）
+    贷：1002 银行存款（一行）
+    """
+    tx_date = tx.transaction_date
+    tx_period = tx_date.strftime("%Y-%m") if tx_date else datetime.now().strftime("%Y-%m")
+    next_voucher_no = _next_voucher_no(db, company_id, tx_period, "记")
+    date_str = tx_date.strftime("%Y-%m-%d") if tx_date else tx_period + "-01"
+
+    cp = tx.counterparty_name or "国家金库"
+    summary_prefix = f"银行流水-#{tx.id}-{cp}（{match_period}税费组合缴纳）"
+
+    total_debit = 0
+    entries = []
+    for code, name, amount in tax_items:
+        amt = round(amount, 2)
+        total_debit += amt
+        entries.append(JournalEntry(
+            company_id=company_id,
+            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+            period=tx_period, voucher_word="记", voucher_no=next_voucher_no,
+            summary=f"{summary_prefix} | {name}",
+            account_code=code, account_name=name,
+            debit_amount=amt, credit_amount=0,
+            source="银行流水", ref_id=tx.id,
+        ))
+
+    # 贷方：银行存款
+    entries.append(JournalEntry(
+        company_id=company_id,
+        entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+        period=tx_period, voucher_word="记", voucher_no=next_voucher_no,
+        summary=f"{summary_prefix} | 银行存款",
+        account_code="1002", account_name="银行存款",
+        debit_amount=0, credit_amount=round(total_debit, 2),
+        source="银行流水", ref_id=tx.id,
+    ))
+
+    db.add_all(entries)
+    tx.journal_voucher_no = f"记-{next_voucher_no}"
+    db.flush()
 
 
 # ========== 工资薪金 — 序时账自动生成 ==========
