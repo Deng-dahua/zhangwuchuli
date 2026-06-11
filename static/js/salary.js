@@ -654,13 +654,18 @@ function importSalaryExcel() {
         body: formData
     }).then(res => res.json()).then(data => {
         progress.style.display = 'none';
+
+        // 关闭弹窗前先读取期间，关闭后弹窗DOM被移除无法再读取
+        const salYear = document.getElementById('sal-import-year')?.value;
+        const salMonth = document.getElementById('sal-import-month')?.value;
+
         closeModal('salary-import-modal');
 
         // 将导入弹窗中的期间同步到页面顶部选择器，确保刷新后显示刚导入的数据
         const topYearSel = document.getElementById('salary-y');
         const topMonthSel = document.getElementById('salary-m');
-        if (topYearSel) topYearSel.value = document.getElementById('sal-import-year').value;
-        if (topMonthSel) topMonthSel.value = document.getElementById('sal-import-month').value;
+        if (topYearSel && salYear) topYearSel.value = salYear;
+        if (topMonthSel && salMonth) topMonthSel.value = salMonth;
 
         loadSalaryData();
         toast(data.msg || '导入完成', 'success');
