@@ -1,13 +1,14 @@
 """
-涉税风险分析报告模块 V6
-综合分析评估 94 个维度（V6新增33项）：
+涉税风险分析报告模块 V7
+综合分析评估 99 个维度 — 全规则100%覆盖：
 账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 / 配比弹性 /
 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践 /
-经营实质(18+3项) / 增值税专项(5+4项) / 发票异常(3+4项) / 费用匹配(3项) /
-企业所得税专项(4+4项) / 薪酬福利(3项) / 其他(2项) /
-V6新增: 资金联动(3项) / 征管风险(4项) / 交易特征(4项) / 财务补充(3项)
+经营实质(18+3+3项) / 增值税专项(5+4项) / 发票异常(3+4+3项) / 费用匹配(3项) /
+企业所得税专项(4+4项) / 申报比对(4项) / 征管风险(4+1项) / 交易特征(4项) /
+V7新增8项: 年终奖计税优化 / 农产品收购发票异常 / 跨区域开票 / 简易计税划分 /
+一址多照/一人多企 / 注册经营地址不一致 / 注销前突击开票 / D级纳税人风险
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -386,6 +387,15 @@ def get_tax_risk_report(
     _analyze_roe_sustainability(db, company_id, period_start, period_end, results)
     _analyze_operating_cash_flow_coverage(db, company_id, period_start, period_end, results)
     _analyze_other_payables_scale_mismatch(db, company_id, period_start, period_end, results)
+    # ── V7 新增 — 补全8项（个人所得税/发票异常/申报比对/经营实质/征管风险）──
+    _analyze_year_end_bonus_tax_opt(db, company_id, period_start, period_end, results)
+    _analyze_agricultural_purchase_invoice(db, company_id, period_start, period_end, results)
+    _analyze_cross_region_invoicing(db, company_id, period_start, period_end, results)
+    _analyze_simple_general_tax_mix(db, company_id, period_start, period_end, results)
+    _analyze_pre_cancellation_spike(db, company_id, period_start, period_end, results)
+    _analyze_same_address_multi_company(db, company_id, period_start, period_end, results)
+    _analyze_address_mismatch(db, company_id, period_start, period_end, results)
+    _analyze_d_taxpayer_risk(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -5641,6 +5651,513 @@ def _analyze_other_payables_scale_mismatch(db, company_id, ps, pe, results):
             "detail": f"其他应付款余额 {other_payables:,.2f} 元，{'、'.join(triggers)}。其他应付款长期大额挂账是高频税务风险点：可能隐藏账外收入、虚列成本费用、虚假负债、或股东/关联方资金拆借未规范处理。",
             "suggestion": "逐笔核查大额其他应付款的入账依据和业务真实性；长期挂账未付的，需核实是否虚假负债或应转收入的预收款项；检查其他应付款中是否隐藏了应付未付的工资/社保/税费。",
             "required_evidence": ["其他应付款明细账", "每笔大额款项的入账凭证及合同", "账龄分析表"]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  V7 新增 — 8项补全规则
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_year_end_bonus_tax_opt(db, company_id, ps, pe, results):
+    """年终奖计税方式未优化（个人所得税）"""
+    # 查找含有"年终奖"或"全年一次性奖金"的工资记录
+    bonus_records = db.query(SalaryRecord).filter(
+        SalaryRecord.company_id == company_id,
+        SalaryRecord.period >= ps, SalaryRecord.period <= pe,
+        or_(
+            func.lower(SalaryRecord.remark).contains("年终奖"),
+            func.lower(SalaryRecord.remark).contains("全年一次性奖金"),
+            func.lower(SalaryRecord.remark).contains("一次性奖金"),
+            func.lower(SalaryRecord.remark).contains("奖金"),
+            func.lower(SalaryRecord.income_item).contains("年终"),
+            func.lower(SalaryRecord.income_item).contains("奖金")
+        )
+    ).all()
+
+    if not bonus_records:
+        return
+
+    bonus_employees = set()
+    total_bonus = 0.0
+    for r in bonus_records:
+        bonus_employees.add(r.employee_name)
+        total_bonus += _safe_float(r.current_income)
+
+    # 年终奖未优化提示：建议在次年1月前测算两种计税方式
+    if total_bonus > 0:
+        results.append({
+            "category": "个人所得税", "category_icon": "👤", "risk_score": 4, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "中",
+            "item": f"年终奖计税方式未优化（涉及{len(bonus_employees)}人）",
+            "detail": f"系统检测到 {len(bonus_employees)} 名员工有年终奖/全年一次性奖金发放记录（合计 {total_bonus:,.2f} 元）。"
+                     f"2027年前年终奖仍可适用单独计税优惠政策（财税〔2023〕30号延续至2027.12.31），"
+                     f"建议在每年1月前测算单独计税与合并计税两种方式的税负差异，选择最优方案并在个税系统中准确申报。",
+            "suggestion": "每月/每季计算每位员工的累计预扣预缴个税，年终奖发放前做税负测算：①单独计税：年终奖÷12查税率表×12；②合并计税：并入综合所得。取税负较低方案。",
+            "required_evidence": ["工资薪金台账", "年终奖两种计税方式税负测算表", "个税申报记录"]
+        })
+
+
+AGRICULTURAL_KEYWORDS = [
+    "农产品", "蔬菜", "水果", "粮食", "谷物", "小麦", "稻谷", "玉米", "大豆",
+    "棉花", "畜牧", "水产", "林木", "药材", "中药材", "苗木", "花卉",
+    "食用油", "菜籽", "花生", "鲜肉", "禽蛋", "茶叶", "蚕茧", "烟叶",
+    "种植", "养殖", "捕捞", "收割", "收购", "农副产品"
+]
+
+
+def _analyze_agricultural_purchase_invoice(db, company_id, ps, pe, results):
+    """农产品收购发票异常（发票异常）"""
+    ps_date = _period_to_date_range(ps)[0]
+    pe_date = _period_to_date_range(pe)[1]
+
+    # 查找品名匹配农产品关键词的进项发票
+    agri_invoices = []
+    for inv in db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date,
+        PurchaseInvoice.invoice_date <= pe_date
+    ).all():
+        gn = (getattr(inv, 'goods_name', '') or '')
+        for kw in AGRICULTURAL_KEYWORDS:
+            if kw in gn:
+                seller = getattr(inv, 'seller_name', '') or ''
+                # 判断销方是否为个人（无公司后缀）
+                is_individual = not any(s in seller for s in ["公司", "集团", "厂", "合作社", "协会"])
+                agri_invoices.append({
+                    "no": getattr(inv, 'digital_invoice_no', '') or (getattr(inv, 'invoice_code', '') or '') + (getattr(inv, 'invoice_no', '') or ''),
+                    "seller": seller,
+                    "goods": gn,
+                    "amt": _safe_float(inv.total_amount),
+                    "is_individual": is_individual
+                })
+                break
+
+    if not agri_invoices:
+        return
+
+    total_agri = len(agri_invoices)
+    total_amt = sum(a['amt'] for a in agri_invoices)
+    individual_cnt = sum(1 for a in agri_invoices if a['is_individual'])
+    individual_amt = sum(a['amt'] for a in agri_invoices if a['is_individual'])
+
+    # 农产品收购发票由购方自行填开，是虚开发票的高发领域
+    if individual_cnt >= 3:
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"农产品收购发票异常（{total_agri}张，{total_amt:,.2f}元）",
+            "detail": f"检测到 {total_agri} 张农产品相关进项发票（合计 {total_amt:,.2f} 元），"
+                     f"其中 {individual_cnt} 张销方疑似为个人（无企业后缀），涉及金额 {individual_amt:,.2f} 元。"
+                     f"农产品收购发票由购方自行填开，是虚开发票的高发领域，金税四期对此专项监控。",
+            "suggestion": "逐笔核实农产品收购的真实性：(1)出售人身份信息真实完整并留存身份证复印件；(2)有收购过磅单/入库单/质检记录；(3)银行付款记录与发票金额一致；(4)大额现金支付需特别警惕。虚开农产品收购发票是刑事犯罪。",
+            "required_evidence": ["农产品收购发票清单", "出售人身份证明", "过磅单/入库单", "付款凭证", "质检记录"]
+        })
+    elif individual_cnt > 0:
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在农产品个人采购发票（{individual_cnt}张）",
+            "detail": f"有 {individual_cnt} 张农产品相关发票销方为个人（非企业），涉及金额 {individual_amt:,.2f} 元。"
+                     f"向个人收购农产品可自行开具收购发票，但需严格留存出售人身份证明和收购记录。",
+            "suggestion": "确保每张农产品收购发票都有完整的出售人身份信息和收购业务记录。"
+        })
+
+
+def _analyze_cross_region_invoicing(db, company_id, ps, pe, results):
+    """跨区域开票异常（发票异常）"""
+    # 获取公司注册地址
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company or not company.address:
+        return
+
+    registered_addr = company.address[:6] if company.address else ""  # 取前6位（省市区）
+    if not registered_addr or len(registered_addr) < 4:
+        return
+
+    ps_date = _period_to_date_range(ps)[0]
+    pe_date = _period_to_date_range(pe)[1]
+
+    # 查找销项发票中购买方地址与注册地严重不符的情况
+    cross_region_invoices = []
+    total_sales = 0
+    for inv in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date,
+        SalesInvoice.invoice_date <= pe_date
+    ).all():
+        total_sales += 1
+        buyer_addr = (getattr(inv, 'buyer_address', '') or '')[:6]
+        if buyer_addr and len(buyer_addr) >= 4 and registered_addr[:2] != buyer_addr[:2]:
+            cross_region_invoices.append({
+                "no": getattr(inv, 'digital_invoice_no', '') or (getattr(inv, 'invoice_code', '') or '') + (getattr(inv, 'invoice_no', '') or ''),
+                "buyer": getattr(inv, 'buyer_name', '') or '',
+                "amt": _safe_float(inv.total_amount),
+                "province": buyer_addr[:2]
+            })
+
+    if total_sales == 0:
+        return
+
+    cross_ratio = len(cross_region_invoices) / total_sales * 100
+    # 按省份统计
+    province_counts = {}
+    for cr in cross_region_invoices:
+        province_counts[cr['province']] = province_counts.get(cr['province'], 0) + 1
+
+    if cross_ratio > 50 and len(cross_region_invoices) >= 10:
+        top_provinces = sorted(province_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        prov_desc = "、".join(f"{p}({c}张)" for p, c in top_provinces)
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"跨区域开票异常（跨省开票占比{cross_ratio:.0f}%）",
+            "detail": f"企业注册地（{registered_addr}）与 {cross_ratio:.0f}%（{len(cross_region_invoices)}/{total_sales}张）销项发票购买方所在地不符，"
+                     f"主要涉及省份：{prov_desc}。大量异地开票可能涉嫌虚开发票或开票地与实际经营地不一致。",
+            "suggestion": "核实开票地点与经营地的关系：(1)确认开票行为在税务登记地进行；(2)如确为异地经营，需办理跨区域涉税事项报告；(3)保留物流运输证明备查。金税四期会记录开票设备MAC地址和IP，跨省开票自动预警。",
+            "required_evidence": ["开票设备/IP记录", "异地经营备案文件", "物流运输单据"]
+        })
+    elif cross_ratio > 30 and len(cross_region_invoices) >= 5:
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在跨区域开票（{cross_ratio:.0f}%跨省）",
+            "detail": f"约 {cross_ratio:.0f}% 的销项发票购买方在注册地以外省份。如为正常商业活动，建议保留物流记录和合同备查。",
+            "suggestion": "确保跨省销售有对应的物流运输单据和合同支撑，以备税务机关核实。"
+        })
+
+
+def _analyze_simple_general_tax_mix(db, company_id, ps, pe, results):
+    """简易计税与一般计税划分不清（申报比对）"""
+    vat_list = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).order_by(VATDeclaration.period).all()
+
+    mix_periods = []
+    for v in vat_list:
+        general_sales = 0.0
+        simple_sales = 0.0
+        # 从附表一检查
+        if v.form_sales:
+            fs = v.form_sales if isinstance(v.form_sales, dict) else (json.loads(v.form_sales) if v.form_sales else {})
+            # 一般计税销售额 (row1)
+            general_sales += _safe_float(fs.get("row1_1_current") or fs.get("row1_1"))
+            general_sales += _safe_float(fs.get("row1_2_current") or fs.get("row1_2"))
+            general_sales += _safe_float(fs.get("row1_3_current") or fs.get("row1_3"))
+            # 简易计税销售额
+            simple_sales += _safe_float(fs.get("row5_1_current") or fs.get("row5_1"))
+            simple_sales += _safe_float(fs.get("row5_2_current") or fs.get("row5_2"))
+            simple_sales += _safe_float(fs.get("row5_3_current") or fs.get("row5_3"))
+        if general_sales > 0 and simple_sales > 0:
+            # 同时存在一般计税和简易计税，检查是否有进项转出
+            input_transfer = 0.0
+            if v.form_deduction:
+                fd = v.form_deduction if isinstance(v.form_deduction, dict) else (json.loads(v.form_deduction) if v.form_deduction else {})
+                input_transfer = _safe_float(fd.get("row14") or fd.get("row14_total"))
+            mix_periods.append({
+                "period": v.period,
+                "general": general_sales,
+                "simple": simple_sales,
+                "input_transfer": input_transfer
+            })
+
+    if not mix_periods:
+        return
+
+    # 检查是否有期间未做进项转出
+    no_transfer_periods = [m for m in mix_periods if m['input_transfer'] < 1]
+    if no_transfer_periods:
+        period_list = "、".join(m['period'] for m in no_transfer_periods[:3])
+        total_simple = sum(m['simple'] for m in no_transfer_periods)
+        results.append({
+            "category": "申报比对", "category_icon": "📋", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"简易计税与一般计税划分不清（{len(no_transfer_periods)}期未做进项转出）",
+            "detail": f"以下期间同时存在一般计税和简易计税销售额，但未发现对应的进项税额转出：{period_list}。"
+                     f"简易计税项目对应的进项税额不得从销项税额中抵扣，专用于简易计税的进项税额必须转出。"
+                     f"混用的进项税额需按销售额比例分摊转出。",
+            "suggestion": "建立一般计税和简易计税项目的进项税额台账：(1)专用于简易计税项目的进项税额全额转出；(2)混用的进项税额按简易计税销售额÷全部销售额的比例计算转出；(3)在增值税申报表附表二正确填列进项税额转出。",
+            "required_evidence": ["简易计税项目清单", "进项税额分摊计算表", "进项税额转出凭证"]
+        })
+
+
+def _analyze_pre_cancellation_spike(db, company_id, ps, pe, results):
+    """注销前突击开票（经营实质）"""
+    # 检查最近6个月的开票趋势，判断是否存在末期激增
+    periods = _get_periods_between(ps, pe)
+    if len(periods) < 6:
+        return
+
+    # 按月统计销项发票
+    monthly_sales = {}
+    ps_date = _period_to_date_range(ps)[0]
+    pe_date = _period_to_date_range(pe)[1]
+
+    for inv in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date,
+        SalesInvoice.invoice_date <= pe_date
+    ).all():
+        inv_date = str(inv.invoice_date)[:7]
+        if inv_date not in monthly_sales:
+            monthly_sales[inv_date] = {"cnt": 0, "amt": 0.0}
+        monthly_sales[inv_date]["cnt"] += 1
+        monthly_sales[inv_date]["amt"] += _safe_float(inv.total_amount)
+
+    # 取后3个月 vs 前3个月
+    sorted_periods = sorted(monthly_sales.keys())
+    if len(sorted_periods) < 6:
+        return
+
+    first_half = sorted_periods[:3]
+    last_half = sorted_periods[-3:]
+
+    first_avg = sum(monthly_sales[p]["amt"] for p in first_half) / 3 if first_half else 0
+    last_avg = sum(monthly_sales[p]["amt"] for p in last_half) / 3 if last_half else 0
+
+    if first_avg <= 0:
+        return
+
+    spike_ratio = (last_avg - first_avg) / first_avg * 100
+
+    # 也检查进项发票
+    monthly_purchase = {}
+    for inv in db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date,
+        PurchaseInvoice.invoice_date <= pe_date
+    ).all():
+        inv_date = str(inv.invoice_date)[:7]
+        if inv_date not in monthly_purchase:
+            monthly_purchase[inv_date] = {"cnt": 0, "amt": 0.0}
+        monthly_purchase[inv_date]["cnt"] += 1
+        monthly_purchase[inv_date]["amt"] += _safe_float(inv.total_amount)
+
+    sorted_pur = sorted(monthly_purchase.keys())
+    pur_first_avg = 0
+    pur_last_avg = 0
+    if len(sorted_pur) >= 6:
+        pur_first_avg = sum(monthly_purchase[p]["amt"] for p in sorted_pur[:3]) / 3
+        pur_last_avg = sum(monthly_purchase[p]["amt"] for p in sorted_pur[-3:]) / 3
+
+    pur_spike = 0
+    if pur_first_avg > 0:
+        pur_spike = (pur_last_avg - pur_first_avg) / pur_first_avg * 100
+
+    if spike_ratio > 200 or pur_spike > 200:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"注销前突击开票嫌疑（近3月开票量环比增长{spike_ratio:.0f}%）",
+            "detail": f"最近3个月销项发票月均金额 {last_avg:,.2f} 元，较前3个月（{first_avg:,.2f} 元）增长 {spike_ratio:.0f}%。"
+                     + (f" 进项发票也增长{pur_spike:.0f}%。" if pur_spike > 50 else "")
+                     + "如企业正在办理注销，注销前突击开票可能涉嫌对外虚开或取得进项发票虚抵后注销逃税。",
+            "suggestion": "如企业正在办理注销，应停止大额开票行为，配合税务机关完成注销清算。注销前异常开票将影响注销审批，严重者追究法律责任。如并非注销而是业务增长，保留所有合同和业务单据备查。",
+            "required_evidence": ["注销申请材料（如适用）", "最近6个月发票台账", "业务增长说明", "对应合同"]
+        })
+    elif spike_ratio > 100:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"近期开票量异常增长（环比{spike_ratio:.0f}%）",
+            "detail": f"最近3个月销项发票金额较前3个月增长 {spike_ratio:.0f}%。如非注销前突击开票而是业务正常增长，保留证明材料。",
+            "suggestion": "确认业务增长原因，保留合同/物流/资金流三流合一的证据链。"
+        })
+
+
+def _analyze_same_address_multi_company(db, company_id, ps, pe, results):
+    """一址多照/一人多企（经营实质）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+
+    # 检查同一注册地址的其他公司
+    same_addr_companies = []
+    if company.address:
+        same_addr_companies = db.query(Company).filter(
+            Company.id != company_id,
+            Company.address == company.address
+        ).all()
+
+    # 检查同一法定代表人的其他公司
+    same_legal_companies = []
+    if company.legal_representative:
+        same_legal_companies = db.query(Company).filter(
+            Company.id != company_id,
+            Company.legal_representative == company.legal_representative
+        ).all()
+
+    same_addr_cnt = len(same_addr_companies)
+    same_legal_cnt = len(same_legal_companies)
+
+    # 排除同一公司的重复（可能同是地址和法人都相同的）
+    addr_ids = {c.id for c in same_addr_companies}
+    legal_ids = {c.id for c in same_legal_companies}
+    total_related = len(addr_ids | legal_ids)
+
+    if same_addr_cnt >= 2 or same_legal_cnt >= 2 or total_related >= 2:
+        detail_parts = []
+        if same_addr_cnt >= 2:
+            detail_parts.append(f"同一注册地址登记了{same_addr_cnt + 1}家企业（含本公司）")
+        if same_legal_cnt >= 2:
+            detail_parts.append(f"同一法定代表人控制{same_legal_cnt + 1}家企业（含本公司）")
+
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"一址多照/一人多企（关联企业{total_related}家）",
+            "detail": "、".join(detail_parts) + "。一址多照/一人多企是虚开发票团伙的常见组织方式。"
+                     "金税四期通过企业关系图谱自动识别关联企业群体，交叉比对发票开具和纳税情况。",
+            "suggestion": "核实各关联企业的经营是否独立：(1)资金账户独立；(2)人员独立（不共用员工）；(3)业务独立（不循环交易）；(4)财务独立（各自核算）。为每家企业的独立性准备证明材料。",
+            "required_evidence": ["关联企业清单", "各企业独立经营证明材料", "各企业银行账户流水", "各企业人员名册和社保记录"]
+        })
+    elif same_addr_cnt == 1 or same_legal_cnt == 1:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在关联企业（{'同地址' if same_addr_cnt else '同法人'}{total_related}家）",
+            "detail": f"发现{total_related}家关联企业。如关联企业间有交易往来，需确保定价公允且保留转移定价文档。",
+            "suggestion": "关注关联企业间的交易是否公允，避免通过关联交易转移利润或虚开发票。"
+        })
+
+
+def _analyze_address_mismatch(db, company_id, ps, pe, results):
+    """注册地址与经营地址不一致（经营实质）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company or not company.address:
+        return
+
+    registered_addr = company.address
+
+    # 检查是否有租赁费/水电费/物业费支出
+    rent_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            func.lower(JournalEntry.summary).contains("租赁"),
+            func.lower(JournalEntry.summary).contains("租金"),
+            func.lower(JournalEntry.summary).contains("房租")
+        )
+    ).scalar())
+
+    utility_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            func.lower(JournalEntry.summary).contains("水电"),
+            func.lower(JournalEntry.summary).contains("电费"),
+            func.lower(JournalEntry.summary).contains("水费"),
+            func.lower(JournalEntry.summary).contains("燃气")
+        )
+    ).scalar())
+
+    property_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            func.lower(JournalEntry.summary).contains("物业"),
+            func.lower(JournalEntry.summary).contains("物业费"),
+            func.lower(JournalEntry.summary).contains("物业管理")
+        )
+    ).scalar())
+
+    # 如果没有任何租赁/水电/物业费，说明实际经营地址可能不在注册地
+    if rent_exp <= 0 and utility_exp <= 0 and property_exp <= 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "注册地址与实际经营地址可能不一致",
+            "detail": f"企业注册地址为「{registered_addr}」，但分析期间内未发现租赁费/水电费/物业费支出记录。"
+                     "实际经营地址与工商注册地址不一致且未办理变更登记，可能影响税务管辖权和纳税地点判断。",
+            "suggestion": "及时办理工商变更登记，或在经营地办理跨区域涉税事项报告。注意：异地经营超过180天的，应在经营地办理税务登记。",
+            "required_evidence": ["经营场所租赁合同或产权证明", "工商变更登记材料", "水电费缴费凭证"]
+        })
+
+    # 检查是否有地址变更（通过公司档案中的备注等）
+    # 如果公司注册地址包含"虚拟"或"集群注册"等字样
+    addr_lower = registered_addr.lower()
+    if any(kw in addr_lower for kw in ["虚拟", "集群", "挂靠", "孵化器", "众创空间", "托管"]):
+        if rent_exp <= 0:
+            results.append({
+                "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+                "risk_color": "#dc2626", "urgency": "紧急",
+                "item": f"注册地址疑似虚拟/挂靠地址（{registered_addr}）",
+                "detail": f"企业注册地址包含「虚拟/集群/挂靠/孵化器/托管」等字眼，且无租赁费/水电费支出。"
+                         "集群注册企业是税务稽查重点：金税四期会检查注册地址是否有实际经营实体。",
+                "suggestion": "如为集群注册但确有实际经营场所，应提供实际经营地址的租赁合同和水电费凭证。如长期无实际经营场所，建议办理注销或变更注册地址。",
+                "required_evidence": ["实际经营地址租赁合同", "水电费缴纳记录", "经营场所照片"]
+            })
+
+
+def _analyze_d_taxpayer_risk(db, company_id, ps, pe, results):
+    """D级纳税人关联风险（征管风险）"""
+    # 纳税信用等级数据通常来自税务机关，系统内可能没有直接存储
+    # 检查公司是否有信用等级相关字段
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+
+    # 检查公司是否有欠税、违规开票等可能导致D级评定的行为
+    # 汇总风险信号
+    risk_signals = []
+
+    # 检查进项发票是否有风险记录
+    risk_inv_cnt = db.query(func.count(PurchaseInvoice.id)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_risk_level.in_(["疑点", "异常", "失控"])
+    ).scalar() or 0
+
+    if risk_inv_cnt > 0:
+        risk_signals.append(f"有{risk_inv_cnt}张风险进项发票")
+
+    # 检查是否有连续零申报
+    vat_list = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).order_by(VATDeclaration.period).all()
+
+    zero_months = 0
+    for v in vat_list:
+        if v.form_main:
+            fm = v.form_main if isinstance(v.form_main, dict) else json.loads(v.form_main)
+            if _safe_float(fm.get("vat_payable")) < 1:
+                zero_months += 1
+
+    if zero_months >= 6:
+        risk_signals.append(f"连续{zero_months}个月零/小额申报")
+
+    # 检查是否有互开发票
+    # (已在 _analyze_cross_invoicing 中检测)
+
+    # 检查是否有欠税
+    # (已在 _analyze_tax_arrears 中检测)
+
+    if risk_signals:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "D级纳税人关联风险（存在多项负面指标）",
+            "detail": f"企业存在多项可能导致纳税信用降级的风险指标：{'；'.join(risk_signals)}。"
+                     "D级纳税人面临发票限量供应（增值税专用发票每月限量25份）、出口退税从严审核、不得享受即征即退、"
+                     "列入重点监控对象等多重限制，且D级评价保留2年。",
+            "suggestion": "逐项整改风险指标：(1)处理风险进项发票，必要时做进项税额转出；(2)补申报零申报期间的应缴税款；(3)完善账务处理和发票管理。次年纳税信用评价前完成整改可申请复评。",
+            "required_evidence": ["纳税信用评价结果查询截图", "风险指标整改方案", "整改证明材料"]
+        })
+
+    # 即使没有明显风险信号，也提醒关注信用评级
+    # 检查供应商中是否有非正常户
+    abnormal_supplier = db.query(func.count(PurchaseInvoice.id)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_risk_level == "异常"
+    ).scalar() or 0
+
+    if abnormal_supplier > 0:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"与异常供应商有交易往来（{abnormal_supplier}家）",
+            "detail": f"有{abnormal_supplier}家进项发票供应商存在异常记录。与异常状态供应商交易取得的发票可能被列为异常扣税凭证，面临进项转出风险。",
+            "suggestion": "建议在每笔大额采购前通过电子税务局查验销方税务状态和纳税信用等级。建立供应商准入制度。"
         })
 
 
