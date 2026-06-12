@@ -75,6 +75,7 @@ function renderTaxRiskRules(container) {
     + '<button class="btn-toolbar" onclick="importTaxRiskRules()">📥 导入规则</button>'
     + '<button class="btn-toolbar" onclick="clearAllRules()">🗑️ 清空规则</button>'
     + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">📤 上传规则到服务器</button>'
+    + '<button class="btn-toolbar" onclick="auditTaxRiskRules()" style="background:#059669;color:#fff">🔍 检查规则</button>'
     + '</div>'
     + '</div>'
     // 主体：左侧输入区 + 右侧显示区
@@ -675,6 +676,139 @@ async function uploadLocalRulesToServer() {
   } catch(e) {
     toast('上传失败: ' + e.message, 'error');
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  规则质量审计
+// ══════════════════════════════════════════════════════════════
+var auditModalOpen = false;
+
+function auditTaxRiskRules() {
+  if (taxRiskRulesData.length === 0) {
+    toast('没有规则可检查', 'warning');
+    return;
+  }
+
+  // 显示加载中
+  showAuditModal('<div style="text-align:center;padding:80px"><div class="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#059669;border-radius:50%;animation:spin 1s linear infinite"></div><p style="color:#6b7280">正在审计 ' + taxRiskRulesData.length + ' 条规则...</p></div>');
+
+  fetch('/api/tax-risk-rules/audit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(taxRiskRulesData)
+  }).then(function(r) { return r.json(); })
+  .then(function(report) {
+    if (!report.ok) { showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">审计失败: ' + (report.error || '未知错误') + '</p></div>'); return; }
+    renderAuditReport(report);
+  }).catch(function(e) {
+    showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">审计失败: ' + e.message + '</p></div>');
+  });
+}
+
+function showAuditModal(html) {
+  var modal = document.getElementById('audit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'audit-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center';
+    modal.onclick = function(e) { if (e.target === modal) closeAuditModal(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:900px;width:95%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative">'
+    + '<button onclick="closeAuditModal()" style="position:sticky;top:0;float:right;z-index:1;margin:12px;border:none;background:#f3f4f6;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;line-height:32px;text-align:center">✕</button>'
+    + '<div style="padding:24px">' + html + '</div></div>';
+}
+
+function closeAuditModal() {
+  var modal = document.getElementById('audit-modal');
+  if (modal) modal.remove();
+}
+
+function renderAuditReport(report) {
+  var layers = report.layers;
+  var summary = report.summary;
+  var allClear = summary.all_clear;
+
+  var statusColor = allClear ? '#059669' : '#f59e0b';
+  var statusIcon = allClear ? '✅' : '⚠️';
+  var statusText = allClear ? '全部检查通过！' : '发现 ' + summary.issues_found.length + ' 项需关注的问题';
+
+  var html = '<div style="margin-bottom:24px">'
+    + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">🔍 规则质量审计报告</h3>'
+    + '<p style="margin:0;color:#6b7280">检查 ' + summary.total_rules + ' 条规则，' + summary.total_categories + ' 个分类</p>'
+    + '</div>';
+
+  // 概览卡片
+  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">';
+  html += '<div style="flex:1;min-width:120px;background:' + statusColor + '10;border:1px solid ' + statusColor + '40;border-radius:8px;padding:14px;text-align:center">'
+    + '<div style="font-size:28px">' + statusIcon + '</div>'
+    + '<div style="font-size:13px;color:' + statusColor + ';font-weight:600;margin-top:4px">' + statusText + '</div></div>';
+  html += '<div style="flex:1;min-width:80px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;text-align:center">'
+    + '<div style="font-size:22px;font-weight:700;color:#059669">' + summary.total_rules + '</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:2px">总规则</div></div>';
+  html += '<div style="flex:1;min-width:80px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;text-align:center">'
+    + '<div style="font-size:22px;font-weight:700;color:#2563eb">' + summary.total_categories + '</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:2px">总分类</div></div>';
+  html += '<div style="flex:1;min-width:80px;background:#fefce8;border:1px solid #fef08a;border-radius:8px;padding:14px;text-align:center">'
+    + '<div style="font-size:22px;font-weight:700;color:#ca8a04">' + summary.avg_score + '</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:2px">平均评分</div></div>';
+  html += '</div>';
+
+  // 等级分布
+  var ld = summary.level_distribution;
+  html += '<div style="display:flex;gap:8px;margin-bottom:20px;font-size:13px">';
+  if (ld['高风险']) html += '<span style="background:#fef2f2;color:#dc2626;padding:2px 10px;border-radius:12px">高风险: ' + ld['高风险'] + '</span>';
+  if (ld['中风险']) html += '<span style="background:#fffbeb;color:#d97706;padding:2px 10px;border-radius:12px">中风险: ' + ld['中风险'] + '</span>';
+  if (ld['低风险']) html += '<span style="background:#eff6ff;color:#2563eb;padding:2px 10px;border-radius:12px">低风险: ' + ld['低风险'] + '</span>';
+  if (ld['良好']) html += '<span style="background:#f0fdf4;color:#059669;padding:2px 10px;border-radius:12px">良好: ' + ld['良好'] + '</span>';
+  html += '</div>';
+
+  // 8层检查结果
+  html += '<div style="margin-bottom:16px"><strong style="color:#374151">逐层检查结果</strong></div>';
+  layers.forEach(function(layer, idx) {
+    var icon = layer.pass ? '✅' : '⚠️';
+    var bg = layer.pass ? '#f9fafb' : '#fef2f2';
+    var border = layer.pass ? '#e5e7eb' : '#fecaca';
+    html += '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;padding:12px 14px;margin-bottom:8px">'
+      + '<div style="font-weight:600;color:' + (layer.pass ? '#374151' : '#991b1b') + '">' + icon + ' 第' + (idx + 1) + '层: ' + layer.name + '</div>';
+    if (layer.detail) {
+      if (Array.isArray(layer.detail)) {
+        layer.detail.forEach(function(d) {
+          if (typeof d === 'string') {
+            html += '<div style="font-size:13px;color:#6b7280;margin-top:4px">' + d + '</div>';
+          } else if (d.ratio !== undefined) {
+            html += '<div style="font-size:13px;color:#d97706;margin-top:4px;padding:4px 8px;background:#fffbeb;border-radius:4px">'
+              + '相似度 ' + Math.round(d.ratio * 100) + '%: <b>' + d.a + '</b> ↔ <b>' + d.b + '</b></div>';
+          } else if (d.group) {
+            html += '<div style="font-size:13px;color:#6b7280;margin-top:4px">⚠ 跨分类语义同类 [<b>' + d.group + '</b>]: '
+              + d.items.map(function(x) { return x.item + '(' + x.category + ')'; }).join(', ') + '</div>';
+          } else if (d.category && d.keyword) {
+            html += '<div style="font-size:13px;color:#d97706;margin-top:4px">⚠ <b>' + d.item + '</b> [' + d.category + '] 含"' + d.keyword + '"关键词</div>';
+          } else if (d.category && d.items) {
+            html += '<div style="font-size:13px;color:#d97706;margin-top:4px">⚠ <b>' + d.category + '</b> 只有 ' + d.count + ' 条: ' + d.items.join(', ') + '</div>';
+          } else if (d.item && d.level) {
+            html += '<div style="font-size:13px;color:#d97706;margin-top:4px">⚠ <b>' + d.item + '</b> level="' + d.level + '"</div>';
+          } else if (d.category && d.spread) {
+            html += '<div style="font-size:13px;color:#6b7280;margin-top:4px">⚠ <b>' + d.category + '</b> 评分跨度 ' + d.min + '~' + d.max + '</div>';
+          }
+        });
+      } else if (typeof layer.detail === 'string') {
+        html += '<div style="font-size:13px;color:#d97706;margin-top:4px">' + layer.detail + '</div>';
+      }
+    }
+    html += '</div>';
+  });
+
+  // 分类分布
+  html += '<div style="margin-top:16px"><strong style="color:#374151">分类分布</strong></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+  var catDist = summary.category_distribution;
+  for (var cat in catDist) {
+    html += '<span style="font-size:12px;background:#f3f4f6;padding:3px 10px;border-radius:12px;white-space:nowrap">' + cat + ' <b>' + catDist[cat] + '</b></span>';
+  }
+  html += '</div>';
+
+  showAuditModal(html);
 }
 
 // ══════════════════════════════════════════════════════════════

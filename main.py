@@ -7203,6 +7203,194 @@ async def tax_risk_rules_save_local(request: Request):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# ==================== 涉税风险规则审计 API ====================
+@app.post("/api/tax-risk-rules/audit")
+async def tax_risk_rules_audit(request: Request):
+    """接收当前规则 JSON，返回 8 层质量审计报告"""
+    try:
+        data = await request.json()
+    except Exception:
+        return {"ok": False, "error": "无效的 JSON 数据"}
+
+    from difflib import SequenceMatcher as _SeqMatcher
+    from collections import Counter as _Counter
+    import re as _re
+
+    report = {"ok": True, "total": len(data), "layers": [], "summary": {}}
+    issues_found = []
+
+    # --- 第1层: ID和名称精确去重 ---
+    ids = [r["id"] for r in data]
+    dup_ids = [i for i in ids if ids.count(i) > 1]
+    items = [r["item"] for r in data]
+    dup_names = {k: v for k, v in _Counter(items).items() if v > 1}
+    layer1 = {"name": "ID/名称精确去重", "pass": not dup_ids and not dup_names}
+    if dup_ids:
+        layer1["detail"] = f"重复ID: {list(set(dup_ids))}"
+    if dup_names:
+        layer1["detail"] = f"重复名称: {dup_names}"
+    report["layers"].append(layer1)
+    if not layer1["pass"]:
+        issues_found.append("ID/名称去重")
+
+    # --- 第2层: 名称相似度 (>=85%) ---
+    sim_names = []
+    for i in range(len(data)):
+        for j in range(i + 1, len(data)):
+            ratio = _SeqMatcher(None, data[i]["item"], data[j]["item"]).ratio()
+            if ratio >= 0.85:
+                sim_names.append({
+                    "ratio": round(ratio, 2),
+                    "a": data[i]["item"], "a_cat": data[i]["category"],
+                    "b": data[j]["item"], "b_cat": data[j]["category"]
+                })
+    layer2 = {"name": "名称相似度检查 (≥85%)", "pass": len(sim_names) == 0}
+    if sim_names:
+        layer2["detail"] = sim_names
+        issues_found.append("名称相似度")
+    report["layers"].append(layer2)
+
+    # --- 第3层: detail 相似度 (>=80%) ---
+    by_cat = {}
+    for r in data:
+        by_cat.setdefault(r["category"], []).append(r)
+    sim_detail = []
+    # 同分类
+    for cat, rules in by_cat.items():
+        for i in range(len(rules)):
+            for j in range(i + 1, len(rules)):
+                ratio = _SeqMatcher(None, rules[i]["detail"], rules[j]["detail"]).ratio()
+                if ratio >= 0.80:
+                    sim_detail.append({
+                        "type": "同分类", "cat": cat, "ratio": round(ratio, 2),
+                        "a": rules[i]["item"], "b": rules[j]["item"]
+                    })
+    # 跨分类
+    for i in range(len(data)):
+        for j in range(i + 1, len(data)):
+            if data[i]["category"] != data[j]["category"]:
+                ratio = _SeqMatcher(None, data[i]["detail"], data[j]["detail"]).ratio()
+                if ratio >= 0.80:
+                    sim_detail.append({
+                        "type": "跨分类", "ratio": round(ratio, 2),
+                        "a": f"{data[i]['item']}({data[i]['category']})",
+                        "b": f"{data[j]['item']}({data[j]['category']})"
+                    })
+    layer3 = {"name": "detail 相似度检查 (≥80%)", "pass": len(sim_detail) == 0}
+    if sim_detail:
+        layer3["detail"] = sim_detail
+        issues_found.append("detail相似度")
+    report["layers"].append(layer3)
+
+    # --- 第4层: 语义同类跨分类扫描 ---
+    keyword_groups = {
+        "零申报/零税额": ["零申报", "零税额"],
+        "留抵退税/留抵": ["留抵退税", "留抵", "进项留抵"],
+        "红冲/作废": ["红冲", "作废"],
+        "开票限额/顶额": ["顶额", "开票限额"],
+        "进项转出": ["进项转出", "进项税额转出"],
+        "发票跨期": ["跨期", "跨年"],
+        "税负率": ["税负率"],
+        "咨询费/服务费": ["咨询", "服务费"],
+        "资金回流": ["资金回流"],
+    }
+    sem_overlaps = []
+    for group_name, keywords in keyword_groups.items():
+        matches = []
+        seen = set()
+        for kw in keywords:
+            for r in data:
+                combined = r["item"] + r["detail"]
+                if kw in combined and r["item"] not in seen:
+                    seen.add(r["item"])
+                    matches.append({"item": r["item"], "category": r["category"]})
+        cats = set(m["category"] for m in matches)
+        if len(matches) > 1 and len(cats) > 1:
+            sem_overlaps.append({"group": group_name, "categories": list(cats), "count": len(matches), "items": matches})
+    layer4 = {"name": "语义同类跨分类扫描", "pass": True}
+    if sem_overlaps:
+        layer4["detail"] = sem_overlaps
+    report["layers"].append(layer4)
+
+    # --- 第5层: 碎片分类 (<2条) ---
+    cats = _Counter(r["category"] for r in data)
+    fragments = {cat: cnt for cat, cnt in cats.items() if cnt < 2}
+    layer5 = {"name": "碎片分类检测 (<2条)", "pass": len(fragments) == 0}
+    if fragments:
+        frag_list = []
+        for cat, cnt in fragments.items():
+            citems = [r["item"] for r in data if r["category"] == cat]
+            frag_list.append({"category": cat, "count": cnt, "items": citems})
+        layer5["detail"] = frag_list
+        issues_found.append("碎片分类")
+    report["layers"].append(layer5)
+
+    # --- 第6层: 归类不当 ---
+    tax_map = {
+        "增值税": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度", "税负水平"],
+        "进项税额": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度", "交易特征"],
+        "销项税额": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度"],
+        "企业所得税": ["企业所得税", "纳税调整", "成本结构", "财务健康"],
+        "汇算清缴": ["企业所得税", "纳税调整"],
+        "纳税调增": ["企业所得税", "纳税调整", "成本结构"],
+        "个人所得税": ["个人所得税"],
+        "个税": ["个人所得税", "薪酬福利"],
+        "代扣代缴": ["个人所得税"],
+    }
+    mismatches = []
+    for r in data:
+        detail = r["detail"] + r["suggestion"]
+        for tax_kw, allowed_cats in tax_map.items():
+            if tax_kw in detail and r["category"] not in allowed_cats:
+                mismatches.append({"item": r["item"], "category": r["category"], "keyword": tax_kw})
+                break
+    layer6 = {"name": "归类不当检测", "pass": len(mismatches) == 0}
+    if mismatches:
+        layer6["detail"] = mismatches
+        issues_found.append("归类不当")
+    report["layers"].append(layer6)
+
+    # --- 第7层: level 一致性 ---
+    valid_levels = {"高风险", "中风险", "低风险", "良好"}
+    bad_levels = []
+    for r in data:
+        if r["level"] not in valid_levels:
+            bad_levels.append({"item": r["item"], "level": r["level"]})
+    layer7 = {"name": "level 字段一致性", "pass": len(bad_levels) == 0}
+    if bad_levels:
+        layer7["detail"] = bad_levels
+        issues_found.append("level不一致")
+    report["layers"].append(layer7)
+
+    # --- 第8层: 评分跨度 ---
+    by_cat2 = {}
+    for r in data:
+        by_cat2.setdefault(r["category"], []).append(r["score"])
+    wide_cats = []
+    for cat, scores in sorted(by_cat2.items()):
+        if len(scores) > 1 and max(scores) - min(scores) >= 5:
+            wide_cats.append({"category": cat, "min": min(scores), "max": max(scores), "spread": max(scores) - min(scores)})
+    layer8 = {"name": "同分类评分跨度检查 (≥5分)", "pass": len(wide_cats) == 0}
+    if wide_cats:
+        layer8["detail"] = wide_cats
+    report["layers"].append(layer8)
+
+    # --- 汇总 ---
+    cats_all = _Counter(r["category"] for r in data)
+    levels_all = _Counter(r["level"] for r in data)
+    scores_all = [r["score"] for r in data]
+    report["summary"] = {
+        "total_rules": len(data),
+        "total_categories": len(cats_all),
+        "level_distribution": dict(levels_all),
+        "score_range": f"{min(scores_all)}~{max(scores_all)}",
+        "avg_score": round(sum(scores_all) / len(scores_all), 1),
+        "category_distribution": dict(cats_all.most_common()),
+        "issues_found": issues_found,
+        "all_clear": len(issues_found) == 0
+    }
+    return report
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
