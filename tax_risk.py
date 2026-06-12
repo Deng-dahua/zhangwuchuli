@@ -1,5 +1,5 @@
 """
-涉税风险分析报告模块 V8
+涉税风险分析报告模块 V9
 综合分析评估 100+ 个维度 — 全规则100%覆盖：
 账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 / 配比弹性 /
 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
@@ -12,6 +12,8 @@ V7新增8项: 年终奖计税优化 / 农产品收购发票异常 / 跨区域开
 V8新增16项: 合同风险 — 三流合一/四流合一(收入无合同/成本无合同/大额无合同/
 三流缺失/四流缺失/长期无合同/金额偏差/过期合同/先票后签/收付款不匹配/
 无合同占比/跨合同方/印花税合同风险/合同作废率/框架合同缺失/关联方无合同)
+V9新增2项: 逐票合同覆盖率 — 销项发票合同覆盖率(逐票名称+有效期双重匹配)、
+进项发票合同覆盖率(逐票名称+有效期双重匹配)
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -7085,6 +7087,36 @@ def _find_matching_contracts(name, contracts):
     return matched
 
 
+def _date_to_str(d):
+    """安全地将日期字段转为 YYYY-MM-DD 字符串（处理 date/datetime/str/None）"""
+    if not d:
+        return ""
+    if isinstance(d, date):
+        return d.strftime("%Y-%m-%d")
+    if hasattr(d, 'strftime'):
+        return d.strftime("%Y-%m-%d")
+    s = str(d)
+    return s[:10] if len(s) >= 10 else s
+
+
+def _contract_covers_date(contract, check_date_str):
+    """判断合同有效期是否覆盖指定日期（YYYY-MM-DD格式）。
+    无生效日期+无到期日期 → 视为永久有效。
+    仅有生效日期 → 生效后有效。
+    仅有到期日期 → 到期前有效。"""
+    eff = _date_to_str(contract.effective_date)
+    exp = _date_to_str(contract.expiry_date)
+    if not eff and not exp:
+        return True
+    if eff and exp:
+        return eff <= check_date_str <= exp
+    if eff and not exp:
+        return eff <= check_date_str
+    if not eff and exp:
+        return check_date_str <= exp
+    return True
+
+
 def _analyze_contract_risks(db, company_id, ps, pe, results):
     """合同风险综合分析：三流合一/四流合一/收入成本无合同/金额匹配等"""
     ps_date, pe_date = _period_to_date_range(ps)[0], _period_to_date_range(pe)[1]
@@ -7955,6 +7987,167 @@ def _analyze_contract_risks(db, company_id, ps, pe, results):
             "suggestion": "逐份补全合同要素：(1)签订日期、生效日期、到期日期必须齐全；(2)合同金额不得为空或零；(3)明确负责人和审批流程；(4)建立合同要素完整性校验规则。",
             "required_evidence": ["补全后的合同正本", "合同要素完整性检查表"]
         })
+
+    # ═══ 18-19. 逐票合同匹配 — 发票合同覆盖率（含有效期校验）═══
+    # 与第1-2条（按客户/供应商名称聚合）不同：
+    # 本条逐票检查每张发票是否在合同有效期内，报告精确的覆盖率统计
+
+    # 构建合同快速查找索引（标准化名称 → 合同列表）
+    contract_lookup = {}  # normalized_name → [Contract]
+    for c in all_contracts:
+        for party in [c.party_a, c.party_b]:
+            if party:
+                nn = _normalize_entity_name(party.strip())
+                if len(nn) >= 2:
+                    if nn not in contract_lookup:
+                        contract_lookup[nn] = []
+                    contract_lookup[nn].append(c)
+
+    # ─── 18. 销项发票逐票合同匹配 ───
+    all_sales_inv = db.query(
+        SalesInvoice.id, SalesInvoice.buyer_name,
+        SalesInvoice.total_amount, SalesInvoice.invoice_date
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date,
+        SalesInvoice.invoice_date <= pe_date
+    ).all()
+
+    sales_matched_cnt = 0
+    sales_matched_amt = 0.0
+    sales_total_cnt = len(all_sales_inv)
+    sales_total_amt = 0.0
+    sales_unmatched_list = []  # 保存前10条无合同发票用于展示
+
+    for inv_id, buyer_name, total_amount, inv_date in all_sales_inv:
+        amt = _safe_float(total_amount)
+        sales_total_amt += amt
+        inv_str = _date_to_str(inv_date)
+
+        # 按名称+有效期查找匹配合同
+        matched = False
+        nn = _normalize_entity_name(buyer_name) if buyer_name else ""
+        if nn and len(nn) >= 2:
+            candidates = contract_lookup.get(nn, [])
+            # 精确匹配失败 → 模糊匹配
+            if not candidates:
+                for key, cts in contract_lookup.items():
+                    if nn in key or key in nn:
+                        candidates = cts
+                        break
+            # 筛选：销售/服务类合同 + 有效期覆盖发票日期
+            for c in candidates:
+                if c.contract_type in ("销售", "服务") and _contract_covers_date(c, inv_str):
+                    matched = True
+                    break
+
+        if matched:
+            sales_matched_cnt += 1
+            sales_matched_amt += amt
+        else:
+            if len(sales_unmatched_list) < 10:
+                sales_unmatched_list.append((buyer_name or "未知", amt, inv_str))
+
+    if sales_total_cnt > 0:
+        cov_pct = round(sales_matched_cnt / sales_total_cnt * 100, 1)
+        amt_cov_pct = round(sales_matched_amt / sales_total_amt * 100, 1) if sales_total_amt > 0 else 0
+        uncovered = sales_total_cnt - sales_matched_cnt
+        uncovered_amt = sales_total_amt - sales_matched_amt
+
+        # 覆盖率<100%即报告（100%覆盖率也报绿色良好）
+        if cov_pct < 100:
+            score = 8 if cov_pct < 50 else (7 if cov_pct < 70 else (5 if cov_pct < 90 else 3))
+            level = "高风险" if cov_pct < 70 else ("中风险" if cov_pct < 90 else "低风险")
+            color = "#dc2626" if cov_pct < 70 else ("#f59e0b" if cov_pct < 90 else "#10b981")
+            urg = "紧急" if cov_pct < 70 else ("提醒" if cov_pct < 90 else "关注")
+            detail_parts = [f"{n}（{a:,.0f}元/{d}）" for n, a, d in sales_unmatched_list[:5]]
+            results.append({
+                "category": CAT, "category_icon": ICON,
+                "risk_score": score, "risk_level": level,
+                "risk_color": color, "urgency": urg,
+                "item": "销项发票合同覆盖率不足",
+                "detail": f"分析期间共 {sales_total_cnt} 张销项发票（{sales_total_amt:,.2f} 元），"
+                           f"其中 {sales_matched_cnt} 张（{sales_matched_amt:,.2f} 元，覆盖率 {cov_pct}% 按张数 / {amt_cov_pct}% 按金额）"
+                           f"有有效合同覆盖（名称匹配+合同在有效期内），"
+                           f"{uncovered} 张（{uncovered_amt:,.2f} 元）无合同或合同已过期。"
+                           f"《发票管理办法》要求开具发票应当基于真实交易，合同是证明交易真实性的核心证据。"
+                           + (f" 无合同发票示例：{'；'.join(detail_parts)}"
+                              + (f"等{uncovered}张" if uncovered > 5 else "")
+                              if sales_unmatched_list else ""),
+                "suggestion": f"提高合同覆盖率至100%：(1)对{uncovered}张无合同销项发票逐票补签销售合同；(2)检查已过期合同是否需续签，续签日期追溯至到期日次日；(3)建立「先签合同后开发票」的铁律制度，杜绝无合同开票。",
+                "required_evidence": ["无合同销项发票清单（含票号/金额/日期）", "补签的销售合同", "合同覆盖率整改计划"]
+            })
+
+    # ─── 19. 进项发票逐票合同匹配 ───
+    all_pur_inv = db.query(
+        PurchaseInvoice.id, PurchaseInvoice.seller_name,
+        PurchaseInvoice.total_amount, PurchaseInvoice.invoice_date
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date,
+        PurchaseInvoice.invoice_date <= pe_date
+    ).all()
+
+    pur_matched_cnt = 0
+    pur_matched_amt = 0.0
+    pur_total_cnt = len(all_pur_inv)
+    pur_total_amt = 0.0
+    pur_unmatched_list = []
+
+    for inv_id, seller_name, total_amount, inv_date in all_pur_inv:
+        amt = _safe_float(total_amount)
+        pur_total_amt += amt
+        inv_str = _date_to_str(inv_date)
+
+        matched = False
+        nn = _normalize_entity_name(seller_name) if seller_name else ""
+        if nn and len(nn) >= 2:
+            candidates = contract_lookup.get(nn, [])
+            if not candidates:
+                for key, cts in contract_lookup.items():
+                    if nn in key or key in nn:
+                        candidates = cts
+                        break
+            for c in candidates:
+                if c.contract_type in ("采购", "服务") and _contract_covers_date(c, inv_str):
+                    matched = True
+                    break
+
+        if matched:
+            pur_matched_cnt += 1
+            pur_matched_amt += amt
+        else:
+            if len(pur_unmatched_list) < 10:
+                pur_unmatched_list.append((seller_name or "未知", amt, inv_str))
+
+    if pur_total_cnt > 0:
+        cov_pct = round(pur_matched_cnt / pur_total_cnt * 100, 1)
+        amt_cov_pct = round(pur_matched_amt / pur_total_amt * 100, 1) if pur_total_amt > 0 else 0
+        uncovered = pur_total_cnt - pur_matched_cnt
+        uncovered_amt = pur_total_amt - pur_matched_amt
+
+        if cov_pct < 100:
+            score = 8 if cov_pct < 50 else (7 if cov_pct < 70 else (5 if cov_pct < 90 else 3))
+            level = "高风险" if cov_pct < 70 else ("中风险" if cov_pct < 90 else "低风险")
+            color = "#dc2626" if cov_pct < 70 else ("#f59e0b" if cov_pct < 90 else "#10b981")
+            urg = "紧急" if cov_pct < 70 else ("提醒" if cov_pct < 90 else "关注")
+            detail_parts = [f"{n}（{a:,.0f}元/{d}）" for n, a, d in pur_unmatched_list[:5]]
+            results.append({
+                "category": CAT, "category_icon": ICON,
+                "risk_score": score, "risk_level": level,
+                "risk_color": color, "urgency": urg,
+                "item": "进项发票合同覆盖率不足",
+                "detail": f"分析期间共 {pur_total_cnt} 张进项发票（{pur_total_amt:,.2f} 元），"
+                           f"其中 {pur_matched_cnt} 张（{pur_matched_amt:,.2f} 元，覆盖率 {cov_pct}% 按张数 / {amt_cov_pct}% 按金额）"
+                           f"有有效合同覆盖（名称匹配+合同在有效期内），"
+                           f"{uncovered} 张（{uncovered_amt:,.2f} 元）无合同或合同已过期。"
+                           f"缺少采购合同违反三流合一原则，影响成本真实性认定和所得税税前扣除资格。"
+                           + (f" 无合同发票示例：{'；'.join(detail_parts)}"
+                              + (f"等{uncovered}张" if uncovered > 5 else "")
+                              if pur_unmatched_list else ""),
+                "suggestion": f"提高合同覆盖率至100%：(1)对{uncovered}张无合同进项发票逐票补签采购合同或服务协议；(2)合同中明确货物/服务内容、质量标准、价格条款、验收标准；(3)建立「先签合同后采购」的铁律制度。",
+                "required_evidence": ["无合同进项发票清单（含票号/金额/日期）", "补签的采购合同/服务协议", "供应商资质文件", "合同覆盖率整改计划"]
+            })
 
 
 # ═══════════════════════════════════════════════════════════
