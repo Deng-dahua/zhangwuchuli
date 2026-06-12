@@ -1383,8 +1383,12 @@ def _analyze_policy_execution(db, company_id, ps, pe, results):
     """社保公积金、结账状态"""
     from database import Period as PeriodModel
     ss_decl_count = db.query(func.count(SocialSecurityDeclaration.id)).filter(
-        SocialSecurityDeclaration.company_id == company_id).scalar()
-    if not ss_decl_count:
+        SocialSecurityDeclaration.company_id == company_id).scalar() or 0
+    # SocialSecurityDetail 无 company_id，通过 declaration_id 关联查询
+    ss_detail_count = db.query(func.count(SocialSecurityDetail.id)).join(
+        SocialSecurityDeclaration, SocialSecurityDetail.declaration_id == SocialSecurityDeclaration.id
+    ).filter(SocialSecurityDeclaration.company_id == company_id).scalar() or 0
+    if not ss_decl_count and not ss_detail_count:
         results.append({
             "category": "政策执行", "category_icon": "📋", "risk_score": 8, "risk_level": "高风险",
             "risk_color": "#dc2626", "urgency": "紧急",
@@ -1393,9 +1397,15 @@ def _analyze_policy_execution(db, company_id, ps, pe, results):
             "suggestion": "依法为员工缴纳社会保险费，包括养老、医疗、失业、工伤、生育保险。"
         })
 
-    hf_count = db.query(func.count(HousingFundDeclaration.id)).filter(
-        HousingFundDeclaration.company_id == company_id).scalar()
-    if not hf_count:
+    hf_decl_count = db.query(func.count(HousingFundDeclaration.id)).filter(
+        HousingFundDeclaration.company_id == company_id).scalar() or 0
+    hf_detail_count = db.query(func.count(HousingFundDetail.id)).filter(
+        HousingFundDetail.company_id == company_id).scalar() or 0
+    hf_journal_count = db.query(func.count(JournalEntry.id)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source.in_(["公积金计提", "公积金缴纳"])
+    ).scalar() or 0
+    if not hf_decl_count and not hf_detail_count and not hf_journal_count:
         results.append({
             "category": "政策执行", "category_icon": "📋", "risk_score": 6, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
@@ -1905,11 +1915,20 @@ def _analyze_good_practices(db, company_id, ps, pe, results):
             "suggestion": "继续保持按期申报。"
         })
 
-    # 社保公积金
+    # 社保公积金（申报表+明细+凭证三重检查）
     ss_ok = db.query(func.count(SocialSecurityDeclaration.id)).filter(
         SocialSecurityDeclaration.company_id == company_id).scalar() or 0
+    ss_ok += db.query(func.count(SocialSecurityDetail.id)).join(
+        SocialSecurityDeclaration, SocialSecurityDetail.declaration_id == SocialSecurityDeclaration.id
+    ).filter(SocialSecurityDeclaration.company_id == company_id).scalar() or 0
     hf_ok = db.query(func.count(HousingFundDeclaration.id)).filter(
         HousingFundDeclaration.company_id == company_id).scalar() or 0
+    hf_ok += db.query(func.count(HousingFundDetail.id)).filter(
+        HousingFundDetail.company_id == company_id).scalar() or 0
+    hf_ok += db.query(func.count(JournalEntry.id)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source.in_(["公积金计提", "公积金缴纳"])
+    ).scalar() or 0
     if ss_ok > 0 and hf_ok > 0:
         results.append({
             "category": "良好实践", "category_icon": "✅", "risk_score": 0, "risk_level": "良好",
