@@ -571,13 +571,16 @@ async function renderPurchaseInvoices(container) {
       });
       piGroups.forEach(g => {
         const piAllIds = g.items.map(i => i.id).join(',');
+        const piRowspan = g.items.length;
         g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         const pjv = i.journal_voucher_no || '';
         html += '<tr>';
-        // 每行独立复选框（不再 rowspan 合并）
-        html += '<td style="text-align:center"><input type="checkbox" class="pi-check" data-id="' + i.id + '" onchange="updatePiBatchBtn()"></td>';
+        // 三号相同的行 → 复选框 rowspan 合并为一个，data-ids 存该组全部ID
+        if (idx === 0) {
+          html += '<td style="text-align:center" rowspan="' + piRowspan + '"><input type="checkbox" class="pi-check" data-ids="' + piAllIds + '" onchange="updatePiBatchBtn()"></td>';
+        }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
@@ -668,6 +671,16 @@ function togglePiSelectAll() {
   updatePiBatchBtn();
 }
 
+// 从已勾选的.pi-check中收集全部发票ID（兼容 data-ids 合并行）
+function getCheckedPiIds() {
+  const ids = [];
+  document.querySelectorAll('.pi-check:checked').forEach(cb => {
+    const idsStr = cb.dataset.ids || cb.dataset.id || '';
+    idsStr.split(',').forEach(s => { const n = parseInt(s.trim()); if (n) ids.push(n); });
+  });
+  return ids;
+}
+
 function updatePiBatchBtn() {
   const checked = document.querySelectorAll('.pi-check:checked');
   const count = checked.length;
@@ -692,10 +705,8 @@ function updatePiBatchBtn() {
 }
 
 async function batchDeletePurchaseInvoices() {
-  const checked = document.querySelectorAll('.pi-check:checked');
-  if (checked.length === 0) return;
-  const ids = [];
-  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  const ids = getCheckedPiIds();
+  if (ids.length === 0) return;
   if (!confirm('确认删除选中的 ' + ids.length + ' 条取得发票？此操作不可恢复。')) return;
   try {
     const result = await api('/api/purchase-invoices/batch-delete', {
@@ -712,10 +723,8 @@ async function batchDeletePurchaseInvoices() {
 
 // 一键生成取得发票的进项抵扣凭证
 async function batchGeneratePurchaseVouchers() {
-  let checked = document.querySelectorAll('.pi-check:checked');
-  if (checked.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  let ids = [];
-  checked.forEach(function(cb) { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  let ids = getCheckedPiIds();
+  if (ids.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
   if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
   let btn = document.getElementById('piBatchGenBtn');
   if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
