@@ -3389,44 +3389,21 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
     if agri_sales < 50000:
         return
 
-    # 检查是否有土地相关费用
+    # 四源交叉验证：土地/场地相关（序时账 + 银行流水 + 发票 + 合同）
     land_keywords = ["土地", "租赁", "承包", "流转", "租金", "地租", "场地"]
-    land_costs = 0
-    for kw in land_keywords:
-        land_costs += db.query(func.sum(JournalEntry.debit_amount)).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period >= ps, JournalEntry.period <= pe,
-            JournalEntry.summary.contains(kw)
-        ).scalar() or 0
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="土地/场地",
+        je_summary_kw=land_keywords,
+        bank_kw=land_keywords,
+        invoice_kw=land_keywords,
+        contract_kw=land_keywords,
+        contract_types=["租赁", "承包"])
 
-    # 银行流水中土地租赁支付
-    bank_land = db.query(func.sum(BankTransaction.debit_amount)).filter(
-        BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps_date,
-        BankTransaction.transaction_date <= pe_date,
-        or_(*[BankTransaction.summary.contains(kw) for kw in land_keywords])
-    ).scalar() or 0
-
-    # 土地/场地合同检测（四源交叉验证-合同维度）
-    land_contracts = db.query(Contract).filter(
-        Contract.company_id == company_id,
-        Contract.status.in_(["已签署", "履行中", "已完成"]),
-        or_(
-            Contract.contract_type.in_(["租赁", "承包"]),
-            Contract.name.contains("土地"),
-            Contract.name.contains("场地"),
-            Contract.name.contains("承包"),
-            Contract.content_summary.contains("土地"),
-            Contract.remark.contains("土地"),
-        )
-    ).all()
-    has_land_contract = len(land_contracts) > 0
-    land_free_possible = any(
-        any(fkw in ((c.name or "") + (c.content_summary or "") + (c.remark or "")).lower()
-            for fkw in ["免费", "免租", "无偿", "0元"])
-        for c in land_contracts
-    )
-
+    land_costs = ev["je"]["amount"]
+    bank_land = ev["bank"]["amount"]
+    contracts = ev["contract"]["contracts"]
+    has_land_contract = ev["contract"]["has_any"]
+    land_free_possible = ev["contract"]["free_possible"]
     total_land = land_costs + bank_land
 
     # 银行有土地付款但序时账无记录 → 高风险
@@ -3447,8 +3424,8 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
             "risk_level": "低风险" if land_free_possible else "中风险",
             "risk_color": "#3b82f6" if land_free_possible else "#f59e0b",
             "urgency": "建议" if land_free_possible else "提醒",
-            "item": f"有土地/场地合同（{len(land_contracts)}份）但序时账无土地租赁费{'(含免费条款)' if land_free_possible else ''}",
-            "detail": f"系统中有 {len(land_contracts)} 份土地/场地相关合同{'(含免费/免租条款)' if land_free_possible else ''}，但序时账和银行流水中均无土地费用。可能为：①自有土地（无需租金）；②合同免费使用；③合同尚未产生费用。",
+            "item": f"有土地/场地合同（{len(contracts)}份）但序时账无土地租赁费{'(含免费条款)' if land_free_possible else ''}",
+            "detail": f"系统中有 {len(contracts)} 份土地/场地相关合同{'(含免费/免租条款)' if land_free_possible else ''}，但序时账和银行流水中均无土地费用。可能为：①自有土地（无需租金）；②合同免费使用；③合同尚未产生费用。",
             "suggestion": "如为自有土地，准备土地证或产权证明；如为免费使用，保留合同作为佐证材料。"
         })
 
@@ -3957,57 +3934,26 @@ def _analyze_office_expense_missing(db, company_id, ps, pe, results):
     if revenue < 100000:
         return
 
-    # 办公费科目
-    office_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.startswith("660201"),  # 办公费
-            JournalEntry.account_code.startswith("660216"),  # 物业费
-            JournalEntry.summary.contains("物业"),
-            JournalEntry.summary.contains("办公用品"),
-            JournalEntry.summary.contains("打印"),
-        )
-    ).scalar() or 0
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    office_kw = ["办公", "物业", "办公用品", "打印"]
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="办公/物业费",
+        je_account_codes=["660201", "660216"],
+        je_summary_kw=office_kw,
+        bank_kw=office_kw,
+        invoice_kw=office_kw,
+        contract_kw=["场地", "物业", "办公", "租赁", "房租"],
+        contract_types=["租赁", "服务"])
 
-    # 银行流水
-    bank_office = db.query(func.sum(BankTransaction.debit_amount)).filter(
-        BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= _period_to_date_range(ps)[0],
-        BankTransaction.transaction_date <= _period_to_date_range(pe)[1],
-        or_(
-            BankTransaction.summary.contains("物业"),
-            BankTransaction.summary.contains("办公"),
-        )
-    ).scalar() or 0
-
-    # ★ 检查取得发票中是否有办公/物业相关支出
-    def _inv_has_office_kw(inv_table):
-        return db.query(func.count(inv_table.id)).filter(
-            inv_table.company_id == company_id,
-            inv_table.invoice_date >= _period_to_date_range(ps)[0],
-            inv_table.invoice_date <= _period_to_date_range(pe)[1],
-            or_(
-                inv_table.goods_name.contains("办公"),
-                inv_table.goods_name.contains("物业"),
-                inv_table.goods_name.contains("打印"),
-                inv_table.seller_name.contains("物业"),
-                inv_table.seller_name.contains("办公"),
-            )
-        ).scalar() or 0
-
-    inv_office_count = _inv_has_office_kw(PurchaseInvoice) + _inv_has_office_kw(BookkeepingInvoice)
-    has_invoice_office = inv_office_count > 0
-
-    # ★ 检查合同（场地/物业/办公相关合同）
-    contract_info = _check_premise_contracts(db, company_id)
-    has_venue_contract = contract_info["any_found"]
-
-    total_office = office_je + bank_office
-    all_none = total_office == 0 and not has_invoice_office and not has_venue_contract
+    office_je = ev["je"]["amount"]
+    bank_office = ev["bank"]["amount"]
+    inv_count = ev["invoice"]["count"]
+    overall = ev["overall"]
+    free_possible = ev["contract"]["free_possible"]
+    contracts = ev["contract"]["contracts"]
 
     # ── 银行有支付但序时账无记录 → 高风险（银行流水必须入账） ──
-    if office_je == 0 and bank_office > 0 and revenue > 500000:
+    if overall["je_missing_but_bank_found"] and revenue > 500000:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
             "risk_color": "#dc2626", "urgency": "紧急",
@@ -4019,7 +3965,7 @@ def _analyze_office_expense_missing(db, company_id, ps, pe, results):
         return
 
     # ── 四源全无 → 中风险 ──
-    if all_none and revenue > 500000:
+    if overall["all_sources_none"] and revenue > 500000:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
@@ -4035,25 +3981,25 @@ def _analyze_office_expense_missing(db, company_id, ps, pe, results):
         return
 
     # ── 序时账没有，发票有 → 费用未入账（发票可延后） ──
-    if total_office == 0 and has_invoice_office and revenue > 500000:
+    if overall["je_missing_but_invoice_found"] and revenue > 500000:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 3, "risk_level": "低风险",
             "risk_color": "#3b82f6", "urgency": "提醒",
             "item": f"营业收入 {revenue:,.0f} 元但零办公费（已取得发票未入账）",
-            "detail": f"营业收入 {revenue:,.0f} 元（≥50万元），序时账中未发现办公费/物业费记录，但取得发票中发现办公/物业相关发票（{inv_office_count}张）。费用已发生但尚未入账，请及时入账。",
+            "detail": f"营业收入 {revenue:,.0f} 元（≥50万元），序时账中未发现办公费/物业费记录，但取得发票中发现办公/物业相关发票（{inv_count}张）。费用已发生但尚未入账，请及时入账。",
             "suggestion": "将已取得的办公费/物业费相关发票及时入账。",
             "required_evidence": ["未入账的办公费/物业费发票", "经营场所使用证明"]
         })
         return
 
     # ── 序时账没有，但有场地合同（免费场地） ──
-    if total_office == 0 and has_venue_contract:
-        free_note = "·可能为免费场地" if contract_info["free_venue_possible"] else ""
+    if overall["je_missing_but_contract_found"]:
+        free_note = "·可能为免费场地" if free_possible else ""
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 2, "risk_level": "低风险",
             "risk_color": "#3b82f6", "urgency": "提醒",
             "item": f"办公费记录缺失但存在场地合同{free_note}",
-            "detail": f"营业收入 {revenue:,.0f} 元，序时账中无办公/物业费记录，但合同中有场地相关协议。可能为关联方免费提供场地或家庭办公，建议保留合同备查。",
+            "detail": f"营业收入 {revenue:,.0f} 元，序时账中无办公/物业费记录，但合同中有场地相关协议（{len(contracts)}份）。可能为关联方免费提供场地或家庭办公，建议保留合同备查。",
             "suggestion": "保留场地使用合同/协议原件备查。如为免费使用，准备相关说明。",
             "required_evidence": ["场地使用合同/协议"]
         })
@@ -5831,28 +5777,26 @@ def _analyze_two_end_outside(db, company_id, ps, pe, results):
     # 供应商同理：名称中不含注册地简称
     purchase_names_outside = {n for n in purchase_names if province_short not in n}
     
-    # 检查注册地是否有经营痕迹（租赁/水电/物业）
-    local_expense = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.like("660214%"),  # 租赁费
-            JournalEntry.account_code.like("660215%"),  # 水电费
-            JournalEntry.account_code.like("660213%"),  # 物业费
-        )
-    ).scalar())
+    # 四源交叉验证经营场所：序时账 + 银行流水 + 发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="经营场所",
+        je_account_codes=["660214", "660215", "660213"],
+        invoice_kw=["租赁", "水电", "物业", "房租"],
+        contract_kw=["场地", "租赁", "房租", "物业", "办公"],
+        contract_types=["租赁"])
 
-    # ★ 同时检查取得发票中是否有经营场所相关支出
-    inv_info = _check_premise_expenses_from_invoices(db, company_id, ps, pe)
-    # ★ 检查合同
-    contract_info = _check_premise_contracts(db, company_id)
+    local_expense = ev["je"]["amount"]
+    overall = ev["overall"]
+    free_possible = ev["contract"]["free_possible"]
+    contracts = ev["contract"]["contracts"]
+    inv_amount = ev["invoice"]["amount"]
 
     outside_threshold = len(purchase_names_outside) >= 3 and len(sales_names_outside) >= 3
     if not outside_threshold:
         return
 
     # ── 四源全无 → 高风险「购销两头在外」 ──
-    if local_expense == 0 and not inv_info["any_found"] and not contract_info["any_found"]:
+    if overall["all_sources_none"]:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
             "risk_color": "#dc2626", "urgency": "紧急",
@@ -5864,22 +5808,22 @@ def _analyze_two_end_outside(db, company_id, ps, pe, results):
         return
 
     # ── 序时账没有，发票有 → 费用已发生未入账 ──
-    if local_expense == 0 and inv_info["any_found"]:
+    if overall["je_missing_but_invoice_found"]:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 6, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "预警",
             "item": "购销两头在外（费用未入账）",
-            "detail": f"主要供应商和客户均在注册地以外，序时账中无经营场所费用，但取得发票中发现相关支出 ¥{inv_info['total_found']:,.2f}（尚未入账）。建议尽快入账以证明经营场所真实性。",
+            "detail": f"主要供应商和客户均在注册地以外，序时账中无经营场所费用，但取得发票中发现相关支出 ¥{inv_amount:,.2f}（尚未入账）。建议尽快入账以证明经营场所真实性。",
             "suggestion": "将已取得的经营场所相关发票入账，保留经营场所租赁合同及水电费凭证备查。",
             "required_evidence": ["未入账的经营场所相关发票", "经营场所租赁合同"]
         })
         return
 
     # ── 序时账没有，但有场地合同（免费场地） ──
-    if local_expense == 0 and contract_info["any_found"]:
-        cts = contract_info["contracts"]
+    if overall["je_missing_but_contract_found"]:
+        cts = contracts
         ct_summary = "；".join([f"{c['name']}({c['type']}{'·免费' if c['is_free'] else ''})" for c in cts[:3]])
-        free_note = "·可能为免费场地" if contract_info["free_venue_possible"] else ""
+        free_note = "·可能为免费场地" if free_possible else ""
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
@@ -6833,47 +6777,25 @@ def _analyze_address_mismatch(db, company_id, ps, pe, results):
 
     registered_addr = company.address
 
-    # 检查是否有租赁费/水电费/物业费支出
-    rent_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            func.lower(JournalEntry.summary).contains("租赁"),
-            func.lower(JournalEntry.summary).contains("租金"),
-            func.lower(JournalEntry.summary).contains("房租")
-        )
-    ).scalar())
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="经营场所",
+        je_summary_kw=["租赁", "租金", "房租", "水电", "电费", "水费", "燃气", "物业", "物业费", "物业管理"],
+        je_account_codes=["660214", "660215", "660213"],
+        invoice_kw=["租赁", "水电", "物业", "房租"],
+        contract_kw=["场地", "租赁", "房租", "物业", "办公"],
+        contract_types=["租赁"])
 
-    utility_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            func.lower(JournalEntry.summary).contains("水电"),
-            func.lower(JournalEntry.summary).contains("电费"),
-            func.lower(JournalEntry.summary).contains("水费"),
-            func.lower(JournalEntry.summary).contains("燃气")
-        )
-    ).scalar())
+    je_has = ev["je"]["has_any"]
+    overall = ev["overall"]
+    inv_amount = ev["invoice"]["amount"]
+    free_possible = ev["contract"]["free_possible"]
+    contracts = ev["contract"]["contracts"]
 
-    property_exp = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            func.lower(JournalEntry.summary).contains("物业"),
-            func.lower(JournalEntry.summary).contains("物业费"),
-            func.lower(JournalEntry.summary).contains("物业管理")
-        )
-    ).scalar())
-
-    # 检查取得发票中是否有经营场所相关支出
-    inv_info = _check_premise_expenses_from_invoices(db, company_id, ps, pe)
-    # ★ 检查合同
-    contract_info = _check_premise_contracts(db, company_id)
-
-    je_has_any = rent_exp > 0 or utility_exp > 0 or property_exp > 0
+    has_inv_or_contract = ev["invoice"]["has_any"] or ev["contract"]["has_any"]
 
     # ── 如果序时账、发票、合同都没有 → 地址不一致 ──
-    if not je_has_any and not inv_info["any_found"] and not contract_info["any_found"]:
+    if overall["all_sources_none"]:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
@@ -6882,21 +6804,18 @@ def _analyze_address_mismatch(db, company_id, ps, pe, results):
             "suggestion": "及时办理工商变更登记，或在经营地办理跨区域涉税事项报告。注意：异地经营超过180天的，应在经营地办理税务登记。",
             "required_evidence": ["经营场所租赁合同或产权证明", "工商变更登记材料", "水电费缴费凭证"]
         })
-    elif not je_has_any and inv_info["any_found"]:
-        # 序时账无记录，但取得了相关发票——费用已发生未入账
+    elif overall["je_missing_but_invoice_found"]:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 3, "risk_level": "低风险",
             "risk_color": "#3b82f6", "urgency": "提醒",
             "item": "注册地址与经营地址不一致",
-            "detail": f"企业注册地址为「{registered_addr}」，序时账中未发现租赁费/水电费/物业费，但取得发票中发现相关费用 ¥{inv_info['total_found']:,.2f}（尚未入账）。建议及时将发票入账以证明经营场所真实性。",
+            "detail": f"企业注册地址为「{registered_addr}」，序时账中未发现租赁费/水电费/物业费，但取得发票中发现相关费用 ¥{inv_amount:,.2f}（尚未入账）。建议及时将发票入账以证明经营场所真实性。",
             "suggestion": "将已取得的经营场所相关发票入账，并核对实际经营地址与注册地址是否一致。",
             "required_evidence": ["未入账的经营场所相关发票", "经营场所租赁合同或产权证明"]
         })
-    elif not je_has_any and contract_info["any_found"]:
-        # 序时账无记录，但有场地合同（免费场地）
-        cts = contract_info["contracts"]
-        ct_summary = "；".join([f"{c['name']}({c['type']}{'·免费' if c['is_free'] else ''})" for c in cts[:3]])
-        free_note = "·可能为免费使用场地" if contract_info["free_venue_possible"] else ""
+    elif overall["je_missing_but_contract_found"]:
+        ct_summary = "；".join([f"{c['name']}({c['type']}{'·免费' if c['is_free'] else ''})" for c in contracts[:3]])
+        free_note = "·可能为免费使用场地" if free_possible else ""
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 2, "risk_level": "低风险",
             "risk_color": "#3b82f6", "urgency": "提醒",
@@ -6907,10 +6826,9 @@ def _analyze_address_mismatch(db, company_id, ps, pe, results):
         })
 
     # 检查是否有地址变更（通过公司档案中的备注等）
-    # 如果公司注册地址包含"虚拟"或"集群注册"等字样
     addr_lower = registered_addr.lower()
     if any(kw in addr_lower for kw in ["虚拟", "集群", "挂靠", "孵化器", "众创空间", "托管"]):
-        if not je_has_any and not inv_info["any_found"] and not contract_info["any_found"]:
+        if overall["all_sources_none"]:
             results.append({
                 "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
                 "risk_color": "#dc2626", "urgency": "紧急",
@@ -6919,8 +6837,7 @@ def _analyze_address_mismatch(db, company_id, ps, pe, results):
                 "suggestion": "如为集群注册但确有实际经营场所，应提供实际经营地址的租赁合同和水电费凭证。如长期无实际经营场所，建议办理注销或变更注册地址。",
                 "required_evidence": ["实际经营地址租赁合同", "水电费缴纳记录", "经营场所照片"]
             })
-        elif not je_has_any and (inv_info["any_found"] or contract_info["any_found"]):
-            # 集群注册但有发票或合同＝需补充
+        elif not je_has and has_inv_or_contract:
             results.append({
                 "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
                 "risk_color": "#f59e0b", "urgency": "提醒",
