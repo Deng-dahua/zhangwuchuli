@@ -984,6 +984,8 @@ def get_tax_risk_report(
     # ── V11 新增 — 普票浪费可抵扣进项税额 + 预付卡涉税风险 ──
     _analyze_wasted_deductible_tax(db, company_id, period_start, period_end, results)
     _analyze_prepaid_card_risk(db, company_id, period_start, period_end, results)
+    # ── V12 新增 — 餐饮住宿类发票群集性虚开嫌疑 ──
+    _analyze_suspicious_invoice_cluster(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -9732,3 +9734,262 @@ def _analyze_prepaid_card_risk(db, company_id, ps, pe, results):
                               "客户签收单（如赠送客户）", "员工福利签领表（如赠送员工）",
                               "代扣代缴个人所得税申报记录（如适用）"]
     })
+
+
+# ══════════════════════════════════════════════════════════════════
+# V12 新增 — 餐饮住宿类发票群集性虚开嫌疑检测
+# ══════════════════════════════════════════════════════════════════
+
+# 疑似虚开发票的行业/品类模式
+_SUSPICIOUS_INDUSTRY_PATTERNS = [
+    ("餐饮管理有限公司", "餐饮服务"),
+    ("酒店管理有限公司", "住宿服务"),
+    ("餐饮管理有限公司", "餐饮费"),
+    ("酒店管理有限公司", "住宿费"),
+]
+
+# 整额阈值：价税合计与最近整千/整万的偏差≤此比例视为整额
+_ROUND_AMOUNT_THRESHOLD = 0.02  # 2%以内偏差
+
+
+def _is_round_amount(total_amount, threshold=_ROUND_AMOUNT_THRESHOLD):
+    """检查价税合计是否接近整千或整万"""
+    amt = _safe_float(total_amount)
+    if amt <= 0:
+        return False
+    # 检查整万（10,000的倍数）
+    nearest_10k = round(amt / 10000) * 10000
+    if nearest_10k > 0 and abs(amt - nearest_10k) / nearest_10k < threshold:
+        return True
+    # 检查整千（1,000的倍数）
+    nearest_1k = round(amt / 1000) * 1000
+    if nearest_1k > 0 and abs(amt - nearest_1k) / nearest_1k < threshold:
+        return True
+    return False
+
+
+def _name_pattern_match(seller_name):
+    """提取供应商名称的结构化模式（用于匹配同类型供应商）"""
+    import re
+    # 匹配 "城市+字号+行业+公司类型" 模式
+    # 例如: 广州鸿逸酒店管理有限公司 → city=广州, industry=酒店管理
+    # 深圳市西北领头羊餐饮有限公司 → city=深圳市, industry=餐饮
+    # 注: 长模式（XX市）优先匹配，短模式（广州/深圳）兜底
+    m = re.match(
+        r'(深圳市|广州市|北京市|上海市|杭州市|成都市|武汉市|南京市|重庆市|天津市|苏州市|东莞市|佛山市'
+        r'|[\u4e00-\u9fff]{2,3}市'
+        r'|[\u4e00-\u9fff]{2,3}省'
+        r'|广州|深圳|北京|上海|杭州|成都|武汉|南京|重庆|天津|苏州|东莞|佛山)'
+        r'(.+?)'
+        r'(餐饮管理|酒店管理|餐饮|酒店|住宿)'
+        r'(有限公司|有限责任公司)',
+        seller_name
+    )
+    if m:
+        return {
+            "city": m.group(1),
+            "keyword": m.group(2),
+            "industry": m.group(3),
+            "type": m.group(4),
+            "pattern": f"{m.group(1)}XX{m.group(3)}{m.group(4)}"
+        }
+    return None
+
+
+def _analyze_suspicious_invoice_cluster(db, company_id, ps, pe, results):
+    """餐饮住宿类发票群集性虚开嫌疑检测。
+    
+    检测「购买发票」嫌疑的核心特征：
+    1. 同城同行业供应商群集开票（短期内大量同类型供应商）
+    2. 金额高度整额化（价税合计集中在整千/整万）
+    3. 税率异常（全部1%小规模而非6%一般纳税人）
+    4. 全部普通发票（无进项抵扣，降低被查风险）
+    5. 供应商不在档案/无合同/无付款记录
+    
+    此为典型的「开票公司」模式——不法分子批量注册空壳公司专门虚开发票。
+    企业通过购买这类发票虚增费用，偷逃企业所得税。
+    """
+    # 全量查询取得发票（不限期间——虚开是系统性问题）
+    all_invs = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.is_positive == True  # 只看正数发票
+    ).all()
+
+    if not all_invs:
+        return
+
+    # ── 按行业+城市分组 ──
+    cluster_groups = {}  # key: (city, industry), value: [invoices]
+    for inv in all_invs:
+        goods = (inv.goods_name or "").strip()
+        seller = (inv.seller_name or "").strip()
+        # 匹配行业模式
+        for industry_kw, goods_kw in _SUSPICIOUS_INDUSTRY_PATTERNS:
+            if industry_kw in seller and goods_kw in goods:
+                parsed = _name_pattern_match(seller)
+                if parsed:
+                    key = (parsed["city"], parsed["industry"])
+                    cluster_groups.setdefault(key, []).append(inv)
+                break
+
+    if not cluster_groups:
+        return
+
+    # ── 分析每个群集 ──
+    for (city, industry), group_invs in cluster_groups.items():
+        if len(group_invs) < 3:
+            continue  # 至少3家同类型供应商才有群集嫌疑
+
+        # 统计指标
+        total_inv_cnt = len(group_invs)
+        total_amount = sum(_safe_float(inv.amount) for inv in group_invs)
+        total_tax = sum(_safe_float(inv.tax_amount) for inv in group_invs)
+        total_with_tax = total_amount + total_tax
+
+        # 1. 税率异常：全部1%
+        rate_1pct = sum(1 for inv in group_invs if _safe_float(inv.tax_rate) == 1.0)
+        rate_1pct_ratio = rate_1pct / total_inv_cnt * 100
+
+        # 2. 全部普票
+        all_general = all(
+            "普通" in (inv.invoice_category or "") for inv in group_invs
+        )
+        general_cnt = sum(1 for inv in group_invs if "普通" in (inv.invoice_category or ""))
+
+        # 3. 金额整额化
+        round_cnt = sum(1 for inv in group_invs if _is_round_amount(inv.total_amount))
+        round_ratio = round_cnt / total_inv_cnt * 100 if total_inv_cnt > 0 else 0
+
+        # 4. 供应商不在档案
+        not_in_registry = 0
+        sellers_in_group = list(set((inv.seller_name or "").strip() for inv in group_invs))
+        for s_name in sellers_in_group:
+            sup = db.query(Supplier).filter(
+                Supplier.company_id == company_id,
+                Supplier.name == s_name
+            ).first()
+            if not sup:
+                not_in_registry += 1
+
+        # 5. 供应商数量
+        unique_sellers = len(sellers_in_group)
+
+        # 6. 时间跨度
+        dates = sorted(set(str(inv.invoice_date) for inv in group_invs if inv.invoice_date))
+        date_range_str = ""
+        if len(dates) >= 2:
+            date_range_str = f"{dates[0]}~{dates[-1]}"
+        elif dates:
+            date_range_str = dates[0]
+
+        # ── 综合评分 ──
+        score = 0
+        red_flags = []
+
+        if unique_sellers >= 5:
+            score += 3
+            red_flags.append(f"短时间内{unique_sellers}家不同{industry}供应商开票，群集性异常")
+        elif unique_sellers >= 3:
+            score += 2
+            red_flags.append(f"{unique_sellers}家不同{industry}供应商开票，存在群集嫌疑")
+
+        if round_ratio >= 60:
+            score += 3
+            red_flags.append(
+                f"{round_cnt}/{total_inv_cnt}张（{round_ratio:.0f}%）发票价税合计为整额"
+                f"（{total_amount:,.0f}元不含税 + {total_tax:,.0f}元税额），非真实消费的金额自然分布"
+            )
+        elif round_ratio >= 30:
+            score += 1
+            red_flags.append(f"{round_cnt}/{total_inv_cnt}张（{round_ratio:.0f}%）发票金额整额化")
+
+        if rate_1pct_ratio >= 80 and total_inv_cnt >= 3:
+            score += 2
+            red_flags.append(
+                f"全部{total_inv_cnt}张发票均为1%小规模纳税人税率，"
+                f"正常{industry}企业一般纳税人适用6%税率"
+            )
+
+        if all_general and total_inv_cnt >= 3:
+            score += 1
+            red_flags.append("全部为普通发票，进项税额不可抵扣→降低被税局稽核的概率")
+
+        if not_in_registry >= 3:
+            score += 2
+            red_flags.append(
+                f"{not_in_registry}/{unique_sellers}家供应商不在供应商档案中，"
+                f"无正式供应商准入记录"
+            )
+        elif not_in_registry > 0:
+            score += 1
+            red_flags.append(f"{not_in_registry}/{unique_sellers}家供应商不在档案中")
+
+        # 跨地域检查
+        company_info = db.query(Company).filter(Company.id == company_id).first()
+        company_city = ""
+        if company_info and company_info.address:
+            import re
+            m = re.match(r'(.+?市)', company_info.address or "")
+            if m:
+                company_city = m.group(1)
+        if company_city and city != company_city:
+            score += 1
+            red_flags.append(f"供应商集中在{city}，但公司在{company_city}，跨地域消费异常")
+
+        # ── 判断风险等级 ──
+        if score >= 8:
+            level = "高风险"
+            color = "#dc2626"
+        elif score >= 5:
+            level = "中风险"
+            color = "#f59e0b"
+        else:
+            level = "低风险"
+            color = "#3b82f6"
+
+        if score < 4:
+            continue  # 分数太低不报告
+
+        # ── 企业所得税逃税估算 ──
+        estimated_tax_evasion = total_with_tax * 0.25  # 25%企业所得税率
+
+        # 列出涉及的供应商
+        seller_list_str = "、".join(sellers_in_group[:10])
+        if len(sellers_in_group) > 10:
+            seller_list_str += f"等{len(sellers_in_group)}家"
+
+        detail = (
+            f"【{city}·{industry}群集】{date_range_str}，涉及{seller_list_str}，"
+            f"共{total_inv_cnt}张发票，价税合计{total_with_tax:,.2f}元。"
+            f"红旗指标：{'；'.join(red_flags)}。"
+            f"若为虚开发票，涉嫌虚增费用偷逃企业所得税约{estimated_tax_evasion:,.2f}元（25%税率）。"
+        )
+
+        suggestion = (
+            f"①核实{seller_list_str}的真实交易背景，索取合同/付款凭证/消费明细/现场照片等佐证材料；"
+            f"②对无法证明真实性的发票，主动做进项税额转出（如已抵扣）并在企业所得税汇算时纳税调增；"
+            f"③建立供应商准入制度，所有供应商须在档案中登记并核实纳税人资质；"
+            f"④对异常集中的同城同行业供应商实施交易真实性审查；"
+            f"⑤餐饮/住宿类费用单笔超过2,000元须附消费明细清单和审批记录；"
+            f"⑥税务局若认定虚开发票，将面临补税+滞纳金+0.5~5倍罚款，情节严重的追究刑事责任。"
+        )
+
+        results.append({
+            "category": "发票合规",
+            "category_icon": "🧾",
+            "risk_score": score,
+            "risk_level": level,
+            "risk_color": color,
+            "urgency": "紧急" if level == "高风险" else ("警示" if level == "中风险" else "提醒"),
+            "item": f"餐饮住宿类发票群集性虚开嫌疑——{city}{industry}供应商",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                f"{city}各供应商的采购合同/订单",
+                "银行付款凭证（对公转账记录）",
+                "餐饮/住宿消费明细清单",
+                "业务招待审批单",
+                "供应商营业执照及纳税人资质证明",
+                "供应商尽职调查报告"
+            ]
+        })
