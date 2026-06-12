@@ -23,24 +23,28 @@ function renderTaxRiskReport(container) {
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
 
-  // 删除查询按钮，在清除按钮前插入生成/刷新报告按钮（btn-toolbar 样式）
+  // 按钮顺序：清除 → 生成/刷新报告（btn-toolbar 样式）
   var trBar = document.getElementById('tr-period-bar');
   if (trBar) {
     var queryBtn = trBar.querySelector('.std-query-btn');
     if (queryBtn) queryBtn.remove();
     var clearBtn = trBar.querySelector('.std-clear-btn');
+    // 在清除按钮后插入生成/刷新报告按钮
     if (clearBtn) {
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'btn-toolbar';
       refreshBtn.id = 'risk-refresh-btn';
       refreshBtn.textContent = '生成/刷新报告';
       refreshBtn.addEventListener('click', loadTaxRiskReport);
-      clearBtn.parentNode.insertBefore(refreshBtn, clearBtn);
+      clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
     spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>'
-      + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>';
+      + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>'
+      + '<span id="risk-delete-btn-wrap" style="margin-left:16px;display:none">'
+      + '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>'
+      + '</span>';
     trBar.appendChild(spacer);
   }
 
@@ -70,6 +74,24 @@ async function loadTaxRiskReport() {
     if (to) url += '&period_to=' + to;
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
+    // 报告生成后显示「删除报告」按钮
+    var delWrap = document.getElementById('risk-delete-btn-wrap');
+    if (delWrap) delWrap.style.display = '';
+    var delBtn = document.getElementById('risk-delete-btn');
+    if (delBtn && !delBtn._bound) {
+      delBtn._bound = true;
+      delBtn.addEventListener('click', function() {
+        if (!confirm('确定要删除当前报告吗？')) return;
+        taxRiskReportData = null;
+        document.getElementById('risk-report-body').innerHTML = '';
+        document.getElementById('risk-summary-cards').innerHTML = '';
+        var m = document.getElementById('risk-metrics-bar');
+        if (m) m.innerHTML = '';
+        var d = document.getElementById('risk-delete-btn-wrap');
+        if (d) d.style.display = 'none';
+        toast('报告已删除', 'success');
+      });
+    }
     var now = new Date();
     var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0')
       + '-' + String(now.getDate()).padStart(2,'0') + ' '
