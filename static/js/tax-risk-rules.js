@@ -137,41 +137,17 @@ function renderTaxRiskRules(container) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  三、加载规则（localStorage优先，否则加载默认61条）
+//  三、加载规则（每次从服务器加载最新规则文件）
 // ══════════════════════════════════════════════════════════════
 async function loadTaxRiskRules() {
-  // 【自动清理旧格式缓存】如果缓存数据只有1-5条，可能是旧格式或fallback数据，强制清理
-  var localData = localStorage.getItem('taxRiskRulesData');
-  if (localData) {
-    try {
-      var parsed = JSON.parse(localData);
-      // 检测旧格式：字段名是 categoryIcon（新格式）但数据量太少，或数据不完整
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed.length < 10) {
-        console.log('[涉税风险规则] 检测到旧/不完整的缓存数据（' + parsed.length + '条），自动清理');
-        localStorage.removeItem('taxRiskRulesData');
-      } else if (Array.isArray(parsed) && parsed.length >= 10) {
-        taxRiskRulesData = parsed;
-        renderTaxRiskRulesList();
-        updateCategoryFilterOptions();
-        toast('已从本地加载 ' + taxRiskRulesData.length + ' 条规则', 'success');
-        return;
-      }
-    } catch (e) {
-      console.error('解析本地规则数据失败:', e);
-      localStorage.removeItem('taxRiskRulesData');
-    }
-  }
-
-  // 本地没有则加载默认61条
+  // 始终从服务器加载最新规则，确保显示内容与后端同步
   await loadDefaultTaxRiskRules();
 }
 
-// 加载默认规则（从JSON文件）
+// 加载默认规则（从最新的规则文件 tax_risk_rules_local_export.json）
 async function loadDefaultTaxRiskRules() {
-  // 如果已有数据，确认是否覆盖
-  // 直接覆盖加载，不再弹确认框（用户可随时用"清空规则"按钮清空）
   try {
-    var resp = await fetch('/static/tax_risk_rules_default.json?_t=' + Date.now());
+    var resp = await fetch('/static/tax_risk_rules_local_export.json?_t=' + Date.now());
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     var rules = await resp.json();
     if (!Array.isArray(rules) || rules.length === 0) throw new Error('规则数据为空');
@@ -181,11 +157,11 @@ async function loadDefaultTaxRiskRules() {
     renderTaxRiskRulesList();
     updateCategoryFilterOptions();
     updateLoadButtonText();
-    toast('已加载默认规则 ' + rules.length + ' 条', 'success');
-    console.log('[涉税风险规则] 已从JSON文件加载', rules.length, '条规则');
+    toast('已加载最新规则 ' + rules.length + ' 条', 'success');
+    console.log('[涉税风险规则] 已从最新规则文件加载', rules.length, '条规则');
   } catch (e) {
-    console.error('加载默认规则失败:', e);
-    toast('加载默认规则失败：' + e.message, 'error');
+    console.error('加载最新规则失败:', e);
+    toast('加载规则失败：' + e.message, 'error');
   }
 }
 
