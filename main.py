@@ -7187,6 +7187,21 @@ def validate_id_card(card_no: str) -> tuple:
 from chat import router as chat_router
 app.include_router(chat_router)
 
+# ==================== 涉税风险规则：从浏览器 localStorage 导出到服务器 ====================
+import json as _json
+from pathlib import Path as _Path
+
+@app.post("/api/tax-risk-rules/save-local")
+def tax_risk_rules_save_local(data: str = Body(...)):
+    """接收浏览器 localStorage 中的涉税风险规则 JSON，保存到服务器文件"""
+    dst = _Path("static/tax_risk_rules_local_export.json")
+    try:
+        parsed = _json.loads(data)
+        dst.write_text(_json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "count": len(parsed), "path": str(dst)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

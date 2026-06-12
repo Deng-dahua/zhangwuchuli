@@ -74,6 +74,7 @@ function renderTaxRiskRules(container) {
     + '<button class="btn-toolbar" onclick="exportTaxRiskRules()">📤 导出规则</button>'
     + '<button class="btn-toolbar" onclick="importTaxRiskRules()">📥 导入规则</button>'
     + '<button class="btn-toolbar" onclick="clearAllRules()">🗑️ 清空规则</button>'
+    + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">📤 上传规则到服务器</button>'
     + '</div>'
     + '</div>'
     // 主体：左侧输入区 + 右侧显示区
@@ -652,6 +653,26 @@ function clearAllRules() {
   renderTaxRiskRulesList();
   updateCategoryFilterOptions();
   toast('所有规则已清空', 'success');
+}
+
+// 把浏览器 localStorage 中的规则上传到服务器（方便分析）
+async function uploadLocalRulesToServer() {
+  var data = localStorage.getItem('taxRiskRulesData');
+  if (!data) { toast('本地没有规则数据', 'error'); return; }
+  try {
+    var resp = await fetch('/api/tax-risk-rules/save-local', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    var result = await resp.json();
+    if (result.ok) {
+      toast('已上传 ' + result.count + ' 条规则到服务器', 'success');
+    } else {
+      toast('上传失败: ' + result.error, 'error');
+    }
+  } catch(e) {
+    toast('上传失败: ' + e.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
