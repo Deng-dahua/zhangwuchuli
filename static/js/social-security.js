@@ -159,6 +159,7 @@ async function renderSocialSecurity(container) {
 
 // ============ 数据加载 ============
 async function ssRefresh() {
+  ssSelectedIds.clear();
   var yearSel = document.getElementById('ss-year');
   var monthSel = document.getElementById('ss-month');
   if (yearSel && monthSel) ssPeriod = yearSel.value + '-' + monthSel.value;
@@ -590,10 +591,12 @@ var ssSelectedIds = new Set();
 function ssToggleAll(cb) {
   var block = cb.closest('.ss-category-block');
   if (!block) return;
-  var checks = block.querySelectorAll('input[type="checkbox"]:not([disabled])');
+  // 排除全选checkbox自身（无value属性），只选数据行checkbox
+  var checks = block.querySelectorAll('input[type="checkbox"][value]:not([disabled])');
   checks.forEach(function(c) {
     c.checked = cb.checked;
     var id = parseInt(c.value);
+    if (isNaN(id)) return; // 安全兜底：跳过无效ID
     if (cb.checked) ssSelectedIds.add(id);
     else ssSelectedIds.delete(id);
   });
