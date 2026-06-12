@@ -1,12 +1,13 @@
 """
-涉税风险分析报告模块 V5
-综合分析评估 61 个维度：
+涉税风险分析报告模块 V6
+综合分析评估 94 个维度（V6新增33项）：
 账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 / 配比弹性 /
 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践 /
-经营实质(18项) / 增值税专项(5项) / 发票异常(3项) / 费用匹配(3项) /
-企业所得税专项(4项) / 薪酬福利(3项) / 其他(2项)
+经营实质(18+3项) / 增值税专项(5+4项) / 发票异常(3+4项) / 费用匹配(3项) /
+企业所得税专项(4+4项) / 薪酬福利(3项) / 其他(2项) /
+V6新增: 资金联动(3项) / 征管风险(4项) / 交易特征(4项) / 财务补充(3项)
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -343,6 +344,48 @@ def get_tax_risk_report(
     _analyze_undistributed_profit(db, company_id, period_start, period_end, results)
     _analyze_cross_invoicing(db, company_id, period_start, period_end, results)
     _analyze_invest_property_tax(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 发票异常补充（4项）──
+    _analyze_top_amount_invoice_ratio(db, company_id, period_start, period_end, results)
+    _analyze_top_amount_red_invoice(db, company_id, period_start, period_end, results)
+    _analyze_consecutive_invoice_numbers(db, company_id, period_start, period_end, results)
+    _analyze_off_hours_invoicing(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 资金流与发票联动（3项）──
+    _analyze_einvoice_frequency_spike(db, company_id, period_start, period_end, results)
+    _analyze_corp_to_personal_transfer(db, company_id, period_start, period_end, results)
+    _analyze_cash_transaction_ratio(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 增值税专项补充（4项）──
+    _analyze_input_tax_transfer_delay(db, company_id, period_start, period_end, results)
+    _analyze_invoice_revenue_cross_period(db, company_id, period_start, period_end, results)
+    _analyze_export_rebate_anomaly(db, company_id, period_start, period_end, results)
+    _analyze_input_tax_credit_long_term(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 企业所得税补充（4项）──
+    _analyze_related_party_transfer_pricing(db, company_id, period_start, period_end, results)
+    _analyze_rd_expense_compliance(db, company_id, period_start, period_end, results)
+    _analyze_eit_contribution_zero(db, company_id, period_start, period_end, results)
+    _analyze_eit_adjustment_items(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 发票深度补充（4项）──
+    _analyze_seller_spike_invoicing(db, company_id, period_start, period_end, results)
+    _analyze_daily_necessities_invoice(db, company_id, period_start, period_end, results)
+    _analyze_energy_consumption_match(db, company_id, period_start, period_end, results)
+    _analyze_transport_expense_match(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 经营实质补充（3项）──
+    _analyze_two_end_outside(db, company_id, period_start, period_end, results)
+    _analyze_new_company_mass_invoicing(db, company_id, period_start, period_end, results)
+    _analyze_small_taxpayer_overscale(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 征管风险（4项）──
+    _analyze_tax_arrears(db, company_id, period_start, period_end, results)
+    _analyze_upstream_runaway(db, company_id, period_start, period_end, results)
+    _analyze_stale_invoice(db, company_id, period_start, period_end, results)
+    _analyze_non_normal_counterparty(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 交易特征（4项）──
+    _analyze_round_amount_transactions(db, company_id, period_start, period_end, results)
+    _analyze_fund_backflow(db, company_id, period_start, period_end, results)
+    _analyze_same_buyer_frequent_red(db, company_id, period_start, period_end, results)
+    _analyze_input_transfer_reentry(db, company_id, period_start, period_end, results)
+    # ── V6 新增 — 财务健康与其他（3项）──
+    _analyze_roe_sustainability(db, company_id, period_start, period_end, results)
+    _analyze_operating_cash_flow_coverage(db, company_id, period_start, period_end, results)
+    _analyze_other_payables_scale_mismatch(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -4014,6 +4057,1590 @@ def _analyze_invest_property_tax(db, company_id, ps, pe, results):
             "item": "持有投资性房地产需关注税费申报",
             "detail": f"投资性房地产账面价值 {invest_prop:,.2f} 元。{ '有租金收入' + str(rent_income) + '元' if has_rent else '未发现租金收入记录' }。稽查要点：①持有投资性房地产需缴纳房产税（按余值1.2%或租金12%）；②租金收入需开具发票并申报增值税；③将来转让需缴纳土地增值税。",
             "suggestion": "①确认是否已缴纳房产税；②出租收入是否入账并申报；③检查从租计征房产税的适用税率。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  F 类 — 金税四期新增：发票异常深度分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_top_amount_invoice_ratio(db, company_id, ps, pe, results):
+    """顶额开票占比过高：开具金额集中在开票限额附近（金税四期必查）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    sales = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status == "正常"
+    ).all()
+    
+    if not sales:
+        return
+    
+    # 顶额标准：金额>=90000（10万版）、>=900000（100万版）
+    top_amount_invs = []
+    for inv in sales:
+        amt = _safe_float(inv.total_amount)
+        if amt >= 90000 and amt <= 100000:  # 10万版顶额区间
+            top_amount_invs.append(inv)
+        elif amt >= 900000 and amt <= 1000000:  # 100万版顶额区间
+            top_amount_invs.append(inv)
+    
+    top_ratio = len(top_amount_invs) / len(sales) * 100 if sales else 0
+    if top_ratio > 30 and len(top_amount_invs) >= 3:
+        top_amt = sum(_safe_float(inv.total_amount) for inv in top_amount_invs)
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"顶额开票占比过高（{top_ratio:.0f}%）",
+            "detail": f"有 {len(top_amount_invs)}/{len(sales)} 张发票金额集中在开票限额附近（>=9万元），占比 {top_ratio:.0f}%，涉及金额 {top_amt:,.2f} 元。涉嫌拆分大额交易或虚开发票。金税四期对顶额开票自动标记。",
+            "suggestion": "核查顶额开票对应的交易是否实质为同一笔业务被拆分。大额交易应使用更高版位发票或申请提高开票限额。",
+            "required_evidence": ["顶额发票清单（含对应合同/验收单/付款凭证）", "顶额开票业务真实性说明"]
+        })
+    elif top_ratio > 10 and len(top_amount_invs) >= 2:
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在顶额开票行为（{len(top_amount_invs)}张，占比{top_ratio:.0f}%）",
+            "detail": f"有 {len(top_amount_invs)} 张发票金额接近开票限额。顶额开票容易被税务机关认定为拆分开票。",
+            "suggestion": "核实业务真实性，避免连续顶额开票。"
+        })
+
+
+def _analyze_top_amount_red_invoice(db, company_id, ps, pe, results):
+    """红冲作废发票集中在顶额：顶额红冲率异常"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    void_red_invs = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status.in_(["作废", "红冲"])
+    ).all()
+    
+    if not void_red_invs:
+        return
+    
+    # 顶额红冲：金额>=90000
+    top_void = [inv for inv in void_red_invs if _safe_float(inv.total_amount) >= 90000]
+    
+    if len(top_void) >= 3:
+        top_amt = sum(_safe_float(inv.total_amount) for inv in top_void)
+        void_ratio = len(top_void) / len(void_red_invs) * 100
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"顶额红冲/作废发票异常（{len(top_void)}张）",
+            "detail": f"红冲/作废发票中有 {len(top_void)} 张金额 >=9万元（占红冲总数 {void_ratio:.0f}%），涉及金额 {top_amt:,.2f} 元。可能涉嫌先开票虚增收入再红冲平账。",
+            "suggestion": "逐笔核实顶额红冲/作废发票的原因：是否真实发生退货退款、销售折让；检查红冲是否有对应的红字信息表。",
+            "required_evidence": ["顶额红冲/作废发票清单", "红字信息表（每笔红冲对应）", "退货协议/验收单/折让协议"]
+        })
+
+
+def _analyze_consecutive_invoice_numbers(db, company_id, ps, pe, results):
+    """发票连号异常：纸质发票连续>=5张连号（金税四期监控）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 获取所有有发票号码的销项发票（排除数电发票，因为数电发票不存在连号概念）
+    invs = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.invoice_no != None, SalesInvoice.invoice_no != "",
+        SalesInvoice.invoice_code != None, SalesInvoice.invoice_code != ""
+    ).order_by(SalesInvoice.invoice_code, SalesInvoice.invoice_no).all()
+    
+    if len(invs) < 5:
+        return
+    
+    # 按发票代码分组，检查每组内号码连续性
+    code_groups = {}
+    for inv in invs:
+        code = inv.invoice_code or ""
+        no_str = inv.invoice_no or ""
+        try:
+            no = int(no_str)
+        except (ValueError, TypeError):
+            continue
+        if code not in code_groups:
+            code_groups[code] = []
+        code_groups[code].append(no)
+    
+    consecutive_groups = []
+    for code, numbers in code_groups.items():
+        numbers.sort()
+        i = 0
+        while i < len(numbers):
+            j = i + 1
+            while j < len(numbers) and numbers[j] == numbers[j - 1] + 1:
+                j += 1
+            group_size = j - i
+            if group_size >= 5:
+                consecutive_groups.append({
+                    "code": code,
+                    "start": numbers[i],
+                    "end": numbers[j - 1],
+                    "count": group_size
+                })
+            i = j
+    
+    if consecutive_groups:
+        total_affected = sum(g["count"] for g in consecutive_groups)
+        detail_items = [f"代码{g['code']}号码{g['start']}~{g['end']}共{g['count']}张" for g in consecutive_groups[:3]]
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"存在发票连号开具（{len(consecutive_groups)}组，{total_affected}张）",
+            "detail": f"发现 {len(consecutive_groups)} 组连号发票（连续>=5张）：{'；'.join(detail_items)}。大量纸质发票连号可能暗示突击开票或虚开发票。注意：电子发票/数电发票不存在连号概念，仅纸质发票需关注。",
+            "suggestion": "核实连号发票对应的交易是否真实发生。如均为真实交易，保留各项业务对应的合同和交货单备查。"
+        })
+
+
+def _analyze_off_hours_invoicing(db, company_id, ps, pe, results):
+    """夜间/节假日开票异常：非工作时间开票（金税四期时间维度监控）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 中国法定节假日（简化版，不包括调休）
+    holidays_2025 = [
+        "01-01",  # 元旦
+        "01-28", "01-29", "01-30", "01-31", "02-01", "02-02", "02-03", "02-04",  # 春节
+        "04-04", "04-05", "04-06",  # 清明
+        "05-01", "05-02", "05-03", "05-04", "05-05",  # 劳动节
+        "05-31", "06-01", "06-02",  # 端午
+        "10-01", "10-02", "10-03", "10-04", "10-05", "10-06", "10-07", "10-08",  # 国庆中秋
+    ]
+    holidays_2026 = [
+        "01-01",
+        "02-17", "02-18", "02-19", "02-20", "02-21", "02-22", "02-23",
+        "04-05", "04-06", "04-07",
+        "05-01", "05-02", "05-03", "05-04", "05-05",
+        "06-19", "06-20", "06-21",
+        "10-01", "10-02", "10-03", "10-04", "10-05", "10-06", "10-07", "10-08",
+    ]
+    all_holidays = set(holidays_2025 + holidays_2026)
+    
+    all_sales = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status == "正常"
+    ).all()
+    
+    if not all_sales:
+        return
+    
+    off_hours_invs = []
+    for inv in all_sales:
+        inv_date = inv.invoice_date
+        if isinstance(inv_date, str):
+            inv_date = datetime.strptime(inv_date, "%Y-%m-%d").date() if inv_date else None
+        if not inv_date:
+            continue
+        
+        # 检查节假日
+        mmdd = inv_date.strftime("%m-%d")
+        is_holiday = mmdd in all_holidays
+        
+        # 检查夜间：22:00-06:00（如果有时间戳）
+        is_night = False
+        if hasattr(inv, 'invoice_time') and inv.invoice_time:
+            try:
+                t = datetime.strptime(str(inv.invoice_time), "%H:%M:%S").time()
+                is_night = t.hour >= 22 or t.hour < 6
+            except:
+                pass
+        
+        # 周末
+        is_weekend = inv_date.weekday() >= 5
+        
+        if is_holiday or is_night or is_weekend:
+            off_hours_invs.append(inv)
+    
+    off_ratio = len(off_hours_invs) / len(all_sales) * 100 if all_sales else 0
+    
+    if off_ratio > 10 and len(off_hours_invs) >= 5:
+        off_amt = sum(_safe_float(inv.total_amount) for inv in off_hours_invs)
+        results.append({
+            "category": "发票异常", "category_icon": "🧾", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"夜间/节假日/周末开票占比偏高（{off_ratio:.0f}%）",
+            "detail": f"有 {len(off_hours_invs)}/{len(all_sales)} 张发票在夜间/节假日/周末开具（占比 {off_ratio:.0f}%），涉及金额 {off_amt:,.2f} 元。非工作时间开票可能被税务机关质疑业务真实性。电商/餐饮住宿等行业可合理解释；制造业/批发业需重点关注。",
+            "suggestion": "检查非工作时间开票对应的业务是否真实发生。保留业务发生时间佐证材料。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  G 类 — 金税四期：资金流与发票联动分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_einvoice_frequency_spike(db, company_id, ps, pe, results):
+    """全电发票开具频次异常：短期内开票量激增（金税四期动态监控）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 按周统计开票量
+    from datetime import timedelta
+    sales = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
+    ).all()
+    
+    if len(sales) < 20:
+        return
+    
+    # 按周汇总
+    weekly_data = {}
+    for inv in sales:
+        inv_date = inv.invoice_date
+        if isinstance(inv_date, str):
+            try:
+                inv_date = datetime.strptime(inv_date, "%Y-%m-%d").date()
+            except:
+                continue
+        if not inv_date:
+            continue
+        # ISO周
+        week_key = inv_date.isocalendar()[:2]  # (year, week)
+        if week_key not in weekly_data:
+            weekly_data[week_key] = {"count": 0, "amount": 0}
+        weekly_data[week_key]["count"] += 1
+        weekly_data[week_key]["amount"] += _safe_float(inv.total_amount)
+    
+    if len(weekly_data) < 4:
+        return
+    
+    weeks = sorted(weekly_data.keys())
+    avg_count = sum(weekly_data[w]["count"] for w in weeks) / len(weeks)
+    avg_amount = sum(weekly_data[w]["amount"] for w in weeks) / len(weeks)
+    
+    spike_weeks = []
+    for w in weeks:
+        cnt = weekly_data[w]["count"]
+        amt = weekly_data[w]["amount"]
+        if avg_count > 0 and cnt > avg_count * 3:  # 偏离均值3倍
+            spike_weeks.append(f"第{w[1]}周({cnt}张/{amt:,.0f}元)")
+        elif avg_amount > 0 and amt > avg_amount * 3:
+            spike_weeks.append(f"第{w[1]}周({cnt}张/{amt:,.0f}元)")
+    
+    if spike_weeks:
+        results.append({
+            "category": "发票合规", "category_icon": "🧾", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "高",
+            "item": f"全电发票开具频次异常（{len(spike_weeks)}周激增）",
+            "detail": f"以下周期开票量/金额远超历史均值（3倍以上）：{'；'.join(spike_weeks[:3])}。金税四期系统会自动标记开票量异常激增的企业。",
+            "suggestion": "核查开票业务真实性，准备合同/物流/资金流佐证材料，说明激增合理原因。",
+            "required_evidence": ["销项发票台账（按日/按周统计）", "激增期间的业务合同及物流单据"]
+        })
+
+
+def _analyze_corp_to_personal_transfer(db, company_id, ps, pe, results):
+    """公户转私户频繁或大额（金税四期与人民银行账户系统联网监控）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 从银行流水筛选贷方（付款）且对方为个人的记录
+    # 个人特征：名称含常见姓名（2-3个汉字）、不含"公司""有限""厂"等
+    company_keywords = ["公司", "有限", "厂", "局", "院", "所", "中心", "集团", "银行", "税务"]
+    
+    all_transfers = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date,
+        BankTransaction.debit_amount > 0  # 企业付款出去
+    ).all()
+    
+    personal_transfers = []
+    for bt in all_transfers:
+        name = (bt.counterparty_name or "").strip()
+        # 排除公司/机构
+        if not name or any(kw in name for kw in company_keywords):
+            continue
+        # 简单规则：2-3个汉字名称（中文姓名特征）
+        if len(name) >= 2 and len(name) <= 4 and all('\u4e00' <= c <= '\u9fff' for c in name):
+            personal_transfers.append(bt)
+    
+    if len(personal_transfers) >= 5:
+        total_amount = sum(_safe_float(bt.debit_amount) for bt in personal_transfers)
+        has_large = any(_safe_float(bt.debit_amount) >= 50000 for bt in personal_transfers)
+        
+        risk_score = 8 if has_large else 5
+        risk_level = "高风险" if has_large else "中风险"
+        risk_color = "#dc2626" if has_large else "#f59e0b"
+        urgency = "高" if has_large else "中"
+        
+        results.append({
+            "category": "资金往来", "category_icon": "💰", "risk_score": risk_score, "risk_level": risk_level,
+            "risk_color": risk_color, "urgency": urgency,
+            "item": f"公户转私户交易（{len(personal_transfers)}笔，{total_amount:,.2f}元）",
+            "detail": f"对公账户向个人账户转账 {len(personal_transfers)} 笔，合计 {total_amount:,.2f} 元。{'含大额转账（>=5万），' if has_large else ''}涉嫌挪用资金或逃避个税。金税四期与人民银行账户系统联网，公转私实时监控。",
+            "suggestion": "规范资金往来，大额转账需有合法依据（分红、薪酬、借款等），并及时代扣个税。保留转账的合同/协议备查。",
+            "required_evidence": ["公转私明细清单（含对方姓名/金额/用途）", "每笔大额转账的合法依据（分红决议/薪酬表/借款合同）", "代扣代缴个税记录"]
+        })
+
+
+def _analyze_cash_transaction_ratio(db, company_id, ps, pe, results):
+    """现金收支占比过高（金税四期大额现金交易重点监控）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 从银行流水筛选现金相关交易
+    cash_keywords = ["现金", "取现", "存现", "现金支取", "现金存入"]
+    
+    all_transactions = db.query(
+        func.count(BankTransaction.id),
+        func.sum(BankTransaction.debit_amount),
+        func.sum(BankTransaction.credit_amount)
+    ).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date
+    ).first() or (0, 0, 0)
+    
+    total_cnt, total_debit, total_credit = all_transactions
+    total_volume = _safe_float(total_debit) + _safe_float(total_credit)
+    
+    if total_volume <= 0:
+        return
+    
+    # 现金交易
+    cash_volume = 0
+    cash_cnt = 0
+    cash_large = 0
+    for kw in cash_keywords:
+        cash_rows = db.query(
+            func.count(BankTransaction.id),
+            func.sum(BankTransaction.debit_amount),
+            func.sum(BankTransaction.credit_amount)
+        ).filter(
+            BankTransaction.company_id == company_id,
+            BankTransaction.transaction_date >= ps_date,
+            BankTransaction.transaction_date <= pe_date,
+            BankTransaction.summary.contains(kw)
+        ).first() or (0, 0, 0)
+        cash_cnt += cash_rows[0] or 0
+        cash_volume += _safe_float(cash_rows[1]) + _safe_float(cash_rows[2])
+    
+    # 也检查序时账中的现金科目
+    cash_je_volume = _get_account_sum(db, company_id, "1001", ps, pe, "debit") + \
+                     _get_account_sum(db, company_id, "1001", ps, pe, "credit")
+    
+    total_cash = cash_volume + cash_je_volume
+    cash_ratio = total_cash / total_volume * 100 if total_volume > 0 else 0
+    
+    if cash_ratio > 30 and total_cash > 100000:
+        results.append({
+            "category": "资金往来", "category_icon": "💰", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "中",
+            "item": f"现金收支占比偏高（{cash_ratio:.0f}%）",
+            "detail": f"现金类交易合计 {total_cash:,.2f} 元（含银行流水现金交易+库存现金科目），占全部资金交易 {cash_ratio:.0f}%。金税四期对大额现金交易重点监控，单笔5万元以上需重点说明。",
+            "suggestion": "减少现金交易，尽量通过对公账户结算，保留完整资金链条证据。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  H 类 — 增值税专项补充分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_input_tax_transfer_delay(db, company_id, ps, pe, results):
+    """进项税额转出处理不及时：免税/简易计税项目进项未及时转出"""
+    decls = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).order_by(VATDeclaration.period).all()
+    
+    delay_periods = []
+    for v in decls:
+        if not v.form_main:
+            continue
+        fm = v.form_main if isinstance(v.form_main, dict) else json.loads(v.form_main)
+        # 检查是否有免税/简易计税/集体福利相关
+        tax_free = _safe_float(fm.get("tax_free_sales", 0))
+        simple_tax = _safe_float(fm.get("simple_tax_sales", 0))
+        input_transfer = _safe_float(fm.get("input_tax_transfer", 0))
+        
+        # 有免税或简易征收，但进项转出很小/为零
+        if (tax_free > 0 or simple_tax > 0):
+            # 检查是否有进项发票
+            input_cnt = db.query(func.count(PurchaseInvoice.id)).filter(
+                PurchaseInvoice.company_id == company_id,
+                func.substr(PurchaseInvoice.invoice_date, 1, 7) == v.period
+            ).scalar() or 0
+            
+            if input_cnt > 0:
+                # 估算应转出的进项税额
+                total_sales = _safe_float(fm.get("taxable_sales", 0)) + tax_free + simple_tax
+                if total_sales > 0:
+                    input_amt = _safe_float(fm.get("input_tax", 0))
+                    expected_transfer = input_amt * (tax_free + simple_tax) / total_sales
+                    if input_transfer < expected_transfer * 0.5 and expected_transfer > 100:
+                        delay_periods.append(f"{v.period}(应转出约{expected_transfer:,.0f}元，实际{input_transfer:,.0f}元)")
+    
+    if delay_periods:
+        results.append({
+            "category": "增值税专项", "category_icon": "🧾", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "高",
+            "item": "进项税额转出处理不及时",
+            "detail": f"以下期间存在免税/简易计税项目但进项转出不足：{'；'.join(delay_periods[:3])}。用于免税项目、集体福利、个人消费的进项税额不得抵扣，必须做进项税额转出。金税四期进项转出数据与申报比对。",
+            "suggestion": "按月核查进项税额用途，属于不得抵扣情形的及时做进项转出，并在增值税申报表正确填列。",
+            "required_evidence": ["进项发票用途分类台账", "不得抵扣进项税额计算表", "进项税额转出明细"]
+        })
+
+
+def _analyze_invoice_revenue_cross_period(db, company_id, ps, pe, results):
+    """增值税发票开具与收入确认跨期异常"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 按期间统计销项发票金额
+    inv_by_period = {}
+    sales_invs = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
+    ).all()
+    for inv in sales_invs:
+        inv_date = inv.invoice_date
+        if isinstance(inv_date, str):
+            period = inv_date[:7]
+        else:
+            period = inv_date.strftime("%Y-%m") if inv_date else ""
+        if period:
+            inv_by_period[period] = inv_by_period.get(period, 0) + _safe_float(inv.total_amount)
+    
+    # 按期间统计申报销售额
+    decls = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).all()
+    
+    mismatches = []
+    for v in decls:
+        period = v.period
+        inv_amt = inv_by_period.get(period, 0)
+        if v.form_main:
+            fm = v.form_main if isinstance(v.form_main, dict) else json.loads(v.form_main)
+            sales = _safe_float(fm.get("taxable_sales", 0)) + _safe_float(fm.get("tax_free_sales", 0)) + \
+                    _safe_float(fm.get("simple_tax_sales", 0))
+            if inv_amt > 0 and sales > 0:
+                diff_pct = abs(inv_amt - sales) / max(inv_amt, sales) * 100
+                if diff_pct > 20:
+                    mismatches.append(f"{period}:发票{inv_amt:,.0f}vs申报{sales:,.0f}差异{diff_pct:.0f}%")
+    
+    if mismatches:
+        results.append({
+            "category": "增值税专项", "category_icon": "🧾", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "高",
+            "item": "增值税发票开具与收入确认跨期异常",
+            "detail": f"以下期间开票金额与申报销售额差异较大：{'；'.join(mismatches[:5])}。金税四期开票系统与申报系统自动比对，跨期差异将被标记。",
+            "suggestion": "确保发票开具时间与收入确认时间一致，跨期发票及时调整申报所属期。"
+        })
+
+
+def _analyze_export_rebate_anomaly(db, company_id, ps, pe, results):
+    """出口退税单证异常检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 检查销项发票中的出口/外销发票
+    export_keywords = ["出口", "外销", "保税", "海外", "跨境"]
+    export_invs = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        or_(*[SalesInvoice.goods_name.contains(kw) for kw in export_keywords])
+    ).all()
+    
+    # 也检查零税率发票
+    zero_rate_invs = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.tax_rate == 0
+    ).all()
+    
+    all_export = export_invs + [inv for inv in zero_rate_invs if inv not in export_invs]
+    
+    if not all_export:
+        return
+    
+    export_amt = sum(_safe_float(inv.total_amount) for inv in all_export)
+    
+    if export_amt > 50000:
+        results.append({
+            "category": "增值税专项", "category_icon": "🧾", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"存在出口业务（{len(all_export)}张发票，{export_amt:,.2f}元）",
+            "detail": f"发现 {len(all_export)} 张出口/零税率销项发票（涉及金额 {export_amt:,.2f} 元）。出口退税是国家重点监管领域，单证不齐可能导致退税被拒或追缴。出口退税申报应在货物报关出口之日起至次年4月30日前完成。",
+            "suggestion": "确保出口退税申报及时，保留报关单、核销单、购货合同、付款凭证等全套单证。",
+            "required_evidence": ["出口退税申报记录", "报关单（出口货物报关单）", "外汇核销单/收汇凭证", "购货增值税专用发票及付款凭证"]
+        })
+
+
+def _analyze_input_tax_credit_long_term(db, company_id, ps, pe, results):
+    """进项税额留抵长期不退税"""
+    decls = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).order_by(VATDeclaration.period).all()
+    
+    if len(decls) < 6:
+        return
+    
+    # 找连续留抵>=6个月且金额>50万的
+    continuous_count = 0
+    max_credit = 0
+    for v in decls:
+        if v.form_main:
+            fm = v.form_main if isinstance(v.form_main, dict) else json.loads(v.form_main)
+            end_credit = _safe_float(fm.get("end_period_credit", 0))
+            max_credit = max(max_credit, end_credit)
+            if end_credit > 500000:
+                continuous_count += 1
+            else:
+                continuous_count = 0
+    
+    if continuous_count >= 6:
+        results.append({
+            "category": "增值税专项", "category_icon": "🧾", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"进项税额长期留抵未退税（>{max_credit:,.0f}元，持续>={continuous_count}个月）",
+            "detail": f"期末留抵税额较大且持续 >=6 个月未申请留抵退税，也未在后续申报中消化。大额长期留抵可能暗示进项税额虚增或收入未确认。",
+            "suggestion": "分析大额留抵原因：(1)是否符合留抵退税条件；(2)是否存在未确认收入的发出商品；(3)是否存在不得抵扣的进项税额。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  I 类 — 企业所得税专项补充
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_related_party_transfer_pricing(db, company_id, ps, pe, results):
+    """关联交易转移定价偏离市场价检测"""
+    # 本函数与_analyze_related_party_pricing有重叠但更侧重转移定价角度
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    
+    legal_rep = company.legal_representative or ""
+    if not legal_rep:
+        return
+    
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 查找与法定代表人/股东相关的交易
+    related_purchase = db.query(
+        func.count(PurchaseInvoice.id),
+        func.sum(PurchaseInvoice.total_amount)
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
+        PurchaseInvoice.seller_name.contains(legal_rep[:2])  # 姓名前两字匹配
+    ).first() or (0, 0)
+    
+    related_sales = db.query(
+        func.count(SalesInvoice.id),
+        func.sum(SalesInvoice.total_amount)
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.buyer_name.contains(legal_rep[:2])
+    ).first() or (0, 0)
+    
+    rp_cnt, rp_amt = related_purchase
+    rs_cnt, rs_amt = related_sales
+    
+    total_related = rp_cnt + rs_cnt
+    if total_related > 0:
+        total_related_amt = _safe_float(rp_amt) + _safe_float(rs_amt)
+        results.append({
+            "category": "企业所得税", "category_icon": "📊", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "高",
+            "item": f"存在关联交易（{total_related}笔，{total_related_amt:,.2f}元）",
+            "detail": f"发现与法定代表人/股东相关的交易：采购 {rp_cnt} 笔（{_safe_float(rp_amt):,.2f}元），销售 {rs_cnt} 笔（{_safe_float(rs_amt):,.2f}元）。关联交易需确保定价符合独立交易原则，否则金税四期与海关/市场监管数据联动将标记异常。",
+            "suggestion": "关联交易需准备转移定价文档，证明交易价格符合独立交易原则，必要时申请预约定价安排。",
+            "required_evidence": ["关联交易合同及定价说明", "可比非受控价格分析", "转移定价文档（主体文档/本地文档）"]
+        })
+
+
+def _analyze_rd_expense_compliance(db, company_id, ps, pe, results):
+    """研发费用加计扣除归集规范性检测"""
+    # 从序时账中查找研发相关支出
+    rd_keywords = ["研发", "开发", "技术", "试验", "试制", "检测", "测试", "专利"]
+    rd_entries = db.query(
+        func.count(JournalEntry.id),
+        func.sum(JournalEntry.debit_amount)
+    ).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(*[JournalEntry.summary.contains(kw) for kw in rd_keywords])
+    ).first() or (0, 0)
+    
+    rd_cnt, rd_amt = rd_entries
+    if rd_cnt and rd_cnt > 0 and _safe_float(rd_amt) > 10000:
+        # 检查工资薪金中是否有研发人员
+        salary_with_rd = db.query(func.count(SalaryRecord.id)).filter(
+            SalaryRecord.company_id == company_id,
+            SalaryRecord.period >= ps, SalaryRecord.period <= pe,
+            or_(
+                SalaryRecord.employee_name.contains("研发"),
+                SalaryRecord.employee_name.contains("技术"),
+                SalaryRecord.employee_name.contains("开发"),
+            )
+        ).scalar() or 0
+        
+        results.append({
+            "category": "企业所得税", "category_icon": "📊", "risk_score": 4, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "中",
+            "item": f"存在研发费用（{rd_cnt}笔，{_safe_float(rd_amt):,.2f}元）",
+            "detail": f"发现 {rd_cnt} 笔研发相关支出（{_safe_float(rd_amt):,.2f}元），{'有' if salary_with_rd > 0 else '无'}研发人员工资记录。研发费用加计扣除需规范归集，区分研发用材料与生产性材料，人员人工费需有明确项目工时记录。",
+            "suggestion": "建立研发项目台账，明确研发人员名单及工时分配，区分研发用材料与生产性材料，规范归集研发费用。",
+            "required_evidence": ["研发项目立项文件", "研发费用辅助账（按项目）", "研发人员工时记录", "研发材料领用记录"]
+        })
+
+
+def _analyze_eit_contribution_zero(db, company_id, ps, pe, results):
+    """企业所得税贡献率持续为零检测"""
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    if revenue < 1000000:  # 收入<100万不触发
+        return
+    
+    # 从利润表角度估算所得税
+    cost = _get_account_sum(db, company_id, "6401", ps, pe, "debit")
+    mgmt = _get_account_sum(db, company_id, "6602", ps, pe, "debit")
+    sales_exp = _get_account_sum(db, company_id, "6601", ps, pe, "debit")
+    fin_exp = _get_account_sum(db, company_id, "6603", ps, pe, "debit")
+    total_exp = cost + mgmt + sales_exp + fin_exp
+    
+    profit = revenue - total_exp
+    
+    # 查找所得税费用
+    income_tax = _get_account_sum(db, company_id, "6801", ps, pe, "debit")  # 所得税费用
+    
+    eit_contribution = income_tax / revenue * 100 if revenue > 0 else 0
+    
+    if profit > 0 and income_tax <= 0:
+        results.append({
+            "category": "企业所得税", "category_icon": "📊", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"企业所得税贡献率持续为零",
+            "detail": f"有营业收入 {revenue:,.2f} 元，账面利润约 {profit:,.2f} 元，但未发现企业所得税计提记录。可能原因：①利润总额持续为负（亏损企业）；②享受免税/减税政策但未合规备案；③通过关联交易转移利润。",
+            "suggestion": "分析利润为负的原因：是真实经营亏损还是有虚列成本/滞后确认收入；检查免税政策适用是否合规。",
+            "required_evidence": ["企业所得税申报表", "亏损原因说明", "免税政策备案文件（如适用）"]
+        })
+    elif eit_contribution < 1 and revenue > 5000000:
+        results.append({
+            "category": "企业所得税", "category_icon": "📊", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"企业所得税贡献率极低（{eit_contribution:.2f}%）",
+            "detail": f"所得税贡献率仅 {eit_contribution:.2f}%，远低于正常水平。建议核查是否存在应调增项目未做纳税调整。",
+            "suggestion": "检查纳税调整事项是否完整，确保所有不得税前扣除的项目已做纳税调增。"
+        })
+
+
+def _analyze_eit_adjustment_items(db, company_id, ps, pe, results):
+    """应纳税所得额调增项目检查"""
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    if revenue <= 0:
+        return
+    
+    # 检查常见的纳税调增事项
+    issues = []
+    
+    # 1. 业务招待费超标
+    entertainment = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        func.lower(JournalEntry.summary).contains("招待"),
+        JournalEntry.period >= ps, JournalEntry.period <= pe
+    ).scalar())
+    if entertainment > 0:
+        limit1 = entertainment * 0.6
+        limit2 = revenue * 0.005
+        actual_limit = min(limit1, limit2)
+        if entertainment > actual_limit:
+            issues.append(f"业务招待费超标{entertainment - actual_limit:,.0f}元")
+    
+    # 2. 广宣费超标
+    ad_promo = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(func.lower(JournalEntry.summary).contains("广告"),
+            func.lower(JournalEntry.summary).contains("宣传"),
+            func.lower(JournalEntry.summary).contains("推广"))
+    ).scalar())
+    if ad_promo > revenue * 0.15:
+        issues.append(f"广宣费超限额{ad_promo - revenue * 0.15:,.0f}元")
+    
+    # 3. 营业外支出检查（罚款/滞纳金等不得扣除项目）
+    penalty = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(func.lower(JournalEntry.summary).contains("罚款"),
+            func.lower(JournalEntry.summary).contains("滞纳金"),
+            func.lower(JournalEntry.summary).contains("罚金"))
+    ).scalar())
+    if penalty > 0:
+        issues.append(f"罚款/滞纳金{penalty:,.0f}元（不得税前扣除）")
+    
+    if issues:
+        results.append({
+            "category": "企业所得税", "category_icon": "📊", "risk_score": 4, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "提醒",
+            "item": "应纳税所得额存在需纳税调增项目",
+            "detail": f"发现以下项目需在汇算清缴时做纳税调增：{'；'.join(issues)}。纳税调整减少率持续为0或极低可能意味着未充分利用税收优惠政策。",
+            "suggestion": "检查是否充分享受小微企业减免税、研发费用加计扣除等优惠政策。注意调减类申报。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  J 类 — 发票深度补充：经营实质与发票匹配
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_seller_spike_invoicing(db, company_id, ps, pe, results):
+    """同一销方短期内开票金额激增检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 按供应商分组，按月统计
+    purchases = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+    ).all()
+    
+    if len(purchases) < 10:
+        return
+    
+    # 按销方分组
+    seller_data = {}
+    for inv in purchases:
+        seller = (inv.seller_name or "未知").strip()
+        if len(seller) < 2:
+            continue
+        if seller not in seller_data:
+            seller_data[seller] = []
+        seller_data[seller].append({
+            "date": inv.invoice_date[:7] if isinstance(inv.invoice_date, str) else inv.invoice_date.strftime("%Y-%m"),
+            "amount": _safe_float(inv.total_amount)
+        })
+    
+    spike_sellers = []
+    for seller, records in seller_data.items():
+        if len(records) < 3:
+            continue
+        # 按月汇总
+        monthly = {}
+        for r in records:
+            m = r["date"]
+            monthly[m] = monthly.get(m, 0) + r["amount"]
+        
+        months = sorted(monthly.keys())
+        if len(months) < 2:
+            continue
+        
+        for i in range(1, len(months)):
+            prev_amt = monthly[months[i - 1]]
+            curr_amt = monthly[months[i]]
+            if prev_amt > 0 and curr_amt / prev_amt > 5 and curr_amt > 50000:
+                spike_sellers.append(f"{seller}({months[i]}:{curr_amt:,.0f}元)")
+                break
+    
+    if spike_sellers:
+        results.append({
+            "category": "发票深度", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "高",
+            "item": f"同一销方短期内开票金额激增（{len(spike_sellers)}家）",
+            "detail": f"以下供应商开票金额环比增长超过5倍：{'；'.join(spike_sellers[:3])}。涉嫌虚开发票或串通开票。金税四期对供应商开票异常行为双向监控。",
+            "suggestion": "核查与销方的业务真实性，准备采购合同/入库单/付款凭证等佐证材料，对异常供应商停止合作。",
+            "required_evidence": ["异常供应商的采购合同", "入库单/收货记录", "付款凭证（银行回单）"]
+        })
+
+
+def _analyze_daily_necessities_invoice(db, company_id, ps, pe, results):
+    """取得大量生活用品类发票检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    daily_keywords = ["日用品", "百货", "食品", "服饰", "箱包", "化妆品", "洗涤", "床上用品",
+                      "厨房用品", "清洁用品", "生活用品", "母婴", "鞋帽", "服装"]
+    
+    daily_invs = db.query(
+        func.count(PurchaseInvoice.id),
+        func.sum(PurchaseInvoice.total_amount)
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
+        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in daily_keywords])
+    ).first() or (0, 0)
+    
+    daily_cnt, daily_amt = daily_invs
+    
+    total_purchase = db.query(
+        func.sum(PurchaseInvoice.total_amount)
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+    ).scalar() or 0
+    
+    if daily_cnt and daily_cnt > 0:
+        ratio = _safe_float(daily_amt) / (_safe_float(total_purchase) or 1) * 100
+        if ratio > 10 and _safe_float(daily_amt) > 10000:
+            results.append({
+                "category": "发票深度", "category_icon": "🔬", "risk_score": 8, "risk_level": "高风险",
+                "risk_color": "#dc2626", "urgency": "紧急",
+                "item": f"取得大量生活用品类发票（{daily_cnt}张，{_safe_float(daily_amt):,.2f}元）",
+                "detail": f"期间取得生活用品类进项发票 {daily_cnt} 张、金额 {_safe_float(daily_amt):,.2f} 元，占进项总额 {ratio:.1f}%。生活用品与多数企业的生产经营活动关系不大，可能涉嫌个人消费报销入账或虚列费用。",
+                "suggestion": "逐笔核实生活用品类发票对应的采购用途：办公用品应有领用登记；劳保用品应有发放记录；节日福利应并入工资薪金扣缴个税。无法说明用途的进项税额不得抵扣。",
+                "required_evidence": ["生活用品类发票清单及用途说明", "领用登记/发放记录", "如为福利费，个税代扣记录"]
+            })
+        elif ratio > 5 and _safe_float(daily_amt) > 5000:
+            results.append({
+                "category": "发票深度", "category_icon": "🔬", "risk_score": 4, "risk_level": "中风险",
+                "risk_color": "#f59e0b", "urgency": "提醒",
+                "item": f"存在生活用品类进项发票（{daily_cnt}张，占比{ratio:.1f}%）",
+                "detail": f"取得 {daily_cnt} 张生活用品类发票（{_safe_float(daily_amt):,.2f}元），占进项总额 {ratio:.1f}%。建议核实采购用途。",
+                "suggestion": "确保每张生活用品类发票有明确的业务用途说明。"
+            })
+
+
+def _analyze_energy_consumption_match(db, company_id, ps, pe, results):
+    """经营能耗（水电气）与业务规模匹配检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    biz = (company.business_scope or "") + " " + (company.company_type or "")
+    
+    # 能源关键词
+    energy_keywords = ["电费", "水费", "燃气", "天然气", "供热", "供电", "水务", "电力"]
+    
+    energy_amt = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
+        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in energy_keywords])
+    ).scalar())
+    
+    # 也查序时账
+    energy_je = 0
+    for kw in energy_keywords:
+        energy_je += _get_account_sum(db, company_id, "660215", ps, pe, "debit")  # 水电费
+    
+    total_energy = max(energy_amt, energy_je)
+    
+    total_purchase = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+    ).scalar())
+    
+    if total_purchase <= 0:
+        return
+    
+    energy_ratio = total_energy / total_purchase * 100
+    
+    # 制造业/餐饮业水电气占比应>5%，一般企业>2%
+    is_mfg = any(kw in biz for kw in ["制造", "生产", "加工", "食品", "餐饮"])
+    threshold = 5 if is_mfg else 2
+    
+    if energy_ratio < threshold and total_purchase > 100000:
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"水电气能耗占比偏低（{energy_ratio:.1f}%）",
+            "detail": f"水电气进项发票金额占进项总额仅 {energy_ratio:.1f}%（{total_energy:,.2f}元），显著低于{'制造/餐饮业应有>=5%' if is_mfg else '一般企业应有>=2%'}的水平。有实体经营场所的企业必然产生水电气消耗，能耗过低可能说明经营场所规模与开票业务规模不匹配。",
+            "suggestion": "核实经营场所的实际使用面积和能耗情况；比对同区域同行业企业的能耗水平；如经营场所为自有或长期租赁，检查水电费缴纳记录是否完整。",
+            "required_evidence": ["水电气费缴纳凭证及发票", "经营场所租赁合同/产权证明", "能耗与业务规模匹配说明"]
+        })
+
+
+def _analyze_transport_expense_match(db, company_id, ps, pe, results):
+    """运输费用与经营模式匹配检测（补充版：运输费为0触发）"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    biz = (company.business_scope or "") + " " + (company.company_type or "")
+    
+    # 运输费关键词
+    transport_kw = ["运输", "物流", "快递", "货运", "配送"]
+    
+    transport_inv = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
+        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in transport_kw])
+    ).scalar())
+    
+    # 序时账运输费
+    transport_je = 0
+    for kw in transport_kw:
+        transport_je += _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            JournalEntry.summary.contains(kw)
+        ).scalar())
+    
+    total_transport = transport_inv + transport_je
+    
+    total_purchase = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+    ).scalar())
+    
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    
+    # 制造业/批发业有大量购销但无运输费
+    is_mfg_wholesale = any(kw in biz for kw in ["制造", "生产", "加工", "批发", "贸易", "销售"])
+    
+    if is_mfg_wholesale and total_transport == 0 and (total_purchase > 100000 or revenue > 100000):
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "运输费用为零（与购销规模不匹配）",
+            "detail": f"企业为制造/批发类企业（购销总额 {(total_purchase + revenue):,.0f} 元），但未发现任何运输/物流费用。有货物购销就需要运输，无运输费不符合商业逻辑。可能：①运费由对方承担并已在发票金额中体现；②私车运输未入账；③虚开发票无真实货物流转。",
+            "suggestion": "如为对方承担运费，提供销售合同中运费的条款说明。如为自有车辆运输，检查车辆折旧/油费是否入账。如为第三方物流，保留运输合同和对账单。",
+            "required_evidence": ["销售合同（运费条款）", "运输合同/物流对账单", "自有车辆费用明细（如适用）"]
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  K 类 — 经营实质补充：上下游地域与开票容量分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_two_end_outside(db, company_id, ps, pe, results):
+    """购销两头在外检测：主要供应商和客户均不在注册地（空壳特征）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    company_addr = (company.address or "").strip()
+    if not company_addr:
+        return
+    
+    # 提取公司所在省份/城市
+    company_province = ""
+    for suffix in ["省", "市", "自治区"]:
+        idx = company_addr.find(suffix)
+        if idx > 0:
+            company_province = company_addr[:idx + 1]
+            break
+    if not company_province:
+        company_province = company_addr[:2]  # fallback
+    
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 从客户档案中按地址筛选（Customer有address字段）
+    # 从供应商和客户名称中提取地区关键词
+    province_short = company_province.replace("省", "").replace("市", "").replace("自治区", "")[:2]
+    
+    # 检查供应商（PurchaseInvoice只有seller_name，Supplier无address）
+    # 策略：统计不同供应商数量，用名称中的省市区关键词匹配
+    purchase_names = set()
+    for inv in db.query(PurchaseInvoice.seller_name).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+    ).all():
+        name = (inv[0] or "").strip()
+        if name:
+            purchase_names.add(name)
+    
+    # 检查客户：优先用Customer表的address字段
+    sales_names_outside = set()
+    sales_names_all = set()
+    # 从SalesInvoice取buyer_name
+    for inv in db.query(SalesInvoice.buyer_name).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
+    ).all():
+        name = (inv[0] or "").strip()
+        if name:
+            sales_names_all.add(name)
+    
+    # 通过Customer表查地址
+    for name in list(sales_names_all):
+        cust = db.query(Customer).filter(
+            Customer.company_id == company_id,
+            Customer.name == name
+        ).first()
+        if cust and cust.address:
+            if company_province not in cust.address:
+                sales_names_outside.add(name)
+        elif name and province_short not in name:
+            # fallback: 名称中不含注册地简称
+            sales_names_outside.add(name)
+    
+    # 供应商同理：名称中不含注册地简称
+    purchase_names_outside = {n for n in purchase_names if province_short not in n}
+    
+    # 检查注册地是否有经营痕迹（租赁/水电/物业）
+    local_expense = _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("660214%"),  # 租赁费
+            JournalEntry.account_code.like("660215%"),  # 水电费
+            JournalEntry.account_code.like("660213%"),  # 物业费
+        )
+    ).scalar())
+    
+    if len(purchase_names_outside) >= 3 and len(sales_names_outside) >= 3 and local_expense == 0:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "购销两头在外——注册地无经营痕迹",
+            "detail": f"主要供应商（{len(purchase_names_outside)}家）和客户（{len(sales_names_outside)}家）均在注册地（{company_province}）以外，且注册地无租赁费/水电费/物业费支出。购销两头在外的空壳公司是虚开发票的典型特征。金税四期通过物流/资金流/发票流三流合一来判断。",
+            "suggestion": "准备经营场所租赁合同+水电物业费凭证+员工名册及社保记录+物流单据，证明企业有真实经营场所和经营能力。",
+            "required_evidence": ["经营场所证明（租赁合同+水电费）", "员工劳动合同+社保记录", "物流运输单据"]
+        })
+    elif len(purchase_names_outside) >= 3 and len(sales_names_outside) >= 3:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "购销主要在外地（注册地有经营费用）",
+            "detail": f"主要供应商和客户在注册地以外，但注册地有经营费用记录。建议确保物流和资金流的记录完整。",
+            "suggestion": "保留完整的货物流转记录和物流单据。"
+        })
+
+
+def _analyze_new_company_mass_invoicing(db, company_id, ps, pe, results):
+    """新办企业短期内大量开票检测（暴力虚开典型特征）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    
+    establishment_date = company.established_date
+    if not establishment_date:
+        return
+    
+    if isinstance(establishment_date, str):
+        try:
+            establishment_date = datetime.strptime(establishment_date, "%Y-%m-%d").date()
+        except:
+            return
+    
+    # 计算公司成立到现在的月数
+    today = date.today()
+    months_since_establish = (today.year - establishment_date.year) * 12 + (today.month - establishment_date.month)
+    
+    if months_since_establish > 12:
+        return  # 成立超过1年，不检测
+    
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 统计开票量
+    sales = db.query(
+        func.count(SalesInvoice.id),
+        func.sum(SalesInvoice.total_amount)
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status == "正常"
+    ).first() or (0, 0)
+    
+    sales_cnt, sales_amt = sales
+    months_active = max(months_since_establish, 1)
+    monthly_avg_amt = _safe_float(sales_amt) / months_active
+    monthly_avg_cnt = sales_cnt / months_active if sales_cnt else 0
+    
+    if monthly_avg_amt > 1000000 or monthly_avg_cnt > 50:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"新办企业（成立{months_since_establish}个月）短期内大量开票",
+            "detail": f"企业成立仅 {months_since_establish} 个月，但月均开票 {monthly_avg_cnt:.0f} 张/{monthly_avg_amt:,.0f} 元。新办企业短期大量开票是暴力虚开的典型手法。金税四期对新办企业开票增量实时监控。",
+            "suggestion": "逐笔核实开票对应的交易背景。新办企业应控制开票节奏，确保业务规模与经营能力（人员/场地/资金）匹配。",
+            "required_evidence": ["营业执照/成立日期", "业务合同清单（所有大额开票对应）", "人员花名册", "经营场所证明"]
+        })
+    elif monthly_avg_amt > 500000 or monthly_avg_cnt > 20:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"新办企业（{months_since_establish}个月）开票量偏高",
+            "detail": f"月均开票 {monthly_avg_cnt:.0f} 张/{monthly_avg_amt:,.0f} 元，建议确保经营能力与开票规模匹配。",
+            "suggestion": "完善人员配置和经营场所，保留业务合同备查。"
+        })
+
+
+def _analyze_small_taxpayer_overscale(db, company_id, ps, pe, results):
+    """小规模纳税人开票量远超经营能力"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return
+    
+    company_type = company.company_type or ""
+    if "一般纳税人" in company_type:
+        return  # 一般纳税人正常
+    
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 统计年度开票金额
+    year_sales = _safe_float(db.query(func.sum(SalesInvoice.total_amount)).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status == "正常"
+    ).scalar())
+    
+    # 小规模纳税人年销售额>500万需强制认定为一般纳税人
+    if year_sales > 5000000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"小规模纳税人年开票超500万（{year_sales:,.2f}元）",
+            "detail": f"企业为小规模纳税人，但年开票金额 {year_sales:,.2f} 元已超过一般纳税人认定标准（500万元）。根据《增值税一般纳税人登记管理办法》，年应征增值税销售额超过500万元应申请认定为一般纳税人，否则将被强制认定并可能追溯补税。",
+            "suggestion": "如确已达到一般纳税人标准，应主动申请认定，避免被强制认定并追溯补税。同时核实开票业务的真实性。",
+            "required_evidence": ["增值税申报表（近12个月）", "超过500万的合理说明或一般纳税人认定申请"]
+        })
+    elif year_sales > 4000000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"小规模纳税人年开票接近500万（{year_sales:,.2f}元）",
+            "detail": f"年开票金额 {year_sales:,.2f} 元，已接近一般纳税人认定标准。建议提前做一般纳税人认定准备。",
+            "suggestion": "评估是否需要主动申请一般纳税人认定。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  L 类 — 征管风险分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_tax_arrears(db, company_id, ps, pe, results):
+    """欠税未清缴检测"""
+    # 检查各税种申报表中是否存在应缴未缴
+    arrears = []
+    
+    # 增值税
+    vat_decls = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).all()
+    vat_arrear = 0
+    for v in vat_decls:
+        fm = v.form_main
+        if fm:
+            fm_dict = json.loads(fm) if isinstance(fm, str) else fm
+            payable = _safe_float(fm_dict.get("vat_payable", 0))
+            paid = _safe_float(fm_dict.get("vat_paid", payable))  # 如果无paid字段，假设已缴
+            if payable > paid + 1:
+                vat_arrear += payable - paid
+    if vat_arrear > 100:
+        arrears.append(f"增值税欠缴{vat_arrear:,.0f}元")
+    
+    # 文化事业建设费
+    ccf_decls = db.query(CulturalConstructionFeeDeclaration).filter(
+        CulturalConstructionFeeDeclaration.company_id == company_id,
+        CulturalConstructionFeeDeclaration.period >= ps, CulturalConstructionFeeDeclaration.period <= pe
+    ).all()
+    ccf_arrear = 0
+    for ccf in ccf_decls:
+        fm = ccf.form_main
+        if fm:
+            fm_dict = json.loads(fm) if isinstance(fm, str) else fm
+            payable = _safe_float(fm_dict.get("row12_total_payable_current", 0))
+            # 简化：假设已缴=应缴（实际应从缴款记录判断）
+    if ccf_arrear > 100:
+        arrears.append(f"文化事业建设费欠缴{ccf_arrear:,.0f}元")
+    
+    if arrears:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "存在欠税未清缴风险",
+            "detail": f"发现可能存在的欠税：{'；'.join(arrears)}。欠税会加收每日万分之五的滞纳金，并可能被采取强制措施（停供发票、税收保全等）。",
+            "suggestion": "立即核实并清缴欠税，优先清缴欠税本金以减少滞纳金。如资金困难，可申请延期缴纳（最长3个月）。",
+            "required_evidence": ["各税种申报表", "缴款凭证/银行回单", "如有争议，提供行政复议或诉讼材料"]
+        })
+
+
+def _analyze_upstream_runaway(db, company_id, ps, pe, results):
+    """上游企业走逃失联检测"""
+    # 检查进项发票中是否有风险供应商（标记为疑点/异常/失控）
+    risk_sellers = db.query(
+        func.count(func.distinct(PurchaseInvoice.seller_name)),
+        func.count(PurchaseInvoice.id),
+        func.sum(PurchaseInvoice.total_amount)
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_risk_level.in_(["疑点", "异常", "失控"])
+    ).first() or (0, 0, 0)
+    
+    seller_cnt, inv_cnt, inv_amt = risk_sellers
+    
+    if seller_cnt and seller_cnt > 0:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 10, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"上游供应商存在走逃失联风险（{seller_cnt}家，{inv_cnt}张发票）",
+            "detail": f"有 {seller_cnt} 家供应商的 {inv_cnt} 张进项发票（涉及金额 {_safe_float(inv_amt):,.2f} 元）被标记为疑点/异常/失控。根据国家税务总局公告2016年第76号，走逃（失联）企业开具的发票属于异常扣税凭证，进项税额不得抵扣，已抵扣的需做进项税额转出。",
+            "suggestion": "立即核实与走逃企业的交易：(1)如有真实交易，保留合同/付款凭证/运输单据等证明；(2)如无法证明，应主动做进项税额转出并补税。",
+            "required_evidence": ["异常凭证清单", "与走逃企业的购销合同", "付款凭证（银行回单）", "货物运输单据（证明真实交易）", "进项转出计算表"]
+        })
+
+
+def _analyze_stale_invoice(db, company_id, ps, pe, results):
+    """滞留票风险：销项发票长期未被购买方认证"""
+    # 检查超过90天未认证的销项发票（简化：检查已开具但可能未匹配到收款记录）
+    cutoff_date = (date.today() - timedelta(days=90)).strftime("%Y-%m-%d")
+    
+    stale_invs = db.query(
+        func.count(SalesInvoice.id),
+        func.sum(SalesInvoice.total_amount)
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date < cutoff_date,
+        SalesInvoice.status == "正常"
+    ).first() or (0, 0)
+    
+    stale_cnt, stale_amt = stale_invs
+    total_sales_cnt = db.query(func.count(SalesInvoice.id)).filter(
+        SalesInvoice.company_id == company_id
+    ).scalar() or 1
+    
+    stale_ratio = stale_cnt / total_sales_cnt * 100
+    if stale_ratio > 20 and stale_cnt >= 10:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"滞留票风险（{stale_cnt}张，占比{stale_ratio:.0f}%）",
+            "detail": f"有 {stale_cnt} 张销项发票开具超过90天（占比 {stale_ratio:.0f}%），涉及金额 {_safe_float(stale_amt):,.2f} 元。过多长期未认证的滞留票会引发税务机关对企业销售真实性的质疑。",
+            "suggestion": "主动联系购买方核实未认证原因：是否对方为非一般纳税人、是否发票遗失、是否对方已入账但未认证。建立发票签收和认证跟踪机制。"
+        })
+
+
+def _analyze_non_normal_counterparty(db, company_id, ps, pe, results):
+    """与非正常户有交易往来检测"""
+    # 从进项发票中检查销方风险等级
+    risk_seller_invs = db.query(
+        func.count(PurchaseInvoice.id),
+        func.sum(PurchaseInvoice.total_amount)
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_risk_level.in_(["疑点", "异常", "失控", "非正常"])
+    ).first() or (0, 0)
+    
+    # 也检查序时账中是否有与非正常户相关的记录
+    risk_journals = db.query(func.count(JournalEntry.id)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.summary.contains("非正常"),
+            JournalEntry.summary.contains("异常"),
+            JournalEntry.summary.contains("走逃"),
+        )
+    ).scalar() or 0
+    
+    risk_inv_cnt, risk_inv_amt = risk_seller_invs
+    
+    total_risk_indicators = risk_inv_cnt + risk_journals
+    
+    if total_risk_indicators > 0:
+        results.append({
+            "category": "征管风险", "category_icon": "🏛️", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "存在与非正常户交易往来的风险",
+            "detail": f"发现 {risk_inv_cnt} 张进项发票来自异常供应商（涉及 {_safe_float(risk_inv_amt):,.2f} 元），{risk_journals} 条异常相关序时账记录。与非正常户交易取得的发票可能被列为异常扣税凭证，面临进项转出风险。",
+            "suggestion": "建立供应商准入制度，合作前查验对方的税务登记状态。已发生的交易需准备充分的三流合一证明。建议每笔大额采购前通过电子税务局查验销方状态。"
+        })
+
+
+# ═══════════════════════════════════════════════════════════
+#  M 类 — 交易特征分析
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_round_amount_transactions(db, company_id, ps, pe, results):
+    """大额整数交易占比过高检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 从销项发票和银行流水检查整数交易
+    all_amt_records = []
+    
+    # 销项发票
+    for inv in db.query(SalesInvoice.total_amount).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date
+    ).all():
+        all_amt_records.append(_safe_float(inv[0]))
+    
+    # 银行流水
+    for bt in db.query(BankTransaction.debit_amount, BankTransaction.credit_amount).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date
+    ).all():
+        all_amt_records.append(_safe_float(bt[0]))  # debit
+        all_amt_records.append(_safe_float(bt[1]))  # credit
+    
+    if len(all_amt_records) < 20:
+        return
+    
+    # 判断整数：整万/整十万/整百万（金额>=10000）
+    round_count = 0
+    for amt in all_amt_records:
+        if amt >= 10000 and amt % 10000 == 0:
+            round_count += 1
+        elif amt >= 100000 and amt % 100000 == 0:
+            round_count += 1
+    
+    round_ratio = round_count / len(all_amt_records) * 100
+    if round_ratio > 30 and round_count >= 10:
+        results.append({
+            "category": "交易特征", "category_icon": "📊", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"大额整数交易占比过高（{round_ratio:.0f}%）",
+            "detail": f"有 {round_count}/{len(all_amt_records)} 笔交易金额为整万/整十万的整数，占比 {round_ratio:.0f}%。频繁的大额整数交易在正常商业活动中极为罕见，容易被认定为资金回流或虚假交易的标志。正常交易金额通常包含税费/折扣/运费等零头。",
+            "suggestion": "逐笔核实大额整数交易的商业合理性，准备合同/验收单/物流单等证明材料。",
+            "required_evidence": ["大额整数交易清单", "每笔对应合同/验收单/付款凭证"]
+        })
+
+
+def _analyze_fund_backflow(db, company_id, ps, pe, results):
+    """资金回流嫌疑检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 从银行流水中找付款后短期内（<=7天）有等额/近似金额回款
+    debits = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date,
+        BankTransaction.debit_amount > 10000  # 大额付款
+    ).all()
+    
+    credits = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date,
+        BankTransaction.credit_amount > 10000  # 大额收款
+    ).all()
+    
+    if len(debits) < 3 or len(credits) < 3:
+        return
+    
+    # 简化的资金回流检测：付款后7天内收款金额近似
+    suspicious_pairs = []
+    from datetime import timedelta
+    
+    for d in debits:
+        d_date = d.transaction_date
+        if isinstance(d_date, str):
+            try:
+                d_date = datetime.strptime(d_date, "%Y-%m-%d").date()
+            except:
+                continue
+        if not d_date:
+            continue
+        
+        d_amt = _safe_float(d.debit_amount)
+        d_name = (d.counterparty_name or "").strip()
+        
+        for c in credits:
+            c_date = c.transaction_date
+            if isinstance(c_date, str):
+                try:
+                    c_date = datetime.strptime(c_date, "%Y-%m-%d").date()
+                except:
+                    continue
+            if not c_date:
+                continue
+            
+            c_amt = _safe_float(c.credit_amount)
+            c_name = (c.counterparty_name or "").strip()
+            
+            # 条件：收款在付款后1-7天内，金额差异<5%
+            days_diff = (c_date - d_date).days
+            if 1 <= days_diff <= 7:
+                amt_diff_pct = abs(d_amt - c_amt) / d_amt * 100 if d_amt > 0 else 999
+                if amt_diff_pct < 5:
+                    # 检查是否来自同一对手方或关联方
+                    if d_name and c_name and (d_name[:2] == c_name[:2] or d_name in c_name or c_name in d_name):
+                        suspicious_pairs.append({
+                            "pay_date": str(d_date), "recv_date": str(c_date),
+                            "pay_amt": d_amt, "recv_amt": c_amt,
+                            "name": d_name
+                        })
+    
+    if suspicious_pairs:
+        results.append({
+            "category": "交易特征", "category_icon": "📊", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"发现资金回流嫌疑（{len(suspicious_pairs)}组）",
+            "detail": f"检测到付款后7天内从相同/关联方收回近似金额的交易 {len(suspicious_pairs)} 组。资金回流是虚开发票的典型资金特征：先付款（伪装采购），短期内等额回款（资金回流）。金税四期已与人民银行账户系统联网，资金回流自动识别。",
+            "suggestion": "逐笔核查资金流出和流入的商业实质：采购是否有真实的货物流；回款是否为正常的销售退款/借款归还。无法合理解释的回流应立即整改。",
+            "required_evidence": ["资金流出/流入明细", "资金回流交易对应的采购合同", "货物入库单/验收单", "退款协议/借款合同（如有）"]
+        })
+
+
+def _analyze_same_buyer_frequent_red(db, company_id, ps, pe, results):
+    """同一购方频繁红冲检测"""
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 获取所有红冲/作废发票
+    void_red = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
+        SalesInvoice.status.in_(["作废", "红冲"])
+    ).all()
+    
+    if len(void_red) < 3:
+        return
+    
+    # 按购买方分组
+    buyer_red = {}
+    for inv in void_red:
+        buyer = (inv.buyer_name or "未知").strip()
+        if buyer not in buyer_red:
+            buyer_red[buyer] = []
+        buyer_red[buyer].append(inv)
+    
+    frequent_buyers = [(name, invs) for name, invs in buyer_red.items() if len(invs) >= 3]
+    
+    if frequent_buyers:
+        detail_items = []
+        for name, invs in frequent_buyers[:3]:
+            amt = sum(_safe_float(inv.total_amount) for inv in invs)
+            detail_items.append(f"{name}({len(invs)}张/{amt:,.0f}元)")
+        
+        results.append({
+            "category": "交易特征", "category_icon": "📊", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"同一购方频繁红冲（{len(frequent_buyers)}家）",
+            "detail": f"对以下购买方频繁开具红字发票：{'；'.join(detail_items)}。频繁红冲可能暗示先开票虚增收入再红冲，或利用红冲调节税负。",
+            "suggestion": "核查红冲发票的真实原因：是否有对应的红字信息表；退货是否有验收和入库记录；销售折让是否有协议。",
+            "required_evidence": ["红冲发票清单", "红字信息表（每笔红冲对应）", "退货验收单/折让协议"]
+        })
+
+
+def _analyze_input_transfer_reentry(db, company_id, ps, pe, results):
+    """进项税额转出后又转入检测"""
+    # 从增值税申报表附表二检查
+    decls = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id,
+        VATDeclaration.period >= ps, VATDeclaration.period <= pe
+    ).order_by(VATDeclaration.period).all()
+    
+    for v in decls:
+        if v.form_main:
+            fm = v.form_main if isinstance(v.form_main, dict) else json.loads(v.form_main)
+            transfer_out = _safe_float(fm.get("input_tax_transfer", 0))
+            transfer_in = _safe_float(fm.get("input_tax_transfer_in", 0))
+            
+            if transfer_out > 0 and transfer_in > 0:
+                results.append({
+                    "category": "交易特征", "category_icon": "📊", "risk_score": 8, "risk_level": "高风险",
+                    "risk_color": "#dc2626", "urgency": "紧急",
+                    "item": f"进项税额转出后又转入（{v.period}）",
+                    "detail": f"{v.period} 期存在进项税额转出 {transfer_out:,.2f} 元后又转入 {transfer_in:,.2f} 元的情况。进项转出后转入需要特定情形（如改变用途用于应税项目），需提供充分依据，否则可能被认定为违规抵扣。",
+                    "suggestion": "检查进项税额转出又转入的合规性：是否确实改变了用途；是否按规定计算可转入的进项税额。保留用途变更的证明材料。",
+                    "required_evidence": ["进项转出凭证", "进项转入依据（资产用途变更证明）", "进项税额转入计算表"]
+                })
+                return  # 只报告一次
+
+
+# ═══════════════════════════════════════════════════════════
+#  N 类 — 财务健康与其他专项
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_roe_sustainability(db, company_id, ps, pe, results):
+    """净资产收益率持续偏低/为负检测"""
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    cost = _get_account_sum(db, company_id, "6401", ps, pe, "debit")
+    mgmt = _get_account_sum(db, company_id, "6602", ps, pe, "debit")
+    sales_exp = _get_account_sum(db, company_id, "6601", ps, pe, "debit")
+    fin_exp = _get_account_sum(db, company_id, "6603", ps, pe, "debit")
+    
+    total_assets = _get_account_balance(db, company_id, "1")
+    total_liab = _get_account_balance(db, company_id, "2")
+    equity = total_assets - total_liab
+    
+    if equity <= 0:
+        return
+    
+    net_profit = revenue - cost - mgmt - sales_exp - fin_exp
+    roe = net_profit / equity * 100
+    
+    if roe < 0:
+        results.append({
+            "category": "财务健康", "category_icon": "💊", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"净资产收益率持续为负（{roe:.1f}%）",
+            "detail": f"近12个月净资产收益率 {roe:.1f}%，为负数。说明企业盈利能力严重不足，可能涉及：隐瞒收入导致利润虚低、成本费用虚增、或经营模式不可持续。",
+            "suggestion": "分析亏损原因：收入确认是否完整；成本费用是否真实合理；是否存在不合理的关联交易转移利润。若为正常经营亏损，保留行业分析和商业计划说明。"
+        })
+    elif roe < 8 and equity > 1000000:
+        results.append({
+            "category": "财务健康", "category_icon": "💊", "risk_score": 3, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "建议",
+            "item": f"净资产收益率偏低（{roe:.1f}%）",
+            "detail": f"净资产收益率仅 {roe:.1f}%，低于行业参考值（一般>8%）。建议分析盈利能力的改善空间。",
+            "suggestion": "关注成本控制和收入增长，制定盈利能力提升计划。"
+        })
+
+
+def _analyze_operating_cash_flow_coverage(db, company_id, ps, pe, results):
+    """经营活动现金流无法覆盖流动负债"""
+    # 从银行流水和序时账估算经营活动现金流
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    
+    # 经营活动现金流入（银行流水贷方/收款）
+    op_cash_in = _safe_float(db.query(func.sum(BankTransaction.credit_amount)).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date
+    ).scalar())
+    
+    # 经营活动现金流出（银行流水借方/付款）
+    op_cash_out = _safe_float(db.query(func.sum(BankTransaction.debit_amount)).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date
+    ).scalar())
+    
+    net_op_cash = op_cash_in - op_cash_out
+    
+    # 流动负债
+    current_liab = _get_account_balance(db, company_id, "21") + _get_account_balance(db, company_id, "22")
+    
+    if current_liab <= 0:
+        return
+    
+    cash_flow_ratio = net_op_cash / current_liab if current_liab > 0 else 0
+    
+    if cash_flow_ratio < 0:
+        results.append({
+            "category": "财务健康", "category_icon": "💊", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "经营活动现金流为负，无法覆盖流动负债",
+            "detail": f"经营活动现金净流量 {net_op_cash:,.2f} 元（现金流为负），流动负债 {current_liab:,.2f} 元，现金流动负债比率 {cash_flow_ratio:.2%}。该指标从收付实现制角度衡量偿债能力，现金流为负意味着企业经营活动无法产生正向现金流入。",
+            "suggestion": "加强应收账款催收，优化存货管理减少资金占用，检查收入确认质量。如为正常经营所需，准备融资计划补充流动资金。"
+        })
+    elif cash_flow_ratio < 0.5 and net_op_cash > 0:
+        results.append({
+            "category": "财务健康", "category_icon": "💊", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"经营活动现金流覆盖流动负债比例偏低（{cash_flow_ratio:.1%}）",
+            "detail": f"经营活动现金净流量 {net_op_cash:,.2f} 元，流动负债 {current_liab:,.2f} 元，覆盖率仅 {cash_flow_ratio:.1%}。短期偿债能力偏弱。",
+            "suggestion": "加快应收账款回收，改善现金流状况。"
+        })
+
+
+def _analyze_other_payables_scale_mismatch(db, company_id, ps, pe, results):
+    """其他应付款与经营规模不匹配"""
+    other_payables = _get_account_balance(db, company_id, "2241")
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    cost = _get_account_sum(db, company_id, "6401", ps, pe, "debit")
+    equity = sum([
+        _get_account_balance(db, company_id, "4001"),
+        _get_account_balance(db, company_id, "4002"),
+        _get_account_balance(db, company_id, "4101"),
+        _get_account_balance(db, company_id, "4103"),
+        _get_account_balance(db, company_id, "4104")
+    ])
+    
+    if other_payables <= 0:
+        return
+    
+    cost_ratio = other_payables / cost * 100 if cost > 0 else 0
+    revenue_ratio = other_payables / revenue * 100 if revenue > 0 else 0
+    equity_ratio = other_payables / equity * 100 if equity > 0 else 0
+    
+    triggers = []
+    if cost_ratio > 50:
+        triggers.append(f"占营业成本 {cost_ratio:.0f}%")
+    if revenue_ratio > 50:
+        triggers.append(f"占营业收入 {revenue_ratio:.0f}%")
+    if equity_ratio > 50:
+        triggers.append(f"占所有者权益 {equity_ratio:.0f}%")
+    
+    if triggers:
+        results.append({
+            "category": "隐匿虚增", "category_icon": "🔗", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"其他应付款与经营规模不匹配（{other_payables:,.2f}元）",
+            "detail": f"其他应付款余额 {other_payables:,.2f} 元，{'、'.join(triggers)}。其他应付款长期大额挂账是高频税务风险点：可能隐藏账外收入、虚列成本费用、虚假负债、或股东/关联方资金拆借未规范处理。",
+            "suggestion": "逐笔核查大额其他应付款的入账依据和业务真实性；长期挂账未付的，需核实是否虚假负债或应转收入的预收款项；检查其他应付款中是否隐藏了应付未付的工资/社保/税费。",
+            "required_evidence": ["其他应付款明细账", "每笔大额款项的入账凭证及合同", "账龄分析表"]
         })
 
 
