@@ -205,6 +205,23 @@ function _readPeriod(prefix) {
   return (yv && mv) ? yv + '-' + mv : '';
 }
 
+// 将 YYYY-MM 转换为当月第一天和最后一天（财税严谨格式）
+function _getPeriodRange(prefix) {
+  let y = document.getElementById(prefix + 'from-y');
+  let m = document.getElementById(prefix + 'from-m');
+  let y2 = document.getElementById(prefix + 'to-y');
+  let m2 = document.getElementById(prefix + 'to-m');
+  if (!y || !m || !y2 || !m2) return { from: '', to: '' };
+  let yv = y.value, mv = m.value, yv2 = y2.value, mv2 = m2.value;
+  if (!yv || !mv || !yv2 || !mv2) return { from: '', to: '' };
+  let from = yv + '-' + mv + '-01';
+  // 计算当月最后一天
+  let yt = parseInt(yv2), mt = parseInt(mv2);
+  let lastDay = new Date(yt, mt, 0).getDate();
+  let to = yv2 + '-' + mv2 + '-' + String(lastDay).padStart(2, '0');
+  return { from: from, to: to };
+}
+
 // ===== 共享期间选择栏组件（带▲▼箭头） =====
 function _buildStandardPeriodBar(prefix, options) {
   let bar = document.getElementById(prefix + 'period-bar');

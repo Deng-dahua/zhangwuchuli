@@ -63,8 +63,10 @@ async function loadTaxRiskReport() {
 
   try {
     var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
-    var from = (typeof _readPeriod === 'function') ? _readPeriod('tr-from') : '';
-    var to = (typeof _readPeriod === 'function') ? _readPeriod('tr-to') : '';
+    // 使用 _getPeriodRange 获取标准格式 YYYY-MM-DD（当月第一天/最后一天）
+    var range = (typeof _getPeriodRange === 'function') ? _getPeriodRange('tr-') : null;
+    var from = range ? range.from : ((typeof _readPeriod === 'function') ? _readPeriod('tr-from') : '');
+    var to = range ? range.to : ((typeof _readPeriod === 'function') ? _readPeriod('tr-to') : '');
 
     // 【关键】先确保规则已同步到服务器
     await syncRulesToServer();

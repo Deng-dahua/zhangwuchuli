@@ -11,10 +11,11 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, extract, and_, or_
-from datetime import date, timedelta
-from typing import Optional, List
+from datetime import date, timedelta, datetime
+from typing import Optional, List, Tuple
 import json
 import os
+import calendar
 
 from database import get_db, Company, Account, JournalEntry
 from database import SalesInvoice, PurchaseInvoice, BookkeepingInvoice
@@ -27,6 +28,31 @@ from database import InventoryTransaction, InventoryBalance, InventoryItem
 from database import SocialSecurityDeclaration, HousingFundDeclaration
 
 router = APIRouter(prefix="/api/tax-risk", tags=["涉税风险分析"])
+
+
+# ============ 期间格式工具函数 ============
+def _normalize_period(ym: str) -> str:
+    """将各种格式的时期统一为 YYYY-MM（财税系统标准格式）"""
+    if not ym:
+        return ''
+    ym = ym.strip()
+    if len(ym) >= 7:
+        return ym[:7]
+    return ym
+
+
+def _period_to_date_range(ym: str) -> Tuple[str, str]:
+    """
+    将 YYYY-MM 转换为当月第一天和最后一天（财税严谨格式）
+    如 2025-01 → ('2025-01-01', '2025-01-31')
+    """
+    if not ym or len(ym) < 7:
+        return ('', '')
+    y, m = int(ym[:4]), int(ym[5:7])
+    first_day = f'{y}-{m:02d}-01'
+    last_day_num = calendar.monthrange(y, m)[1]
+    last_day = f'{y}-{m:02d}-{last_day_num:02d}'
+    return (first_day, last_day)
 
 # ── 工具函数 ──
 
@@ -99,6 +125,8 @@ def _get_periods_between(ps: str, pe: str) -> list:
 
 def _monthly_account_balance(db: Session, company_id: int, account_code: str, ps: str, pe: str) -> dict:
     """按月汇总科目借方/贷方发生额"""
+    ps = _normalize_period(ps)
+    pe = _normalize_period(pe)
     rows = db.query(
         JournalEntry.period,
         func.coalesce(func.sum(JournalEntry.debit_amount), 0),
@@ -206,11 +234,11 @@ def get_tax_risk_report(
 ):
     results = []
     if period_from and period_to:
-        # 规范化：前端可能传 YYYY-MM-DD，统一截为 YYYY-MM
-        period_start = period_from[:7] if len(period_from) > 7 else period_from
-        period_end = period_to[:7] if len(period_to) > 7 else period_to
+        # 规范化：统一为 YYYY-MM 格式
+        period_start = _normalize_period(period_from)
+        period_end = _normalize_period(period_to)
     elif period:
-        period_start = period_end = period[:7] if len(period) > 7 else period
+        period_start = period_end = _normalize_period(period)
     else:
         latest = db.query(func.max(VATDeclaration.period)).filter(
             VATDeclaration.company_id == company_id).scalar()
@@ -674,8 +702,8 @@ def _analyze_financial_tax_invoice_cross(db, company_id, ps, pe, results):
     # 销项发票金额
     inv_amount = _safe_float(db.query(func.sum(SalesInvoice.total_amount)).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31").scalar())
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1]).scalar())
 
     # 增值税申报销售额（取最近一期）
     vat_sales = 0
@@ -1327,7 +1355,7 @@ def _analyze_tax_adjustment(db, company_id, ps, pe, results):
 
 def _analyze_revenue_timing(db, company_id, ps, pe, results):
     """收入确认时点：四季度收入占比、年底集中开票"""
-    # 获取全年各月收入
+    # 获取全年各月收入（传入 YYYY-MM 格式）
     y_start = ps[:4] + "-01"
     y_end = pe[:4] + "-12"
     monthly_rev = _monthly_account_balance(db, company_id, "6001", y_start, y_end)
@@ -2014,8 +2042,8 @@ def _analyze_business_premise(db, company_id, ps, pe, results):
     from sqlalchemy import or_
     bf_rent = db.query(func.count(BankTransaction.id)).filter(
         BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps + "-01",
-        BankTransaction.transaction_date <= pe + "-31",
+        BankTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        BankTransaction.transaction_date <= _period_to_date_range(pe)[1],
         or_(
             BankTransaction.counterparty_name.contains("租"),
             BankTransaction.counterparty_name.contains("物业"),
@@ -2076,15 +2104,15 @@ def _analyze_inventory_substance(db, company_id, ps, pe, results):
     in_qty = db.query(func.sum(InventoryTransaction.quantity)).filter(
         InventoryTransaction.company_id == company_id,
         InventoryTransaction.trans_type.in_(["入库", "盘盈", "调拨入"]),
-        InventoryTransaction.transaction_date >= ps + "-01",
-        InventoryTransaction.transaction_date <= pe + "-31"
+        InventoryTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        InventoryTransaction.transaction_date <= _period_to_date_range(pe)[1]
     ).scalar() or 0
 
     out_qty = db.query(func.sum(InventoryTransaction.quantity)).filter(
         InventoryTransaction.company_id == company_id,
         InventoryTransaction.trans_type.in_(["出库", "盘亏", "调拨出"]),
-        InventoryTransaction.transaction_date >= ps + "-01",
-        InventoryTransaction.transaction_date <= pe + "-31"
+        InventoryTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        InventoryTransaction.transaction_date <= _period_to_date_range(pe)[1]
     ).scalar() or 0
 
     end_stock = db.query(func.sum(InventoryBalance.end_quantity)).filter(
@@ -2169,8 +2197,8 @@ def _analyze_utility_expense(db, company_id, ps, pe, results):
     # 产量 proxies：销项发票数量（生产企业以销售发票货物数量近似）
     sales_qty = db.query(func.sum(SalesInvoice.quantity)).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31",
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1],
         SalesInvoice.status == "正常"
     ).scalar() or 0
 
@@ -2217,7 +2245,7 @@ def _analyze_staffing_substance(db, company_id, ps, pe, results):
     """员工人数与收入规模不匹配——空壳或隐瞒用工嫌疑"""
     emp_count = db.query(func.count(Employee.id)).filter(
         Employee.company_id == company_id,
-        or_(Employee.leave_date == None, Employee.leave_date >= ps + "-01")
+        or_(Employee.leave_date == None, Employee.leave_date >= _period_to_date_range(ps)[0])
     ).scalar() or 0
 
     revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
@@ -2285,8 +2313,8 @@ def _analyze_fund_flow_invoice_match(db, company_id, ps, pe, results):
     # 销项发票（开票方=本企业）
     sales = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31",
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1],
         SalesInvoice.status == "正常"
     ).all()
 
@@ -2385,8 +2413,8 @@ def _analyze_scrap_revenue(db, company_id, ps, pe, results):
     # 检查是否有边角料销售的销项发票
     scrap_invoices = db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31",
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1],
         or_(
             SalesInvoice.goods_name.contains("边角"),
             SalesInvoice.goods_name.contains("废"),
@@ -2402,8 +2430,8 @@ def _analyze_scrap_revenue(db, company_id, ps, pe, results):
     # 从银行存款借方（收款）中查找是否有零星空交易（疑似边角料销售未开票）
     unidentified_credits = db.query(func.count(BankTransaction.id)).filter(
         BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps + "-01",
-        BankTransaction.transaction_date <= pe + "-31",
+        BankTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        BankTransaction.transaction_date <= _period_to_date_range(pe)[1],
         BankTransaction.credit_amount > 0,
         or_(
             BankTransaction.counterparty_name == None,
@@ -2448,16 +2476,16 @@ def _analyze_deemed_sales(db, company_id, ps, pe, results):
     free_out = db.query(InventoryTransaction).filter(
         InventoryTransaction.company_id == company_id,
         InventoryTransaction.trans_type == "出库",
-        InventoryTransaction.transaction_date >= ps + "-01",
-        InventoryTransaction.transaction_date <= pe + "-31"
+        InventoryTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        InventoryTransaction.transaction_date <= _period_to_date_range(pe)[1]
     ).all()
 
     # 简易判断：有出库记录但销项发票中没有对应记录
     sales_inv_nos = set()
     for inv in db.query(SalesInvoice).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31"
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1]
     ).all():
         no = getattr(inv, 'digital_invoice_no', None) or (inv.invoice_code or "") + (inv.invoice_no or "")
         if no:
@@ -2562,8 +2590,8 @@ def _analyze_related_party_pricing(db, company_id, ps, pe, results):
     if legal_rep:
         related_inv_count = db.query(func.count(PurchaseInvoice.id)).filter(
             PurchaseInvoice.company_id == company_id,
-            PurchaseInvoice.invoice_date >= ps + "-01",
-            PurchaseInvoice.invoice_date <= pe + "-31",
+            PurchaseInvoice.invoice_date >= _period_to_date_range(ps)[0],
+            PurchaseInvoice.invoice_date <= _period_to_date_range(pe)[1],
             PurchaseInvoice.seller_name.contains(legal_rep)
         ).scalar() or 0
 
@@ -2619,7 +2647,7 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
     if revenue < 100000:
         return  # 收入过低，不分析
 
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 进项发票中的运输/物流费用
     transport_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
@@ -2728,7 +2756,7 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
                                          "农副产品", "园艺", "苗圃"])
     if not is_agri:
         # 也检查销项发票中是否有农产品/免税农产品
-        ps_date = ps + "-01"; pe_date = pe + "-31"
+        ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
         agri_sales = db.query(func.sum(SalesInvoice.total_amount)).filter(
             SalesInvoice.company_id == company_id,
             SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
@@ -2746,7 +2774,7 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
         if agri_sales < 50000:
             return
     else:
-        ps_date = ps + "-01"; pe_date = pe + "-31"
+        ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
         agri_sales = db.query(func.sum(SalesInvoice.total_amount)).filter(
             SalesInvoice.company_id == company_id,
             SalesInvoice.invoice_date >= ps_date, SalesInvoice.invoice_date <= pe_date,
@@ -2882,7 +2910,7 @@ def _analyze_packaging_missing(db, company_id, ps, pe, results):
     if not is_product_biz:
         return
 
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 进项发票中的包装费用
     packaging_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
@@ -2936,14 +2964,14 @@ def _analyze_warehouse_missing(db, company_id, ps, pe, results):
     stock_in = db.query(func.sum(InventoryTransaction.quantity)).filter(
         InventoryTransaction.company_id == company_id,
         InventoryTransaction.trans_type == "入库",
-        InventoryTransaction.transaction_date >= ps + "-01",
-        InventoryTransaction.transaction_date <= pe + "-31"
+        InventoryTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        InventoryTransaction.transaction_date <= _period_to_date_range(pe)[1]
     ).scalar() or 0
 
     if end_stock == 0 and stock_in == 0:
         return  # 无库存，跳过
 
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 仓库租赁合同
     warehouse_contracts = db.query(func.count(Contract.id)).filter(
@@ -3071,7 +3099,7 @@ def _analyze_advertising_missing(db, company_id, ps, pe, results):
     if revenue < 500000:
         return
 
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 广告费/推广费（进项发票）
     ad_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
@@ -3121,7 +3149,7 @@ def _analyze_travel_missing(db, company_id, ps, pe, results):
     if revenue < 300000:
         return
 
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 检查是否有非本地的客户
     company = db.query(Company).filter(Company.id == company_id).first()
@@ -3207,8 +3235,8 @@ def _analyze_office_expense_missing(db, company_id, ps, pe, results):
     # 银行流水
     bank_office = db.query(func.sum(BankTransaction.debit_amount)).filter(
         BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps + "-01",
-        BankTransaction.transaction_date <= pe + "-31",
+        BankTransaction.transaction_date >= _period_to_date_range(ps)[0],
+        BankTransaction.transaction_date <= _period_to_date_range(pe)[1],
         or_(
             BankTransaction.summary.contains("物业"),
             BankTransaction.summary.contains("办公"),
@@ -3409,8 +3437,8 @@ def _analyze_vat_no_ticket_sales(db, company_id, ps, pe, results):
     revenue_credit = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
     invoice_sales = db.query(func.sum(SalesInvoice.amount)).filter(
         SalesInvoice.company_id == company_id,
-        SalesInvoice.invoice_date >= ps + "-01",
-        SalesInvoice.invoice_date <= pe + "-31"
+        SalesInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        SalesInvoice.invoice_date <= _period_to_date_range(pe)[1]
     ).scalar() or 0
 
     gap = revenue_credit - _safe_float(invoice_sales)
@@ -3431,7 +3459,7 @@ def _analyze_vat_no_ticket_sales(db, company_id, ps, pe, results):
 
 def _analyze_invoice_amount_anomaly(db, company_id, ps, pe, results):
     """零税额/顶额/代开发票异常分析"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 零税额发票
     zero_tax_sales = db.query(func.count(SalesInvoice.id), func.sum(SalesInvoice.amount)).filter(
@@ -3475,7 +3503,7 @@ def _analyze_invoice_amount_anomaly(db, company_id, ps, pe, results):
 
 def _analyze_sensitive_invoice(db, company_id, ps, pe, results):
     """敏感业务发票分析：生活用品/装修/餐饮/经纪代理/咨询服务"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     sensitive_keywords = {
         "生活用品": ["生活用品", "日用品", "洗护", "纸巾", "清洁用品", "劳保"],
@@ -3505,7 +3533,7 @@ def _analyze_sensitive_invoice(db, company_id, ps, pe, results):
 
 def _analyze_buy_sell_mismatch(db, company_id, ps, pe, results):
     """购销商品不匹配风险（制造业专用）"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
@@ -3549,7 +3577,7 @@ def _analyze_buy_sell_mismatch(db, company_id, ps, pe, results):
 
 def _analyze_fuel_vs_vehicles(db, company_id, ps, pe, results):
     """油费进项与固定资产（车辆）匹配分析"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 油费进项
     fuel_invs = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
@@ -3593,7 +3621,7 @@ def _analyze_fuel_vs_vehicles(db, company_id, ps, pe, results):
 
 def _analyze_transport_ratio(db, company_id, ps, pe, results):
     """运输费用占进项发票金额比例异常"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     transport_invs = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
         PurchaseInvoice.company_id == company_id,
@@ -3628,7 +3656,7 @@ def _analyze_transport_ratio(db, company_id, ps, pe, results):
 def _analyze_expense_reasonability(db, company_id, ps, pe, results):
     """费用合理性分析：业务招待费/广告费/咨询顾问费占比"""
     revenue_credit = _get_account_sum(db, company_id, "6001", ps, pe, "credit") or 1
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 业务招待费
     entertain_invs = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
@@ -3750,7 +3778,7 @@ def _analyze_non_taxable_income(db, company_id, ps, pe, results):
 
 def _analyze_provisional_cost(db, company_id, ps, pe, results):
     """暂估/无票成本费用分析"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 检查摘要中包含"暂估""无票""预提"等的凭证
     provisional_entries = db.query(func.count(JournalEntry.id), func.sum(JournalEntry.debit_amount)).filter(
@@ -3795,7 +3823,7 @@ def _analyze_staff_welfare(db, company_id, ps, pe, results):
 
     welfare_invs = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
         PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps + "-01", PurchaseInvoice.invoice_date <= pe + "-31",
+        PurchaseInvoice.invoice_date >= _period_to_date_range(ps)[0], PurchaseInvoice.invoice_date <= _period_to_date_range(pe)[1],
         or_(
             PurchaseInvoice.goods_name.contains("福利"),
             PurchaseInvoice.goods_name.contains("节日"),
@@ -3912,7 +3940,7 @@ def _analyze_undistributed_profit(db, company_id, ps, pe, results):
 
 def _analyze_cross_invoicing(db, company_id, ps, pe, results):
     """互开发票风险（即同一对手方既做客户又做供应商）"""
-    ps_date = ps + "-01"; pe_date = pe + "-31"
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 获取所有客户名称
     sales_names = set()
