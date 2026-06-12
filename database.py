@@ -1889,11 +1889,15 @@ def _classify_purchase_debit(db, company_id, inv):
 
 
 def auto_generate_purchase_journal(db, company_id, invoice_id=None):
-    """为取得发票生成采购入账凭证。
+    """为取得发票生成采购入账凭证（三步法）。
 
-    借：1405 库存商品 = 不含税金额
-    贷：2202 应付账款 / 供应商 = 不含税金额
-    （若银行流水有对应付款，则贷方用 1002 银行存款）
+    第一步 → 进项认证：只对 input_vat_deductions 中已认证的发票做进项税额
+    第二步 → 供应商档案：只对 Supplier 档案内的供应商走 2202 应付账款
+    第三步 → 主营业务成本：档案内供应商的广告/设计/信息技术/现代服务 → 6401
+
+    借：成本/费用科目（不含税金额）
+    借：221001002 进项税额（仅已认证专票）
+    贷：2202 应付账款 / 供应商（价税合计）
 
     三号合并规则：发票代码+发票号码+数电发票号码三者相同的行视为同一张发票，
     合并为一个凭证号（一组 = 一张凭证），每行分录共享 voucher_no，
@@ -1904,6 +1908,24 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
     若 invoice_id 为 list，则为列表中的发票生成凭证（同组三号仍合并）。
     """
     get_full_name, account_map = _build_account_name_resolver(db, company_id)
+
+    # ── 第一步：进项认证 → 确定哪些发票可以做进项税额 ──
+    from sqlalchemy import text as _sa_text
+    certified_rows = db.execute(_sa_text(
+        "SELECT digital_invoice_no, invoice_no FROM input_vat_deductions "
+        "WHERE company_id = :cid AND check_status = '已勾选'"
+    ), {"cid": company_id}).fetchall()
+    certified_nos = set()
+    for r in certified_rows:
+        if r.digital_invoice_no:
+            certified_nos.add(r.digital_invoice_no)
+        if r.invoice_no:
+            certified_nos.add(r.invoice_no)
+
+    # ── 第二步：供应商档案 → 确定哪些是正式供应商 ──
+    supplier_norm_map = {}  # normalized_name → Supplier
+    for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        supplier_norm_map[_normalize_customer_name(s.name)] = s
 
     # 确保 2202 应付账款 科目存在
     acc_2202 = db.query(Account).filter(
@@ -2016,54 +2038,50 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         credit_code, credit_name = "2202", get_full_name("2202") or "应付账款"
 
         # 为组内每行发票生成分录，共享同一个 voucher_no
+        group_generated = False
         for inv in unprocessed:
             debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
 
-            # 判断是否为专票（税额可抵扣）
-            is_special = "专用" in (inv.invoice_category or "")
+            # ── 三步法判断 ──
+            # 第一步：进项认证 — 发票号是否在 input_vat_deductions 中
+            inv_no = inv.digital_invoice_no or inv.invoice_no or ""
+            is_certified = inv_no in certified_nos
 
-            if is_special:
-                # 专票：税额单独记进项税额
-                # 借方1：费用/成本（不含税金额）
+            # 第二步：供应商档案 — 供应商是否在档案中
+            seller_norm = _normalize_customer_name(seller)
+            is_supplier = seller_norm in supplier_norm_map
+
+            # 两步必须同时通过才生成凭证
+            if not is_certified or not is_supplier:
+                # 发票未认证或供应商不在档案 → 跳过，不生成分录
+                continue
+
+            group_generated = True
+
+            # 已认证专票：税额单独记进项税额
+            # 借方1：成本/费用（不含税金额）
+            db.add(JournalEntry(
+                company_id=company_id,
+                entry_date=entry_date,
+                period=period, voucher_word="记", voucher_no=voucher_no,
+                summary=summary, account_code=debit_code, account_name=debit_name,
+                debit_amount=inv.amount, credit_amount=0,
+                contact_project=seller,
+                source="取得发票", ref_id=inv.id,
+            ))
+            # 借方2：进项税额（若有）
+            if inv.tax_amount and inv.tax_amount != 0:
                 db.add(JournalEntry(
                     company_id=company_id,
                     entry_date=entry_date,
                     period=period, voucher_word="记", voucher_no=voucher_no,
-                    summary=summary, account_code=debit_code, account_name=debit_name,
-                    debit_amount=inv.amount, credit_amount=0,
+                    summary=summary, account_code=tax_code, account_name=tax_name,
+                    debit_amount=inv.tax_amount, credit_amount=0,
                     contact_project=seller,
                     source="取得发票", ref_id=inv.id,
                 ))
-                # 借方2：进项税额（若有）
-                if inv.tax_amount and inv.tax_amount != 0:
-                    db.add(JournalEntry(
-                        company_id=company_id,
-                        entry_date=entry_date,
-                        period=period, voucher_word="记", voucher_no=voucher_no,
-                        summary=summary, account_code=tax_code, account_name=tax_name,
-                        debit_amount=inv.tax_amount, credit_amount=0,
-                        contact_project=seller,
-                        source="取得发票", ref_id=inv.id,
-                    ))
-                # 贷方：应付账款（价税合计）
-                # 红字发票（金额<0）：inv_total = 负数，表示红字冲销
-                inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
-            else:
-                # 普票：税额不可抵扣，并入成本费用
-                # 借方：费用/成本（价税合计，税额包含在成本中）
-                # 红字发票（金额<0）：inv_total = 负数，表示红字冲销
-                inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
-                db.add(JournalEntry(
-                    company_id=company_id,
-                    entry_date=entry_date,
-                    period=period, voucher_word="记", voucher_no=voucher_no,
-                    summary=summary, account_code=debit_code, account_name=debit_name,
-                    debit_amount=inv_total, credit_amount=0,
-                    contact_project=seller,
-                    source="取得发票", ref_id=inv.id,
-                ))
-
-            # 贷方：应付账款（价税合计）——专票和普票共用
+            # 贷方：应付账款（价税合计）
+            inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
             db.add(JournalEntry(
                 company_id=company_id,
                 entry_date=entry_date,
@@ -2075,7 +2093,8 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
             ))
 
         db.flush()
-        total += 1  # 一组（一个复选框）= 一张凭证
+        if group_generated:
+            total += 1  # 一组（一个复选框）= 一张凭证
 
     return total
 
