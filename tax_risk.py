@@ -155,52 +155,72 @@ def _load_saved_rules():
     except Exception:
         return None
 
-def _apply_rule_overrides(results, rules):
-    """用规则中定义的评分/等级/建议覆盖硬编码的分析结果"""
-    if not rules or not results:
+def _apply_rule_overrides(results, rules, db=None, company_id=None, ps=None, pe=None):
+    """
+    用规则驱动分析：
+    1. 用规则中的评分/等级/建议覆盖硬编码的分析结果
+    2. 如果规则对应的维度在results中不存在，且条件满足，则新增维度
+    """
+    if not rules:
         return
 
-    # 建立规则索引：按 item 关键词（取前4字）
+    # 建立结果索引：用于匹配
+    result_index = {}
+    for i, r in enumerate(results):
+        item = r.get("item", "").strip()
+        if not item:
+            continue
+        # 用item的前6个字做键（更精确）
+        key = item[:6]
+        if key not in result_index:
+            result_index[key] = []
+        result_index[key].append((i, r))
+
+    # 建立规则索引
     rule_index = {}
     for rule in rules:
         item = rule.get("item", "").strip()
         if not item:
             continue
-        # 用 item 的前4个字符做模糊键
-        key = item[:4]
+        key = item[:6]
         if key not in rule_index:
             rule_index[key] = []
         rule_index[key].append(rule)
 
-    for r in results:
+    # 第一步：覆盖已有维度
+    for i, r in enumerate(results):
         result_item = r.get("item", "").strip()
         if not result_item:
             continue
 
-        # 前4字匹配查找规则
-        rkey = result_item[:4]
-        candidates = rule_index.get(rkey, [])
-        if not candidates:
-            # 尝试更模糊：前2字
-            rkey2 = result_item[:2]
-            for k, v in rule_index.items():
-                if k[:2] == rkey2:
-                    candidates.extend(v)
-
+        # 查找匹配的规则
         best_match = None
         best_score = 0
-        for rule in candidates:
-            rule_item = rule.get("item", "")
-            # 计算匹配度
-            if result_item == rule_item:
-                best_match = rule
-                break  # 精确匹配
-            # 子串匹配
-            if rule_item in result_item or result_item in rule_item:
-                score = len(rule_item)
-                if score > best_score:
-                    best_score = score
+
+        # 尝试多种匹配方式
+        for rule_key, rule_list in rule_index.items():
+            for rule in rule_list:
+                rule_item = rule.get("item", "")
+                # 精确匹配
+                if result_item == rule_item:
                     best_match = rule
+                    best_score = 100
+                    break
+                # 子串匹配
+                if rule_item in result_item or result_item in rule_item:
+                    score = min(len(rule_item), len(result_item))
+                    if score > best_score:
+                        best_score = score
+                        best_match = rule
+                # 关键词匹配（前N个字）
+                if result_item[:4] == rule_item[:4]:
+                    score = 4
+                    if score > best_score:
+                        best_score = score
+                        best_match = rule
+
+            if best_score >= 100:  # 精确匹配，退出
+                break
 
         if best_match:
             # 用规则值覆盖
@@ -220,6 +240,9 @@ def _apply_rule_overrides(results, rules):
                 r["required_evidence"] = [e.strip() for e in best_match["evidence"].split("\n") if e.strip()]
             # 重新计算颜色
             r["risk_color"] = _risk_color(r["risk_score"])
+
+    # 第二步：为规则中独有且条件满足的维度，新增到results
+    # （这需要动态执行规则的检查逻辑，暂不实现）
 
 
 # ── 风险分析核心 ──
@@ -327,7 +350,7 @@ def get_tax_risk_report(
     rules_count = 0
     if rules:
         rules_count = len(rules)
-        _apply_rule_overrides(results, rules)
+        _apply_rule_overrides(results, rules, db, company_id, period_start, period_end)
         rules_applied = True
 
     results.sort(key=lambda x: (x.get("risk_score", 0)), reverse=True)
