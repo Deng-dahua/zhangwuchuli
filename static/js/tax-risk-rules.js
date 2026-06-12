@@ -77,6 +77,7 @@ function renderTaxRiskRules(container) {
     + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">📤 上传规则到服务器</button>'
     + '<button class="btn-toolbar" onclick="auditTaxRiskRules()" style="background:#059669;color:#fff">🔍 检查规则</button>'
     + '<button class="btn-toolbar" onclick="autoFixTaxRiskRules()" style="background:#d97706;color:#fff">🔧 一键修复</button>'
+    + '<button class="btn-toolbar" onclick="parseReportModal()" style="background:#6366f1;color:#fff">📄 解析报告</button>'
     + '</div>'
     + '</div>'
     // 主体：左侧输入区 + 右侧显示区
@@ -994,4 +995,88 @@ function importTaxRiskRules() {
 // ══════════════════════════════════════════════════════════════
 function saveTaxRiskRulesToLocal() {
   localStorage.setItem('taxRiskRulesData', JSON.stringify(taxRiskRulesData));
+}
+// ========== 解析报告 ==========
+function parseReportModal() {
+  var html = '<div style="margin-bottom:20px">'
+    + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">📄 解析税务报告</h3>'
+    + '<p style="margin:0;color:#6b7280">粘贴报告文本，系统自动提取风险规则</p>'
+    + '</div>';
+  html += '<div style="margin-bottom:16px">'
+    + '<textarea id="report-text-input" style="width:100%;height:200px;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box" placeholder="粘贴税务报告、风险分析结果或文章内容..."></textarea>'
+    + '</div>';
+  html += '<div style="display:flex;gap:8px;justify-content:center">'
+    + '<button onclick="submitReportForParsing()" style="padding:10px 24px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">🔍 开始解析</button>'
+    + '<button onclick="closeAuditModal()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-size:14px">取消</button>'
+    + '</div>';
+  showAuditModal(html);
+}
+
+function submitReportForParsing() {
+  var textInput = document.getElementById('report-text-input');
+  if (!textInput || !textInput.value.trim()) {
+    toast('请粘贴报告文本', 'warning');
+    return;
+  }
+  var text = textInput.value.trim();
+  var modalBody = document.querySelector('#audit-modal > div > div');
+  if (modalBody) {
+    modalBody.innerHTML = '<div style="text-align:center;padding:80px"><div class="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite"></div><p style="color:#6b7280">正在解析报告（' + text.length + ' 字）...</p></div>';
+  }
+  fetch('/api/tax-risk-rules/parse-report', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: text})
+  }).then(function(r) { return r.json(); })
+  .then(function(result) {
+    if (!result.ok) { showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">解析失败: ' + (result.error || '未知错误') + '</p></div>'); return; }
+    renderParsedRules(result);
+  }).catch(function(e) {
+    showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">解析失败: ' + e.message + '</p></div>');
+  });
+}
+
+function renderParsedRules(result) {
+  var rules = result.rules || [];
+  var html = '<div style="margin-bottom:20px">'
+    + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">📄 解析结果</h3>'
+    + '<p style="margin:0;color:#6b7280">从 ' + result.text_length + ' 字中提取了 ' + rules.length + ' 条规则</p>'
+    + '</div>';
+  if (rules.length === 0) {
+    html += '<div style="text-align:center;padding:40px;color:#6b7280">未提取到规则，请检查报告内容</div>';
+  } else {
+    html += '<div style="max-height:400px;overflow-y:auto;margin-bottom:16px">';
+    rules.forEach(function(rule, idx) {
+      var lc = rule.level === '高风险' ? '#dc2626' : (rule.level === '中风险' ? '#d97706' : '#2563eb');
+      html += '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">'
+        + '<div style="font-weight:600;color:#111827;flex:1">' + (idx+1) + '. ' + rule.item + '</div>'
+        + '<span style="background:' + lc + '15;color:' + lc + ';padding:2px 8px;border-radius:12px;font-size:12px">' + rule.level + '</span>'
+        + '</div>'
+        + '<div style="font-size:13px;color:#6b7280;margin-top:4px">分类: ' + rule.category + ' | 评分: ' + rule.score + '分</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<div style="display:flex;gap:8px;justify-content:center">';
+  if (rules.length > 0) {
+    var rulesStr = JSON.stringify(rules).replace(/"/g, '&quot;');
+    html += '<button onclick="applyParsedRules(\'' + rulesStr + '\')" style="padding:10px 24px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">✅ 应用 ' + rules.length + ' 条规则</button>';
+  }
+  html += '<button onclick="parseReportModal()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-size:14px">重新解析</button>'
+    + '<button onclick="closeAuditModal()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-size:14px">取消</button>'
+    + '</div>';
+  showAuditModal(html);
+}
+
+function applyParsedRules(rulesStr) {
+  try {
+    var rules = JSON.parse(rulesStr.replace(/&quot;/g, '"'));
+    if (!Array.isArray(rules) || rules.length === 0) { toast('解析数据无效', 'error'); return; }
+    taxRiskRulesData = taxRiskRulesData.concat(rules);
+    saveTaxRiskRulesToCache();
+    closeAuditModal();
+    renderTaxRiskRules();
+    toast('已添加 ' + rules.length + ' 条规则', 'success');
+  } catch(e) { toast('应用失败: ' + e.message, 'error'); }
 }

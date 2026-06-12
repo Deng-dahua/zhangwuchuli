@@ -7540,6 +7540,208 @@ async def tax_risk_rules_fix(request: Request):
         }
     }
 
+
+# =================== 涉税风险规则报告解析 API ===================
+@app.post("/api/tax-risk-rules/parse-report")
+async def tax_risk_rules_parse_report(request: Request):
+    """接收税务报告/文章内容，智能提取风险规则"""
+    try:
+        body = await request.json()
+        report_text = body.get("text", "")
+        if not report_text:
+            return {"ok": False, "error": "报告内容不能为空"}
+    except Exception:
+        return {"ok": False, "error": "无效的请求数据"}
+
+    import re as _re
+    import uuid as _uuid
+    from difflib import SequenceMatcher as _SeqMatcher
+
+    text = report_text
+
+    # === 第1步：文本预处理 ===
+    lines = text.split('\n')
+    cleaned = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            cleaned.append('')
+        elif _re.match(r'^[\d\s\-–—_・•·]+$', line):
+            continue
+        elif len(line) <= 3 and _re.match(r'^\d+$', line):
+            continue
+        else:
+            cleaned.append(line)
+    text = '\n'.join(cleaned)
+
+    # === 第2步：智能分段 ===
+    paragraphs = []
+    current_para = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            if current_para:
+                paragraphs.append('\n'.join(current_para))
+                current_para = []
+            continue
+        is_new_rule = False
+        if _re.match(r'^[\(]?\d+[\)\.]?[\、\.)]', line):
+            is_new_rule = True
+        elif _re.match(r'^[一二三四五六七八九十]+[、\.]', line):
+            is_new_rule = True
+        elif any(kw in line for kw in ['风险点', '风险分析']) and len(line) < 40:
+            is_new_rule = True
+        elif '问题' in line and len(line) < 30:
+            is_new_rule = True
+        if is_new_rule and current_para:
+            paragraphs.append('\n'.join(current_para))
+            current_para = [line]
+        else:
+            current_para.append(line)
+    if current_para:
+        paragraphs.append('\n'.join(current_para))
+
+    if len(paragraphs) < 2:
+        sentences = _re.split(r'[。\.\!\?！？]+', text)
+        paragraphs = []
+        chunk = []
+        for s in sentences:
+            s = s.strip()
+            if s:
+                chunk.append(s)
+                if len(chunk) >= 2:
+                    paragraphs.append('。'.join(chunk) + '。')
+                    chunk = []
+        if chunk:
+            paragraphs.append('。'.join(chunk))
+
+    # === 第3步：提取规则 ===
+    category_keywords = {
+        "发票合规": ["发票", "进项", "销项", "税号", "全电", "数电", "红冲", "作废"],
+        "发票异常": ["顶额", "作废", "红冲", "异常", "失控", "虚开"],
+        "发票深度": ["油费", "运输费", "生活用品", "水电", "能耗", "进销"],
+        "增值税专项": ["增值税", "留抵", "退税", "简易计税", "免税"],
+        "企业所得税": ["所得税", "折旧", "摊销", "准备金", "不征税"],
+        "纳税调整": ["招待费", "广告费", "业务招待", "纳税调增"],
+        "个人所得税": ["个税", "工资", "薪金", "分红", "股东", "借款"],
+        "成本结构": ["成本", "收入", "费用", "毛利率", "占比"],
+        "经营实质": ["经营能力", "开票量", "注册地址"],
+        "资金往来": ["公户", "私户", "转账", "资金回流"],
+        "隐匿虚增": ["其他应收", "其他应付", "挂账", "隐瞒"],
+        "财务健康": ["现金流", "偿债", "净资产", "利润率"],
+        "征管风险": ["欠税", "走逃", "失联", "D级", "非正常户"],
+        "申报比对": ["零申报", "比对", "未申报", "漏申报"],
+        "税负水平": ["税负率", "印花税", "行业税负"],
+        "交易特征": ["整数", "大额", "频繁", "同一", "回流"],
+        "账务数据": ["借贷", "凭证", "序时账", "记账"],
+    }
+
+    def _auto_classify(text_content):
+        best = ("其他", 0)
+        for cat, kws in category_keywords.items():
+            score = sum(1 for kw in kws if kw in text_content)
+            if score > best[1]:
+                best = (cat, score)
+        return best[0] if best[1] > 0 else "其他"
+
+    def _estimate_score(text_content):
+        m = _re.search(r'评分[：:\s]*(\d+)', text_content)
+        if m:
+            return int(m.group(1))
+        m = _re.search(r'(\d+)\s*分', text_content)
+        if m and int(m.group(1)) <= 10:
+            return int(m.group(1))
+        high_kws = ['虚开', '偷税', '逃税', '隐瞒', '涉嫌', '不得', '禁止']
+        mid_kws = ['异常', '偏高', '偏低', '超标', '不匹配', '未', '漏']
+        if any(kw in text_content for kw in high_kws):
+            return 8
+        elif any(kw in text_content for kw in mid_kws):
+            return 5
+        return 5
+
+    def _level_from_score(score):
+        if score >= 7:
+            return "高风险"
+        elif score >= 4:
+            return "中风险"
+        elif score > 0:
+            return "低风险"
+        return "良好"
+
+    cat_icon_map = {
+        "发票合规": "🧾", "发票异常": "⚠️", "发票深度": "🔍",
+        "增值税专项": "🧮", "企业所得税": "💰", "纳税调整": "⚖️",
+        "个人所得税": "👤", "成本结构": "📐", "经营实质": "🏭",
+        "资金往来": "💸", "隐匿虚增": "🫥", "财务健康": "💊",
+        "征管风险": "🚨", "申报比对": "📊", "税负水平": "📉",
+        "交易特征": "🔗", "账务数据": "📊", "其他": "📋",
+    }
+
+    rules = []
+    seen_items = set()
+    for para in paragraphs:
+        if len(para) < 10:
+            continue
+        lines_para = [l.strip() for l in para.split('\n') if l.strip()]
+        if not lines_para:
+            continue
+        first_line = _re.sub(r'^[\(\[\d]+[\)\.\、\.]?\s*', '', lines_para[0])
+        first_line = _re.sub(r'^[一二三四五六七八九十]+[、\.\s]*', '', first_line)
+        item = first_line[:40] if len(first_line) > 5 else first_line
+        if not item or len(item) < 3:
+            continue
+        is_dup = False
+        for seen in seen_items:
+            if _SeqMatcher(None, item, seen).ratio() > 0.8:
+                is_dup = True
+                break
+        if is_dup:
+            continue
+        seen_items.add(item)
+        category = _auto_classify(para)
+        # 分类纠偏：更精确的关键词覆盖通用匹配
+        _override_map = {
+            "零申报": "申报比对", "留抵退税": "增值税专项", "出口退税": "增值税专项",
+            "油费": "发票深度", "运输费": "发票深度", "水电": "发票深度",
+            "走逃": "征管风险", "非正常户": "征管风险", "D级": "征管风险",
+            "生活用品": "发票深度", "能耗": "发票深度", "进销": "发票深度",
+            "印花税": "税负水平", "个税": "个人所得税",
+            "税负率": "税负水平",
+        }
+        for _kw, _correct_cat in _override_map.items():
+            if _kw in para and category != _correct_cat:
+                category = _correct_cat
+                break
+        score = _estimate_score(para)
+        level = _level_from_score(score)
+        detail = para[:200] + ('...' if len(para) > 200 else '')
+        suggestion = ""
+        sug_match = _re.search(r'建议[：:\s]*(.+)', para)
+        if sug_match:
+            suggestion = sug_match.group(1)[:150]
+        rules.append({
+            "id": str(_uuid.uuid4()),
+            "category": category,
+            "categoryIcon": cat_icon_map.get(category, "📋"),
+            "item": item,
+            "detail": detail,
+            "score": score,
+            "level": level,
+            "suggestion": suggestion,
+            "urgency": "提醒" if score < 5 else ("紧急" if score >= 8 else "高"),
+            "evidence": "",
+            "dataSource": "报告解析",
+            "remark": f"从报告解析（{len(para)}字）"
+        })
+
+    return {
+        "ok": True,
+        "rules": rules,
+        "count": len(rules),
+        "paragraphs_found": len(paragraphs),
+        "text_length": len(report_text)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
