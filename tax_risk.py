@@ -14,6 +14,7 @@ from sqlalchemy import func, case, extract, and_, or_
 from datetime import date, timedelta
 from typing import Optional, List
 import json
+import os
 
 from database import get_db, Company, Account, JournalEntry
 from database import SalesInvoice, PurchaseInvoice, BookkeepingInvoice
@@ -108,6 +109,89 @@ def _monthly_account_balance(db: Session, company_id: int, account_code: str, ps
         JournalEntry.period >= ps, JournalEntry.period <= pe
     ).group_by(JournalEntry.period).order_by(JournalEntry.period).all()
     return {r[0]: {"debit": _safe_float(r[1]), "credit": _safe_float(r[2])} for r in rows}
+
+
+# ── 规则文件路径 ──
+RULES_FILE = os.path.join(os.path.dirname(__file__), 'static', 'tax_risk_rules_local_export.json')
+
+def _load_saved_rules():
+    """加载用户保存的涉税风险规则（从风险规则管理模块）"""
+    if not os.path.exists(RULES_FILE):
+        return None
+    try:
+        with open(RULES_FILE, 'r', encoding='utf-8') as f:
+            rules = json.load(f)
+        if isinstance(rules, list) and len(rules) > 0:
+            return rules
+        return None
+    except Exception:
+        return None
+
+def _apply_rule_overrides(results, rules):
+    """用规则中定义的评分/等级/建议覆盖硬编码的分析结果"""
+    if not rules or not results:
+        return
+
+    # 建立规则索引：按 item 关键词（取前4字）
+    rule_index = {}
+    for rule in rules:
+        item = rule.get("item", "").strip()
+        if not item:
+            continue
+        # 用 item 的前4个字符做模糊键
+        key = item[:4]
+        if key not in rule_index:
+            rule_index[key] = []
+        rule_index[key].append(rule)
+
+    for r in results:
+        result_item = r.get("item", "").strip()
+        if not result_item:
+            continue
+
+        # 前4字匹配查找规则
+        rkey = result_item[:4]
+        candidates = rule_index.get(rkey, [])
+        if not candidates:
+            # 尝试更模糊：前2字
+            rkey2 = result_item[:2]
+            for k, v in rule_index.items():
+                if k[:2] == rkey2:
+                    candidates.extend(v)
+
+        best_match = None
+        best_score = 0
+        for rule in candidates:
+            rule_item = rule.get("item", "")
+            # 计算匹配度
+            if result_item == rule_item:
+                best_match = rule
+                break  # 精确匹配
+            # 子串匹配
+            if rule_item in result_item or result_item in rule_item:
+                score = len(rule_item)
+                if score > best_score:
+                    best_score = score
+                    best_match = rule
+
+        if best_match:
+            # 用规则值覆盖
+            if "score" in best_match and best_match["score"] is not None:
+                r["risk_score"] = best_match["score"]
+            if "level" in best_match and best_match["level"]:
+                r["risk_level"] = best_match["level"]
+            if "category" in best_match and best_match["category"]:
+                r["category"] = best_match["category"]
+            if "categoryIcon" in best_match:
+                r["category_icon"] = best_match["categoryIcon"]
+            if "suggestion" in best_match and best_match["suggestion"]:
+                r["suggestion"] = best_match["suggestion"]
+            if "urgency" in best_match and best_match["urgency"]:
+                r["urgency"] = best_match["urgency"]
+            if "evidence" in best_match and best_match["evidence"]:
+                r["required_evidence"] = [e.strip() for e in best_match["evidence"].split("\n") if e.strip()]
+            # 重新计算颜色
+            r["risk_color"] = _risk_color(r["risk_score"])
 
 
 # ── 风险分析核心 ──
@@ -208,6 +292,15 @@ def get_tax_risk_report(
     _analyze_cross_invoicing(db, company_id, period_start, period_end, results)
     _analyze_invest_property_tax(db, company_id, period_start, period_end, results)
 
+    # ── 【核心】加载用户规则并应用覆盖 ──
+    rules = _load_saved_rules()
+    rules_applied = False
+    rules_count = 0
+    if rules:
+        rules_count = len(rules)
+        _apply_rule_overrides(results, rules)
+        rules_applied = True
+
     results.sort(key=lambda x: (x.get("risk_score", 0)), reverse=True)
 
     high_count = sum(1 for r in results if r.get("risk_level") == "高风险")
@@ -241,6 +334,8 @@ def get_tax_risk_report(
             "gross_margin_pct": round((revenue_debit - cost_debit) / revenue_debit * 100, 2) if revenue_debit > 0 else 0,
             "vat_payable": round(vat_total, 2),
         },
+        "rules_applied": rules_applied,
+        "rules_count": rules_count,
         "required_evidence_summary": _build_evidence_summary(results),
         "results": results
     }

@@ -61,6 +61,10 @@ async function loadTaxRiskReport() {
     var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
     var from = (typeof _readPeriod === 'function') ? _readPeriod('tr-from') : '';
     var to = (typeof _readPeriod === 'function') ? _readPeriod('tr-to') : '';
+
+    // 【关键】先确保规则已同步到服务器
+    await syncRulesToServer();
+
     var url = '/api/tax-risk/report?company_id=' + cid;
     if (from) url += '&period_from=' + from;
     if (to) url += '&period_to=' + to;
@@ -80,6 +84,32 @@ async function loadTaxRiskReport() {
   }
 }
 
+// 将本地规则同步到服务器（供后端分析使用）
+async function syncRulesToServer() {
+  try {
+    var rules = null;
+    // 从 localStorage 获取规则
+    if (typeof taxRiskRulesData !== 'undefined' && taxRiskRulesData && taxRiskRulesData.length > 0) {
+      rules = taxRiskRulesData;
+    } else {
+      var stored = localStorage.getItem('taxRiskRulesData');
+      if (stored) {
+        rules = JSON.parse(stored);
+      }
+    }
+    if (rules && rules.length > 0) {
+      await fetch('/api/tax-risk-rules/save-local', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(rules)
+      });
+      console.log('[报告] 规则已同步到服务器，共 ' + rules.length + ' 条');
+    }
+  } catch(e) {
+    console.warn('[报告] 规则同步失败（后端可能未就绪）:', e.message);
+  }
+}
+
 function renderTaxRiskReportData(data) {
   if (!data || !data.results) {
     document.getElementById('risk-report-body').innerHTML
@@ -88,7 +118,7 @@ function renderTaxRiskReportData(data) {
   }
 
   // 汇总卡片 + 财务指标
-  renderSummaryCards(data.summary, data.period_start, data.period_end, data.metrics);
+  renderSummaryCards(data.summary, data.period_start, data.period_end, data.metrics, data.rules_applied, data.rules_count);
 
   // 佐证材料汇总（如有）
   if (data.required_evidence_summary && data.required_evidence_summary.length > 0) {
@@ -139,7 +169,7 @@ function renderTaxRiskReportData(data) {
   body.innerHTML = html || '<div class="risk-empty">未发现明显风险事项</div>';
 }
 
-function renderSummaryCards(summary, ps, pe, metrics) {
+function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) {
   var el = document.getElementById('risk-summary-cards');
   if (!el || !summary) return;
 
@@ -153,9 +183,16 @@ function renderSummaryCards(summary, ps, pe, metrics) {
   };
   var overall = summary.overall_risk_level || '良好';
 
+  var rulesBadge = '';
+  if (rulesApplied && rulesCount > 0) {
+    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#eef2ff;color:#6366f1;border-radius:4px;font-size:11px;font-weight:500;">基于 ' + rulesCount + ' 条规则</span>';
+  } else {
+    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;">未加载规则</span>';
+  }
+
   el.innerHTML = ''
     + '<div class="risk-card overall" style="border-color:' + (levelColor[overall] || '#10b981') + ';background:' + (levelBg[overall] || '#ecfdf5') + '">'
-    + '<div class="risk-card-label">综合风险等级</div>'
+    + '<div class="risk-card-label">综合风险等级' + rulesBadge + '</div>'
     + '<div class="risk-card-value" style="color:' + (levelColor[overall] || '#10b981') + '">' + overall + '</div>'
     + '<div class="risk-card-sub">分析期间：' + escapeHtml(ps || '-') + ' ~ ' + escapeHtml(pe || '-') + '</div>'
     + '</div>'
@@ -187,7 +224,8 @@ function renderSummaryCards(summary, ps, pe, metrics) {
       bar.textContent = '收入：¥' + formatNum(metrics.revenue)
         + ' | 成本：¥' + formatNum(metrics.cost)
         + ' | 毛利率：' + (metrics.gross_margin_pct || 0).toFixed(1) + '%'
-        + ' | 增值税：¥' + formatNum(metrics.vat_payable || 0);
+        + ' | 增值税：¥' + formatNum(metrics.vat_payable || 0)
+        + (rulesApplied ? ' | 规则驱动' : '');
     }
   }
 }
