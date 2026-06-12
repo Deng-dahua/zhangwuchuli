@@ -70,28 +70,26 @@ function renderTaxRiskRules(container) {
     + '<p>收集和整理涉税风险分析规则，用于编制涉税风险分析报告</p>'
     + '</div>'
     + '<div class="risk-rules-toolbar">'
-    + '<button class="btn-toolbar btn-primary" id="btn-load-default-rules" onclick="loadDefaultTaxRiskRules()">📥 加载61条默认规则</button>'
-    + '<button class="btn-toolbar" onclick="exportTaxRiskRules()">📤 导出规则</button>'
-    + '<button class="btn-toolbar" onclick="importTaxRiskRules()">📥 导入规则</button>'
-    + '<button class="btn-toolbar" onclick="clearAllRules()">🗑️ 清空规则</button>'
-    + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">📤 上传规则到服务器</button>'
-    + '<button class="btn-toolbar" onclick="auditTaxRiskRules()" style="background:#059669;color:#fff">🔍 检查规则</button>'
-    + '<button class="btn-toolbar" onclick="autoFixTaxRiskRules()" style="background:#d97706;color:#fff">🔧 一键修复</button>'
-    + '<button class="btn-toolbar" onclick="parseReportModal()" style="background:#6366f1;color:#fff">📄 解析报告</button>'
+    + '<button class="btn-toolbar btn-primary" id="btn-load-default-rules" onclick="loadDefaultTaxRiskRules()">加载默认规则</button>'
+    + '<button class="btn-toolbar" onclick="exportTaxRiskRules()">导出规则</button>'
+    + '<button class="btn-toolbar" onclick="importTaxRiskRules()">导入规则</button>'
+    + '<button class="btn-toolbar" onclick="clearAllRules()">清空规则</button>'
+    + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">上传规则到服务器</button>'
+    + '<button class="btn-toolbar" onclick="auditTaxRiskRules()" style="background:#059669;color:#fff">检查规则</button>'
+    + '<button class="btn-toolbar" onclick="autoFixTaxRiskRules()" style="background:#d97706;color:#fff">修复规则</button>'
     + '</div>'
     + '</div>'
     // 主体：左侧输入区 + 右侧显示区
     + '<div class="risk-rules-body">'
     // 左侧：纯文本输入框
     + '<div class="risk-rules-input" id="risk-rules-input">'
-    + '<div class="input-panel-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
-    + '<div>'
-    + '<h3 style="margin:0 0 4px 0;">📝 规则信息输入</h3>'
+    + '<div class="input-panel-header">'
+    + '<h3 style="margin:0 0 4px 0;">规则信息输入</h3>'
     + '<span class="input-panel-hint">自由输入涉税风险规则描述，系统自动解析整理</span>'
-    + '</div>'
-    + '<div style="display:flex;gap:8px;">'
-    + '<button class="btn btn-primary" onclick="parseAndAddRules()">🔍 解析并添加</button>'
-    + '<button class="btn btn-cancel" onclick="document.getElementById(\'rule-input-text\').value=\'\'">🧹 清空输入</button>'
+    + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+    + '<button class="btn btn-primary" onclick="parseAndAddRules()">解析并添加</button>'
+    + '<button class="btn btn-cancel" onclick="document.getElementById(\'rule-input-text\').value=\'\'">清空输入</button>'
+    + '<button class="btn btn-toolbar" onclick="parseReportModal()" style="background:#6366f1;color:#fff">解析报告</button>'
     + '</div>'
     + '</div>'
     + '<div class="input-panel-body">'
@@ -107,7 +105,7 @@ function renderTaxRiskRules(container) {
     // 右侧：规则显示区
     + '<div class="risk-rules-display" id="risk-rules-display">'
     + '<div class="display-panel-header">'
-    + '<h3>📋 规则显示区</h3>'
+    + '<h3>规则显示区 <span style="font-size:13px;color:var(--gray-400);font-weight:400">（当前 <strong id="risk-rules-header-count">0</strong> 条）</span></h3>'
     + '<div class="display-panel-toolbar">'
     + '<input type="text" class="search-input" id="risk-rules-search" placeholder="🔍 搜索规则..." oninput="filterTaxRiskRules()">'
     + '<select class="filter-select" id="risk-rules-filter-category" onchange="filterTaxRiskRules()">'
@@ -123,7 +121,7 @@ function renderTaxRiskRules(container) {
     + '</div>'
     + '</div>'
     + '<div class="display-panel-body" id="risk-rules-list">'
-    + '<div class="risk-rules-empty">暂无规则数据，请在左侧输入区添加规则，或点击"加载61条默认规则"</div>'
+    + '<div class="risk-rules-empty">暂无规则数据，请在左侧输入区添加规则，或点击"加载默认规则"</div>'
     + '</div>'
     + '<div class="display-panel-footer">'
     + '<span id="risk-rules-stats">共 0 条规则</span>'
@@ -166,7 +164,7 @@ async function loadTaxRiskRules() {
   await loadDefaultTaxRiskRules();
 }
 
-// 加载默认61条规则（从JSON文件）
+// 加载默认规则（从JSON文件）
 async function loadDefaultTaxRiskRules() {
   // 如果已有数据，确认是否覆盖
   // 直接覆盖加载，不再弹确认框（用户可随时用"清空规则"按钮清空）
@@ -507,7 +505,7 @@ function renderTaxRiskRulesList(filterData) {
   if (!listEl) return;
 
   if (data.length === 0) {
-    listEl.innerHTML = '<div class="risk-rules-empty">暂无规则数据，请在左侧输入区添加规则，或点击"加载61条默认规则"</div>';
+    listEl.innerHTML = '<div class="risk-rules-empty">暂无规则数据，请在左侧输入区添加规则，或点击"加载默认规则"</div>';
   } else {
     // 按分类分组
     var grouped = {};
@@ -551,6 +549,10 @@ function renderTaxRiskRulesList(filterData) {
       + '<span style="color:#3b82f6">🔵 ' + low + '</span> '
       + '<span style="color:#10b981">🟢 ' + good + '</span>';
   }
+
+  // 更新规则显示区标题中的数量
+  var hcEl = document.getElementById('risk-rules-header-count');
+  if (hcEl) hcEl.textContent = data.length;
 
   // 更新加载按钮上的规则数量
   updateLoadButtonText();
@@ -597,12 +599,7 @@ function escapeHtml(text) {
 function updateLoadButtonText() {
   var btn = document.getElementById('btn-load-default-rules');
   if (!btn) return;
-  var cnt = taxRiskRulesData.length;
-  if (cnt > 0) {
-    btn.innerHTML = '📥 重新加载默认规则<span style="font-size:11px;opacity:0.8;">（当前 ' + cnt + ' 条）</span>';
-  } else {
-    btn.innerHTML = '📥 加载61条默认规则';
-  }
+  btn.innerHTML = '加载默认规则';
 }
 
 // ══════════════════════════════════════════════════════════════
