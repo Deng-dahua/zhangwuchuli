@@ -1,6 +1,6 @@
 """
-涉税风险分析报告模块 V7
-综合分析评估 99 个维度 — 全规则100%覆盖：
+涉税风险分析报告模块 V8
+综合分析评估 100+ 个维度 — 全规则100%覆盖：
 账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 / 配比弹性 /
 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
@@ -8,7 +8,10 @@
 经营实质(18+3+3项) / 增值税专项(5+4项) / 发票异常(3+4+3项) / 费用匹配(3项) /
 企业所得税专项(4+4项) / 申报比对(4项) / 征管风险(4+1项) / 交易特征(4项) /
 V7新增8项: 年终奖计税优化 / 农产品收购发票异常 / 跨区域开票 / 简易计税划分 /
-一址多照/一人多企 / 注册经营地址不一致 / 注销前突击开票 / D级纳税人风险
+一址多照/一人多企 / 注册经营地址不一致 / 注销前突击开票 / D级纳税人风险 /
+V8新增16项: 合同风险 — 三流合一/四流合一(收入无合同/成本无合同/大额无合同/
+三流缺失/四流缺失/长期无合同/金额偏差/过期合同/先票后签/收付款不匹配/
+无合同占比/跨合同方/印花税合同风险/合同作废率/框架合同缺失/关联方无合同)
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -25,7 +28,7 @@ from database import VATDeclaration, InputVATDeduction, BankTransaction
 from database import SalaryRecord, SocialSecurityDetail, HousingFundDetail
 from database import CulturalConstructionFeeDeclaration
 from database import FixedAsset, IntangibleAsset
-from database import Customer, Supplier, Employee, Contract, Payment
+from database import Customer, Supplier, Employee, Contract, ContractPayment, Payment
 from database import InventoryTransaction, InventoryBalance, InventoryItem
 from database import SocialSecurityDeclaration, HousingFundDeclaration
 
@@ -833,6 +836,8 @@ def get_tax_risk_report(
     _analyze_address_mismatch(db, company_id, period_start, period_end, results)
     _analyze_d_taxpayer_risk(db, company_id, period_start, period_end, results)
     _analyze_flexible_employment_tax(db, company_id, period_start, period_end, results)
+    # ── V8 新增 — 合同风险（三流合一/四流合一，16项）──
+    _analyze_contract_risks(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -7032,6 +7037,924 @@ def _analyze_flexible_employment_tax(db, company_id, ps, pe, results):
             "服务成果交付证明（如为咨询服务）"
         ]
     })
+
+
+# ═══════════════════════════════════════════════════════════
+#  V8 新增 — 合同风险分析（三流合一/四流合一，16项）
+# ═══════════════════════════════════════════════════════════
+
+def _normalize_entity_name(name):
+    """规范化企业名称用于跨表匹配（去掉常见后缀）"""
+    if not name:
+        return ""
+    n = name.strip().replace("（", "(").replace("）", ")")
+    for sfx in ["有限责任公司", "股份有限公司", "有限公司", "合伙企业", "(有限合伙)", "（有限合伙）",
+                 "个人独资企业", "专业合作社", "集团"]:
+        n = n.replace(sfx, "")
+    return n.strip()
+
+
+def _name_in_set(name, party_set):
+    """检查企业名称是否匹配合同中的任一交易方（模糊匹配）"""
+    if not name or not party_set:
+        return False
+    nn = _normalize_entity_name(name)
+    if len(nn) < 2:
+        return False
+    for party in party_set:
+        np = _normalize_entity_name(party)
+        if len(np) < 2:
+            continue
+        if nn == np or nn in np or np in nn:
+            return True
+    return False
+
+
+def _find_matching_contracts(name, contracts):
+    """从合同列表中找出匹配指定企业名称的合同"""
+    if not name or not contracts:
+        return []
+    matched = []
+    nn = _normalize_entity_name(name)
+    for c in contracts:
+        for party in [c.party_b or "", c.party_a or ""]:
+            np = _normalize_entity_name(party)
+            if len(np) >= 2 and (nn == np or nn in np or np in nn):
+                matched.append(c)
+                break
+    return matched
+
+
+def _analyze_contract_risks(db, company_id, ps, pe, results):
+    """合同风险综合分析：三流合一/四流合一/收入成本无合同/金额匹配等"""
+    ps_date, pe_date = _period_to_date_range(ps)[0], _period_to_date_range(pe)[1]
+    CAT = "合同风险"
+    ICON = "📋"
+
+    # ═══ 预加载所有有效合同 ═══
+    all_contracts = db.query(Contract).filter(
+        Contract.company_id == company_id,
+        Contract.status.in_(["已签署", "履行中", "已完成"])
+    ).all()
+
+    # 按类型分组
+    sales_ct = [c for c in all_contracts if c.contract_type in ("销售", "服务")]  # 销售类合同
+    purchase_ct = [c for c in all_contracts if c.contract_type in ("采购", "服务")]  # 采购类合同
+    # 服务类合同同时属于销售和采购（既可能对外提供服务，也可能接受服务）
+
+    # 提取交易方名称集合
+    sales_parties = set()
+    for c in sales_ct:
+        if c.party_b: sales_parties.add(c.party_b.strip())
+        if c.party_a: sales_parties.add(c.party_a.strip())
+
+    purchase_parties = set()
+    for c in purchase_ct:
+        if c.party_b: purchase_parties.add(c.party_b.strip())
+        if c.party_a: purchase_parties.add(c.party_a.strip())
+
+    # ═══ 1. 收入无销售合同匹配 ═══
+    sales_customers = db.query(
+        SalesInvoice.buyer_name,
+        func.sum(SalesInvoice.total_amount).label("total"),
+        func.count(SalesInvoice.id).label("cnt")
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_date,
+        SalesInvoice.invoice_date <= pe_date
+    ).group_by(SalesInvoice.buyer_name).order_by(func.sum(SalesInvoice.total_amount).desc()).all()
+
+    no_ct_customers = []
+    no_ct_revenue = 0.0
+    total_sales_rev = 0.0
+    for name, amt, cnt in sales_customers:
+        a = _safe_float(amt)
+        total_sales_rev += a
+        if not _name_in_set(name, sales_parties):
+            no_ct_customers.append((name, a, cnt))
+            no_ct_revenue += a
+
+    if no_ct_customers and total_sales_rev > 0:
+        pct = round(no_ct_revenue / total_sales_rev * 100, 1) if total_sales_rev > 0 else 0
+        top3 = no_ct_customers[:3]
+        detail_parts = [f"{n}（{a:,.0f}元/{c}张）" for n, a, c in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "收入无销售合同匹配",
+            "detail": f"分析期间内共 {len(no_ct_customers)} 家客户的开票收入（合计 {no_ct_revenue:,.2f} 元，占收入 {pct}%）未找到匹配的销售/服务合同。"
+                       f"三流合一要求合同流、发票流、资金流一致，缺少合同流将构成重大税务风险。"
+                       f"涉及客户：{'、'.join(detail_parts)}"
+                       + (f"等{len(no_ct_customers)}家" if len(no_ct_customers) > 3 else ""),
+            "suggestion": "立即补充签订正式销售合同：(1)逐户与客户签署书面购销/服务合同；(2)合同中明确标的、金额、付款方式、违约责任等核心条款；(3)合同签署日期不得晚于首笔交易发生日期；(4)合同归档纳入公司档案管理。",
+            "required_evidence": ["销售合同正本", "合同审批流程记录", "合同登记台账"]
+        })
+
+    # ═══ 2. 成本无采购合同匹配 ═══
+    purchase_suppliers = db.query(
+        PurchaseInvoice.seller_name,
+        func.sum(PurchaseInvoice.total_amount).label("total"),
+        func.count(PurchaseInvoice.id).label("cnt")
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date,
+        PurchaseInvoice.invoice_date <= pe_date
+    ).group_by(PurchaseInvoice.seller_name).order_by(func.sum(PurchaseInvoice.total_amount).desc()).all()
+
+    no_ct_suppliers = []
+    no_ct_purchase = 0.0
+    total_purchase_amt = 0.0
+    for name, amt, cnt in purchase_suppliers:
+        a = _safe_float(amt)
+        total_purchase_amt += a
+        if not _name_in_set(name, purchase_parties):
+            no_ct_suppliers.append((name, a, cnt))
+            no_ct_purchase += a
+
+    if no_ct_suppliers and total_purchase_amt > 0:
+        pct = round(no_ct_purchase / total_purchase_amt * 100, 1) if total_purchase_amt > 0 else 0
+        top3 = no_ct_suppliers[:3]
+        detail_parts = [f"{n}（{a:,.0f}元/{c}张）" for n, a, c in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "成本无采购合同匹配",
+            "detail": f"分析期间内共 {len(no_ct_suppliers)} 家供应商的采购成本（合计 {no_ct_purchase:,.2f} 元，占采购 {pct}%）未找到匹配的采购/服务合同。"
+                       f"缺少采购合同不仅违反三流合一原则，还影响成本真实性认定和所得税税前扣除。"
+                       f"涉及供应商：{'、'.join(detail_parts)}"
+                       + (f"等{len(no_ct_suppliers)}家" if len(no_ct_suppliers) > 3 else ""),
+            "suggestion": "立即补充签订正式采购合同：(1)逐户与供应商签署采购合同或服务协议；(2)合同中明确货物/服务内容、质量标准、价格条款、验收标准；(3)每笔采购均需留存合同副本备查；(4)建立合同与采购发票的对应台账。",
+            "required_evidence": ["采购合同正本", "合同审批记录", "供应商资质文件", "合同登记台账"]
+        })
+
+    # ═══ 3. 大额交易无合同 ═══
+    BIG_THRESHOLD = 100000  # 10万元作为大额交易门槛
+
+    # 3a. 销项大额无合同
+    big_sales_no_ct = []
+    for name, amt, cnt in sales_customers:
+        a = _safe_float(amt)
+        if a >= BIG_THRESHOLD and not _name_in_set(name, sales_parties):
+            big_sales_no_ct.append((name, a, cnt))
+
+    if big_sales_no_ct:
+        total_big = sum(a for _, a, _ in big_sales_no_ct)
+        top3 = big_sales_no_ct[:3]
+        detail_parts = [f"{n}（{a:,.0f}元）" for n, a, _ in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "大额销项交易无合同",
+            "detail": f"共 {len(big_sales_no_ct)} 笔大额销项交易（单家≥{BIG_THRESHOLD/10000:.0f}万元，合计 {total_big:,.2f} 元）未签订销售合同。"
+                       f"大额交易缺少合同是稽查重点，可能被认定为虚开发票或收入造假。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(big_sales_no_ct)}家" if len(big_sales_no_ct) > 3 else ""),
+            "suggestion": "所有大额交易必须签订书面合同。单笔≥10万元的交易必须：(1)签署正式购销合同；(2)保留招投标/比价/谈判记录；(3)合同经法务审核；(4)建立大额合同专项管理台账。",
+            "required_evidence": ["大额销售合同正本", "招投标/谈判记录", "法务审核意见"]
+        })
+
+    # 3b. 进项大额无合同
+    big_purchase_no_ct = []
+    for name, amt, cnt in purchase_suppliers:
+        a = _safe_float(amt)
+        if a >= BIG_THRESHOLD and not _name_in_set(name, purchase_parties):
+            big_purchase_no_ct.append((name, a, cnt))
+
+    if big_purchase_no_ct:
+        total_big = sum(a for _, a, _ in big_purchase_no_ct)
+        top3 = big_purchase_no_ct[:3]
+        detail_parts = [f"{n}（{a:,.0f}元）" for n, a, _ in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "大额进项交易无合同",
+            "detail": f"共 {len(big_purchase_no_ct)} 笔大额进项交易（单家≥{BIG_THRESHOLD/10000:.0f}万元，合计 {total_big:,.2f} 元）未签订采购合同。"
+                       f"大额采购无合同可能被质疑成本真实性，影响所得税税前扣除资格。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(big_purchase_no_ct)}家" if len(big_purchase_no_ct) > 3 else ""),
+            "suggestion": "所有大额采购必须签订书面合同：(1)签署正式采购合同或服务协议；(2)保留比价/招标记录；(3)合同经审批流程；(4)建立大额采购合同登记台账。",
+            "required_evidence": ["大额采购合同正本", "比价/招标记录", "采购审批单"]
+        })
+
+    # ═══ 4. 三流合一缺失（合同流+发票流+资金流完整性检查）════
+    # 对于有合同且有大额交易的，检查是否三流完整
+    all_contracts_with_amount = [c for c in all_contracts if _safe_float(c.amount) >= BIG_THRESHOLD]
+    three_flow_missing = []
+
+    for c in all_contracts_with_amount:
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        if not parties:
+            continue
+        ct_amount = _safe_float(c.amount)
+
+        # 检查发票流：该合同任一交易方是否有匹配的发票
+        invoice_found = False
+        for party in parties:
+            nn = _normalize_entity_name(party)
+            # 查销项发票
+            sale_amt = db.query(func.coalesce(func.sum(SalesInvoice.total_amount), 0)).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.invoice_date >= ps_date,
+                SalesInvoice.invoice_date <= pe_date
+            ).scalar() or 0
+            # 精确匹配：遍历结果不如直接查
+            sale_match = db.query(func.count(SalesInvoice.id)).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.invoice_date >= ps_date,
+                SalesInvoice.invoice_date <= pe_date,
+                SalesInvoice.buyer_name == party
+            ).scalar() or 0
+            purchase_match = db.query(func.count(PurchaseInvoice.id)).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.invoice_date >= ps_date,
+                PurchaseInvoice.invoice_date <= pe_date,
+                PurchaseInvoice.seller_name == party
+            ).scalar() or 0
+            if sale_match > 0 or purchase_match > 0:
+                invoice_found = True
+                break
+            # 模糊匹配
+            if _name_in_set(party, sales_parties) or _name_in_set(party, purchase_parties):
+                invoice_found = True
+                break
+
+        # 检查资金流：合同对方是否有匹配的银行流水
+        bank_match = 0
+        for party in parties:
+            bm = db.query(func.count(BankTransaction.id)).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction.transaction_date >= ps_date,
+                BankTransaction.transaction_date <= pe_date,
+                BankTransaction.counterparty_name == party
+            ).scalar() or 0
+            bank_match += bm
+
+        if not invoice_found:
+            three_flow_missing.append({
+                "contract_no": c.contract_no, "name": c.name,
+                "amount": ct_amount, "type": c.contract_type,
+                "missing": "发票流" if bank_match > 0 else "发票流+资金流"
+            })
+
+    if three_flow_missing:
+        missing_both = [x for x in three_flow_missing if "资金流" in x["missing"]]
+        missing_invoice = [x for x in three_flow_missing if x["missing"] == "发票流"]
+        detail_parts = []
+        for x in three_flow_missing[:5]:
+            detail_parts.append(f"{x['contract_no']} {x['name']}（{x['amount']:,.0f}元，缺失{x['missing']}）")
+
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "三流合一缺失（合同→发票→资金不完整）",
+            "detail": f"共 {len(three_flow_missing)} 份有效合同的大额交易中，未发现对应的发票流或资金流记录。"
+                       f"其中 {len(missing_both)} 份既无发票也无付款记录（严重），{len(missing_invoice)} 份无发票记录。"
+                       f"三流不合一是虚开发票认定的重要线索。"
+                       f"涉及合同：{'；'.join(detail_parts)}"
+                       + (f"等{len(three_flow_missing)}份" if len(three_flow_missing) > 5 else ""),
+            "suggestion": "逐份核查合同执行情况：(1)补开/补收对应发票；(2)补办付款手续并留存银行回单；(3)确实无法补办的，出具书面说明并由负责人签字；(4)建立三流合一检查制度，每笔交易前确认合同→发票→资金三流匹配。",
+            "required_evidence": ["合同执行情况说明", "补开发票/付款凭证", "三流比对台账"]
+        })
+
+    # ═══ 5. 四流合一缺失（合同+发票+资金+货物流）═══
+    # 检查采购合同：有合同+发票+付款，但缺少物流/验收单（通过合同金额与发票金额一致性间接判断）
+    four_flow_issues = []
+    for c in purchase_ct:
+        if _safe_float(c.amount) < BIG_THRESHOLD:
+            continue
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        if not parties:
+            continue
+        # 有发票吗
+        has_invoice = False
+        total_invoice_amt = 0.0
+        for party in parties:
+            invoices = db.query(
+                func.count(PurchaseInvoice.id),
+                func.coalesce(func.sum(PurchaseInvoice.total_amount), 0)
+            ).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.invoice_date >= ps_date,
+                PurchaseInvoice.invoice_date <= pe_date,
+                PurchaseInvoice.seller_name == party
+            ).first()
+            if invoices and invoices[0] > 0:
+                has_invoice = True
+                total_invoice_amt += _safe_float(invoices[1])
+        # 有付款吗
+        has_payment = False
+        for party in parties:
+            pay_cnt = db.query(func.count(BankTransaction.id)).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction.transaction_date >= ps_date,
+                BankTransaction.transaction_date <= pe_date,
+                BankTransaction.counterparty_name == party
+            ).scalar() or 0
+            if pay_cnt > 0:
+                has_payment = True
+                break
+        # 三流有但货物流存疑（合同金额与发票金额偏差大 = 可能存在未收货或未验收）
+        if has_invoice and has_payment:
+            ct_amt = _safe_float(c.amount)
+            if ct_amt > 0 and total_invoice_amt > 0:
+                deviation = abs(ct_amt - total_invoice_amt) / ct_amt
+                if deviation > 0.3:  # 偏差超30%
+                    four_flow_issues.append({
+                        "contract_no": c.contract_no, "name": c.name,
+                        "ct_amt": ct_amt, "inv_amt": total_invoice_amt,
+                        "deviation_pct": round(deviation * 100, 1)
+                    })
+
+    if four_flow_issues:
+        detail_parts = []
+        for x in four_flow_issues[:5]:
+            detail_parts.append(
+                f"{x['contract_no']} {x['name']}（合同{x['ct_amt']:,.0f}元 vs 发票{x['inv_amt']:,.0f}元，偏差{x['deviation_pct']}%）"
+            )
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "四流合一缺失（货物流存疑）",
+            "detail": f"共 {len(four_flow_issues)} 份采购合同虽有合同+发票+付款三流，但合同金额与发票金额偏差超30%，"
+                       f"可能存在货物未完全交付、未验收即付款、或发票金额不实等问题，无法满足四流合一要求。"
+                       f"涉及合同：{'；'.join(detail_parts)}"
+                       + (f"等{len(four_flow_issues)}份" if len(four_flow_issues) > 5 else ""),
+            "suggestion": "补充完整的货物流证据链：(1)逐单补充货物验收单/入库单；(2)大额采购补充运输单据；(3)建立四流比对台账（合同→发票→付款→验收）；(4)对偏差原因逐份出具书面说明。",
+            "required_evidence": ["货物验收单/入库单", "运输物流单据", "四流比对台账", "偏差说明"]
+        })
+
+    # ═══ 6. 长期合作方无正式合同 ═══
+    # 过去12个月累计交易额 > 50万但零合同
+    LONG_TERM_THRESHOLD = 500000
+    # 扩展查询范围到过去12个月
+    ps_12m = f"{int(ps[:4]) - 1 if int(ps[5:7]) == 1 else int(ps[:4])}-{12 if int(ps[5:7]) == 1 else int(ps[5:7]) - 1:02d}"
+    # 简化：直接查当前分析期间的数据（如需完整12个月可后续扩展）
+
+    # 用当前期间 + 前推12个月来查
+    from datetime import datetime as dt
+    try:
+        pe_dt = dt.strptime(pe + "-01", "%Y-%m-%d")
+        ps_12m_dt = dt(pe_dt.year - 1, pe_dt.month, 1)
+        ps_12m_date = ps_12m_dt.strftime("%Y-%m-%d")
+        pe_date_range = _period_to_date_range(pe)[1]
+    except:
+        ps_12m_date = ps_date
+        pe_date_range = pe_date
+
+    # 查12个月内的所有发票
+    long_sales = db.query(
+        SalesInvoice.buyer_name,
+        func.sum(SalesInvoice.total_amount).label("total")
+    ).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps_12m_date,
+        SalesInvoice.invoice_date <= pe_date_range
+    ).group_by(SalesInvoice.buyer_name).all()
+
+    long_purchase = db.query(
+        PurchaseInvoice.seller_name,
+        func.sum(PurchaseInvoice.total_amount).label("total")
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_12m_date,
+        PurchaseInvoice.invoice_date <= pe_date_range
+    ).group_by(PurchaseInvoice.seller_name).all()
+
+    long_no_ct_cust = []
+    for name, amt in long_sales:
+        a = _safe_float(amt)
+        if a >= LONG_TERM_THRESHOLD and not _name_in_set(name, sales_parties):
+            long_no_ct_cust.append((name, a))
+
+    long_no_ct_supp = []
+    for name, amt in long_purchase:
+        a = _safe_float(amt)
+        if a >= LONG_TERM_THRESHOLD and not _name_in_set(name, purchase_parties):
+            long_no_ct_supp.append((name, a))
+
+    if long_no_ct_cust:
+        total = sum(a for _, a in long_no_ct_cust)
+        top3 = long_no_ct_cust[:3]
+        detail_parts = [f"{n}（{a:,.0f}元）" for n, a in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "长期大额客户无正式合同",
+            "detail": f"共 {len(long_no_ct_cust)} 家客户近12个月累计交易额超{LONG_TERM_THRESHOLD/10000:.0f}万元（合计 {total:,.2f} 元），"
+                       f"但系统中未发现任何销售合同或服务协议。长期大额无合同交易是税务稽查的重点关注事项。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(long_no_ct_cust)}家" if len(long_no_ct_cust) > 3 else ""),
+            "suggestion": "立即与长期合作客户补充签署框架协议或年度采购合同：(1)签订年度框架合同明确基本条款；(2)单笔交易签署订单/补充协议；(3)合同应涵盖定价机制、交货方式、结算周期等核心要素。",
+            "required_evidence": ["年度框架合同/销售协议", "历史交易对账单", "合作备忘录"]
+        })
+
+    if long_no_ct_supp:
+        total = sum(a for _, a in long_no_ct_supp)
+        top3 = long_no_ct_supp[:3]
+        detail_parts = [f"{n}（{a:,.0f}元）" for n, a in top3]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "长期大额供应商无正式合同",
+            "detail": f"共 {len(long_no_ct_supp)} 家供应商近12个月累计交易额超{LONG_TERM_THRESHOLD/10000:.0f}万元（合计 {total:,.2f} 元），"
+                       f"但系统中未发现任何采购合同。长期大额无合同采购可能影响成本真实性认定。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(long_no_ct_supp)}家" if len(long_no_ct_supp) > 3 else ""),
+            "suggestion": "立即与长期合作供应商补签采购框架合同：(1)签订年度采购协议；(2)明确质量标准、验收标准、违约责任；(3)逐单签署采购订单作为合同附件。",
+            "required_evidence": ["年度采购框架合同", "供应商资质文件", "历史采购对账单"]
+        })
+
+    # ═══ 7. 合同金额与发票金额严重偏差 ═══
+    # 对于有匹配合同的客户/供应商，检查合同金额 vs 实际发票金额
+    contract_invoice_deviation = []
+
+    # 销售合同 vs 销项发票
+    for c in sales_ct:
+        ct_amt = _safe_float(c.amount)
+        if ct_amt <= 0:
+            continue
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        for party in parties:
+            inv_amt = db.query(func.coalesce(func.sum(SalesInvoice.total_amount), 0)).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.invoice_date >= ps_date,
+                SalesInvoice.invoice_date <= pe_date,
+                SalesInvoice.buyer_name == party
+            ).scalar() or 0
+            inv_amt = _safe_float(inv_amt)
+            if inv_amt > 0:
+                dev = abs(ct_amt - inv_amt) / ct_amt
+                if dev > 0.5:
+                    contract_invoice_deviation.append({
+                        "contract_no": c.contract_no, "name": c.name,
+                        "party": party, "ct_amt": ct_amt, "inv_amt": inv_amt,
+                        "deviation_pct": round(dev * 100, 1), "direction": "销售"
+                    })
+            break  # 一个合同只匹配第一个交易方
+
+    # 采购合同 vs 进项发票
+    for c in purchase_ct:
+        ct_amt = _safe_float(c.amount)
+        if ct_amt <= 0:
+            continue
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        for party in parties:
+            inv_amt = db.query(func.coalesce(func.sum(PurchaseInvoice.total_amount), 0)).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.invoice_date >= ps_date,
+                PurchaseInvoice.invoice_date <= pe_date,
+                PurchaseInvoice.seller_name == party
+            ).scalar() or 0
+            inv_amt = _safe_float(inv_amt)
+            if inv_amt > 0:
+                dev = abs(ct_amt - inv_amt) / ct_amt
+                if dev > 0.5:
+                    contract_invoice_deviation.append({
+                        "contract_no": c.contract_no, "name": c.name,
+                        "party": party, "ct_amt": ct_amt, "inv_amt": inv_amt,
+                        "deviation_pct": round(dev * 100, 1), "direction": "采购"
+                    })
+            break
+
+    if contract_invoice_deviation:
+        detail_parts = []
+        for x in contract_invoice_deviation[:5]:
+            detail_parts.append(
+                f"{x['contract_no']} {x['name']} {x['direction']}（合同{x['ct_amt']:,.0f} vs 发票{x['inv_amt']:,.0f}，偏差{x['deviation_pct']}%）"
+            )
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同金额与实际交易金额严重偏差",
+            "detail": f"共 {len(contract_invoice_deviation)} 份合同的金额与对应发票金额偏差超过50%。"
+                       f"合同金额与发票金额严重不匹配，可能导致：印花税申报不准确（合同金额为计税基础）、"
+                       f"合同管理失控、隐藏未开票收入等问题。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(contract_invoice_deviation)}份" if len(contract_invoice_deviation) > 5 else ""),
+            "suggestion": "逐份核实偏差原因：(1)签署补充协议调整合同金额；(2)如为框架合同，补充具体订单作为附件；(3)更新合同台账并修正印花税申报基础。",
+            "required_evidence": ["合同金额偏差说明", "补充协议/订单", "印花税申报更正表"]
+        })
+
+    # ═══ 8. 过期合同仍在发生交易 ═══
+    # 合同到期日期 < 当前期间，但在分析期间仍有发票
+    expired_trading = []
+    for c in all_contracts:
+        if not c.expiry_date:
+            continue
+        # 转换为date对象比较
+        exp_date = c.expiry_date if isinstance(c.expiry_date, date) else c.expiry_date
+        if hasattr(exp_date, 'strftime'):
+            exp_str = exp_date.strftime("%Y-%m-%d")
+        else:
+            exp_str = str(exp_date)
+        if exp_str >= ps_date:
+            continue  # 未过期
+
+        # 已过期，检查是否仍有交易
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        has_trade = False
+        trade_info = ""
+        for party in parties:
+            sale_cnt = db.query(func.count(SalesInvoice.id)).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.invoice_date >= ps_date,
+                SalesInvoice.invoice_date <= pe_date,
+                SalesInvoice.buyer_name == party
+            ).scalar() or 0
+            if sale_cnt > 0:
+                has_trade = True
+                trade_info = f"销项发票{sale_cnt}张"
+                break
+            pur_cnt = db.query(func.count(PurchaseInvoice.id)).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.invoice_date >= ps_date,
+                PurchaseInvoice.invoice_date <= pe_date,
+                PurchaseInvoice.seller_name == party
+            ).scalar() or 0
+            if pur_cnt > 0:
+                has_trade = True
+                trade_info = f"进项发票{pur_cnt}张"
+                break
+        if has_trade:
+            expired_trading.append({
+                "contract_no": c.contract_no, "name": c.name,
+                "expiry": exp_str, "trade": trade_info
+            })
+
+    if expired_trading:
+        detail_parts = []
+        for x in expired_trading[:5]:
+            detail_parts.append(f"{x['contract_no']} {x['name']}（到期{x['expiry']}，仍有{x['trade']}）")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "过期合同仍在发生交易",
+            "detail": f"共 {len(expired_trading)} 份已过期合同在分析期间内仍有发票交易记录。"
+                       f"过期后继续交易属于事实合同关系，但缺少正式合同保护，法律风险极高——"
+                       f"发生纠纷时无法依据合同条款维权，且可能被认定为虚构交易。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(expired_trading)}份" if len(expired_trading) > 5 else ""),
+            "suggestion": "立即处理过期合同：(1)已终止的合作关系补充终止协议；(2)继续合作的立即续签合同，续签日期追溯至到期日次日；(3)建立合同到期预警制度，提前30天提醒续签。",
+            "required_evidence": ["续签合同/终止协议", "合同到期预警记录", "续签审批流程"]
+        })
+
+    # ═══ 9. 发票日期早于合同签订日期（先票后签）═══
+    pre_sign_invoices = []
+    for c in all_contracts:
+        if not c.signing_date:
+            continue
+        sign_date = c.signing_date if isinstance(c.signing_date, date) else c.signing_date
+        if hasattr(sign_date, 'strftime'):
+            sign_str = sign_date.strftime("%Y-%m-%d")
+        else:
+            sign_str = str(sign_date)
+
+        parties = [p.strip() for p in [c.party_b or "", c.party_a or ""] if p.strip()]
+        for party in parties:
+            # 查销项发票中早于签订日期的
+            pre_sale = db.query(
+                func.count(SalesInvoice.id),
+                func.min(SalesInvoice.invoice_date)
+            ).filter(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.buyer_name == party,
+                SalesInvoice.invoice_date < sign_str
+            ).first()
+            if pre_sale and pre_sale[0] > 0:
+                pre_sign_invoices.append({
+                    "contract_no": c.contract_no, "name": c.name,
+                    "party": party, "sign_date": sign_str,
+                    "first_invoice": str(pre_sale[1]) if pre_sale[1] else "",
+                    "cnt": pre_sale[0], "type": "销项"
+                })
+
+            # 查进项发票
+            pre_pur = db.query(
+                func.count(PurchaseInvoice.id),
+                func.min(PurchaseInvoice.invoice_date)
+            ).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.seller_name == party,
+                PurchaseInvoice.invoice_date < sign_str
+            ).first()
+            if pre_pur and pre_pur[0] > 0:
+                pre_sign_invoices.append({
+                    "contract_no": c.contract_no, "name": c.name,
+                    "party": party, "sign_date": sign_str,
+                    "first_invoice": str(pre_pur[1]) if pre_pur[1] else "",
+                    "cnt": pre_pur[0], "type": "进项"
+                })
+
+    if pre_sign_invoices:
+        detail_parts = []
+        for x in pre_sign_invoices[:5]:
+            detail_parts.append(
+                f"{x['contract_no']} {x['name']}（{x['type']}，签{x['sign_date']}，"
+                f"首票{x['first_invoice']}，共{x['cnt']}张）"
+            )
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "先票后签（发票日期早于合同签订日期）",
+            "detail": f"共 {len(pre_sign_invoices)} 份合同存在交易发票日期早于合同签订日期的「先票后签」问题。"
+                       f"先票后签说明业务发生在前、合同补签在后，属于倒签合同行为，"
+                       f"在税务稽查中会被重点审查，可能被认定为虚构交易或虚开发票。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(pre_sign_invoices)}份" if len(pre_sign_invoices) > 5 else ""),
+            "suggestion": "规范合同签署流程：(1)严格执行「先签合同后开发票」的原则；(2)已发生的倒签情况逐份出具书面说明，记录真实业务背景；(3)建立合同签署→开票的流程管控，杜绝先票后签。",
+            "required_evidence": ["倒签合同书面说明", "合同审批记录", "业务发生证明材料"]
+        })
+
+    # ═══ 10. 合同收付款计划与实际银行流水不匹配 ═══
+    # 查询合同收付款计划并与银行流水对比
+    ct_with_plans = db.query(ContractPayment).filter(
+        ContractPayment.company_id == company_id,
+        ContractPayment.due_date >= ps_date,
+        ContractPayment.due_date <= pe_date
+    ).all()
+
+    plan_unmatched = []
+    for cp in ct_with_plans:
+        # 取关联合同
+        contract = db.query(Contract).filter(Contract.id == cp.contract_id).first()
+        if not contract:
+            continue
+        parties = [p.strip() for p in [contract.party_b or "", contract.party_a or ""] if p.strip()]
+        plan_amt = _safe_float(cp.amount)
+        paid_amt = _safe_float(cp.paid_amount)
+        if paid_amt >= plan_amt * 0.95:
+            continue  # 已基本付清
+
+        # 查银行流水是否有匹配付款
+        matched_bank = False
+        for party in parties:
+            bank_amt = db.query(func.coalesce(func.sum(BankTransaction.debit_amount), 0)).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction.transaction_date >= ps_date,
+                BankTransaction.transaction_date <= pe_date,
+                BankTransaction.counterparty_name == party
+            ).scalar() or 0
+            bank_amt = _safe_float(bank_amt)
+            if bank_amt > 0 and abs(bank_amt - (plan_amt - paid_amt)) < plan_amt * 0.3:
+                matched_bank = True
+                break
+
+        if not matched_bank and plan_amt > 10000:  # 只关注1万元以上未匹配的
+            plan_unmatched.append({
+                "contract_no": contract.contract_no,
+                "name": contract.name,
+                "payment_no": cp.payment_no,
+                "plan_amt": plan_amt, "paid_amt": paid_amt,
+                "due_date": str(cp.due_date) if cp.due_date else ""
+            })
+
+    if plan_unmatched:
+        total_unmatched = sum(p["plan_amt"] - p["paid_amt"] for p in plan_unmatched)
+        detail_parts = []
+        for x in plan_unmatched[:5]:
+            detail_parts.append(
+                f"{x['contract_no']} 第{x['payment_no']}期 "
+                f"（应付{x['plan_amt']:,.0f}/实付{x['paid_amt']:,.0f}，到期{x['due_date']}）"
+            )
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同收付款计划与实际流水不匹配",
+            "detail": f"共 {len(plan_unmatched)} 条合同收付款计划的到期金额与银行流水无法匹配"
+                       f"（未匹配总额 {total_unmatched:,.2f} 元）。"
+                       f"合同付款计划与实际付款脱节，可能隐藏：(1)付款未入账；(2)虚假付款计划；"
+                       f"(3)资金体外循环。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(plan_unmatched)}条" if len(plan_unmatched) > 5 else ""),
+            "suggestion": "逐笔核实合同付款执行情况：(1)比对合同付款计划与银行流水、发票记录；(2)对未匹配款项出具说明（延期/取消/变更支付方式）；(3)更新合同付款台账并与账面一致。",
+            "required_evidence": ["合同付款对账单", "未付款项说明", "银行流水截图"]
+        })
+
+    # ═══ 11. 无合同交易占比过高 ═══
+    no_ct_total = no_ct_revenue + no_ct_purchase
+    total_all = total_sales_rev + total_purchase_amt
+    if total_all > 0 and no_ct_total > 0:
+        no_ct_pct = round(no_ct_total / total_all * 100, 1)
+        if no_ct_pct > 30:
+            results.append({
+                "category": CAT, "category_icon": ICON, "risk_score": 8, "risk_level": "高风险",
+                "risk_color": "#dc2626", "urgency": "紧急",
+                "item": "无合同交易占比过高",
+                "detail": f"分析期间内无合同匹配的发票总额为 {no_ct_total:,.2f} 元，占全部交易额（{total_all:,.2f}元）的 {no_ct_pct}%。"
+                           f"超过30%的交易无合同支持，暴露出严重的合同管理漏洞，"
+                           f"税务机关可能质疑公司内部控制有效性，并重点关注无合同交易的真实性。",
+                "suggestion": "全面整改合同管理制度：(1)制定《合同管理办法》，明确签订标准（金额/类型/期限）；(2)建立合同台账与业务台账的定期比对机制；(3)历史无合同交易逐笔补充签署确认函或框架协议。",
+                "required_evidence": ["合同管理制度文件", "无合同交易确认函", "合同台账与业务台账比对表"]
+            })
+
+    # ═══ 12. 合同状态异常（大量作废/终止合同）═══
+    abnormal_status = db.query(
+        Contract.status, func.count(Contract.id), func.sum(Contract.amount)
+    ).filter(
+        Contract.company_id == company_id
+    ).group_by(Contract.status).all()
+
+    status_map = {}
+    for s, cnt, amt in abnormal_status:
+        status_map[s] = (cnt, _safe_float(amt))
+
+    total_ct = sum(cnt for cnt, _ in status_map.values())
+    terminated_cnt = status_map.get("已终止", (0, 0))[0]
+    draft_cnt = status_map.get("起草中", (0, 0))[0]
+
+    if total_ct > 0 and terminated_cnt > 0:
+        terminated_pct = round(terminated_cnt / total_ct * 100, 1)
+        if terminated_pct > 30:
+            results.append({
+                "category": CAT, "category_icon": ICON, "risk_score": 5, "risk_level": "中风险",
+                "risk_color": "#f59e0b", "urgency": "提醒",
+                "item": "合同终止率偏高",
+                "detail": f"系统中共有 {total_ct} 份合同，其中 {terminated_cnt} 份已终止（占比 {terminated_pct}%）。"
+                           f"合同终止率过高可能暗示：(1)业务合作关系不稳定；(2)合同管理不规范、频繁更换合作方；"
+                           f"(3)存在虚假签约后终止的异常模式。",
+                "suggestion": "逐份分析终止原因：(1)分类统计终止原因（履约完成/协商终止/违约终止）；(2)对异常终止合同重点核查业务真实性；(3)完善合同签订前的尽职调查流程。",
+                "required_evidence": ["合同终止原因汇总", "终止合同清单", "业务流程改进方案"]
+            })
+
+    if total_ct > 0 and draft_cnt > 0:
+        draft_pct = round(draft_cnt / total_ct * 100, 1)
+        if draft_pct > 20:
+            results.append({
+                "category": CAT, "category_icon": ICON, "risk_score": 4, "risk_level": "中风险",
+                "risk_color": "#f59e0b", "urgency": "提醒",
+                "item": "大量合同处于起草中状态",
+                "detail": f"系统中共有 {total_ct} 份合同，其中 {draft_cnt} 份仍处于「起草中」状态（占比 {draft_pct}%）。"
+                           f"大量合同长期未签署，可能表明：(1)合同审批流程效率低下；(2)业务未按合同执行即已发生；"
+                           f"(3)合同管理流于形式。",
+                "suggestion": "清理起草中合同：(1)超过30天未签署的合同逐一确认状态——签署/终止/继续协商；(2)建立合同审批时效预警，超期自动提醒；(3)已执行但未签署的合同立即补签。",
+                "required_evidence": ["起草中合同清单", "合同审批时效报告", "补签/终止确认"]
+            })
+
+    # ═══ 13. 印花税 — 无合同导致印花税风险 ═══
+    # 发票金额大但合同金额小/零 → 印花税可能少缴
+    if total_ct == 0 and (total_sales_rev > 100000 or total_purchase_amt > 100000):
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "无合同导致印花税申报基础缺失",
+            "detail": f"系统中有销项收入 {total_sales_rev:,.2f} 元、进项采购 {total_purchase_amt:,.2f} 元，"
+                       f"但没有任何有效合同记录。印花税以合同金额为计税基础，无合同意味着无法正确计算印花税，"
+                       f"容易导致少缴或漏缴印花税。",
+            "suggestion": "(1)按发票金额作为合同印花税的最低计税基础，主动申报缴纳；(2)立即补签合同并登记入册；(3)建立合同与印花税申报的联动机制。",
+            "required_evidence": ["印花税补缴计算表", "补签合同清单", "印花税申报表"]
+        })
+
+    # ═══ 14. 框架合同缺失（大量交易使用同一客户/供应商但无框架协议）═══
+    # 与第6条互补：不仅看12个月累计，还看期间内的交易频次
+    high_freq_no_ct = []
+    for name, amt, cnt in sales_customers:
+        if cnt >= 5 and not _name_in_set(name, sales_parties):
+            high_freq_no_ct.append((name, amt, cnt))
+
+    if high_freq_no_ct:
+        total = sum(a for _, a, _ in high_freq_no_ct)
+        detail_parts = [f"{n}（{c}张/{a:,.0f}元）" for n, a, c in high_freq_no_ct[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "高频交易客户无框架合同",
+            "detail": f"共 {len(high_freq_no_ct)} 家客户在分析期间开票≥5张（合计 {total:,.2f} 元）但无销售合同。"
+                       f"高频交易缺乏框架合同保护，无法规范交易条款、定价机制和结算方式，"
+                       f"发生纠纷时难以维权。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(high_freq_no_ct)}家" if len(high_freq_no_ct) > 5 else ""),
+            "suggestion": "为高频交易客户签订框架销售合同/年度供货协议，明确：(1)年度供货量/金额预估；(2)定价机制和调价规则；(3)结算周期和信用期；(4)质量保证和售后服务条款。",
+            "required_evidence": ["框架销售合同/年度协议", "客户信用评估报告", "交易条款清单"]
+        })
+
+    # ═══ 15. 合同对方与发票对方名称不一致 ═══
+    # 检查同一客户/供应商在合同和发票中的名称是否能匹配上
+    name_mismatch = []
+
+    # 销售方向：发票客户名 vs 合同乙方
+    invoice_customers = set(name for name, _, _ in sales_customers)
+    ct_sales_names = set()
+    for c in sales_ct:
+        if c.party_b: ct_sales_names.add(c.party_b.strip())
+        if c.party_a: ct_sales_names.add(c.party_a.strip())
+
+    # 找出发票中有但合同中没有的，且发票中名称与合同中任一名称都不相似的
+    for name in list(invoice_customers)[:20]:  # 限制检查量
+        if name not in ct_sales_names and not _name_in_set(name, ct_sales_names):
+            # 发票中有，合同中找不到 → 已经在"收入无合同"中报了
+            pass
+
+    # 反之：合同中有乙方但找不到匹配发票的
+    for party in list(ct_sales_names)[:20]:
+        matched = False
+        for inv_name in invoice_customers:
+            if _name_in_set(party, {inv_name}):
+                matched = True
+                break
+        if not matched:
+            # 合同有交易方但找不到发票 → 可能名称不一致
+            name_mismatch.append({"party": party, "type": "销售"})
+
+    # 采购方向
+    invoice_suppliers = set(name for name, _, _ in purchase_suppliers)
+    ct_pur_names = set()
+    for c in purchase_ct:
+        if c.party_b: ct_pur_names.add(c.party_b.strip())
+        if c.party_a: ct_pur_names.add(c.party_a.strip())
+
+    for party in list(ct_pur_names)[:20]:
+        matched = False
+        for inv_name in invoice_suppliers:
+            if _name_in_set(party, {inv_name}):
+                matched = True
+                break
+        if not matched:
+            name_mismatch.append({"party": party, "type": "采购"})
+
+    if name_mismatch:
+        detail_parts = [f"{x['type']}合同方「{x['party']}」无匹配发票" for x in name_mismatch[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同对方与发票对方名称不一致",
+            "detail": f"共 {len(name_mismatch)} 个合同交易方在发票中找不到匹配记录，"
+                       f"可能存在合同签约主体与开票主体不一致的问题。"
+                       f"合同流和发票流的主体不一致将破坏三流合一完整性。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(name_mismatch)}个" if len(name_mismatch) > 5 else ""),
+            "suggestion": "逐一核实合同签约主体与开票主体的一致性：(1)关注集团内部不同子公司签约与开票的对应关系；(2)第三方代签约需补充授权委托书；(3)名称变更的需补充工商变更证明。",
+            "required_evidence": ["签约主体与开票主体对应关系表", "授权委托书", "工商变更证明"]
+        })
+
+    # ═══ 16. 关联方交易无独立合同 ═══
+    # 简易版：通过银行流水中的"往来"/"借款"/"关联"等关键词 + 无合同判断
+    related_kw = ["往来", "借款", "周转", "拆借", "关联", "集团", "总部", "分公司", "子公司"]
+    related_bank = db.query(
+        BankTransaction.counterparty_name,
+        func.sum(BankTransaction.debit_amount).label("debit"),
+        func.sum(BankTransaction.credit_amount).label("credit")
+    ).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date,
+        or_(*[BankTransaction.summary.contains(kw) for kw in related_kw])
+    ).group_by(BankTransaction.counterparty_name).all()
+
+    related_no_ct = []
+    for name, debit, credit in related_bank:
+        total_flow = _safe_float(debit) + _safe_float(credit)
+        if total_flow < 50000:
+            continue
+        # 检查是否有合同
+        if not _name_in_set(name, sales_parties) and not _name_in_set(name, purchase_parties):
+            related_no_ct.append((name, total_flow))
+
+    if related_no_ct:
+        total = sum(a for _, a in related_no_ct)
+        detail_parts = [f"{n}（{a:,.0f}元）" for n, a in related_no_ct[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "关联方资金往来无独立合同",
+            "detail": f"发现 {len(related_no_ct)} 个疑似关联方的银行流水往来（含「往来/借款/关联」等关键词，"
+                       f"合计 {total:,.2f} 元）无对应合同。"
+                       f"关联方资金往来缺少书面协议，可能被认定为：(1)资本弱化——债资比超标利息不得税前扣除；"
+                       f"(2)转移定价——未按独立交易原则定价面临纳税调整。"
+                       f"涉及：{'、'.join(detail_parts)}"
+                       + (f"等{len(related_no_ct)}个" if len(related_no_ct) > 5 else ""),
+            "suggestion": "关联交易必须签订书面协议：(1)借款类：签订借款合同，约定利率（不得低于央行同期贷款基准利率）；(2)购销类：签订购销合同并留存同期可比非关联交易价格作为定价依据；(3)编制关联交易同期资料报告。",
+            "required_evidence": ["关联交易合同/借款协议", "同期可比价格分析", "关联交易同期资料报告"]
+        })
+
+    # ═══ 17. 合同要素完整性检查 ═══
+    # 检查合同的必填字段是否完整
+    incomplete_ct = []
+    for c in all_contracts:
+        missing = []
+        if not c.signing_date: missing.append("签订日期")
+        if not c.effective_date: missing.append("生效日期")
+        if not c.expiry_date: missing.append("到期日期")
+        if _safe_float(c.amount) <= 0: missing.append("合同金额")
+        if not c.responsible_person: missing.append("负责人")
+        if missing:
+            incomplete_ct.append({"contract_no": c.contract_no, "name": c.name, "missing": missing})
+
+    if incomplete_ct and len(incomplete_ct) > len(all_contracts) * 0.3:  # 超过30%合同要素不全
+        detail_parts = []
+        for x in incomplete_ct[:5]:
+            detail_parts.append(f"{x['contract_no']} {x['name']}（缺{'/'.join(x['missing'])}）")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同要素不完整",
+            "detail": f"共 {len(incomplete_ct)} 份合同（占总数 {round(len(incomplete_ct)/len(all_contracts)*100,1)}%）"
+                       f"存在关键要素缺失。合同要素不全可能导致：(1)合同法律效力瑕疵；"
+                       f"(2)合同执行缺乏明确标准；(3)印花税申报计税基础不准确。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(incomplete_ct)}份" if len(incomplete_ct) > 5 else ""),
+            "suggestion": "逐份补全合同要素：(1)签订日期、生效日期、到期日期必须齐全；(2)合同金额不得为空或零；(3)明确负责人和审批流程；(4)建立合同要素完整性校验规则。",
+            "required_evidence": ["补全后的合同正本", "合同要素完整性检查表"]
+        })
 
 
 # ═══════════════════════════════════════════════════════════

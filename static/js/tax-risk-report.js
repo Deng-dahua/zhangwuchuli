@@ -159,10 +159,11 @@ function renderTaxRiskReportData(data) {
     categories[cat].push(r);
   }
 
-  // 完整53个分类排序（经营实质稽查级+增值税专项排最前）
+  // 完整54个分类排序（经营实质稽查级+增值税专项排最前）
   var catOrder = [
     '经营实质',
     '增值税专项',
+    '合同风险',
     '发票异常',
     '费用匹配',
     '企业所得税',
