@@ -997,14 +997,30 @@ function saveTaxRiskRulesToLocal() {
   localStorage.setItem('taxRiskRulesData', JSON.stringify(taxRiskRulesData));
 }
 // ========== 解析报告 ==========
+var _parseReportFile = null;
+
 function parseReportModal() {
+  _parseReportFile = null;
   var html = '<div style="margin-bottom:20px">'
     + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">📄 解析税务报告</h3>'
-    + '<p style="margin:0;color:#6b7280">粘贴报告文本，系统自动提取风险规则</p>'
+    + '<p style="margin:0;color:#6b7280">粘贴文本或上传 PDF/Word/TXT 文件，自动提取风险规则</p>'
     + '</div>';
+
+  // 文件上传区域
+  html += '<div id="report-drop-zone" style="border:2px dashed #c7d2fe;border-radius:10px;padding:24px;text-align:center;margin-bottom:16px;background:#eef2ff;cursor:pointer;transition:border-color .2s"'
+    + ' ondrop="handleReportFileDrop(event)" ondragover="handleReportFileDragOver(event)" ondragleave="handleReportFileDragLeave(event)" onclick="document.getElementById(\'report-file-input\').click()">'
+    + '<input type="file" id="report-file-input" accept=".pdf,.docx,.txt" style="display:none" onchange="handleReportFileSelect(event)">'
+    + '<div style="font-size:36px;margin-bottom:8px">📁</div>'
+    + '<div style="font-weight:600;color:#4338ca;font-size:14px" id="report-file-label">点击选择或拖拽 PDF/Word/TXT 文件</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:4px" id="report-file-info">支持 PDF、Word(.docx)、TXT</div>'
+    + '</div>';
+
+  // 文本粘贴区域
+  html += '<div style="margin-bottom:8px;font-size:13px;color:#6b7280;font-weight:600">— 或者直接粘贴文本 —</div>';
   html += '<div style="margin-bottom:16px">'
-    + '<textarea id="report-text-input" style="width:100%;height:200px;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box" placeholder="粘贴税务报告、风险分析结果或文章内容..."></textarea>'
+    + '<textarea id="report-text-input" style="width:100%;height:160px;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box" placeholder="粘贴税务报告、风险分析结果或文章内容..."></textarea>'
     + '</div>';
+
   html += '<div style="display:flex;gap:8px;justify-content:center">'
     + '<button onclick="submitReportForParsing()" style="padding:10px 24px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">🔍 开始解析</button>'
     + '<button onclick="closeAuditModal()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-size:14px">取消</button>'
@@ -1012,10 +1028,58 @@ function parseReportModal() {
   showAuditModal(html);
 }
 
+function handleReportFileDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('report-drop-zone').style.borderColor = '#6366f1';
+}
+
+function handleReportFileDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('report-drop-zone').style.borderColor = '#c7d2fe';
+}
+
+function handleReportFileDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('report-drop-zone').style.borderColor = '#c7d2fe';
+  var files = e.dataTransfer.files;
+  if (files.length > 0) setReportFile(files[0]);
+}
+
+function handleReportFileSelect(e) {
+  var files = e.target.files;
+  if (files.length > 0) setReportFile(files[0]);
+}
+
+function setReportFile(file) {
+  var ext = file.name.split('.').pop().toLowerCase();
+  var allowed = ['pdf', 'docx', 'txt'];
+  if (allowed.indexOf(ext) === -1) {
+    toast('仅支持 PDF/Word/TXT 文件', 'warning');
+    return;
+  }
+  _parseReportFile = file;
+  document.getElementById('report-file-label').textContent = '✅ ' + file.name;
+  document.getElementById('report-file-info').textContent = (file.size / 1024).toFixed(1) + ' KB · ' + ext.toUpperCase();
+  document.getElementById('report-drop-zone').style.borderColor = '#059669';
+  document.getElementById('report-drop-zone').style.background = '#f0fdf4';
+  // 选择文件后清空文本框
+  var ta = document.getElementById('report-text-input');
+  if (ta) ta.value = '';
+}
+
 function submitReportForParsing() {
+  // 优先文件上传
+  if (_parseReportFile) {
+    uploadReportFile(_parseReportFile);
+    return;
+  }
+  // 文本解析
   var textInput = document.getElementById('report-text-input');
   if (!textInput || !textInput.value.trim()) {
-    toast('请粘贴报告文本', 'warning');
+    toast('请粘贴文本或上传文件', 'warning');
     return;
   }
   var text = textInput.value.trim();
@@ -1033,6 +1097,25 @@ function submitReportForParsing() {
     renderParsedRules(result);
   }).catch(function(e) {
     showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">解析失败: ' + e.message + '</p></div>');
+  });
+}
+
+function uploadReportFile(file) {
+  var modalBody = document.querySelector('#audit-modal > div > div');
+  if (modalBody) {
+    modalBody.innerHTML = '<div style="text-align:center;padding:80px"><div class="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite"></div><p style="color:#6b7280">正在上传并解析 ' + file.name + '...</p></div>';
+  }
+  var formData = new FormData();
+  formData.append('file', file);
+  fetch('/api/tax-risk-rules/upload-report', {
+    method: 'POST',
+    body: formData
+  }).then(function(r) { return r.json(); })
+  .then(function(result) {
+    if (!result.ok) { showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">解析失败: ' + (result.error || '未知错误') + '</p></div>'); return; }
+    renderParsedRules(result);
+  }).catch(function(e) {
+    showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">上传失败: ' + e.message + '</p></div>');
   });
 }
 

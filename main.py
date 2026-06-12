@@ -7542,17 +7542,8 @@ async def tax_risk_rules_fix(request: Request):
 
 
 # =================== 涉税风险规则报告解析 API ===================
-@app.post("/api/tax-risk-rules/parse-report")
-async def tax_risk_rules_parse_report(request: Request):
-    """接收税务报告/文章内容，智能提取风险规则"""
-    try:
-        body = await request.json()
-        report_text = body.get("text", "")
-        if not report_text:
-            return {"ok": False, "error": "报告内容不能为空"}
-    except Exception:
-        return {"ok": False, "error": "无效的请求数据"}
-
+def _parse_tax_report_text(report_text: str):
+    """核心解析逻辑，供文本和文件上传两个端点共用"""
     import re as _re
     import uuid as _uuid
     from difflib import SequenceMatcher as _SeqMatcher
@@ -7699,7 +7690,6 @@ async def tax_risk_rules_parse_report(request: Request):
             continue
         seen_items.add(item)
         category = _auto_classify(para)
-        # 分类纠偏：更精确的关键词覆盖通用匹配
         _override_map = {
             "零申报": "申报比对", "留抵退税": "增值税专项", "出口退税": "增值税专项",
             "油费": "发票深度", "运输费": "发票深度", "水电": "发票深度",
@@ -7741,6 +7731,87 @@ async def tax_risk_rules_parse_report(request: Request):
         "paragraphs_found": len(paragraphs),
         "text_length": len(report_text)
     }
+
+
+@app.post("/api/tax-risk-rules/parse-report")
+async def tax_risk_rules_parse_report(request: Request):
+    """接收税务报告/文章内容，智能提取风险规则"""
+    try:
+        body = await request.json()
+        report_text = body.get("text", "")
+        if not report_text:
+            return {"ok": False, "error": "报告内容不能为空"}
+    except Exception:
+        return {"ok": False, "error": "无效的请求数据"}
+    return _parse_tax_report_text(report_text)
+
+
+@app.post("/api/tax-risk-rules/upload-report")
+async def tax_risk_rules_upload_report(request: Request):
+    """接收上传的报告文件（PDF/Word/TXT），提取文本并解析为规则"""
+    import io as _io
+    import os as _os
+
+    try:
+        form = await request.form()
+        file = form.get("file")
+        if not file:
+            return {"ok": False, "error": "未找到上传文件"}
+    except Exception:
+        return {"ok": False, "error": "无效的文件上传请求"}
+
+    filename = (file.filename or "").lower()
+    content_bytes = await file.read()
+
+    if not content_bytes:
+        return {"ok": False, "error": "文件内容为空"}
+
+    extracted_text = ""
+    source_desc = ""
+
+    if filename.endswith('.txt'):
+        try:
+            extracted_text = content_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                extracted_text = content_bytes.decode('gbk')
+            except Exception:
+                return {"ok": False, "error": "无法解码TXT文件编码"}
+        source_desc = f"TXT文件 ({filename})"
+
+    elif filename.endswith('.docx'):
+        try:
+            from docx import Document as _Document
+            doc = _Document(_io.BytesIO(content_bytes))
+            paragraphs_text = [p.text for p in doc.paragraphs]
+            extracted_text = '\n\n'.join(paragraphs_text)
+            source_desc = f"Word文档 ({filename})"
+        except Exception as e:
+            return {"ok": False, "error": f"Word文档解析失败: {str(e)}"}
+
+    elif filename.endswith('.pdf'):
+        try:
+            from PyPDF2 import PdfReader as _PdfReader
+            reader = _PdfReader(_io.BytesIO(content_bytes))
+            pages_text = []
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    pages_text.append(t.strip())
+            extracted_text = '\n\n'.join(pages_text)
+            source_desc = f"PDF文件 ({filename}, {len(reader.pages)}页)"
+        except Exception as e:
+            return {"ok": False, "error": f"PDF解析失败: {str(e)}"}
+
+    else:
+        return {"ok": False, "error": f"不支持的文件格式 (.{filename.split('.')[-1]})，仅支持 PDF/Word/TXT"}
+
+    if not extracted_text.strip():
+        return {"ok": False, "error": "未能从文件中提取到文本内容"}
+
+    result = _parse_tax_report_text(extracted_text.strip())
+    result["source_file"] = source_desc
+    return result
 
 if __name__ == "__main__":
     import uvicorn
