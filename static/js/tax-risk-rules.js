@@ -165,11 +165,7 @@ async function loadTaxRiskRules() {
 // 加载默认61条规则（从JSON文件）
 async function loadDefaultTaxRiskRules() {
   // 如果已有数据，确认是否覆盖
-  if (taxRiskRulesData.length > 0) {
-    if (!confirm('当前已有 ' + taxRiskRulesData.length + ' 条规则，重新加载将覆盖现有数据。确定继续吗？')) {
-      return;
-    }
-  }
+  // 直接覆盖加载，不再弹确认框（用户可随时用"清空规则"按钮清空）
   try {
     var resp = await fetch('/static/tax_risk_rules_default.json?_t=' + Date.now());
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
