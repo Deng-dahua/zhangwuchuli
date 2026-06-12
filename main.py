@@ -1550,6 +1550,14 @@ def create_account(data: AccountCreate, company_id: int = Query(...), db: Sessio
     # 1221其他应收款不允许设二级科目，应使用往来项目（人员/供应商档案）
     if code[:4] == '1221' and level and level >= 2:
         raise HTTPException(400, detail="1221其他应收款不需要二级科目，请直接使用往来项目（人员档案/供应商档案）")
+    # 去重检查：同一公司内科目编码不能重复
+    dup_code = db.query(Account).filter(Account.company_id == company_id, Account.code == code).first()
+    if dup_code:
+        raise HTTPException(400, detail=f"科目编码【{code}】已存在（{dup_code.name}），请更换编码")
+    # 去重检查：同一公司内科目名称不能重复（本级名称）
+    dup_name = db.query(Account).filter(Account.company_id == company_id, Account.name == name).first()
+    if dup_name:
+        raise HTTPException(400, detail=f"科目名称【{name}】已存在（{dup_name.code}），请更换名称")
     acc = Account(company_id=company_id, code=code, name=name, category=category,
                   balance_direction=balance_direction, level=level, parent_code=parent_code,
                   opening_balance=data.opening_balance)
@@ -1589,6 +1597,14 @@ def update_account(account_id: int, data: AccountUpdate, company_id: int = Query
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     if data.name is not None:
+        # 去重检查：同一公司内科目名称不能重复（排除自身）
+        dup_name = db.query(Account).filter(
+            Account.company_id == company_id,
+            Account.name == data.name,
+            Account.id != account_id
+        ).first()
+        if dup_name:
+            raise HTTPException(400, detail=f"科目名称【{data.name}】已存在（{dup_name.code}），请更换名称")
         acc.name = data.name
     if data.is_active is not None:
         acc.is_active = data.is_active
