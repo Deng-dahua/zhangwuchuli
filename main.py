@@ -1530,7 +1530,7 @@ class AccountUpdate(BaseModel):
 @app.post("/api/accounts")
 def create_account(data: AccountCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     code = data.code
-    name = data.name
+    name = (data.name or "").strip()
     category = data.category
     balance_direction = data.balance_direction
     level = data.level
@@ -1597,15 +1597,16 @@ def update_account(account_id: int, data: AccountUpdate, company_id: int = Query
     if not acc:
         raise HTTPException(404, detail="科目不存在")
     if data.name is not None:
+        new_name = data.name.strip()
         # 去重检查：同一公司内科目名称不能重复（排除自身）
         dup_name = db.query(Account).filter(
             Account.company_id == company_id,
-            Account.name == data.name,
+            Account.name == new_name,
             Account.id != account_id
         ).first()
         if dup_name:
-            raise HTTPException(400, detail=f"科目名称【{data.name}】已存在（{dup_name.code}），请更换名称")
-        acc.name = data.name
+            raise HTTPException(400, detail=f"科目名称【{new_name}】已存在（{dup_name.code}），请更换名称")
+        acc.name = new_name
     if data.is_active is not None:
         acc.is_active = data.is_active
     if data.opening_balance is not None:
