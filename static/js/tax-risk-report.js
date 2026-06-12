@@ -53,7 +53,7 @@ function renderTaxRiskReport(container) {
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
     spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>'
-      + '<span id="risk-metrics-bar" style="margin-left:16px;color:var(--gray-500);font-size:12px"></span>'
+      + ''
       + '<span id="risk-delete-btn-wrap" style="margin-left:16px;display:none">'
       + '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>'
       + '</span>';
@@ -121,8 +121,6 @@ async function loadTaxRiskReport() {
         taxRiskReportData = null;
         document.getElementById('risk-report-body').innerHTML = '';
         document.getElementById('risk-summary-cards').innerHTML = '';
-        var m = document.getElementById('risk-metrics-bar');
-        if (m) m.innerHTML = '';
         var d = document.getElementById('risk-delete-btn-wrap');
         if (d) d.style.display = 'none';
         var db = document.getElementById('risk-download-btn');
@@ -278,17 +276,7 @@ function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) 
     + '<div class="risk-card-value" style="color:#6b7280">' + (summary.total_items || 0) + '</div>'
     + '<div class="risk-card-sub">项</div></div>';
 
-  // 显示财务指标
-  if (metrics && metrics.revenue > 0) {
-    var bar = document.getElementById('risk-metrics-bar');
-    if (bar) {
-      bar.textContent = '收入：¥' + formatNum(metrics.revenue)
-        + ' | 成本：¥' + formatNum(metrics.cost)
-        + ' | 毛利率：' + (metrics.gross_margin_pct || 0).toFixed(1) + '%'
-        + ' | 增值税：¥' + formatNum(metrics.vat_payable || 0)
-        + (rulesApplied ? ' | 规则驱动' : '');
-    }
-  }
+  // （财务指标栏已移除）
 }
 
 function formatNum(n) {
