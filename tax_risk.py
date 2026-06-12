@@ -9385,7 +9385,7 @@ def _analyze_commission_fee_compliance(db, company_id, ps, pe, results):
             JournalEntry.account_code.like("6001%")
         ).scalar() or 0
 
-        ratio = (total_amt / total_revenue * 100) if total_revenue > 0 else 0
+        ratio = (_safe_float(total_amt) / _safe_float(total_revenue) * 100) if _safe_float(total_revenue) > 0 else 0
         detail_parts = [f"{x['period']} {x['summary'][:40]}（{x['amount']:,.0f}元）" for x in found[:5]]
         results.append({
             "category": "企业所得税", "category_icon": "💰",
@@ -9570,8 +9570,8 @@ def _analyze_wasted_deductible_tax(db, company_id, ps, pe, results):
     if not wasted_by_supplier:
         return
 
-    # 2. 过滤浪费税额 > 50
-    significant = {k: v for k, v in wasted_by_supplier.items() if v["tax"] >= 50}
+    # 2. 过滤浪费税额 > 0（只要浪费就报告，金额小则扣分低）
+    significant = {k: v for k, v in wasted_by_supplier.items() if v["tax"] > 0}
     if not significant:
         return
 

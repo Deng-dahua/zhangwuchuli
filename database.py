@@ -2041,16 +2041,18 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                         entry_date=entry_date,
                         period=period, voucher_word="记", voucher_no=voucher_no,
                         summary=summary, account_code=tax_code, account_name=tax_name,
-                        debit_amount=abs(inv.tax_amount), credit_amount=0,
+                        debit_amount=inv.tax_amount, credit_amount=0,
                         contact_project=seller,
                         source="取得发票", ref_id=inv.id,
                     ))
                 # 贷方：应付账款（价税合计）
-                inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+                # 红字发票（金额<0）：inv_total = 负数，表示红字冲销
+                inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
             else:
                 # 普票：税额不可抵扣，并入成本费用
                 # 借方：费用/成本（价税合计，税额包含在成本中）
-                inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+                # 红字发票（金额<0）：inv_total = 负数，表示红字冲销
+                inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
                 db.add(JournalEntry(
                     company_id=company_id,
                     entry_date=entry_date,
