@@ -601,10 +601,62 @@ def _load_saved_rules():
         with open(RULES_FILE, 'r', encoding='utf-8') as f:
             rules = json.load(f)
         if isinstance(rules, list) and len(rules) > 0:
+            _validate_rules_on_load(rules)  # 启动时自动校验规则完整性
             return rules
         return None
     except Exception:
         return None
+
+
+# ── 规则校验标准（启动时自动审计）──
+VALID_LEVELS = {'高风险', '中风险', '低风险', '良好'}
+VALID_URGENCIES = {'紧急', '高', '中', '低', '提醒', '建议'}
+RULE_REQUIRED_FIELDS = ['id', 'item', 'category', 'score', 'level', 'suggestion', 'urgency', 'evidence', 'remark', 'dataSource']
+
+def _validate_rules_on_load(rules: list):
+    """启动时校验规则文件完整性，不合格打印警告到stdout"""
+    issues = []
+    seen_items = {}
+    for r in rules:
+        rid = r.get('id', '?')
+        ritem = r.get('item', '').strip()
+        
+        # 必填字段
+        for f in RULE_REQUIRED_FIELDS:
+            val = r.get(f)
+            if val is None or (isinstance(val, str) and val.strip() == ''):
+                issues.append(f"[规则] ID={rid} 缺失字段: {f}")
+        
+        # score范围
+        score = r.get('score', -1)
+        if not isinstance(score, (int, float)) or score < 0 or score > 100:
+            issues.append(f"[规则] ID={rid} score={score} 无效(0-100)")
+        
+        # level
+        if r.get('level', '') not in VALID_LEVELS:
+            issues.append(f"[规则] ID={rid} level='{r.get('level','')}' 无效")
+        
+        # urgency
+        if r.get('urgency', '') not in VALID_URGENCIES:
+            issues.append(f"[规则] ID={rid} urgency='{r.get('urgency','')}' 无效")
+        
+        # item唯一性
+        if ritem:
+            if ritem in seen_items:
+                issues.append(f"[规则] ID={rid} item='{ritem}' 与 ID={seen_items[ritem]} 重复!")
+            else:
+                seen_items[ritem] = rid
+        
+        # suggestion长度
+        if len(r.get('suggestion', '')) < 5:
+            issues.append(f"[规则] ID={rid} suggestion过短")
+    
+    if issues:
+        print(f"\n⚠️  规则文件校验发现 {len(issues)} 个问题：")
+        for i in issues:
+            print(f"  {i}")
+        print(f"  文件: {RULES_FILE}\n")
+    return issues
 
 
 # ── 冲突场景答案存储（用户确认风险冲突后保存）──

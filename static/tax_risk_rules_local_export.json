@@ -25,7 +25,7 @@
     "urgency": "紧急",
     "evidence": "序时账记录\n期间凭证清单",
     "dataSource": "JournalEntry 按期间统计凭证数量",
-    "remark": ""
+    "remark": "可能存在记账遗漏或期间未正常结账"
   },
   {
     "id": 3,
@@ -53,7 +53,7 @@
     "urgency": "紧急",
     "evidence": "固定资产清单\n折旧计提计算表",
     "dataSource": "FixedAsset 表 + JournalEntry 摘要含'折旧'",
-    "remark": ""
+    "remark": "固定资产应按月计提折旧，未计提可能虚增利润少缴所得税"
   },
   {
     "id": 5,
@@ -67,7 +67,7 @@
     "urgency": "提醒",
     "evidence": "无形资产清单\n摊销计算表",
     "dataSource": "IntangibleAsset 表 + JournalEntry 摘要含'摊销'",
-    "remark": ""
+    "remark": "无形资产应在使用寿命内系统摊销，未摊销影响损益真实性"
   },
   {
     "id": 6,
@@ -81,7 +81,7 @@
     "urgency": "紧急",
     "evidence": "风险进项发票清单\n进项税额转出凭证",
     "dataSource": "PurchaseInvoice.invoice_risk_level",
-    "remark": ""
+    "remark": "进项发票存在失控、作废、红冲等异常状态，可能影响抵扣"
   },
   {
     "id": 7,
@@ -109,7 +109,7 @@
     "urgency": "提醒",
     "evidence": "供应商档案\n进项发票清单",
     "dataSource": "PurchaseInvoice.seller_tax_no",
-    "remark": ""
+    "remark": "缺失税号影响发票合规性和进项抵扣认证"
   },
   {
     "id": 9,
@@ -123,7 +123,7 @@
     "urgency": "提醒",
     "evidence": "客户档案\n销项发票清单",
     "dataSource": "SalesInvoice.buyer_tax_no",
-    "remark": ""
+    "remark": "缺失税号可能导致发票被退回或影响购买方抵扣"
   },
   {
     "id": 10,
@@ -137,7 +137,7 @@
     "urgency": "紧急",
     "evidence": "进项抵扣风险清单\n发票认证记录",
     "dataSource": "InputVATDeduction.risk_level",
-    "remark": ""
+    "remark": "抵扣记录存在异常需核查是否涉及虚开或违规抵扣"
   },
   {
     "id": 11,
@@ -179,7 +179,7 @@
     "urgency": "提醒",
     "evidence": "代开发票清单\n合同\n资金流水\n物流单据",
     "dataSource": "PurchaseInvoice.seller_name/goods_name 含'代开'",
-    "remark": ""
+    "remark": "频繁取得代开发票需关注业务真实性及代开合规性"
   },
   {
     "id": 14,
@@ -347,7 +347,7 @@
     "urgency": "建议",
     "evidence": "文化事业建设费申报表\n财税〔2025〕7号文",
     "dataSource": "CulturalConstructionFeeDeclaration.fee_reduction_rate",
-    "remark": ""
+    "remark": "符合减半征收条件但未适用优惠政策，存在多缴风险"
   },
   {
     "id": 26,
@@ -358,8 +358,8 @@
     "score": 0,
     "level": "良好",
     "suggestion": "继续保持合理的税负水平。",
-    "urgency": "",
-    "evidence": "",
+    "urgency": "建议",
+    "evidence": "增值税纳税申报表、序时账销项税额汇总",
     "dataSource": "VATDeclaration",
     "remark": "0.5%<=税负率<=5%为良好"
   },
@@ -389,7 +389,7 @@
     "urgency": "紧急",
     "evidence": "增值税申报表\n城建税计提凭证",
     "dataSource": "VATDeclaration 增值税额 vs JournalEntry 640301",
-    "remark": ""
+    "remark": "增值税与城建税应同步计提，缺失可能漏税"
   },
   {
     "id": 29,
@@ -403,7 +403,7 @@
     "urgency": "紧急",
     "evidence": "固定资产房屋清单\n房产税计算表\n纳税申报记录",
     "dataSource": "FixedAsset 分类为房屋建筑物 vs JournalEntry 640309",
-    "remark": ""
+    "remark": "自有房产需按原值或租金缴纳房产税"
   },
   {
     "id": 30,
@@ -417,7 +417,7 @@
     "urgency": "紧急",
     "evidence": "租金收入明细\n房产税申报表",
     "dataSource": "序时账 其他业务收入-租金 vs JournalEntry 640309",
-    "remark": ""
+    "remark": "出租房产取得的租金收入需缴纳房产税"
   },
   {
     "id": 31,
@@ -431,7 +431,7 @@
     "urgency": "紧急",
     "evidence": "员工名单\n工资发放记录\n个税申报记录",
     "dataSource": "Employee 表 vs 个税申报记录",
-    "remark": ""
+    "remark": "存在雇员但无个税申报记录，可能漏报工资薪金所得"
   },
   {
     "id": 32,
@@ -445,7 +445,7 @@
     "urgency": "紧急",
     "evidence": "劳务费支付凭证\n个税代扣记录\n合同协议",
     "dataSource": "JournalEntry 摘要含'劳务' 借方发生额",
-    "remark": ""
+    "remark": "支付劳务报酬需依法代扣代缴个人所得税"
   },
   {
     "id": 33,
@@ -459,7 +459,7 @@
     "urgency": "紧急",
     "evidence": "利润分配决议\n个税代扣凭证\n股东领款记录",
     "dataSource": "JournalEntry 摘要含'利润分配' vs 个税申报",
-    "remark": ""
+    "remark": "向个人股东分配利润需代扣20%个人所得税"
   },
   {
     "id": 34,
@@ -493,7 +493,7 @@
     "id": 36,
     "category": "纳税调整",
     "categoryIcon": "📊",
-    "item": "业务招待费可能超标",
+    "item": "业务招待费超标（纳税调整视角）",
     "detail": "业务招待费支出可能超过税法规定的扣除限额（发生额60%与营业收入5‰孰低）。超标部分需做纳税调增。",
     "score": 7,
     "level": "高风险",
@@ -515,7 +515,7 @@
     "urgency": "提醒",
     "evidence": "广宣费明细表\n汇算清缴计算表",
     "dataSource": "JournalEntry 摘要含'广告'/'宣传' 借方发生额",
-    "remark": ""
+    "remark": "广告宣传费超收入15%限额需纳税调增"
   },
   {
     "id": 38,
@@ -529,7 +529,7 @@
     "urgency": "提醒",
     "evidence": "职工福利费明细表\n工资总额计算表",
     "dataSource": "JournalEntry 摘要含'福利' vs 工资总额×14%",
-    "remark": ""
+    "remark": "福利费超工资14%限额需纳税调增"
   },
   {
     "id": 39,
@@ -543,7 +543,7 @@
     "urgency": "提醒",
     "evidence": "资产减值准备计提凭证\n汇算清缴纳税调整表",
     "dataSource": "JournalEntry 摘要含'减值'/'准备' 借方发生额",
-    "remark": ""
+    "remark": "未经核准的资产减值准备需在汇算时纳税调增"
   },
   {
     "id": 40,
@@ -571,7 +571,7 @@
     "urgency": "紧急",
     "evidence": "社保申报记录\n社保缴费凭证\n员工名单",
     "dataSource": "SocialSecurityDeclaration 表",
-    "remark": ""
+    "remark": "有员工但无社保缴存记录，违反社保法规定"
   },
   {
     "id": 42,
@@ -585,7 +585,7 @@
     "urgency": "提醒",
     "evidence": "公积金申报记录\n缴存凭证",
     "dataSource": "HousingFundDeclaration 表",
-    "remark": ""
+    "remark": "有员工但无公积金缴存记录，可能违反公积金条例"
   },
   {
     "id": 43,
@@ -613,7 +613,7 @@
     "urgency": "紧急",
     "evidence": "银行对账单\n银行存款余额调节表",
     "dataSource": "科目 1002 期末余额",
-    "remark": ""
+    "remark": "银行余额为负可能涉及未达账项或记账错误"
   },
   {
     "id": 45,
@@ -627,7 +627,7 @@
     "urgency": "提醒",
     "evidence": "应收账款账龄分析表\n催款函",
     "dataSource": "科目 1122 余额，账龄>1年",
-    "remark": ""
+    "remark": "长期未回款的应收账款可能涉及坏账或虚构收入"
   },
   {
     "id": 46,
@@ -759,7 +759,7 @@
     "id": 55,
     "category": "财务健康",
     "categoryIcon": "💹",
-    "item": "毛利率/净利率为负",
+    "item": "毛利率/净利率为负（财务健康）",
     "detail": "毛利率或净利率为负数，企业经营处于亏损状态。持续亏损可能引发税务关注。",
     "score": 5,
     "level": "中风险",
@@ -787,7 +787,7 @@
     "id": 57,
     "category": "行业专项",
     "categoryIcon": "📊",
-    "item": "毛利率偏离行业参考值",
+    "item": "毛利率偏离行业参考值（行业对标）",
     "detail": "企业毛利率与行业参考值偏差较大。毛利率异常偏离可能暗示成本核算不准确或收入不完整。",
     "score": 6,
     "level": "中风险",
@@ -806,8 +806,8 @@
     "score": 0,
     "level": "良好",
     "suggestion": "继续保持规范的发票管理制度。",
-    "urgency": "",
-    "evidence": "",
+    "urgency": "建议",
+    "evidence": "进项发票明细、供应商档案",
     "dataSource": "PurchaseInvoice.seller_tax_no 完整率",
     "remark": "完整度>95%为良好"
   },
@@ -1131,7 +1131,7 @@
     "urgency": "提醒",
     "evidence": "经营场所合同\n第三方代付证明",
     "dataSource": "Contract × BankTransaction × JournalEntry 三方比对",
-    "remark": ""
+    "remark": "存在经营场所租赁合同但序时账无对应费用处理"
   },
   {
     "id": 88,
@@ -1173,7 +1173,7 @@
     "urgency": "紧急",
     "evidence": "员工名册\n工资发放明细\n社保申报明细\n劳动合同",
     "dataSource": "SalaryRecord × SocialSecurityDetail 人员交叉比对",
-    "remark": ""
+    "remark": "存在雇员但无社保申报记录，违反社保法"
   },
   {
     "id": 91,
@@ -1187,7 +1187,7 @@
     "urgency": "提醒",
     "evidence": "废料销售台账\n废料销售发票\n投入产出分析表",
     "dataSource": "SalesInvoice × 废料/边角料 关键词 + 投入产出比分析",
-    "remark": ""
+    "remark": "边角料和废料销售收入应并入应税收入申报"
   },
   {
     "id": 92,
@@ -1257,7 +1257,7 @@
     "urgency": "提醒",
     "evidence": "运输费用明细\n同行业运费占比参考",
     "dataSource": "JournalEntry 运输费/物流费科目 发生额 vs 营业收入",
-    "remark": ""
+    "remark": "运输费用与经营规模不匹配或未在正确科目核算"
   },
   {
     "id": 97,
@@ -1271,7 +1271,7 @@
     "urgency": "紧急",
     "evidence": "银行流水（土地/农业付款明细）\n农业采购合同/协议",
     "dataSource": "BankTransaction × JournalEntry 关键词匹配",
-    "remark": ""
+    "remark": "银行付款存在但账面无对应资产或费用记录"
   },
   {
     "id": 98,
@@ -1285,7 +1285,7 @@
     "urgency": "紧急",
     "evidence": "土地承包/租赁合同\n种植成本明细\n农机费用凭证\n农业投入品采购凭证",
     "dataSource": "农产品销售收入 × 农业经营支出 比对",
-    "remark": ""
+    "remark": "农产品收入需有成本支撑，无种植成本可能虚构收入"
   },
   {
     "id": 99,
@@ -1299,7 +1299,7 @@
     "urgency": "提醒",
     "evidence": "包装物采购凭证\n产品出库记录\n包装流程说明",
     "dataSource": "PurchaseInvoice + BankTransaction + JournalEntry × 包装/包材关键词",
-    "remark": ""
+    "remark": "生产企业缺少包装相关费用不合常理"
   },
   {
     "id": 100,
@@ -1313,7 +1313,7 @@
     "urgency": "提醒",
     "evidence": "固定资产卡片\n设备维修记录\n保修合同",
     "dataSource": "JournalEntry 维修费科目 × 固定资产清单",
-    "remark": ""
+    "remark": "长期无设备维护支出可能导致资产虚增"
   },
   {
     "id": 101,
@@ -1327,7 +1327,7 @@
     "urgency": "提醒",
     "evidence": "广告合同\n广告费发票\n推广活动照片/刊发证明\n银行付款记录",
     "dataSource": "BankTransaction + PurchaseInvoice × JournalEntry 广告费 四源交叉验证",
-    "remark": ""
+    "remark": "四源数据交叉比对发现广告费一致性问题"
   },
   {
     "id": 102,
@@ -1341,7 +1341,7 @@
     "urgency": "提醒",
     "evidence": "差旅报销单\n出差审批记录\n交通/住宿票据\n行程记录",
     "dataSource": "BankTransaction + PurchaseInvoice × JournalEntry 差旅费 四源交叉验证",
-    "remark": ""
+    "remark": "四源数据交叉比对发现差旅费一致性问题"
   },
   {
     "id": 103,
@@ -1397,7 +1397,7 @@
     "urgency": "紧急",
     "evidence": "银行流水（销售收款明细）\n增值税申报表\n未开票收入台账",
     "dataSource": "BankTransaction 收款 × SalesInvoice 开票 × VATDeclaration 申报 三方比对",
-    "remark": ""
+    "remark": "存在无票收入但未在申报表中体现"
   },
   {
     "id": 107,
@@ -1411,7 +1411,7 @@
     "urgency": "提醒",
     "evidence": "零税额发票清单\n对应交易合同/单据",
     "dataSource": "SalesInvoice × PurchaseInvoice tax_amount=0 统计分析",
-    "remark": ""
+    "remark": "大量零税额发票可能涉及虚开"
   },
   {
     "id": 108,
@@ -1439,7 +1439,7 @@
     "urgency": "提醒",
     "evidence": "生活用品类进项发票清单\n对应业务用途说明\n福利费/招待费台账",
     "dataSource": "PurchaseInvoice × 生活用品/日用品/食品 关键词匹配",
-    "remark": ""
+    "remark": "大量生活用品发票可能与经营无关，存在虚列费用风险"
   },
   {
     "id": 110,
@@ -1467,7 +1467,7 @@
     "urgency": "提醒",
     "evidence": "固定资产-车辆清单\n加油费发票明细\n车辆使用台账\n私车公用租赁协议",
     "dataSource": "PurchaseInvoice 油费 × FixedAsset 车辆数量 配比分析",
-    "remark": ""
+    "remark": "油费支出需与名下车辆数量和使用情况匹配"
   },
   {
     "id": 112,
@@ -1481,7 +1481,7 @@
     "urgency": "提醒",
     "evidence": "运输费明细\n运输合同/运单\n同行业运费占比参考",
     "dataSource": "JournalEntry 运输费 × 营业收入 比例分析",
-    "remark": ""
+    "remark": "运输费与经营模式和货物流量不匹配需核实"
   },
   {
     "id": 113,
@@ -1635,7 +1635,7 @@
     "urgency": "紧急",
     "evidence": "出口报关单\n银行收汇水单\n出口发票\n进货凭证/进项发票",
     "dataSource": "出口退税申报系统 × 企业ERP/序时账 数据比对",
-    "remark": ""
+    "remark": "出口退税备案单证不完整可能影响退税资格"
   },
   {
     "id": 124,
@@ -1663,7 +1663,7 @@
     "urgency": "紧急",
     "evidence": "经营场所租赁合同\n水电费缴费记录\n员工名册+考勤\n采购地/销售地商业合理性说明",
     "dataSource": "供应商/客户地域分析 × 注册地 比对",
-    "remark": ""
+    "remark": "上下游均在外地可能涉及空转贸易或虚开发票"
   },
   {
     "id": 126,
@@ -1677,7 +1677,7 @@
     "urgency": "紧急",
     "evidence": "营业执照（成立日期）\n资产清单/财务报表\n人员社保缴纳记录\n大额交易合同及物流单据",
     "dataSource": "企业成立日期 × 开票金额 时间-规模配比分析",
-    "remark": ""
+    "remark": "新办企业快速大额开票可能涉及暴力虚开"
   },
   {
     "id": 127,
@@ -1705,7 +1705,7 @@
     "urgency": "紧急",
     "evidence": "欠税明细（欠税金额+所属期+滞纳金天数）\n税款缴纳凭证\n延期缴纳申请",
     "dataSource": "VATDeclaration 应缴税额 vs 实缴税额 比对",
-    "remark": ""
+    "remark": "欠税可能产生滞纳金并影响纳税信用等级"
   },
   {
     "id": 129,
@@ -1747,7 +1747,7 @@
     "urgency": "紧急",
     "evidence": "非正常户交易清单\n对方工商/税务状态查询结果\n交易合同/付款凭证/物流记录",
     "dataSource": "供应商/客户 × 税务机关非正常户名单 比对",
-    "remark": ""
+    "remark": "与非正常户交易取得的发票可能不被认可"
   },
   {
     "id": 132,
@@ -1803,7 +1803,7 @@
     "urgency": "提醒",
     "evidence": "进项税额转出/转入明细表\n转出后又转入的业务背景说明\n对应进项发票",
     "dataSource": "JournalEntry × 进项税额转出/转入科目 追踪分析",
-    "remark": ""
+    "remark": "转出后又转入可能涉及调节应纳税额"
   },
   {
     "id": 136,
@@ -1817,7 +1817,7 @@
     "urgency": "提醒",
     "evidence": "验资报告/出资证明\n借款合同\n利息支出计算表\n实缴资本与认缴资本对比表",
     "dataSource": "BankTransaction × 借款利息 × 实缴资本比例 分析",
-    "remark": ""
+    "remark": "出资未到位对应的利息支出不得税前扣除"
   },
   {
     "id": 137,
@@ -1831,7 +1831,7 @@
     "urgency": "提醒",
     "evidence": "不征税收入文件/批复\n不征税收入专项台账\n对应支出明细\n纳税调整明细",
     "dataSource": "JournalEntry × 不征税收入科目 + 政府补助/财政拨款 关键词",
-    "remark": ""
+    "remark": "不征税收入对应的支出不得税前扣除"
   },
   {
     "id": 138,
@@ -1859,7 +1859,7 @@
     "urgency": "紧急",
     "evidence": "工资发放明细\n员工花名册\n劳动合同\n社保申报/缴费记录",
     "dataSource": "SalaryRecord × SocialSecurityDetail 人员交叉比对",
-    "remark": ""
+    "remark": "发放工资但未缴纳社保违反社保法规定"
   },
   {
     "id": 140,
@@ -1901,7 +1901,7 @@
     "urgency": "提醒",
     "evidence": "未分配利润余额\n董事会/股东会关于利润分配的决议\n转增资本记录",
     "dataSource": "JournalEntry 未分配利润 余额分析",
-    "remark": ""
+    "remark": "长期不分配利润可能被税务机关关注"
   },
   {
     "id": 143,
@@ -1929,7 +1929,7 @@
     "urgency": "提醒",
     "evidence": "投资性房地产清单\n租赁合同\n房产税申报表\n土地使用税申报表",
     "dataSource": "FixedAsset × 投资性房地产 + 租金收入 关联检查",
-    "remark": ""
+    "remark": "投资性房地产后续计量影响房产税和所得税"
   },
   {
     "id": 145,
@@ -2013,7 +2013,7 @@
     "urgency": "提醒",
     "evidence": "员工年终奖金明细\n两种计税方式税负对比测算表",
     "dataSource": "SalaryRecord × 全年一次性奖金 税负对比测算",
-    "remark": ""
+    "remark": "年终奖可选择单独计税或并入综合所得需测算最优方案"
   },
   {
     "id": 151,
@@ -2041,7 +2041,7 @@
     "urgency": "提醒",
     "evidence": "跨区域开票清单\n异地经营合同/项目说明\n跨区域涉税事项报告表",
     "dataSource": "SalesInvoice 开票IP/设备 × 税务登记地 比对",
-    "remark": ""
+    "remark": "跨区域大量开票需核实业务真实性"
   },
   {
     "id": 153,
@@ -2055,7 +2055,7 @@
     "urgency": "提醒",
     "evidence": "一般计税项目清单\n简易计税项目清单\n进项税额分摊计算表",
     "dataSource": "VATDeclaration × JournalEntry 简易计税/一般计税 进项拆分",
-    "remark": ""
+    "remark": "两种计税方式未正确划分可能导致少缴税款"
   },
   {
     "id": 154,
@@ -2083,7 +2083,7 @@
     "urgency": "紧急",
     "evidence": "同一地址注册的企业清单\n入驻/孵化协议\n关联企业关系图谱\n各自经营场所证明",
     "dataSource": "企业注册地址/法定代表人/股东 跨公司交叉比对",
-    "remark": ""
+    "remark": "同一地址注册多家企业或一人控制多家企业存在虚开风险"
   },
   {
     "id": 156,
@@ -2097,7 +2097,7 @@
     "urgency": "提醒",
     "evidence": "实际经营场所租赁合同/证明\n工商变更登记申请\n跨区域涉税事项报告表\n虚拟地址入驻协议",
     "dataSource": "工商登记地址 × 实际经营地址（通过发票地址/银行流水/合同地址推断）比对",
-    "remark": ""
+    "remark": "注册地与经营地分离可能影响税收管辖权"
   },
   {
     "id": 157,
@@ -2111,7 +2111,7 @@
     "urgency": "提醒",
     "evidence": "集群注册/虚拟地址入驻协议\n实际经营场所证明\n跨区域涉税事项报告",
     "dataSource": "注册地址类型 × 银行/发票/合同地址 比对",
-    "remark": ""
+    "remark": "集群注册但存在实际经营需确认是否符合条件"
   },
   {
     "id": 158,
@@ -2125,7 +2125,7 @@
     "urgency": "紧急",
     "evidence": "关联D级纳税人清单\n本企业纳税信用等级\n关联人员任职情况\n纳税信用修复申请",
     "dataSource": "法定代表人/股东/财务负责人 × D级纳税人名单 交叉比对",
-    "remark": ""
+    "remark": "与D级纳税人存在关联交易需关注"
   },
   {
     "id": 159,
@@ -2153,7 +2153,7 @@
     "urgency": "提醒",
     "evidence": "存在涉税条款缺失的合同清单\n完善后的合同模板\n合同管理制度",
     "dataSource": "Contract × 涉税条款关键词（税率/发票/税额/专票/普票）完整性检测",
-    "remark": ""
+    "remark": "合同缺少涉税关键条款可能影响税务处理"
   },
   {
     "id": 161,
@@ -2167,7 +2167,7 @@
     "urgency": "提醒",
     "evidence": "按对方分组的合同清单\n小额合同的合计金额\n合同拆分合理性说明",
     "dataSource": "Contract 按 counterparty_name 分组 同月多份小额合计 ≥20万",
-    "remark": ""
+    "remark": "通过拆分合同降低单笔金额可能涉及逃税"
   },
   {
     "id": 162,
@@ -2181,7 +2181,7 @@
     "urgency": "提醒",
     "evidence": "含违约金条款的合同清单\n违约金收支明细\n对应的发票/税务处理记录",
     "dataSource": "Contract × 违约金/赔偿金 关键词 + JournalEntry 匹配",
-    "remark": ""
+    "remark": "违约金收入需缴纳增值税和企业所得税"
   },
   {
     "id": 163,
@@ -2195,7 +2195,7 @@
     "urgency": "提醒",
     "evidence": "含免租期/装修期的租赁合同\n房产税申报表\n免租期税务处理说明",
     "dataSource": "Contract × 免租期/装修期 关键词 关联分析",
-    "remark": ""
+    "remark": "免租期内增值税视同销售和房产税从价计征需关注"
   },
   {
     "id": 164,
@@ -2209,7 +2209,7 @@
     "urgency": "提醒",
     "evidence": "跨境合同清单\n代扣代缴税费计算表\n对外支付备案表\n税款扣缴凭证",
     "dataSource": "Contract × 跨境/境外/foreign 关键词 代扣代缴条款检测",
-    "remark": ""
+    "remark": "跨境交易需明确代扣代缴义务避免漏税"
   },
   {
     "id": 165,
@@ -2223,7 +2223,7 @@
     "urgency": "提醒",
     "evidence": "合同变更/补充协议清单\n更新后的合同台账\n合同版本管理规定",
     "dataSource": "Contract × 变更/补充协议 原合同编号 匹配",
-    "remark": ""
+    "remark": "合同变更影响交易认定和税务处理"
   },
   {
     "id": 166,
@@ -2237,7 +2237,7 @@
     "urgency": "提醒",
     "evidence": "混合销售/兼营合同清单\n不同业务适用税率分析\n分签合同建议",
     "dataSource": "Contract × 混合销售/兼营 关键词 + 税率分析",
-    "remark": ""
+    "remark": "未分别约定可能导致税率适用错误"
   },
   {
     "id": 167,
@@ -2265,7 +2265,7 @@
     "urgency": "紧急",
     "evidence": "非货币资产交换/抵债协议\n换出资产的公允价值评估报告\n增值税申报表\n企业所得税申报表",
     "dataSource": "JournalEntry × 非货币资产交换/以物易物/以物抵债 关键词",
-    "remark": ""
+    "remark": "以物易物应视同销售确认收入"
   },
   {
     "id": 169,
@@ -2279,7 +2279,7 @@
     "urgency": "提醒",
     "evidence": "债务重组协议\n债务豁免/减免函\n企业所得税申报表\n企业重组特殊性税务处理备案",
     "dataSource": "JournalEntry × 债务重组/债务豁免/债务减免 关键词",
-    "remark": ""
+    "remark": "债务豁免收益需并入应纳税所得额"
   },
   {
     "id": 170,
@@ -2321,7 +2321,7 @@
     "urgency": "提醒",
     "evidence": "关联方管理费协议\n服务内容及收费标准说明\n受益性证明文件\n发票\n转让定价同期资料",
     "dataSource": "JournalEntry × 管理费/服务费 + 关联方/母公司/集团 关键词",
-    "remark": ""
+    "remark": "管理费分摊需真实合理且有合同支撑"
   },
   {
     "id": 173,
@@ -2335,7 +2335,7 @@
     "urgency": "紧急",
     "evidence": "境外支付明细\n对外支付税务备案表\n代扣代缴税款凭证\n税收协定优惠待遇申请\n非居民纳税人身份证明",
     "dataSource": "BankTransaction × 境外/跨境/外汇 付款 配对分析",
-    "remark": ""
+    "remark": "对外支付需依法代扣代缴增值税和所得税"
   },
   {
     "id": 174,
@@ -2349,7 +2349,7 @@
     "urgency": "提醒",
     "evidence": "不同税率业务的收入成本明细\n增值税申报表（分税率栏次）\n分别核算的制度及台账",
     "dataSource": "SalesInvoice × 不同税率/征收率 分别核算检查",
-    "remark": ""
+    "remark": "未分别核算从高适用税率可能导致多缴税"
   },
   {
     "id": 175,
@@ -2363,7 +2363,7 @@
     "urgency": "提醒",
     "evidence": "排污许可证\n污染物排放监测报告\n环境保护税计算表\n环境保护税申报表",
     "dataSource": "JournalEntry/BankTransaction × 排污/环保/环境治理 关键词 关联分析",
-    "remark": ""
+    "remark": "有排污行为需依法缴纳环保税"
   },
   {
     "id": 176,
@@ -2377,7 +2377,7 @@
     "urgency": "提醒",
     "evidence": "特定业务发票清单\n备注栏填写情况检查表\n补充/重开的合规发票",
     "dataSource": "SalesInvoice × PurchaseInvoice 特定业务类型 备注栏完整性检测",
-    "remark": ""
+    "remark": "建筑服务等特定业务发票备注栏填写不合规"
   },
   {
     "id": 177,
@@ -2391,7 +2391,7 @@
     "urgency": "提醒",
     "evidence": "佣金/手续费支出明细\n代扣个税计算表\n收款方经营资质证明\n支出限额计算表（合同金额×法定比例）",
     "dataSource": "JournalEntry × 佣金/手续费/居间 关键词 比例分析",
-    "remark": ""
+    "remark": "佣金支出超限额不得税前扣除"
   },
   {
     "id": 178,
@@ -2405,7 +2405,7 @@
     "urgency": "提醒",
     "evidence": "捐赠协议/决议\n公益事业捐赠票据\n受赠方公益性捐赠税前扣除资格证明\n扣除限额计算表\n纳税调整明细",
     "dataSource": "JournalEntry × 捐赠/捐助/公益 关键词 合规性检查",
-    "remark": ""
+    "remark": "捐赠需通过合规渠道且不超过利润12%"
   },
   {
     "id": 179,
@@ -2419,7 +2419,7 @@
     "urgency": "提醒",
     "evidence": "存货盘点报告\n盘亏/盘盈/报废明细\n进项税额转出计算表\n资产损失税前扣除申报（清单/专项）",
     "dataSource": "JournalEntry × 存货盘亏/盘盈/报废 关键词 税务处理完整性检测",
-    "remark": ""
+    "remark": "存货非正常损失需进项税额转出"
   },
   {
     "id": 180,
@@ -2433,7 +2433,7 @@
     "urgency": "提醒",
     "evidence": "水电费发票/缴费记录\n生产量/产量统计表\n投入产出能耗分析表\n转供水电分摊协议",
     "dataSource": "PurchaseInvoice × 水/电/气 关键词 金额与产量/收入 比率分析",
-    "remark": ""
+    "remark": "能耗费用与经营规模不匹配需核实"
   },
   {
     "id": 181,
@@ -2447,6 +2447,6 @@
     "urgency": "提醒",
     "evidence": "运输费明细\n采购总额/销售总额\n运输费占比行业参考\n运输合同/运单",
     "dataSource": "JournalEntry 运输费 × 采购总额/销售收入 比率分析",
-    "remark": ""
+    "remark": "运输费与购销货量不匹配需核实"
   }
 ]
