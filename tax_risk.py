@@ -396,6 +396,7 @@ def get_tax_risk_report(
     _analyze_same_address_multi_company(db, company_id, period_start, period_end, results)
     _analyze_address_mismatch(db, company_id, period_start, period_end, results)
     _analyze_d_taxpayer_risk(db, company_id, period_start, period_end, results)
+    _analyze_flexible_employment_tax(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -5665,12 +5666,10 @@ def _analyze_year_end_bonus_tax_opt(db, company_id, ps, pe, results):
         SalaryRecord.company_id == company_id,
         SalaryRecord.period >= ps, SalaryRecord.period <= pe,
         or_(
-            func.lower(SalaryRecord.remark).contains("年终奖"),
-            func.lower(SalaryRecord.remark).contains("全年一次性奖金"),
-            func.lower(SalaryRecord.remark).contains("一次性奖金"),
-            func.lower(SalaryRecord.remark).contains("奖金"),
-            func.lower(SalaryRecord.income_item).contains("年终"),
-            func.lower(SalaryRecord.income_item).contains("奖金")
+            func.lower(SalaryRecord.income_type).contains("年终奖"),
+            func.lower(SalaryRecord.income_type).contains("全年一次性奖金"),
+            func.lower(SalaryRecord.income_type).contains("一次性奖金"),
+            func.lower(SalaryRecord.income_type).contains("奖金")
         )
     ).all()
 
@@ -6159,6 +6158,120 @@ def _analyze_d_taxpayer_risk(db, company_id, ps, pe, results):
             "detail": f"有{abnormal_supplier}家进项发票供应商存在异常记录。与异常状态供应商交易取得的发票可能被列为异常扣税凭证，面临进项转出风险。",
             "suggestion": "建议在每笔大额采购前通过电子税务局查验销方税务状态和纳税信用等级。建立供应商准入制度。"
         })
+
+
+def _analyze_flexible_employment_tax(db, company_id, ps, pe, results):
+    """灵活用工/劳务报酬税务处理不规范（财务健康）"""
+    ps_date = _period_to_date_range(ps)[0]
+    pe_date = _period_to_date_range(pe)[1]
+
+    # 灵活用工/劳务派遣关键词
+    labor_keywords = ["劳务", "派遣", "外包", "灵活用工", "兼职", "临时工",
+                      "服务费", "咨询费", "居间", "佣金", "代办"]
+
+    # 1. 检查进项发票中是否有劳务/服务类发票
+    labor_invs = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps_date,
+        PurchaseInvoice.invoice_date <= pe_date
+    ).all()
+
+    labor_inv_amount = 0
+    labor_inv_cnt = 0
+    labor_sellers = set()
+    for inv in labor_invs:
+        pname = (inv.goods_name or "").strip()
+        summary = (inv.summary or "").strip()
+        combined = pname + summary
+        if any(kw in combined for kw in labor_keywords):
+            labor_inv_amount += _safe_float(inv.total_amount)
+            labor_inv_cnt += 1
+            if inv.seller_name:
+                labor_sellers.add(inv.seller_name.strip())
+
+    # 2. 检查银行流水中是否有劳务/服务类支付
+    labor_txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps_date,
+        BankTransaction.transaction_date <= pe_date,
+        BankTransaction.debit_amount > 0
+    ).all()
+
+    labor_tx_amount = 0
+    labor_tx_cnt = 0
+    for bt in labor_txs:
+        summ = (bt.summary or "").strip()
+        remark = (bt.remark or "").strip()
+        cpty = (bt.counterparty_name or "").strip()
+        combined = summ + remark + cpty
+        if any(kw in combined for kw in labor_keywords):
+            labor_tx_amount += _safe_float(bt.debit_amount)
+            labor_tx_cnt += 1
+
+    total_labor_expense = labor_inv_amount + labor_tx_amount
+
+    if total_labor_expense <= 0:
+        return
+
+    # 3. 检查是否有对应的人员薪金/个税记录
+    revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
+    salary_expense = _get_account_sum(db, company_id, "660205", ps, pe, "debit")  # 工资薪金
+
+    # 4. 判断风险：劳务费用高但工资薪金低/无
+    # 将劳务报酬伪装为经营所得（不代扣个税）是常见避税手段
+    labor_ratio = total_labor_expense / revenue if revenue > 0 else 0
+
+    risk_items = []
+    detail_parts = []
+
+    if labor_inv_cnt >= 3 and labor_inv_amount >= 100000:
+        detail_parts.append(f"取得劳务/服务类进项发票 {labor_inv_cnt} 张，金额 {labor_inv_amount:,.2f} 元")
+        detail_parts.append(f"涉及销方 {len(labor_sellers)} 家")
+
+    if labor_tx_cnt >= 3 and labor_tx_amount >= 100000:
+        detail_parts.append(f"银行支付劳务/服务类款项 {labor_tx_cnt} 笔，金额 {labor_tx_amount:,.2f} 元")
+
+    if not detail_parts:
+        return
+
+    # 劳务费用占总收入比例过高
+    if labor_ratio > 0.3:
+        risk_items.append(f"劳务/服务支出占营业收入 {labor_ratio*100:.1f}%")
+
+    # 劳务费用高但无工资薪金支出
+    if salary_expense < 1000 and total_labor_expense >= 50000:
+        risk_items.append("有大量劳务支出但无工资薪金记录（疑似将员工薪酬伪装为劳务费）")
+
+    # 多张小额服务费发票，典型灵活用工拆分
+    if labor_inv_cnt >= 10:
+        risk_items.append(f"劳务/服务发票数量较多（{labor_inv_cnt}张），存在拆分金额规避个税嫌疑")
+
+    if not risk_items:
+        return
+
+    risk_score = 7 if labor_ratio > 0.5 else (6 if len(risk_items) >= 2 else 5)
+    risk_level = "高风险" if risk_score >= 7 else "中风险"
+    risk_color = "#dc2626" if risk_score >= 7 else "#f59e0b"
+    urgency = "高" if risk_score >= 7 else "中"
+
+    detail = "；".join(detail_parts) + "。" if detail_parts else ""
+    detail += "风险信号：" + "；".join(risk_items) + "。"
+    detail += "金税四期接入人社部门数据，灵活用工/劳务报酬的税务合规是重点监控领域。将工资薪金伪装为经营所得（劳务发票）以规避个税代扣义务，是典型税务违规。"
+
+    results.append({
+        "category": "财务健康", "category_icon": "💼", "risk_score": risk_score,
+        "risk_level": risk_level, "risk_color": risk_color, "urgency": urgency,
+        "item": "灵活用工/劳务报酬税务处理不规范",
+        "detail": detail,
+        "suggestion": "①核实劳务/服务发票是否对应真实业务（留存合同、成果交付证明）；②如为个人提供劳务，需按规定代扣代缴个人所得税（劳务报酬适用20%-40%税率）；③如使用灵活用工平台，确保平台具备税务代征资质并取得合规发票；④避免将员工工资薪金伪装为劳务费以规避社保和个税。",
+        "required_evidence": [
+            "劳务/服务类发票对应的业务合同",
+            "劳务报酬个人所得税代扣代缴记录",
+            "灵活用工平台合作协议及平台资质证明",
+            "劳务人员身份证件及联系方式清单",
+            "服务成果交付证明（如为咨询服务）"
+        ]
+    })
 
 
 # ═══════════════════════════════════════════════════════════
