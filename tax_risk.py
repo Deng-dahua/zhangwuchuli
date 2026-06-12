@@ -396,6 +396,187 @@ def _check_premise_evidence_all(db: Session, company_id: int, ps: str, pe: str):
     }
 
 
+def _check_expense_evidence(db: Session, company_id: int, ps: str, pe: str,
+                             expense_name: str = "",
+                             je_account_codes: list = None,
+                             je_summary_kw: list = None,
+                             bank_kw: list = None,
+                             invoice_kw: list = None,
+                             contract_kw: list = None,
+                             contract_types: list = None,
+                             je_extra_codes: list = None):
+    """通用费用四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同。
+    
+    银行流水铁律：银行付款必须入账（余额对不上）
+    发票铁律：发票可以延后入账
+    合同铁律：合同是免费/赊账场景的唯一证据
+    
+    参数：
+    - expense_name: 费用名称（用于日志/标识）
+    - je_account_codes: 序时账科目代码前缀列表，如 ["660207"]
+    - je_summary_kw: 序时账摘要关键词
+    - je_extra_codes: 额外科目代码（用于合并检查，如折旧费走不同科目）
+    - bank_kw: 银行流水关键词（匹配 counterparty_name + summary）
+    - invoice_kw: 发票关键词（匹配 goods_name + seller_name）
+    - contract_kw: 合同关键词（匹配 name + content_summary + remark）
+    - contract_types: 合同类型筛选（如 ["租赁", "服务"]）
+    
+    返回: 统一结构字典，含 overall.risk_level
+    """
+    je_account_codes = je_account_codes or []
+    je_summary_kw = je_summary_kw or []
+    bank_kw = bank_kw or []
+    invoice_kw = invoice_kw or []
+    contract_kw = contract_kw or []
+    contract_types = contract_types or []
+    je_extra_codes = je_extra_codes or []
+    
+    ps_date, pe_date = _period_to_date_range(ps)[0], _period_to_date_range(pe)[1]
+    
+    # 1. 序时账
+    je_amount = 0.0
+    all_codes = list(je_account_codes) + list(je_extra_codes)
+    if all_codes:
+        code_conditions = [JournalEntry.account_code.like(f"{code}%") for code in all_codes]
+        je_code_q = db.query(func.coalesce(func.sum(JournalEntry.debit_amount), 0)).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            or_(*code_conditions)
+        )
+        je_amount += _safe_float(je_code_q.scalar())
+    
+    if je_summary_kw:
+        je_summary_q = db.query(func.coalesce(func.sum(JournalEntry.debit_amount), 0)).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            or_(*[JournalEntry.summary.contains(kw) for kw in je_summary_kw])
+        )
+        # 避免重复计数：如果与科目查询重叠，取 max
+        je_summary_amt = _safe_float(je_summary_q.scalar())
+        if all_codes:
+            je_amount = max(je_amount, je_summary_amt)  # 取大的，避免重复
+        else:
+            je_amount = je_summary_amt
+    
+    je_has = je_amount > 0
+    
+    # 2. 银行流水
+    bank_amount = 0.0
+    if bank_kw:
+        bank_or = []
+        for kw in bank_kw:
+            bank_or.append(BankTransaction.counterparty_name.contains(kw))
+            bank_or.append(BankTransaction.summary.contains(kw))
+        bank_amount = _safe_float(db.query(func.coalesce(func.sum(BankTransaction.debit_amount), 0)).filter(
+            BankTransaction.company_id == company_id,
+            BankTransaction.transaction_date >= ps_date,
+            BankTransaction.transaction_date <= pe_date,
+            or_(*bank_or)
+        ).scalar())
+    bank_has = bank_amount > 0
+    
+    # 3. 发票（取得发票 + 记账发票）
+    inv_amount = 0.0
+    inv_count = 0
+    if invoice_kw:
+        inv_pi_q = db.query(
+            func.coalesce(func.sum(func.abs(PurchaseInvoice.total_amount)), 0),
+            func.count(PurchaseInvoice.id)
+        ).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.invoice_date >= ps_date,
+            PurchaseInvoice.invoice_date <= pe_date,
+            or_(*[or_(PurchaseInvoice.goods_name.contains(kw), PurchaseInvoice.seller_name.contains(kw)) for kw in invoice_kw])
+        )
+        pi_amt, pi_cnt = inv_pi_q.first()
+        inv_amount += _safe_float(pi_amt)
+        inv_count += (pi_cnt or 0)
+        
+        inv_bi_q = db.query(
+            func.coalesce(func.sum(func.abs(BookkeepingInvoice.total_amount)), 0),
+            func.count(BookkeepingInvoice.id)
+        ).filter(
+            BookkeepingInvoice.company_id == company_id,
+            BookkeepingInvoice.invoice_date >= ps_date,
+            BookkeepingInvoice.invoice_date <= pe_date,
+            or_(*[or_(BookkeepingInvoice.goods_name.contains(kw), BookkeepingInvoice.seller_name.contains(kw)) for kw in invoice_kw])
+        )
+        bi_amt, bi_cnt = inv_bi_q.first()
+        inv_amount += _safe_float(bi_amt)
+        inv_count += (bi_cnt or 0)
+    inv_has = inv_amount > 0
+    
+    # 4. 合同
+    contract_has = False
+    free_possible = False
+    contracts_detail = []
+    if contract_kw or contract_types:
+        q = db.query(Contract).filter(
+            Contract.company_id == company_id,
+            Contract.status.in_(["已签署", "履行中", "已完成"])
+        )
+        if contract_types:
+            q = q.filter(Contract.contract_type.in_(contract_types))
+        
+        all_contracts = q.all()
+        for c in all_contracts:
+            combined = (c.name or "") + (c.content_summary or "") + (c.remark or "")
+            combined_lower = combined.lower()
+            if contract_kw:
+                if any(kw in combined_lower for kw in contract_kw):
+                    is_free = any(fkw in combined_lower for fkw in ["免费", "免租", "无偿", "0元", "0.00"])
+                    contracts_detail.append({
+                        "contract_no": c.contract_no, "name": c.name,
+                        "type": c.contract_type, "amount": float(c.amount or 0),
+                        "status": c.status, "is_free": is_free,
+                    })
+                    if is_free:
+                        free_possible = True
+            else:
+                # 无关键词，接受所有匹配类型的合同
+                is_free = any(fkw in combined_lower for fkw in ["免费", "免租", "无偿", "0元", "0.00"])
+                contracts_detail.append({
+                    "contract_no": c.contract_no, "name": c.name,
+                    "type": c.contract_type, "amount": float(c.amount or 0),
+                    "status": c.status, "is_free": is_free,
+                })
+                if is_free:
+                    free_possible = True
+        
+        contract_has = len(contracts_detail) > 0
+    
+    # 综合判断
+    all_none = (not je_has) and (not bank_has) and (not inv_has) and (not contract_has)
+    je_missing_invoice_found = (not je_has) and inv_has
+    je_missing_bank_found = (not je_has) and bank_has
+    je_missing_contract_found = (not je_has) and contract_has
+    
+    if all_none:
+        risk_level = "shell_suspect"
+    elif je_missing_bank_found:
+        risk_level = "bank_unrecorded"
+    elif je_missing_invoice_found:
+        risk_level = "unrecorded"
+    elif je_missing_contract_found:
+        risk_level = "free_possible"
+    else:
+        risk_level = "none"
+    
+    return {
+        "je": {"has_any": je_has, "amount": je_amount},
+        "bank": {"has_payment": bank_has, "amount": bank_amount},
+        "invoice": {"has_any": inv_has, "amount": inv_amount, "count": inv_count},
+        "contract": {"has_any": contract_has, "free_possible": free_possible, "contracts": contracts_detail},
+        "overall": {
+            "je_missing_but_invoice_found": je_missing_invoice_found,
+            "je_missing_but_bank_found": je_missing_bank_found,
+            "je_missing_but_contract_found": je_missing_contract_found,
+            "all_sources_none": all_none,
+            "risk_level": risk_level,
+        }
+    }
+
+
 # ── 规则文件路径 ──
 RULES_FILE = os.path.join(os.path.dirname(__file__), 'static', 'tax_risk_rules_local_export.json')
 
@@ -3062,54 +3243,12 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
     if revenue < 100000:
         return  # 收入过低，不分析
 
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
-
-    # 进项发票中的运输/物流费用
-    transport_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(
-            PurchaseInvoice.goods_name.contains("运输"),
-            PurchaseInvoice.goods_name.contains("物流"),
-            PurchaseInvoice.goods_name.contains("快递"),
-            PurchaseInvoice.goods_name.contains("配送"),
-            PurchaseInvoice.goods_name.contains("货运"),
-            PurchaseInvoice.goods_name.contains("搬运"),
-        )
-    ).scalar() or 0
-
-    # 序时账中的运输费科目
-    transport_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.startswith("660207"),  # 运输费
-            JournalEntry.summary.contains("运输"),
-            JournalEntry.summary.contains("物流"),
-            JournalEntry.summary.contains("快递"),
-        )
-    ).scalar() or 0
-
-    # 银行流水中是否有运输相关支付
-    bank_transport = db.query(func.sum(BankTransaction.debit_amount)).filter(
-        BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps_date,
-        BankTransaction.transaction_date <= pe_date,
-        or_(
-            BankTransaction.summary.contains("运输"),
-            BankTransaction.summary.contains("物流"),
-            BankTransaction.summary.contains("快递"),
-            BankTransaction.summary.contains("货运"),
-            BankTransaction.counterparty_name.contains("物流"),
-        )
-    ).scalar() or 0
-
-    total_transport = transport_inv + transport_je + bank_transport
-
     # 检查公司是否有实物产品销售（而非纯服务）
     company = db.query(Company).filter(Company.id == company_id).first()
     biz = (company.business_scope or "") + " " + (company.company_type or "")
     is_service_company = any(kw in biz for kw in ["服务", "咨询", "技术", "设计", "开发", "软件", "信息"])
+
+    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
 
     # 检查销项发票中是否有实物商品（排除服务类）
     total_sales_amt = db.query(func.sum(SalesInvoice.total_amount)).filter(
@@ -3118,7 +3257,6 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
         SalesInvoice.status == "正常"
     ).scalar() or 0
 
-    # 排除明显服务类销售
     service_keywords = ["服务", "咨询", "设计", "开发", "代理", "广告", "租赁", "技术"]
     service_sales = 0
     if is_service_company:
@@ -3128,19 +3266,72 @@ def _analyze_transport_missing(db, company_id, ps, pe, results):
             SalesInvoice.status == "正常",
             or_(*[SalesInvoice.goods_name.contains(kw) for kw in service_keywords])
         ).scalar() or 0
-
     product_sales = total_sales_amt - service_sales
 
-    if total_transport == 0 and revenue > 0:
-        if is_service_company and product_sales == 0:
-            return  # 纯服务型企业，运输费缺失属正常
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="运输/物流费",
+        je_account_codes=["660207"],
+        je_summary_kw=["运输", "物流", "快递", "搬运", "货运", "配送"],
+        bank_kw=["运输", "物流", "快递", "货运", "配送", "搬运"],
+        invoice_kw=["运输", "物流", "快递", "配送", "货运", "搬运"],
+        contract_kw=["运输", "物流", "快递", "货运", "承运", "配送"],
+        contract_types=["服务"])
 
+    transport_je = ev["je"]["amount"]
+    transport_inv = ev["invoice"]["amount"]
+    bank_transport = ev["bank"]["amount"]
+    total_transport = transport_inv + transport_je + bank_transport
+
+    # 纯服务型企业 → 跳过
+    if is_service_company and product_sales == 0:
+        return
+
+    # 银行付款未入账 → 高风险（跨来源检测）
+    if ev["overall"]["je_missing_but_bank_found"] and (product_sales > 100000 or revenue > 500000):
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 9, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有运输/物流付款但序时账无运输费记录",
+            "detail": f"银行流水中有运输/物流相关付款 {ev['bank']['amount']:,.0f} 元（实物产品销售 {product_sales:,.0f} 元），但序时账中无运输费科目（660207）记录。银行付款必须入账，否则余额对不上。可能：①运输费记入其他科目（如原材料采购含运费）；②凭证尚未生成。",
+            "suggestion": "核查银行运输付款对应的序时账科目，如运费合并在采购成本中，建立科目映射对照表。",
+            "required_evidence": ["银行运输付款回单", "对应序时账凭证", "运费与采购成本的分摊说明"]
+        })
+        return
+
+    # 有发票但序时账未入账 → 中风险
+    if ev["overall"]["je_missing_but_invoice_found"] and product_sales > 50000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"有运输发票（{ev['invoice']['count']}张/{ev['invoice']['amount']:,.0f}元）但序时账无运输费",
+            "detail": f"取得运输/物流发票 {ev['invoice']['count']} 张，金额 {ev['invoice']['amount']:,.0f} 元，但序时账中未发现运输费科目（660207）。发票已取得但费用未入账，可能为发票延后或运费合并在采购成本中。",
+            "suggestion": "确认运输发票是否已入账（如含在采购成本中），建议将运费单独核算以清晰反映货物流成本。"
+        })
+        return
+
+    # 有运输合同但无账务
+    if ev["overall"]["je_missing_but_contract_found"] and product_sales > 50000:
+        free_contracts = [c for c in ev["contract"]["contracts"] if c["is_free"]]
+        has_free = len(free_contracts) > 0
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 2 if has_free else 4,
+            "risk_level": "低风险" if has_free else "中风险",
+            "risk_color": "#3b82f6" if has_free else "#f59e0b", "urgency": "建议" if has_free else "提醒",
+            "item": f"有运输/物流合同（{len(ev['contract']['contracts'])}份）但序时账无运输费{'(含免费条款)' if has_free else ''}",
+            "detail": f"系统中有 {len(ev['contract']['contracts'])} 份运输/物流相关合同{'(含免费/无偿运输条款)' if has_free else ''}，但序时账中无运输费。可能为：①运费由客户承担（到付/自提）；②合同刚签署尚未产生费用；③免费配送。",
+            "suggestion": "如运费由客户承担，在销售合同中标明运费条款。如为自提，保留客户自提签收记录。"
+        })
+        return
+
+    # 四源皆空 → 高风险
+    if ev["overall"]["all_sources_none"] and revenue > 0:
         if product_sales > 100000 or (not is_service_company and revenue > 500000):
             results.append({
                 "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
                 "risk_color": "#dc2626", "urgency": "紧急",
-                "item": "有销售收入但零运输/物流费用",
-                "detail": f"企业营业收入 {revenue:,.0f} 元（其中实物产品销售 {product_sales:,.0f} 元），但进项发票、序时账、银行流水中均未发现运输/物流费用。稽查视角：有货物销售但无运输费，货物如何交付？存在以下嫌疑：①虚开发票（无真实货物交付）；②运输费用以现金支付未入账；③由客户自提但无自提记录。这是稽查机关重点核查的货物交付实质问题。",
+                "item": "有销售收入但零运输/物流费用（四源皆空）",
+                "detail": f"企业营业收入 {revenue:,.0f} 元（其中实物产品销售 {product_sales:,.0f} 元），但序时账、银行流水、发票、合同中均未发现运输/物流费用。稽查视角：有货物销售但无运输费，货物如何交付？存在以下嫌疑：①虚开发票（无真实货物交付）；②运输费用以现金支付未入账；③由客户自提但无自提记录。这是稽查机关重点核查的货物交付实质问题。",
                 "suggestion": "（稽查应对）准备以下佐证材料：①货运单/快递单/物流签收单（证明货物真实发出）；②如为客户自提，提供客户自提签收记录；③如含运费（由客户承担），提供销售合同相关条款；④承运方资质证明（道路运输许可证）；⑤主要客户的货物交付方式说明（含每种方式的占比）。",
                 "required_evidence": [
                     "货物运输单据（运单/快递单/物流签收记录）",
@@ -3216,7 +3407,50 @@ def _analyze_agriculture_substance(db, company_id, ps, pe, results):
         or_(*[BankTransaction.summary.contains(kw) for kw in land_keywords])
     ).scalar() or 0
 
+    # 土地/场地合同检测（四源交叉验证-合同维度）
+    land_contracts = db.query(Contract).filter(
+        Contract.company_id == company_id,
+        Contract.status.in_(["已签署", "履行中", "已完成"]),
+        or_(
+            Contract.contract_type.in_(["租赁", "承包"]),
+            Contract.name.contains("土地"),
+            Contract.name.contains("场地"),
+            Contract.name.contains("承包"),
+            Contract.content_summary.contains("土地"),
+            Contract.remark.contains("土地"),
+        )
+    ).all()
+    has_land_contract = len(land_contracts) > 0
+    land_free_possible = any(
+        any(fkw in ((c.name or "") + (c.content_summary or "") + (c.remark or "")).lower()
+            for fkw in ["免费", "免租", "无偿", "0元"])
+        for c in land_contracts
+    )
+
     total_land = land_costs + bank_land
+
+    # 银行有土地付款但序时账无记录 → 高风险
+    if bank_land > 0 and land_costs == 0 and agri_sales > 100000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有土地/场地付款但序时账无对应记录",
+            "detail": f"银行流水中有土地/场地相关付款 {bank_land:,.0f} 元，但序时账中无对应土地租赁/承包费用。银行付款必须入账。可能：①土地费用记入其他科目；②凭证尚未生成。",
+            "suggestion": "核查银行土地付款对应的序时账科目，补录土地租赁/承包费用凭证。",
+            "required_evidence": ["银行土地付款回单", "对应序时账凭证"]
+        })
+
+    # 有土地合同但无账务（可能免费/自有土地）
+    if has_land_contract and land_costs == 0 and bank_land == 0 and agri_sales > 100000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 3 if land_free_possible else 5,
+            "risk_level": "低风险" if land_free_possible else "中风险",
+            "risk_color": "#3b82f6" if land_free_possible else "#f59e0b",
+            "urgency": "建议" if land_free_possible else "提醒",
+            "item": f"有土地/场地合同（{len(land_contracts)}份）但序时账无土地租赁费{'(含免费条款)' if land_free_possible else ''}",
+            "detail": f"系统中有 {len(land_contracts)} 份土地/场地相关合同{'(含免费/免租条款)' if land_free_possible else ''}，但序时账和银行流水中均无土地费用。可能为：①自有土地（无需租金）；②合同免费使用；③合同尚未产生费用。",
+            "suggestion": "如为自有土地，准备土地证或产权证明；如为免费使用，保留合同作为佐证材料。"
+        })
 
     # 检查是否有种植必须成本（化肥/农药/种子之外、人工/灌溉等）
     planting_keywords = ["化肥", "农药", "种子", "种苗", "灌溉", "农机", "农具",
@@ -3325,45 +3559,78 @@ def _analyze_packaging_missing(db, company_id, ps, pe, results):
     if not is_product_biz:
         return
 
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="包装费",
+        je_account_codes=["660209"],
+        je_summary_kw=["包装", "打包", "纸箱", "编织袋"],
+        bank_kw=["包装", "打包", "纸箱", "包装材料"],
+        invoice_kw=["包装", "纸箱", "塑料袋", "编织袋", "打包"],
+        contract_kw=["包装", "打包", "包材", "包装材料"],
+        contract_types=["采购", "服务"])
 
-    # 进项发票中的包装费用
-    packaging_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(
-            PurchaseInvoice.goods_name.contains("包装"),
-            PurchaseInvoice.goods_name.contains("纸箱"),
-            PurchaseInvoice.goods_name.contains("塑料袋"),
-            PurchaseInvoice.goods_name.contains("编织袋"),
-            PurchaseInvoice.goods_name.contains("打包"),
-        )
-    ).scalar() or 0
-
-    # 序时账中包装费科目
-    packaging_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.startswith("660209"),  # 包装费
-            JournalEntry.summary.contains("包装"),
-        )
-    ).scalar() or 0
-
+    packaging_je = ev["je"]["amount"]
+    packaging_inv = ev["invoice"]["amount"]
     total_packaging = packaging_inv + packaging_je
 
-    if total_packaging == 0 and revenue > 500000:
+    # 银行付款未入账 → 高风险
+    if ev["overall"]["je_missing_but_bank_found"] and revenue > 200000:
         results.append({
-            "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有包装费付款但序时账无包装费记录",
+            "detail": f"银行流水中有包装相关付款 {ev['bank']['amount']:,.0f} 元，但序时账中无对应包装费科目（660209）或包装摘要记录。银行流水必须入账，否则银行余额对不上。可能：①包装费记入了其他科目（如原材料）；②凭证尚未入账。",
+            "suggestion": "核查银行包装付款对应的序时账科目，如误记入原材料等科目，建议调整至660209包装费科目或建立科目映射对照表。",
+            "required_evidence": ["银行包装付款回单", "对应序时账凭证（核实科目归集）"]
+        })
+        return
+
+    # 有发票但序时账未入账 → 中风险（发票可延后）
+    if ev["overall"]["je_missing_but_invoice_found"]:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
-            "item": "有销售收入但零包装费用",
-            "detail": f"企业营业收入 {revenue:,.0f} 元，经营范围含产品生产/销售，但进项发票和序时账中均未发现包装费（包装材料/纸箱/打包等）。稽查视角：实物产品销售必然需要包装材料，零包装费不符合产品交付实质。可能：①包装费未单独核算（合并在原材料中）；②产品无实际包装（直发/散装需备说明）；③费用未取得发票。",
+            "item": f"有包装材料发票（{ev['invoice']['count']}张/{ev['invoice']['amount']:,.0f}元）但序时账无包装费",
+            "detail": f"取得包装相关进项发票 {ev['invoice']['count']} 张，金额 {ev['invoice']['amount']:,.0f} 元，但序时账中未发现包装费科目（660209）记录。发票已取得但费用尚未入账，可能为发票延后入账（常见做法）或费用科目归集错误。",
+            "suggestion": "确认包装材料发票是否已入账（如记入原材料科目），建议补录包装费凭证或建立发票与凭证的对应关系。"
+        })
+        return
+
+    # 有合同但无账务 → 低风险（可能为免费/对方承担）
+    if ev["overall"]["je_missing_but_contract_found"]:
+        free_contracts = [c for c in ev["contract"]["contracts"] if c["is_free"]]
+        has_free = len(free_contracts) > 0
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 2 if has_free else 4,
+            "risk_level": "低风险" if has_free else "中风险",
+            "risk_color": "#3b82f6" if has_free else "#f59e0b", "urgency": "建议" if has_free else "提醒",
+            "item": f"有包装合同（{len(ev['contract']['contracts'])}份）但序时账无包装费",
+            "detail": f"系统中存在 {len(ev['contract']['contracts'])} 份包装相关合同{'(含免费/免租金条款)' if has_free else ''}，但序时账中无包装费记录。可能为：①合同已签但尚未实际履行；②包装费用由对方承担；③免费包装/赠送包材。",
+            "suggestion": "核实合同实际履行情况，如已履行但费用未入账，补录相关凭证。如为对方免费提供，保留合同作为佐证材料。"
+        })
+        return
+
+    # 四源皆空 → 中高风险
+    if ev["overall"]["all_sources_none"] and revenue > 500000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "有销售收入但零包装费用（四源皆空）",
+            "detail": f"企业营业收入 {revenue:,.0f} 元，经营范围含产品生产/销售，但序时账、银行流水、进项发票、合同中均未发现包装费（包装材料/纸箱/打包等）。稽查视角：实物产品销售必然需要包装材料，零包装费不符合产品交付实质。可能：①包装费未单独核算（合并在原材料中）；②产品无实际包装（直发/散装需备说明）；③费用未取得发票。",
             "suggestion": "①如包装费合并在原材料采购中，补充说明材料；②如为散装/直发产品，提供客户签收记录；③补录包装材料采购凭证。",
             "required_evidence": [
                 "包装材料采购发票及入库记录",
                 "如包装费合并核算，提供材料出库单/成本分摊说明",
                 "如为散装/直发，提供产品交付方式说明"
             ]
+        })
+    elif total_packaging == 0 and revenue > 200000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 3, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "建议",
+            "item": "包装费用偏低或未单独记录",
+            "detail": f"企业营业收入 {revenue:,.0f} 元，包装费记录缺失。建议核实包装材料是否合并在原材料中核算。",
+            "suggestion": "如包装费合并在原材料采购中，补充说明材料。"
         })
 
 
@@ -3386,50 +3653,53 @@ def _analyze_warehouse_missing(db, company_id, ps, pe, results):
     if end_stock == 0 and stock_in == 0:
         return  # 无库存，跳过
 
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="仓储费",
+        je_summary_kw=["仓储", "仓库", "库房", "仓租", "仓管", "保管"],
+        bank_kw=["仓储", "仓库", "仓租", "库房"],
+        invoice_kw=["仓储", "仓库", "仓租", "库房", "保管", "寄存"],
+        contract_kw=["仓库", "仓储", "库房", "仓租", "寄存"],
+        contract_types=["租赁"])
 
-    # 仓库租赁合同
-    warehouse_contracts = db.query(func.count(Contract.id)).filter(
-        Contract.company_id == company_id,
-        or_(
-            Contract.name.contains("仓库"),
-            Contract.name.contains("仓储"),
-            Contract.name.contains("库房"),
-        )
-    ).scalar() or 0
-
-    # 仓储费（序时账）
-    warehouse_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.summary.contains("仓储"),
-            JournalEntry.summary.contains("仓库"),
-            JournalEntry.summary.contains("库房"),
-            JournalEntry.summary.contains("仓租"),
-        )
-    ).scalar() or 0
-
-    # 银行流水仓储支付
-    bank_warehouse = db.query(func.sum(BankTransaction.debit_amount)).filter(
-        BankTransaction.company_id == company_id,
-        BankTransaction.transaction_date >= ps_date,
-        BankTransaction.transaction_date <= pe_date,
-        or_(
-            BankTransaction.summary.contains("仓储"),
-            BankTransaction.summary.contains("仓库"),
-            BankTransaction.summary.contains("仓租"),
-        )
-    ).scalar() or 0
-
+    warehouse_je = ev["je"]["amount"]
+    bank_warehouse = ev["bank"]["amount"]
     total_warehouse = warehouse_je + bank_warehouse
+    warehouse_contracts = len(ev["contract"]["contracts"])
 
-    if warehouse_contracts == 0 and total_warehouse == 0 and end_stock > 100:
+    # 银行付款未入账 → 高风险
+    if ev["overall"]["je_missing_but_bank_found"] and end_stock > 100:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": f"银行有仓储支付（{ev['bank']['amount']:,.0f}元）但序时账无仓储费记录",
+            "detail": f"期末库存 {end_stock:,.0f} 件，入库 {stock_in:,.0f} 件。银行流水中有仓储相关付款 {ev['bank']['amount']:,.0f} 元，但序时账中无对应仓储费记录。银行付款必须入账，否则余额对不上。",
+            "suggestion": "核查银行仓储付款对应的序时账科目，补录仓储费凭证。",
+            "required_evidence": ["银行仓储付款回单", "对应序时账凭证"]
+        })
+        return
+
+    # 有合同但无账务（免费仓库可能）
+    if ev["overall"]["je_missing_but_contract_found"]:
+        free_contracts = [c for c in ev["contract"]["contracts"] if c["is_free"]]
+        has_free = len(free_contracts) > 0
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 3 if has_free else 5,
+            "risk_level": "低风险" if has_free else "中风险",
+            "risk_color": "#3b82f6" if has_free else "#f59e0b", "urgency": "建议" if has_free else "提醒",
+            "item": f"有仓储合同（{warehouse_contracts}份）但序时账无仓储费{'(含免费条款)' if has_free else ''}",
+            "detail": f"期末库存 {end_stock:,.0f} 件，入库 {stock_in:,.0f} 件。系统中有 {warehouse_contracts} 份仓储/仓库相关合同{'(含免费/免租条款)' if has_free else ''}，但序时账中无仓储费。可能为：①自有仓库（无需租金）；②合同刚签署尚未产生费用；③对方免费提供仓储。",
+            "suggestion": "如为自有仓库，提供房产证明；如为免费存货，保留仓储合同作为佐证材料。"
+        })
+        return
+
+    # 四源皆空 → 高风险
+    if ev["overall"]["all_sources_none"] and end_stock > 100:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
             "risk_color": "#dc2626", "urgency": "紧急",
-            "item": f"有库存（{end_stock:,.0f}件）但无仓储/仓库费用",
-            "detail": f"期末库存 {end_stock:,.0f} 件，入库 {stock_in:,.0f} 件，但系统中无仓库租赁合同、序时账和银行流水中也无仓储/仓库费用。稽查视角：有货物就必须有存放场所。无仓储费→货物存放在哪里？→可能存在：①库存数据不实（虚列存货）；②仓库为自有但未入账；③存货已发出但未确认收入。",
+            "item": f"有库存（{end_stock:,.0f}件）但无仓储/仓库费用（四源皆空）",
+            "detail": f"期末库存 {end_stock:,.0f} 件，入库 {stock_in:,.0f} 件，但序时账、银行流水、发票、合同中均无仓储/仓库费用。稽查视角：有货物就必须有存放场所。无仓储费→货物存放在哪里？→可能存在：①库存数据不实（虚列存货）；②仓库为自有但未入账；③存货已发出但未确认收入。",
             "suggestion": "①如为自有仓库，提供房产证/固定资产明细；②如为租赁仓库，补充仓库租赁合同及租金支付凭证；③核对库存实物与账面是否一致。",
             "required_evidence": [
                 "仓库证明：自有房产证/仓库租赁合同+租金支付凭证",
@@ -3470,19 +3740,44 @@ def _analyze_equipment_depreciation_missing(db, company_id, ps, pe, results):
         FixedAsset.company_id == company_id
     ).scalar() or 0
 
-    # 检查设备租赁费
-    equip_rent = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.summary.contains("设备租赁"),
-            JournalEntry.summary.contains("机械租赁"),
-            JournalEntry.summary.contains("设备租金"),
-            JournalEntry.summary.contains("机器租赁"),
-        )
-    ).scalar() or 0
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同（设备租赁/折旧）
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="设备折旧/租赁费",
+        je_extra_codes=["660202"],  # 折旧已单独查，这里只查租赁
+        je_summary_kw=["设备租赁", "机械租赁", "设备租金", "机器租赁"],
+        bank_kw=["设备租赁", "机械租赁", "设备租金", "机器租赁", "设备采购"],
+        invoice_kw=["设备", "机械", "机器", "生产线"],
+        contract_kw=["设备", "机械", "机器", "生产线", "加工"],
+        contract_types=["采购", "租赁"])
 
+    equip_rent = ev["je"]["amount"]  # 设备租赁费（四源结果）
     total_equip_cost = depr + mfg_depr + equip_rent
+
+    # 银行有设备付款但序时账无折旧/租赁记录 → 高风险
+    if ev["overall"]["je_missing_but_bank_found"] and fixed_assets == 0 and revenue > 300000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有设备相关付款但序时账无设备折旧/租赁费",
+            "detail": f"银行流水中有设备相关付款 {ev['bank']['amount']:,.0f} 元，但序时账中无设备折旧或租赁费，且固定资产系统中无设备记录。银行付款必须入账。可能：①设备采购未入固定资产卡片；②设备租赁费记入其他科目；③为其他用途付款（非生产设备）。",
+            "suggestion": "核查银行设备付款的实际用途，如为设备采购，补录固定资产卡片并计提折旧；如为租赁，补录设备租赁费凭证。",
+            "required_evidence": ["银行设备付款回单", "设备采购合同/租赁合同", "固定资产卡片"]
+        })
+        return
+
+    # 有设备合同但无账务
+    if ev["overall"]["je_missing_but_contract_found"] and fixed_assets == 0:
+        free_contracts = [c for c in ev["contract"]["contracts"] if c["is_free"]]
+        has_free = len(free_contracts) > 0
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 3 if has_free else 5,
+            "risk_level": "低风险" if has_free else "中风险",
+            "risk_color": "#3b82f6" if has_free else "#f59e0b", "urgency": "建议" if has_free else "提醒",
+            "item": f"有设备相关合同（{len(ev['contract']['contracts'])}份）但无固定资产/折旧记录{'(含免费条款)' if has_free else ''}",
+            "detail": f"系统中有 {len(ev['contract']['contracts'])} 份设备/机械相关合同{'(含免费/无偿条款)' if has_free else ''}，但序时账和固定资产系统中均无对应记录。可能为：①合同已签但设备尚未到货；②设备由对方免费提供使用；③合同未实际履行。",
+            "suggestion": "核实合同实际履行状态，如设备已到货使用，补录固定资产卡片；如为免费使用，保留合同作为佐证材料。"
+        })
+        return
 
     if fixed_assets == 0 and equip_rent == 0 and revenue > 500000:
         results.append({
@@ -3514,41 +3809,61 @@ def _analyze_advertising_missing(db, company_id, ps, pe, results):
     if revenue < 500000:
         return
 
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="广告/营销费",
+        je_account_codes=["660103"],
+        je_summary_kw=["广告", "推广", "营销", "宣传", "展会"],
+        bank_kw=["广告", "推广", "营销", "宣传", "展会", "传媒"],
+        invoice_kw=["广告", "推广", "营销", "宣传", "展会"],
+        contract_kw=["广告", "推广", "营销", "宣传", "展会"],
+        contract_types=["服务"])
 
-    # 广告费/推广费（进项发票）
-    ad_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(
-            PurchaseInvoice.goods_name.contains("广告"),
-            PurchaseInvoice.goods_name.contains("推广"),
-            PurchaseInvoice.goods_name.contains("营销"),
-            PurchaseInvoice.goods_name.contains("宣传"),
-            PurchaseInvoice.goods_name.contains("展会"),
-        )
-    ).scalar() or 0
-
-    # 序时账科目
-    ad_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.startswith("660103"),  # 广告费
-            JournalEntry.summary.contains("广告"),
-            JournalEntry.summary.contains("推广"),
-            JournalEntry.summary.contains("营销"),
-        )
-    ).scalar() or 0
-
+    ad_je = ev["je"]["amount"]
+    ad_inv = ev["invoice"]["amount"]
     total_ad = ad_inv + ad_je
 
-    if total_ad == 0 and revenue > 1000000:
+    # 银行付款未入账 → 高风险
+    if ev["overall"]["je_missing_but_bank_found"] and revenue > 500000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有广告/营销付款但序时账无对应记录",
+            "detail": f"银行流水中有广告/推广相关付款 {ev['bank']['amount']:,.0f} 元，但序时账中无广告费科目（660103）记录。银行付款必须入账，否则余额对不上。可能：①广告费记入其他科目；②凭证尚未生成。",
+            "suggestion": "核查银行广告付款对应的序时账科目，补录广告费凭证或建立科目映射表。",
+            "required_evidence": ["银行广告付款回单", "对应序时账凭证"]
+        })
+        return
+
+    # 有发票但序时账未入账 → 中风险
+    if ev["overall"]["je_missing_but_invoice_found"]:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"有广告/营销发票（{ev['invoice']['count']}张/{ev['invoice']['amount']:,.0f}元）但序时账无广告费",
+            "detail": f"取得广告/推广相关进项发票 {ev['invoice']['count']} 张，金额 {ev['invoice']['amount']:,.0f} 元，但序时账中未发现广告费科目（660103）记录。发票已取得但未入账，可能延后入账或科目归集有误。",
+            "suggestion": "确认广告发票是否已入账，补录广告费凭证。"
+        })
+        return
+
+    # 有合同但无账务
+    if ev["overall"]["je_missing_but_contract_found"]:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"有广告/营销合同（{len(ev['contract']['contracts'])}份）但序时账无广告费",
+            "detail": f"系统中有 {len(ev['contract']['contracts'])} 份广告/营销相关合同，但序时账中无广告费。可能为：①合同已签但尚未产生费用；②以资源置换形式合作（无现金流）。",
+            "suggestion": "核实合同实际履行情况，如已产生费用，补录凭证。如为资源置换，保留合同作为说明材料。"
+        })
+        return
+
+    # 四源皆空 → 中风险（取决于收入规模）
+    if ev["overall"]["all_sources_none"] and revenue > 1000000:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 5, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
-            "item": f"营业收入 {revenue:,.0f} 元但零广告/营销费用",
-            "detail": f"营业收入 {revenue:,.0f} 元（≥100万元），但未发现广告费、推广费、营销费等市场拓展相关支出。稽查视角：收入达到一定规模却无市场拓展费用，不符合商业逻辑。可能：①广告费未取得发票；②以其他费用名义入账；③确无广告需求（如为B2B大客户模式）。",
+            "item": f"营业收入 {revenue:,.0f} 元但零广告/营销费用（四源皆空）",
+            "detail": f"营业收入 {revenue:,.0f} 元（≥100万元），但序时账、银行流水、发票、合同中均未发现广告费/推广费/营销费等市场拓展相关支出。稽查视角：收入达到一定规模却无市场拓展费用，不符合商业逻辑。可能：①广告费未取得发票；②以其他费用名义入账；③确无广告需求（如为B2B大客户模式）。",
             "suggestion": "①如确有广告/推广支出，补录相关凭证；②如为B2B大客户模式（无需广告），准备客户开发方式说明；③如通过电商平台销售，平台服务费即推广费，需明确标注。",
             "required_evidence": [
                 "市场推广/客户开发模式说明",
@@ -3564,13 +3879,10 @@ def _analyze_travel_missing(db, company_id, ps, pe, results):
     if revenue < 300000:
         return
 
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
-
     # 检查是否有非本地的客户
     company = db.query(Company).filter(Company.id == company_id).first()
     company_city = ""
     if company and company.address:
-        # 尝试提取城市名
         addr = company.address
         for suffix in ["市", "县", "区"]:
             idx = addr.find(suffix)
@@ -3578,7 +3890,6 @@ def _analyze_travel_missing(db, company_id, ps, pe, results):
                 company_city = addr[max(0, idx-3):idx+1]
                 break
 
-    # 统计客户数量
     customers = db.query(Customer).filter(Customer.company_id == company_id).all()
     has_remote_customers = False
     for c in customers:
@@ -3587,38 +3898,50 @@ def _analyze_travel_missing(db, company_id, ps, pe, results):
             has_remote_customers = True
             break
 
-    # 差旅费
-    travel_je = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.period >= ps, JournalEntry.period <= pe,
-        or_(
-            JournalEntry.account_code.startswith("660211"),  # 差旅费
-            JournalEntry.summary.contains("差旅"),
-            JournalEntry.summary.contains("出差"),
-            JournalEntry.summary.contains("交通"),
-            JournalEntry.summary.contains("住宿"),
-        )
-    ).scalar() or 0
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="差旅费",
+        je_account_codes=["660211"],
+        je_summary_kw=["差旅", "出差", "交通", "住宿", "机票"],
+        bank_kw=["差旅", "出差", "机票", "酒店", "住宿", "携程", "去哪儿"],
+        invoice_kw=["机票", "酒店", "住宿", "差旅", "火车票"],
+        contract_kw=["差旅", "出差", "商旅", "携程"],
+        contract_types=["服务"])
 
-    # 进项发票
-    travel_inv = db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(
-            PurchaseInvoice.goods_name.contains("机票"),
-            PurchaseInvoice.goods_name.contains("酒店"),
-            PurchaseInvoice.goods_name.contains("住宿"),
-        )
-    ).scalar() or 0
-
+    travel_je = ev["je"]["amount"]
+    travel_inv = ev["invoice"]["amount"]
     total_travel = travel_je + travel_inv
 
-    if total_travel == 0 and revenue > 1000000 and (has_remote_customers or len(customers) > 5):
+    # 银行付款未入账 → 高风险
+    if ev["overall"]["je_missing_but_bank_found"] and revenue > 500000:
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有差旅付款但序时账无差旅费记录",
+            "detail": f"银行流水中有差旅相关付款 {ev['bank']['amount']:,.0f} 元，但序时账中无差旅费科目（660211）记录。银行付款必须入账。可能：①差旅费记入其他费用科目；②报销凭证尚未生成。",
+            "suggestion": "核查银行差旅付款对应的序时账科目，补录差旅费凭证。",
+            "required_evidence": ["银行差旅付款回单", "对应序时账凭证"]
+        })
+        return
+
+    # 有发票但序时账未入账 → 中风险
+    if ev["overall"]["je_missing_but_invoice_found"]:
         results.append({
             "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
             "risk_color": "#f59e0b", "urgency": "提醒",
-            "item": f"有{len(customers)}家客户但零差旅费用",
-            "detail": f"系统中有 {len(customers)} 家客户（含异地客户），营业收入 {revenue:,.0f} 元，但未发现差旅费/住宿费/交通费。稽查视角：有客户就有业务往来，有业务就有差旅需求。零差旅费不符合常规商业逻辑。可能：①差旅费未取得发票或以现金支付未入账；②确无差旅需要（本地客户为主/线上沟通）。",
+            "item": f"有差旅发票（{ev['invoice']['count']}张/{ev['invoice']['amount']:,.0f}元）但序时账无差旅费",
+            "detail": f"取得机票/酒店等差旅发票 {ev['invoice']['count']} 张，金额 {ev['invoice']['amount']:,.0f} 元，但序时账中未发现差旅费科目（660211）记录。发票已取得但报销凭证未生成，可能为员工差旅费未及时报销入账。",
+            "suggestion": "催促员工及时提交差旅费报销单，补录差旅费凭证。"
+        })
+        return
+
+    # 四源皆空 + 有异地客户 → 中风险
+    if ev["overall"]["all_sources_none"] and revenue > 1000000 and (has_remote_customers or len(customers) > 5):
+        results.append({
+            "category": "经营实质", "category_icon": "🔍", "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": f"有{len(customers)}家客户但零差旅费用（四源皆空）",
+            "detail": f"系统中有 {len(customers)} 家客户（含异地客户），营业收入 {revenue:,.0f} 元，但序时账、银行流水、发票、合同中均未发现差旅费/住宿费/交通费。稽查视角：有客户就有业务往来，有业务就有差旅需求。零差旅费不符合常规商业逻辑。可能：①差旅费未取得发票或以现金支付未入账；②确无差旅需要（本地客户为主/线上沟通）。",
             "suggestion": "①如确有差旅，补录差旅费报销凭证；②如以线上沟通为主，准备业务沟通记录（邮件/视频会议记录）；③如客户均为本地，提供客户地域分布说明。",
             "required_evidence": [
                 "客户地域分布说明",
@@ -5299,32 +5622,31 @@ def _analyze_daily_necessities_invoice(db, company_id, ps, pe, results):
 
 def _analyze_energy_consumption_match(db, company_id, ps, pe, results):
     """经营能耗（水电气）与业务规模匹配检测"""
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
-    
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         return
     biz = (company.business_scope or "") + " " + (company.company_type or "")
     
-    # 能源关键词
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
     energy_keywords = ["电费", "水费", "燃气", "天然气", "供热", "供电", "水务", "电力"]
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="能源/水电费",
+        je_account_codes=["660215"],
+        je_summary_kw=energy_keywords,
+        bank_kw=energy_keywords + ["电", "水", "气"],
+        invoice_kw=energy_keywords,
+        contract_kw=["租赁", "物业", "场地", "厂房", "办公室", "商铺"],
+        contract_types=["租赁"])
     
-    energy_amt = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in energy_keywords])
-    ).scalar())
-    
-    # 也查序时账
-    energy_je = 0
-    for kw in energy_keywords:
-        energy_je += _get_account_sum(db, company_id, "660215", ps, pe, "debit")  # 水电费
-    
+    energy_amt = ev["invoice"]["amount"]
+    energy_je = ev["je"]["amount"]
     total_energy = max(energy_amt, energy_je)
+    bank_energy = ev["bank"]["amount"]
     
     total_purchase = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
         PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+        PurchaseInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        PurchaseInvoice.invoice_date <= _period_to_date_range(pe)[1]
     ).scalar())
     
     if total_purchase <= 0:
@@ -5335,6 +5657,29 @@ def _analyze_energy_consumption_match(db, company_id, ps, pe, results):
     # 制造业/餐饮业水电气占比应>5%，一般企业>2%
     is_mfg = any(kw in biz for kw in ["制造", "生产", "加工", "食品", "餐饮"])
     threshold = 5 if is_mfg else 2
+    
+    # 银行有能源付款但发票/序时账无对应 → 高风险（水电气是银行必须记录的基础支出）
+    if ev["overall"]["je_missing_but_bank_found"] and total_purchase > 50000:
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有能源/水电费付款但无对应发票或凭证",
+            "detail": f"银行流水中有能源/水电相关付款 {bank_energy:,.0f} 元，但序时账中无水电费科目（660215）记录，进项发票中也无对应发票。水电气是基础经营支出，银行有付款而账上无记录，说明可能：①水电费发票未取得或丢失；②水电费记入其他科目；③以个人账户代付未入账。",
+            "suggestion": "核查银行水电付款对应的凭证，补录水电费发票及费用。建立水电费发票月度催收机制。",
+            "required_evidence": ["银行水电付款回单", "水电费发票（催收中）", "水电费分摊说明（如含在租金中）"]
+        })
+        return
+    
+    # 有场地租赁合同但无私账水电费 → 水和电可能含在租金中
+    if ev["overall"]["je_missing_but_contract_found"] and total_energy < threshold * total_purchase / 100 and total_purchase > 100000:
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 3, "risk_level": "低风险",
+            "risk_color": "#3b82f6", "urgency": "建议",
+            "item": f"有场地/租赁合同（{len(ev['contract']['contracts'])}份）但水电费记录不完整",
+            "detail": f"系统中有 {len(ev['contract']['contracts'])} 份场地租赁/物业相关合同，但水电费记录仅 {total_energy:,.0f} 元（占进项{energy_ratio:.1f}%）。可能为水电费包含在租金中统一支付。",
+            "suggestion": "如水电费含在租金中，建议在租赁合同中明确水电费条款，或要求房东单独开具水电费发票。"
+        })
+        return
     
     if energy_ratio < threshold and total_purchase > 100000:
         results.append({
@@ -5349,49 +5694,70 @@ def _analyze_energy_consumption_match(db, company_id, ps, pe, results):
 
 def _analyze_transport_expense_match(db, company_id, ps, pe, results):
     """运输费用与经营模式匹配检测（补充版：运输费为0触发）"""
-    ps_date = _period_to_date_range(ps)[0]; pe_date = _period_to_date_range(pe)[1]
-    
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         return
     biz = (company.business_scope or "") + " " + (company.company_type or "")
     
-    # 运输费关键词
+    # 制造业/批发业有大量购销但无运输费
+    is_mfg_wholesale = any(kw in biz for kw in ["制造", "生产", "加工", "批发", "贸易", "销售"])
+    
+    # 四源交叉验证：序时账 + 银行流水 + 取得发票 + 合同
     transport_kw = ["运输", "物流", "快递", "货运", "配送"]
+    ev = _check_expense_evidence(db, company_id, ps, pe,
+        expense_name="运输/物流费",
+        je_account_codes=["660207"],
+        je_summary_kw=transport_kw,
+        bank_kw=transport_kw + ["搬运"],
+        invoice_kw=transport_kw,
+        contract_kw=transport_kw,
+        contract_types=["服务"])
     
-    transport_inv = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
-        PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date,
-        or_(*[PurchaseInvoice.goods_name.contains(kw) for kw in transport_kw])
-    ).scalar())
-    
-    # 序时账运输费
-    transport_je = 0
-    for kw in transport_kw:
-        transport_je += _safe_float(db.query(func.sum(JournalEntry.debit_amount)).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.period >= ps, JournalEntry.period <= pe,
-            JournalEntry.summary.contains(kw)
-        ).scalar())
-    
-    total_transport = transport_inv + transport_je
+    transport_je = ev["je"]["amount"]
+    transport_inv = ev["invoice"]["amount"]
+    bank_transport = ev["bank"]["amount"]
+    total_transport = transport_inv + transport_je + bank_transport
     
     total_purchase = _safe_float(db.query(func.sum(PurchaseInvoice.total_amount)).filter(
         PurchaseInvoice.company_id == company_id,
-        PurchaseInvoice.invoice_date >= ps_date, PurchaseInvoice.invoice_date <= pe_date
+        PurchaseInvoice.invoice_date >= _period_to_date_range(ps)[0],
+        PurchaseInvoice.invoice_date <= _period_to_date_range(pe)[1]
     ).scalar())
     
     revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
     
-    # 制造业/批发业有大量购销但无运输费
-    is_mfg_wholesale = any(kw in biz for kw in ["制造", "生产", "加工", "批发", "贸易", "销售"])
+    # 银行有运输付款但账上无对应 → 高风险
+    if is_mfg_wholesale and ev["overall"]["je_missing_but_bank_found"] and total_purchase > 50000:
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 8, "risk_level": "高风险",
+            "risk_color": "#dc2626", "urgency": "紧急",
+            "item": "银行有运输/物流付款但无对应运输费凭证",
+            "detail": f"银行流水中有运输/物流相关付款 {bank_transport:,.0f} 元，但序时账中无运输费科目（660207）记录。银行付款必须入账。可能：①运费合并在采购成本中；②凭证尚未生成。",
+            "suggestion": "核查银行运输付款对应的序时账科目，如运费合并在采购成本中，建立科目映射表。",
+            "required_evidence": ["银行运输付款回单", "对应序时账凭证", "运费与采购成本的分摊说明"]
+        })
+        return
+    
+    # 有运输合同但无账务
+    if is_mfg_wholesale and ev["overall"]["je_missing_but_contract_found"] and total_purchase > 50000:
+        free_contracts = [c for c in ev["contract"]["contracts"] if c["is_free"]]
+        has_free = len(free_contracts) > 0
+        results.append({
+            "category": "发票深度", "category_icon": "🔬", "risk_score": 3 if has_free else 5,
+            "risk_level": "低风险" if has_free else "中风险",
+            "risk_color": "#3b82f6" if has_free else "#f59e0b", "urgency": "建议" if has_free else "提醒",
+            "item": f"有运输/物流合同（{len(ev['contract']['contracts'])}份）但无运输费记录{'(含免费条款)' if has_free else ''}",
+            "detail": f"系统中有 {len(ev['contract']['contracts'])} 份运输/物流合同{'(含免费条款)' if has_free else ''}，但序时账中无运输费。可能为：①运费由对方承担（到付/含在售价中）；②合同刚签署尚未履行。",
+            "suggestion": "如运费由客户承担，在销售合同中标明运费承担方式。如为免费运输，保留合同作为佐证。"
+        })
+        return
     
     if is_mfg_wholesale and total_transport == 0 and (total_purchase > 100000 or revenue > 100000):
         results.append({
             "category": "发票深度", "category_icon": "🔬", "risk_score": 7, "risk_level": "高风险",
             "risk_color": "#dc2626", "urgency": "紧急",
-            "item": "运输费用与经营模式不匹配",
-            "detail": f"企业为制造/批发类企业（购销总额 {(total_purchase + revenue):,.0f} 元），但未发现任何运输/物流费用。有货物购销就需要运输，无运输费不符合商业逻辑。可能：①运费由对方承担并已在发票金额中体现；②私车运输未入账；③虚开发票无真实货物流转。",
+            "item": "运输费用与经营模式不匹配（四源皆空）",
+            "detail": f"企业为制造/批发类企业（购销总额 {(total_purchase + revenue):,.0f} 元），但序时账、银行流水、发票、合同中均未发现任何运输/物流费用。有货物购销就需要运输，无运输费不符合商业逻辑。可能：①运费由对方承担并已在发票金额中体现；②私车运输未入账；③虚开发票无真实货物流转。",
             "suggestion": "如为对方承担运费，提供销售合同中运费的条款说明。如为自有车辆运输，检查车辆折旧/油费是否入账。如为第三方物流，保留运输合同和对账单。",
             "required_evidence": ["销售合同（运费条款）", "运输合同/物流对账单", "自有车辆费用明细（如适用）"]
         })
