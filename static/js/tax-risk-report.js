@@ -38,6 +38,18 @@ function renderTaxRiskReport(container) {
       refreshBtn.addEventListener('click', loadTaxRiskReport);
       clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
+    // 下载报告按钮（下拉菜单）
+    var downloadWrap = document.createElement('span');
+    downloadWrap.style.marginRight = '8px';
+    downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
+      + '<button class="btn-toolbar" id="risk-download-btn" style="display:none">下载报告</button>'
+      + '<div class="download-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;min-width:120px">'
+      + '<div data-fmt="pdf" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📄 PDF 下载</div>'
+      + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📝 Word 下载</div>'
+      + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📊 PPT 下载</div>'
+      + '</div></div>';
+    clearBtn.parentNode.insertBefore(downloadWrap, clearBtn);
+
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
     spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>'
@@ -46,6 +58,26 @@ function renderTaxRiskReport(container) {
       + '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>'
       + '</span>';
     trBar.appendChild(spacer);
+
+    // 下载菜单交互
+    setTimeout(function() {
+      var downloadBtn = document.getElementById('risk-download-btn');
+      var downloadMenu = document.querySelector('.download-menu');
+      if (downloadBtn && downloadMenu) {
+        downloadBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          downloadMenu.style.display = downloadMenu.style.display === 'none' ? '' : 'none';
+        });
+        downloadMenu.querySelectorAll('[data-fmt]').forEach(function(item) {
+          item.addEventListener('click', function() {
+            var fmt = this.getAttribute('data-fmt');
+            downloadReport(fmt);
+            downloadMenu.style.display = 'none';
+          });
+        });
+        document.addEventListener('click', function() { downloadMenu.style.display = 'none'; });
+      }
+    }, 100);
   }
 
   if (!taxRiskReportData) {
@@ -76,9 +108,11 @@ async function loadTaxRiskReport() {
     if (to) url += '&period_to=' + to;
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
-    // 报告生成后显示「删除报告」按钮
+    // 报告生成后显示「删除报告」和「下载报告」按钮
     var delWrap = document.getElementById('risk-delete-btn-wrap');
     if (delWrap) delWrap.style.display = '';
+    var downloadBtn = document.getElementById('risk-download-btn');
+    if (downloadBtn) downloadBtn.style.display = '';
     var delBtn = document.getElementById('risk-delete-btn');
     if (delBtn && !delBtn._bound) {
       delBtn._bound = true;
@@ -91,6 +125,8 @@ async function loadTaxRiskReport() {
         if (m) m.innerHTML = '';
         var d = document.getElementById('risk-delete-btn-wrap');
         if (d) d.style.display = 'none';
+        var db = document.getElementById('risk-download-btn');
+        if (db) db.style.display = 'none';
         toast('报告已删除', 'success');
       });
     }
@@ -289,18 +325,67 @@ function renderRiskItem(r, idx) {
   else if (r.risk_level === '低风险') levelClass = 'item-low';
   else if (r.risk_level === '良好') levelClass = 'item-good';
 
+  // 冲突已解决标签
+  var conflictBadge = '';
+  if (r._conflict_resolved) {
+    conflictBadge = '<span class="conflict-resolved-badge" title="已确认冲突场景" style="display:inline-block;margin-left:6px;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:10px;font-size:11px">已评估</span>';
+  }
+
+  // 冲突场景UI
+  var conflictHtml = '';
+  if (r.conflict_scenarios && r.conflict_scenarios.length > 0) {
+    conflictHtml = '<div class="conflict-scenarios-section">'
+      + '<div class="conflict-title">⚠️ 存在可能的降级/排除场景，请确认：</div>';
+    for (var s = 0; s < r.conflict_scenarios.length; s++) {
+      var sc = r.conflict_scenarios[s];
+      var scId = sc.id || '';
+      var isResolved = r._conflict_resolved && r._saved_answers && r._saved_answers[scId];
+      var isEliminate = sc.effect === 'eliminate';
+      var effectLabel = isEliminate ? '完全排除风险' : '风险降级';
+      var effectColor = isEliminate ? '#10b981' : '#f59e0b';
+
+      conflictHtml += '<div class="conflict-scenario-item" style="margin-top:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">';
+      conflictHtml += '<div class="conflict-question" style="font-size:13px;color:#92400e;margin-bottom:8px;line-height:1.6">' + escapeHtml(sc.question) + '</div>';
+
+      if (isResolved) {
+        // 已解决状态
+        var answer = r._saved_answers[scId];
+        conflictHtml += '<div style="font-size:12px;color:#0369a1;margin-top:4px">✓ 已确认' + (answer.note ? '：' + escapeHtml(answer.note) : '') + '</div>';
+        conflictHtml += '<button class="conflict-reset-btn" onclick="resetConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\')" '
+          + 'style="margin-top:6px;padding:2px 10px;font-size:11px;background:none;border:1px solid #cbd5e1;border-radius:4px;color:var(--gray-500);cursor:pointer">撤销</button>';
+      } else {
+        // 未解决状态
+        conflictHtml += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+        conflictHtml += '<button class="conflict-confirm-btn" onclick="resolveConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\',false)" '
+          + 'style="padding:4px 14px;font-size:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;color:#dc2626;cursor:pointer">确认风险</button>';
+        conflictHtml += '<button class="conflict-eliminate-btn" onclick="resolveConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\',true)" '
+          + 'style="padding:4px 14px;font-size:12px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:4px;color:#059669;cursor:pointer">' + effectLabel + '</button>';
+        conflictHtml += '</div>';
+      }
+      conflictHtml += '</div>';
+    }
+    conflictHtml += '</div>';
+  }
+
   return '<div class="risk-item ' + levelClass + '">'
     + '<div class="risk-item-header">'
     + '<span class="risk-item-level" style="background:' + (r.risk_color || '#6b7280') + '">' + escapeHtml(r.risk_level) + '</span>'
     + '<span class="risk-item-title">' + escapeHtml(r.item) + '</span>'
     + urgencyBadge
+    + conflictBadge
     + '</div>'
     + '<div class="risk-item-detail">' + escapeHtml(r.detail) + '</div>'
     + '<div class="risk-item-suggestion">'
     + '<span class="suggestion-label">💡 建议：</span>' + escapeHtml(r.suggestion)
     + '</div>'
     + (r.required_evidence && r.required_evidence.length > 0 ? renderEvidenceList(r.required_evidence, r.risk_level) : '')
+    + conflictHtml
     + '</div>';
+}
+
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 }
 
 function renderEvidenceList(evidence, level) {
@@ -341,6 +426,59 @@ function renderEvidenceSummary(summaryItems) {
   }
   html += '</div></div>';
   body.innerHTML = html + (body.innerHTML || '');
+}
+
+function downloadReport(format) {
+  if (!taxRiskReportData) { toast('请先生成报告', 'error'); return; }
+  var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
+  var range = (typeof _getPeriodRange === 'function') ? _getPeriodRange('tr-') : null;
+  var from = range ? range.from : '';
+  var to = range ? range.to : '';
+  var url = '/api/tax-risk/report/download?company_id=' + cid + '&format=' + format;
+  if (from) url += '&period_from=' + from;
+  if (to) url += '&period_to=' + to;
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'tax_risk_report.' + (format === 'docx' ? 'docx' : format === 'pptx' ? 'pptx' : 'pdf');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('报告下载中...', 'success');
+}
+
+function resolveConflict(riskItem, conflictId, confirmed) {
+  var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
+  fetch('/api/tax-risk/report/conflict-answers?company_id=' + cid, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ risk_item: riskItem, conflict_id: conflictId, confirmed: confirmed, answer_note: '' })
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      toast(confirmed ? '风险已降级/排除' : '风险已确认', 'success');
+      // 刷新当前风险项显示
+      loadTaxRiskReport();
+    }
+  }).catch(function(err) {
+    toast('操作失败: ' + (err.message || err), 'error');
+  });
+}
+
+function resetConflict(riskItem, conflictId) {
+  var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
+  fetch('/api/tax-risk/report/conflict-answers/reset?company_id=' + cid, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ risk_item: riskItem, conflict_id: conflictId })
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      toast('冲突答案已重置', 'success');
+      loadTaxRiskReport();
+    }
+  }).catch(function(err) {
+    toast('重置失败: ' + (err.message || err), 'error');
+  });
 }
 
 function escapeHtml(str) {

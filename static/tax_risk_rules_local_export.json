@@ -235,7 +235,19 @@
     "urgency": "紧急",
     "evidence": "其他应收款明细账\n股东借款协议\n资金用途说明",
     "dataSource": "科目 1221 期末余额 / 科目 1 期末余额",
-    "remark": "占比>10%触发"
+    "remark": "占比>10%触发",
+    "conflict_scenarios": [
+      {
+        "id": "normal_petty_cash",
+        "question": "大额其他应收款是否为正常经营备用金、员工差旅借款、保证金/押金等？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "其他应收款主要系正常经营备用金和押金。仍需注意：员工借款需及时报销冲账，备用金需定期清理。",
+          "override_suggestion": "逐户建立其他应收款台账，定期清理。员工借款超过3个月未报销的及时催收。"
+        }
+      }
+    ]
   },
   {
     "id": 21,
@@ -417,7 +429,30 @@
     "urgency": "紧急",
     "evidence": "其他应收款明细\n股东借款合同\n还款凭证",
     "dataSource": "科目 1221 余额（个人），账龄>1年",
-    "remark": "稽查重点"
+    "remark": "稽查重点",
+    "conflict_scenarios": [
+      {
+        "id": "loan_repaid",
+        "question": "该股东借款是否已在年末前归还，或于汇算清缴前已归还？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：股东借款已在纳税年度终了前/汇算清缴前归还，不视同分红。",
+          "override_suggestion": "保留银行回单和借款协议备查。"
+        }
+      },
+      {
+        "id": "business_loan",
+        "question": "该借款是否为正常经营用途（如采购垫款、投标保证金等），而非个人消费？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "借款系正常经营用途，非个人消费。但仍需注意：超过1年未归还仍会被税务机关认定为视同分红。",
+          "override_suggestion": "签订书面借款协议，明确借款用途和还款期限，年末前督促归还。如无法归还，补缴20%个人所得税。"
+        }
+      }
+    ]
   },
   {
     "id": 35,
@@ -501,7 +536,30 @@
     "urgency": "紧急",
     "evidence": "社保申报记录\n社保缴费凭证\n员工名单",
     "dataSource": "SocialSecurityDeclaration 表",
-    "remark": ""
+    "remark": "",
+    "conflict_scenarios": [
+      {
+        "id": "retired_reemploy",
+        "question": "是否存在以下情形：①员工均为退休返聘、实习生、劳务派遣人员？②企业为初创阶段尚未招聘正式员工？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：员工均为退休返聘/实习生/劳务派遣人员，无需缴纳社保；或企业处于初创筹建阶段。",
+          "override_suggestion": "退休返聘保留退休证+劳务协议；实习生保留实习协议；劳务派遣保留派遣合同。"
+        }
+      },
+      {
+        "id": "flexible_employment",
+        "question": "是否全员采用灵活用工/平台用工模式，由平台方负责社保？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "企业采用灵活用工/平台用工模式，社保由平台方承担。需确认平台方的社保缴纳合规性。",
+          "override_suggestion": "保留灵活用工平台服务协议+付款凭证+平台方社保缴纳承诺函。"
+        }
+      }
+    ]
   },
   {
     "id": 42,
@@ -515,7 +573,20 @@
     "urgency": "提醒",
     "evidence": "公积金申报记录\n缴存凭证",
     "dataSource": "HousingFundDeclaration 表",
-    "remark": ""
+    "remark": "",
+    "conflict_scenarios": [
+      {
+        "id": "no_hf_needed",
+        "question": "是否存在以下情形：①员工均为退休返聘无需缴存？②企业为初创阶段尚未招聘正式员工？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：员工均为退休返聘/企业初创阶段，无需缴纳住房公积金。",
+          "override_suggestion": "保留相关证明材料备查。"
+        }
+      }
+    ]
   },
   {
     "id": 43,
@@ -571,7 +642,19 @@
     "urgency": "提醒",
     "evidence": "工资发放记录\n薪酬制度文件",
     "dataSource": "SalaryRecord.current_income，4500-5500元区间",
-    "remark": "占比>50%触发"
+    "remark": "占比>50%触发",
+    "conflict_scenarios": [
+      {
+        "id": "market_rate",
+        "question": "该岗位的市场薪酬水平是否确实在起征点附近（如基础行政、初级客服等岗位）？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "低风险",
+          "override_detail": "员工薪酬与市场水平一致，属于正常薪酬分布。建议保留薪酬制度和岗位说明书以备稽查。",
+          "override_suggestion": "保留岗位说明书、薪酬制度文件、同行业薪酬调查报告。确保薪酬发放真实反映劳动价值。"
+        }
+      }
+    ]
   },
   {
     "id": 48,
@@ -683,7 +766,29 @@
     "urgency": "提醒",
     "evidence": "利润表\n亏损原因分析报告",
     "dataSource": "利润表 6001 vs 6401+6601+6602+6603",
-    "remark": "毛利率或净利率<0触发"
+    "remark": "毛利率或净利率<0触发",
+    "conflict_scenarios": [
+      {
+        "id": "startup_loss",
+        "question": "是否为企业初创期/市场拓展期，以价格策略抢占市场份额导致的战略性亏损？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "毛利率为负系企业初创期/市场拓展期的战略性亏损。持续亏损超过3年将引发税务机关关注。",
+          "override_suggestion": "保留市场分析报告、定价策略说明备查。建议制定盈利时间表，避免长期亏损被质疑无实质经营。"
+        }
+      },
+      {
+        "id": "industry_cycle",
+        "question": "是否为周期性行业低谷期，同行企业普遍亏损？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "亏损系行业周期性波动所致，同行企业普遍处于亏损状态。",
+          "override_suggestion": "保留行业分析报告、同行业上市公司数据对比。注意亏损年度仍需正常申报。"
+        }
+      }
+    ]
   },
   {
     "id": 56,
@@ -697,7 +802,20 @@
     "urgency": "紧急",
     "evidence": "经营场所证明\n员工社保证明\n存货固定资产盘点表\n银行流水和合同",
     "dataSource": "综合判断：凭证数量、员工数量、固定资产、营业收入",
-    "remark": "满足≥3项触发高风险"
+    "remark": "满足≥3项触发高风险",
+    "conflict_scenarios": [
+      {
+        "id": "preparation_phase",
+        "question": "企业是否处于筹建期/项目筹备期，尚未正式开展经营业务？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：企业处于筹建期/项目筹备期，尚未正式开展经营，零申报/低申报属于正常状态。",
+          "override_suggestion": "保留筹建相关证明：项目筹备计划、场地租赁/购置合同、人员招聘计划等。"
+        }
+      }
+    ]
   },
   {
     "id": 57,
@@ -711,7 +829,29 @@
     "urgency": "提醒",
     "evidence": "行业毛利率参考数据\n企业毛利率分析表",
     "dataSource": "科目 6001 vs 6401，对比行业参考值",
-    "remark": "偏差>20个百分点触发"
+    "remark": "偏差>20个百分点触发",
+    "conflict_scenarios": [
+      {
+        "id": "unique_model",
+        "question": "企业是否具有独特的商业模式或技术优势（如自有IP、专利技术、独家渠道）导致毛利率显著高于行业？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "低风险",
+          "override_detail": "毛利率偏高系企业独特商业模式/技术优势所致，属于正常经营特征。",
+          "override_suggestion": "保留商业模式说明、知识产权清单、独家授权协议等证明文件。确保收入成本核算准确。"
+        }
+      },
+      {
+        "id": "promotion_period",
+        "question": "是否处于促销期/市场开拓期，以低价策略导致毛利率偏低？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "低风险",
+          "override_detail": "毛利率偏低系促销/市场开拓策略所致，属于短期经营安排。",
+          "override_suggestion": "保留促销方案、市场拓展计划等文件。注意低价策略的持续性，避免被认定为转移定价。"
+        }
+      }
+    ]
   },
   {
     "id": 58,
@@ -739,7 +879,19 @@
     "urgency": "紧急",
     "evidence": "利润表\n亏损原因分析\n行业周期分析报告",
     "dataSource": "按期间统计收入-成本-费用，计算盈利/亏损期数",
-    "remark": "亏损面≥75%触发高风险"
+    "remark": "亏损面≥75%触发高风险",
+    "conflict_scenarios": [
+      {
+        "id": "r_and_d_heavy",
+        "question": "是否属于研发密集型企业（如生物医药、SaaS、芯片设计），研发投入大、盈利周期长？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "长期亏损系研发密集型企业特征，属于行业正常现象。但连续亏损超过5年可能引发重点稽查。",
+          "override_suggestion": "保留研发项目立项书、研发费用辅助账、研发成果证明。积极申请高新技术企业资质和研发费用加计扣除。"
+        }
+      }
+    ]
   },
   {
     "id": 60,
@@ -753,7 +905,30 @@
     "urgency": "紧急",
     "evidence": "租赁合同\n租金/水电费/物业费支付凭证\n经营场所照片",
     "dataSource": "JournalEntry 摘要含'租赁'/'水电'/'物业' 借方发生额",
-    "remark": "稽查必查项"
+    "remark": "稽查必查项",
+    "conflict_scenarios": [
+      {
+        "id": "free_premises",
+        "question": "该经营场所是否为自有房产或关联方无偿提供使用？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险（无租赁费但持续经营）已排除：经营场所为自有房产或关联方无偿提供使用，属于正常商业安排。",
+          "override_suggestion": "保留无偿使用协议或产权证明备查。关联方无偿提供注意关联交易披露要求。"
+        }
+      },
+      {
+        "id": "virtual_office",
+        "question": "企业是否使用虚拟地址/集中办公区注册，实际经营在其他地点？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "企业使用虚拟注册地址，实际经营场所另有其地。需确保实际经营场所的租赁/使用证明齐全。",
+          "override_suggestion": "提供实际经营场所的租赁合同、水电费凭证，确保注册地址与实际地址的工商备案一致性。"
+        }
+      }
+    ]
   },
   {
     "id": 61,
@@ -767,7 +942,20 @@
     "urgency": "紧急",
     "evidence": "存货盘点表\n仓库租赁合同\n仓储费支付凭证",
     "dataSource": "PurchaseInvoice 采购总额 / SalesInvoice 销售总额，vs 租赁费支出",
-    "remark": "进销比>3且无仓库租赁触发"
+    "remark": "进销比>3且无仓库租赁触发",
+    "conflict_scenarios": [
+      {
+        "id": "dropshipping",
+        "question": "是否采用代发货/零库存模式（如一件代发），不需要自有仓库？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：企业采用代发货/零库存经营模式，无需自有仓库。进销比异常系经营模式所致。",
+          "override_suggestion": "保留与供应商的代发协议、物流单据备查，证明实际业务流程。"
+        }
+      }
+    ]
   },
   {
     "id": "3c80c2cb-04e7-430d-a392-6390b7c25c8d",
@@ -795,7 +983,19 @@
     "urgency": "高",
     "evidence": "银行流水，筛选贷方对方为个人的记录",
     "dataSource": "银行流水",
-    "remark": "金税四期与人民银行账户系统联网，公转私实时监控"
+    "remark": "金税四期与人民银行账户系统联网，公转私实时监控",
+    "conflict_scenarios": [
+      {
+        "id": "normal_reimbursement",
+        "question": "公转私款项是否为正常费用报销、员工备用金、工资奖金发放等？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "公转私主要为正常费用报销和工资发放。但频繁大额转账仍需规范管理，避免被认定为资金抽逃。",
+          "override_suggestion": "每笔公转私需附审批单+发票+银行回单。大额转账（≥5万）需额外附情况说明。避免无理由、无凭证的公转私。"
+        }
+      }
+    ]
   },
   {
     "id": "d4de3e4a-603a-43d2-ade8-15a44e29a606",
@@ -809,7 +1009,19 @@
     "urgency": "中",
     "evidence": "银行流水现金流量表，统计现金交易占比",
     "dataSource": "银行流水",
-    "remark": "单笔5万元以上现金交易需重点说明"
+    "remark": "单笔5万元以上现金交易需重点说明",
+    "conflict_scenarios": [
+      {
+        "id": "retail_industry",
+        "question": "是否为零售/餐饮/便民服务等现金交易为主的行业？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "企业属于零售/餐饮/便民服务行业，现金交易占比高属于行业特性。需加强现金管理规范性。",
+          "override_suggestion": "建立现金收付台账，每日现金收入及时存入银行。大额支出避免现金支付。保留POS机流水、收银系统数据作为佐证。"
+        }
+      }
+    ]
   },
   {
     "id": "c743b4ef-e2bc-4a19-b80a-bb422da3a6e5",
@@ -921,7 +1133,19 @@
     "urgency": "高",
     "evidence": "进项发票品名列表、销项发票品名列表，做关键词匹配比对",
     "dataSource": "进项发票/销项发票",
-    "remark": "商贸企业进销品名匹配是金税四期必查项"
+    "remark": "商贸企业进销品名匹配是金税四期必查项",
+    "conflict_scenarios": [
+      {
+        "id": "processing_trade",
+        "question": "是否为委托加工/来料加工模式，进项为原材料、销项为加工后的成品？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "进销品名不一致系委托加工/来料加工模式所致，属于正常经营安排。",
+          "override_suggestion": "保留委托加工合同、加工费结算凭证、出入库记录。确保加工业务的进销对应关系可追溯。"
+        }
+      }
+    ]
   },
   {
     "id": "208f6a57-a742-4014-b0aa-82aec6235962",
@@ -1103,7 +1327,19 @@
     "urgency": "紧急",
     "evidence": "留抵税额变动分析表、大额进项发票清单、采购合同及付款凭证",
     "dataSource": "VATDeclaration附表五，按期间比对期末留抵税额变动",
-    "remark": "留抵税额环比增长>100%且绝对额>10万元触发高风险"
+    "remark": "留抵税额环比增长>100%且绝对额>10万元触发高风险",
+    "conflict_scenarios": [
+      {
+        "id": "major_purchase",
+        "question": "留抵税额增长是否因大规模设备采购、集中进货等正常经营安排？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "留抵增长系大规模采购所致，属于正常经营安排。需确保大额进项发票真实、合规。",
+          "override_suggestion": "保留采购合同、入库单、付款凭证及验收入库记录。确保进项税额抵扣凭证完整。"
+        }
+      }
+    ]
   },
   {
     "id": "40c3267a-57b6-41dc-b3e8-c4ff48fb3a12",
@@ -1145,7 +1381,30 @@
     "urgency": "提醒",
     "evidence": "留抵税额分析表、未确认收入明细、进项税额明细",
     "dataSource": "VATDeclaration，期末留抵>50万且持续>=6个月",
-    "remark": "留抵>50万且持续>=6个月触发"
+    "remark": "留抵>50万且持续>=6个月触发",
+    "conflict_scenarios": [
+      {
+        "id": "export_enterprise",
+        "question": "是否为出口型企业（适用免抵退税），留抵税额来自出口退税？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：企业为出口型企业，留抵税额来自出口退税的正常累积，符合政策规定。",
+          "override_suggestion": "保留出口报关单、出口退税申报表等资料备查。"
+        }
+      },
+      {
+        "id": "construction_phase",
+        "question": "是否处于大规模基建/设备采购期，尚未进入正常经营阶段？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "低风险",
+          "override_detail": "企业处于基建/设备采购期，留抵税额来自大规模固定资产投资。属于正常经营安排。",
+          "override_suggestion": "保留设备采购合同、入库单、付款凭证备查。建成投产后应关注留抵退税政策。"
+        }
+      }
+    ]
   },
   {
     "id": "3fa7ae78-422c-4231-82ff-3632cdcb863b",
@@ -1411,7 +1670,30 @@
     "urgency": "紧急",
     "evidence": "其他应付款明细账、入账凭证、合同协议、资金流水",
     "dataSource": "序时账，其他应付款科目余额 vs 营业成本/营业收入/所有者权益，账龄>1年",
-    "remark": "任一项占比>50%触发高风险，>30%触发中风险"
+    "remark": "任一项占比>50%触发高风险，>30%触发中风险",
+    "conflict_scenarios": [
+      {
+        "id": "normal_deposit",
+        "question": "大额其他应付款是否为正常经营押金/保证金（如投标保证金、履约保证金、租房押金等）？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：大额其他应付款系正常经营押金/保证金，属于标准商业安排。",
+          "override_suggestion": "保留保证金/押金的合同或协议，确保有明确的退还条件和时间。"
+        }
+      },
+      {
+        "id": "shareholder_lending",
+        "question": "是否为股东/关联方临时资金拆借（有借款协议+利息约定+还款计划）？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "其他应付款为股东/关联方借款。需注意利息支出的税前扣除限制（关联债资比2:1/5:1）和增值税处理。",
+          "override_suggestion": "签订书面借款协议，明确利息和还款期限。关联方借款需注意独立交易原则。"
+        }
+      }
+    ]
   },
   {
     "id": "98044853-57d0-4f6f-a8f3-cb4666e9ede5",
@@ -1523,7 +1805,30 @@
     "urgency": "紧急",
     "evidence": "员工花名册、劳动合同、社保缴纳记录、工资发放记录",
     "dataSource": "序时账（应付职工薪酬/管理费用-工资）+ 营业收入",
-    "remark": "有营业收入但人工成本为0触发高风险"
+    "remark": "有营业收入但人工成本为0触发高风险",
+    "conflict_scenarios": [
+      {
+        "id": "outsourcing",
+        "question": "是否将主要业务外包给第三方公司，或采用劳务派遣模式用工？",
+        "effect": "eliminate",
+        "if_confirmed": {
+          "new_level": "良好",
+          "new_score": 0,
+          "override_detail": "原风险已排除：企业主要业务采用外包/劳务派遣模式，人力成本体现在外包服务费中。",
+          "override_suggestion": "保留外包服务合同、发票、付款凭证备查。注意劳务派遣用工比例不得超过用工总量的10%。"
+        }
+      },
+      {
+        "id": "founder_unpaid",
+        "question": "是否为初创企业，创始团队暂未领取工资？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "低风险",
+          "override_detail": "企业处于初创期，创始团队暂未发放工资。如有经营收入，应尽快规范用工制度。",
+          "override_suggestion": "建议创始团队签订劳动合同，依法缴纳社保。若暂不发薪，保留相关决议记录。"
+        }
+      }
+    ]
   },
   {
     "id": "8dbfe621-37b5-4d64-9cf0-d384a8637cb2",
@@ -1537,7 +1842,19 @@
     "urgency": "紧急",
     "evidence": "所得税申报表、利润表、免税政策备案文件",
     "dataSource": "企业所得税申报表（实际缴纳税额/应纳税所得额），行业参考值16-22%",
-    "remark": "连续≥2年贡献率为0且营业收入>100万触发"
+    "remark": "连续≥2年贡献率为0且营业收入>100万触发",
+    "conflict_scenarios": [
+      {
+        "id": "accumulated_loss",
+        "question": "是否以前年度有大量亏损可弥补，导致当期应纳所得税额为零？",
+        "effect": "downgrade_partial",
+        "if_confirmed": {
+          "new_level": "中风险",
+          "override_detail": "贡献率为零系弥补以前年度亏损所致，符合税法规定（可弥补年限：一般5年/高新技术10年）。",
+          "override_suggestion": "保留亏损弥补台账、年度汇算清缴申报表。确认亏损弥补年限和金额正确。"
+        }
+      }
+    ]
   },
   {
     "id": "9080c2ab-f062-48dc-a5b4-2dc78dc7fa27",
