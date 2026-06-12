@@ -5,3 +5,6 @@ __pycache__/
 .env
 .DS_Store
 server.log
+generate_rules.py
+server_error.log
+tax_risk_rules_default.json
