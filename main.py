@@ -1858,14 +1858,19 @@ class FixedAssetCreate(BaseModel):
 
 
 class FixedAssetUpdate(BaseModel):
+    code: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
+    spec: Optional[str] = None
+    unit: Optional[str] = None
     dept_code: Optional[str] = None
     location: Optional[str] = None
+    purchase_date: Optional[date] = None
     original_value: Optional[float] = None
     residual_value: Optional[float] = None
     useful_life_months: Optional[int] = None
     depreciation_method: Optional[str] = None
+    supplier: Optional[str] = None
     status: Optional[str] = None
     remark: Optional[str] = None
 
@@ -1902,6 +1907,27 @@ def list_fixed_assets(
     } for a in assets]
 
 
+@app.get("/api/fixed-assets/{fa_id}")
+def get_fixed_asset(fa_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
+    if not fa:
+        raise HTTPException(404, detail="资产不存在")
+    return {
+        "id": fa.id, "code": fa.code, "name": fa.name, "category": fa.category,
+        "spec": fa.spec, "unit": fa.unit, "dept_code": fa.dept_code,
+        "location": fa.location, "purchase_date": str(fa.purchase_date) if fa.purchase_date else "",
+        "original_value": fa.original_value, "residual_value": fa.residual_value,
+        "useful_life_months": fa.useful_life_months,
+        "accumulated_depreciation": fa.accumulated_depreciation,
+        "monthly_depreciation": fa.monthly_depreciation,
+        "depreciation_method": fa.depreciation_method,
+        "status": fa.status, "supplier": fa.supplier,
+        "net_value": round(fa.original_value - fa.accumulated_depreciation, 2),
+        "net_rate": round((fa.original_value - fa.accumulated_depreciation) / fa.original_value * 100, 1) if fa.original_value > 0 else 0,
+        "remark": fa.remark
+    }
+
+
 @app.post("/api/fixed-assets")
 def create_fixed_asset(data: FixedAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     # 计算月折旧额（直线法）
@@ -1933,8 +1959,10 @@ def update_fixed_asset(fa_id: int, data: FixedAssetUpdate, company_id: int = Que
         setattr(fa, k, v)
     # 重新计算月折旧额
     if data.original_value is not None or data.residual_value is not None or data.useful_life_months is not None:
-        if fa.useful_life_months > 0:
-            fa.monthly_depreciation = round((fa.original_value - fa.residual_value) / fa.useful_life_months, 2)
+        if fa.useful_life_months and fa.useful_life_months > 0:
+            orig = float(fa.original_value or 0)
+            resid = float(fa.residual_value or 0)
+            fa.monthly_depreciation = round((orig - resid) / fa.useful_life_months, 2)
     fa.updated_at = datetime.now()
     db.commit()
     return {"message": "更新成功"}
@@ -1957,20 +1985,24 @@ def depreciate_asset(fa_id: int, period: str = Query(...), company_id: int = Que
     if existing:
         raise HTTPException(400, detail=f"该资产在 {period} 期间已计提折旧")
     # 累计折旧不能超过（原值-残值）
-    if fa.accumulated_depreciation + fa.monthly_depreciation > fa.original_value - fa.residual_value:
-        dep_amount = fa.original_value - fa.residual_value - fa.accumulated_depreciation
+    orig = float(fa.original_value or 0)
+    resid = float(fa.residual_value or 0)
+    accum = float(fa.accumulated_depreciation or 0)
+    monthly = float(fa.monthly_depreciation or 0)
+    if accum + monthly > orig - resid:
+        dep_amount = orig - resid - accum
     else:
-        dep_amount = fa.monthly_depreciation
+        dep_amount = monthly
     if dep_amount <= 0:
         raise HTTPException(400, detail="该资产已提足折旧")
-    acc_before = fa.accumulated_depreciation
-    fa.accumulated_depreciation += dep_amount
+    acc_before = accum
+    fa.accumulated_depreciation = acc_before + dep_amount
     fa.updated_at = datetime.now()
     rec = FixedAssetDepreciation(
         company_id=company_id, asset_id=fa_id, period=period,
         depreciation_amount=dep_amount, accumulated_before=acc_before,
-        accumulated_after=fa.accumulated_depreciation,
-        net_value=round(fa.original_value - fa.accumulated_depreciation, 2)
+        accumulated_after=round(orig - resid, 2),
+        net_value=round(orig - resid, 2)
     )
     db.add(rec)
     db.commit()
@@ -2024,20 +2056,24 @@ def batch_depreciate(company_id: int = Query(...), period: Optional[str] = None,
         ).first()
         if existing:
             continue
-        if fa.monthly_depreciation <= 0:
+        monthly = float(fa.monthly_depreciation or 0)
+        if monthly <= 0:
             continue
-        max_dep = fa.original_value - fa.residual_value - fa.accumulated_depreciation
+        orig = float(fa.original_value or 0)
+        resid = float(fa.residual_value or 0)
+        accum = float(fa.accumulated_depreciation or 0)
+        max_dep = orig - resid - accum
         if max_dep <= 0:
             continue
-        dep_amount = min(fa.monthly_depreciation, max_dep)
-        acc_before = fa.accumulated_depreciation
-        fa.accumulated_depreciation += dep_amount
+        dep_amount = min(monthly, max_dep)
+        acc_before = float(fa.accumulated_depreciation or 0)
+        fa.accumulated_depreciation = acc_before + dep_amount
         fa.updated_at = datetime.now()
         rec = FixedAssetDepreciation(
             company_id=company_id, asset_id=fa.id, period=period,
             depreciation_amount=dep_amount, accumulated_before=acc_before,
-            accumulated_after=fa.accumulated_depreciation,
-            net_value=round(fa.original_value - fa.accumulated_depreciation, 2)
+            accumulated_after=round(orig - resid, 2),
+            net_value=round(orig - resid, 2)
         )
         db.add(rec)
         depreciated.append((fa, dep_amount))
@@ -2121,8 +2157,10 @@ class IntangibleAssetCreate(BaseModel):
 
 
 class IntangibleAssetUpdate(BaseModel):
+    code: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
+    purchase_date: Optional[date] = None
     original_value: Optional[float] = None
     residual_value: Optional[float] = None
     useful_life_months: Optional[int] = None
@@ -2156,6 +2194,24 @@ def list_intangible_assets(
     } for a in assets]
 
 
+@app.get("/api/intangible-assets/{ia_id}")
+def get_intangible_asset(ia_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    a = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
+    if not a:
+        raise HTTPException(404, detail="无形资产不存在")
+    return {
+        "id": a.id, "code": a.code, "name": a.name, "category": a.category,
+        "purchase_date": str(a.purchase_date) if a.purchase_date else "",
+        "original_value": a.original_value, "residual_value": a.residual_value,
+        "useful_life_months": a.useful_life_months,
+        "accumulated_amortization": a.accumulated_amortization,
+        "monthly_amortization": a.monthly_amortization,
+        "status": a.status,
+        "net_value": round(a.original_value - a.accumulated_amortization, 2),
+        "remark": a.remark
+    }
+
+
 @app.post("/api/intangible-assets")
 def create_intangible_asset(data: IntangibleAssetCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     monthly = round((data.original_value - data.residual_value) / data.useful_life_months, 2) if data.useful_life_months > 0 else 0
@@ -2179,8 +2235,10 @@ def update_intangible_asset(ia_id: int, data: IntangibleAssetUpdate, company_id:
         raise HTTPException(404, detail="资产不存在")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(ia, k, v)
-    if ia.useful_life_months > 0:
-        ia.monthly_amortization = round((ia.original_value - ia.residual_value) / ia.useful_life_months, 2)
+    if ia.useful_life_months and ia.useful_life_months > 0:
+        orig = float(ia.original_value or 0)
+        resid = float(ia.residual_value or 0)
+        ia.monthly_amortization = round((orig - resid) / ia.useful_life_months, 2)
     ia.updated_at = datetime.now()
     db.commit()
     return {"message": "更新成功"}
@@ -2201,20 +2259,24 @@ def amortize_asset(ia_id: int, period: str = Query(...), company_id: int = Query
     ).first()
     if existing:
         raise HTTPException(400, detail=f"该资产在 {period} 期间已摊销")
-    if ia.accumulated_amortization + ia.monthly_amortization > ia.original_value - ia.residual_value:
-        amt = ia.original_value - ia.residual_value - ia.accumulated_amortization
+    orig = float(ia.original_value or 0)
+    resid = float(ia.residual_value or 0)
+    accum = float(ia.accumulated_amortization or 0)
+    monthly = float(ia.monthly_amortization or 0)
+    if accum + monthly > orig - resid:
+        amt = orig - resid - accum
     else:
-        amt = ia.monthly_amortization
+        amt = monthly
     if amt <= 0:
         raise HTTPException(400, detail="该资产已摊销完毕")
-    acc_before = ia.accumulated_amortization
-    ia.accumulated_amortization += amt
+    acc_before = accum
+    ia.accumulated_amortization = acc_before + amt
     ia.updated_at = datetime.now()
     rec = IntangibleAssetAmortization(
         company_id=company_id, asset_id=ia_id, period=period,
         amortization_amount=amt, accumulated_before=acc_before,
-        accumulated_after=ia.accumulated_amortization,
-        net_value=round(ia.original_value - ia.accumulated_amortization, 2)
+        accumulated_after=round(orig - resid, 2),
+        net_value=round(orig - resid, 2)
     )
     db.add(rec)
     db.commit()
@@ -2267,20 +2329,24 @@ def batch_amortize(company_id: int = Query(...), period: Optional[str] = None,
         ).first()
         if existing:
             continue
-        if ia.monthly_amortization <= 0:
+        monthly = float(ia.monthly_amortization or 0)
+        if monthly <= 0:
             continue
-        max_amt = ia.original_value - ia.residual_value - ia.accumulated_amortization
+        orig = float(ia.original_value or 0)
+        resid = float(ia.residual_value or 0)
+        accum = float(ia.accumulated_amortization or 0)
+        max_amt = orig - resid - accum
         if max_amt <= 0:
             continue
-        amt = min(ia.monthly_amortization, max_amt)
-        acc_before = ia.accumulated_amortization
-        ia.accumulated_amortization += amt
+        amt = min(monthly, max_amt)
+        acc_before = float(ia.accumulated_amortization or 0)
+        ia.accumulated_amortization = acc_before + amt
         ia.updated_at = datetime.now()
         rec = IntangibleAssetAmortization(
             company_id=company_id, asset_id=ia.id, period=period,
             amortization_amount=amt, accumulated_before=acc_before,
-            accumulated_after=ia.accumulated_amortization,
-            net_value=round(ia.original_value - ia.accumulated_amortization, 2)
+            accumulated_after=round(orig - resid, 2),
+            net_value=round(orig - resid, 2)
         )
         db.add(rec)
         amortized.append((ia, amt))
@@ -2410,6 +2476,21 @@ def list_inventory_items(
     } for i in items]
 
 
+@app.get("/api/inventory-items/{item_id}")
+def get_inventory_item(item_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    i = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.id == item_id).first()
+    if not i:
+        raise HTTPException(404, detail="存货不存在")
+    return {
+        "id": i.id, "code": i.code, "name": i.name, "spec": i.spec,
+        "unit": i.unit, "category": i.category, "warehouse": i.warehouse,
+        "safety_stock": i.safety_stock, "current_stock": i.current_stock,
+        "cost_price": i.cost_price, "sale_price": i.sale_price,
+        "stock_value": round(i.current_stock * i.cost_price, 2),
+        "account_code": i.account_code, "remark": i.remark
+    }
+
+
 @app.post("/api/inventory-items")
 def create_inventory_item(data: InventoryItemCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
     item = InventoryItem(company_id=company_id, **data.model_dump())
@@ -2429,6 +2510,17 @@ def update_inventory_item(item_id: int, data: InventoryItemUpdate, company_id: i
     item.updated_at = datetime.now()
     db.commit()
     return {"message": "更新成功"}
+
+
+@app.delete("/api/inventory-items/{item_id}")
+def delete_inventory_item(item_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, detail="存货不存在")
+    item.is_active = False
+    item.updated_at = datetime.now()
+    db.commit()
+    return {"message": "删除成功"}
 
 
 @app.get("/api/inventory-transactions")

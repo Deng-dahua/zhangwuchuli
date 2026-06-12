@@ -225,7 +225,7 @@ async function depreciateAll() {
   const period = _faEffectivePeriod();
   if (!confirm(`确认对全部在用资产计提 ${period} 折旧？`)) return;
   try {
-    const res = await api('/api/fixed-assets/depreciate', {method:'POST', body:JSON.stringify({period})});
+    const res = await api(`/api/fixed-assets/depreciate?period=${encodeURIComponent(period)}`, {method:'POST'});
     let msg = `折旧完成，共处理 ${res.depreciated_count} 项资产`;
     if (res.total_amount > 0) msg += `，¥${fmt(res.total_amount)}`;
     if (res.voucher_no) msg += `，凭证号 ${res.voucher_no}`;
@@ -449,7 +449,7 @@ async function amortizeAll() {
   const period = _iaEffectivePeriod();
   if (!confirm(`确认对全部在用无形资产摊销 ${period}？`)) return;
   try {
-    const res = await api('/api/intangible-assets/amortize', {method:'POST', body:JSON.stringify({period})});
+    const res = await api(`/api/intangible-assets/amortize?period=${encodeURIComponent(period)}`, {method:'POST'});
     let msg = `摊销完成，共处理 ${res.amortized_count} 项资产`;
     if (res.total_amount > 0) msg += `，¥${fmt(res.total_amount)}`;
     if (res.voucher_no) msg += `，凭证号 ${res.voucher_no}`;
