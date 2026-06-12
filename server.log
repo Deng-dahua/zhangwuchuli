@@ -1,9 +1,8 @@
-INFO:     Started server process [13672]
+INFO:     Started server process [6468]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8001): [winerror 10048] 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-  [OK] 自动为 10 张开具发票生成凭证
-  [OK] 进项抵扣→凭证: 自动生成 1 笔
-数据库初始化完成（1 家公司）
+INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
+  [OK] 开具发票→凭证: 无需生成（均已存在或无发票）
+数据库初始化完成（4 家公司）
+INFO:     127.0.0.1:1085 - "POST /api/tax-risk-rules/save-local HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1092 - "POST /api/tax-risk-rules/save-local HTTP/1.1" 200 OK

@@ -657,12 +657,14 @@ function clearAllRules() {
 
 // 把浏览器 localStorage 中的规则上传到服务器（方便分析）
 async function uploadLocalRulesToServer() {
-  var data = localStorage.getItem('taxRiskRulesData');
-  if (!data) { toast('本地没有规则数据', 'error'); return; }
+  var raw = localStorage.getItem('taxRiskRulesData');
+  if (!raw) { toast('本地没有规则数据', 'error'); return; }
   try {
+    // localStorage 存的是 JSON 字符串，先解析成对象再 stringify，避免双重引号
+    var dataObj = JSON.parse(raw);
     var resp = await fetch('/api/tax-risk-rules/save-local', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
+      body: JSON.stringify(dataObj)
     });
     var result = await resp.json();
     if (result.ok) {

@@ -7190,15 +7190,16 @@ app.include_router(chat_router)
 # ==================== 涉税风险规则：从浏览器 localStorage 导出到服务器 ====================
 import json as _json
 from pathlib import Path as _Path
+from fastapi import Request
 
 @app.post("/api/tax-risk-rules/save-local")
-def tax_risk_rules_save_local(data: str = Body(...)):
+async def tax_risk_rules_save_local(request: Request):
     """接收浏览器 localStorage 中的涉税风险规则 JSON，保存到服务器文件"""
     dst = _Path("static/tax_risk_rules_local_export.json")
     try:
-        parsed = _json.loads(data)
-        dst.write_text(_json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
-        return {"ok": True, "count": len(parsed), "path": str(dst)}
+        data = await request.json()
+        dst.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "count": len(data), "path": str(dst)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
