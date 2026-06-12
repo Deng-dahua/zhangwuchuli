@@ -41,7 +41,7 @@ from database import (
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals, _match_tax_payment_journals,
-    auto_generate_purchase_journal,
+    auto_generate_purchase_journal, _next_voucher_no,
 )
 
 from vat import router as vat_router
@@ -2002,6 +2002,111 @@ def delete_fixed_asset(fa_id: int, company_id: int = Query(...), db: Session = D
     return {"message": "删除成功"}
 
 
+@app.post("/api/fixed-assets/depreciate")
+def batch_depreciate(company_id: int = Query(...), period: Optional[str] = None,
+                     db: Session = Depends(get_db)):
+    """批量计提折旧 + 自动生成凭证"""
+    if not period:
+        period = datetime.now().strftime("%Y-%m")
+    assets = db.query(FixedAsset).filter(
+        FixedAsset.company_id == company_id, FixedAsset.status == "在用"
+    ).all()
+    if not assets:
+        return {"depreciated_count": 0, "message": "无在用资产"}
+    
+    depreciated = []
+    total_amount = 0.0
+    for fa in assets:
+        existing = db.query(FixedAssetDepreciation).filter(
+            FixedAssetDepreciation.company_id == company_id,
+            FixedAssetDepreciation.asset_id == fa.id,
+            FixedAssetDepreciation.period == period
+        ).first()
+        if existing:
+            continue
+        if fa.monthly_depreciation <= 0:
+            continue
+        max_dep = fa.original_value - fa.residual_value - fa.accumulated_depreciation
+        if max_dep <= 0:
+            continue
+        dep_amount = min(fa.monthly_depreciation, max_dep)
+        acc_before = fa.accumulated_depreciation
+        fa.accumulated_depreciation += dep_amount
+        fa.updated_at = datetime.now()
+        rec = FixedAssetDepreciation(
+            company_id=company_id, asset_id=fa.id, period=period,
+            depreciation_amount=dep_amount, accumulated_before=acc_before,
+            accumulated_after=fa.accumulated_depreciation,
+            net_value=round(fa.original_value - fa.accumulated_depreciation, 2)
+        )
+        db.add(rec)
+        depreciated.append((fa, dep_amount))
+        total_amount += dep_amount
+    
+    if not depreciated:
+        db.commit()
+        return {"depreciated_count": 0, "total_amount": 0, "message": "所有资产已计提或无需折旧"}
+    
+    # 生成折旧凭证
+    _ensure_account(db, company_id, "1602", "累计折旧", "资产", "贷")
+    _ensure_account(db, company_id, "660203", "折旧费", "损益", "借", parent_code="6602")
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    
+    next_vno = _next_voucher_no(db, company_id, period)
+    summary = f"计提{period}固定资产折旧（{len(depreciated)}项）"
+    # 借方：管理费用-折旧费
+    je_debit = JournalEntry(
+        company_id=company_id, period=period, voucher_word="记", voucher_no=next_vno,
+        entry_date=datetime.now().date(), summary=summary, account_code="660203", account_name="折旧费",
+        debit_amount=round(total_amount, 2), credit_amount=0,
+        source="折旧计提"
+    )
+    db.add(je_debit)
+    # 贷方：累计折旧
+    je_credit = JournalEntry(
+        company_id=company_id, period=period, voucher_word="记", voucher_no=next_vno,
+        entry_date=datetime.now().date(), summary=summary, account_code="1602", account_name="累计折旧",
+        debit_amount=0, credit_amount=round(total_amount, 2),
+        source="折旧计提"
+    )
+    db.add(je_credit)
+    
+    db.commit()
+    return {
+        "depreciated_count": len(depreciated),
+        "total_amount": round(total_amount, 2),
+        "voucher_no": f"记-{next_vno}",
+        "message": f"计提{len(depreciated)}项资产折旧 ¥{total_amount:,.2f}"
+    }
+
+
+@app.get("/api/fixed-assets/stats")
+def fixed_assets_stats(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """固定资产统计概览"""
+    assets = db.query(FixedAsset).filter(FixedAsset.company_id == company_id).all()
+    active = [a for a in assets if a.status == "在用"]
+    return {
+        "total_count": len(assets),
+        "active_count": len(active),
+        "total_original": round(sum(a.original_value for a in assets), 2),
+        "total_depreciation": round(sum(a.accumulated_depreciation for a in assets), 2),
+        "total_net_value": round(sum(a.original_value - a.accumulated_depreciation for a in assets), 2),
+        "monthly_depreciation": round(sum(a.monthly_depreciation for a in active), 2),
+    }
+
+
+@app.post("/api/fixed-assets/batch-delete")
+def batch_delete_fixed_assets(ids: List[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    deleted = 0
+    for fa_id in ids:
+        fa = db.query(FixedAsset).filter(FixedAsset.company_id == company_id, FixedAsset.id == fa_id).first()
+        if fa and fa.status != "在用":
+            db.delete(fa)
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted, "message": f"删除 {deleted} 项"}
+
+
 # ==================== 无形资产 ====================
 
 class IntangibleAssetCreate(BaseModel):
@@ -2124,6 +2229,122 @@ def delete_intangible_asset(ia_id: int, company_id: int = Query(...), db: Sessio
     db.delete(ia)
     db.commit()
     return {"message": "删除成功"}
+
+
+@app.get("/api/intangible-assets/{ia_id}/amortizations")
+def get_asset_amortizations(ia_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    """查询某项无形资产的摊销明细"""
+    recs = db.query(IntangibleAssetAmortization).filter(
+        IntangibleAssetAmortization.company_id == company_id,
+        IntangibleAssetAmortization.asset_id == ia_id
+    ).order_by(IntangibleAssetAmortization.period).all()
+    return [{
+        "id": r.id, "period": r.period, "amortization_amount": r.amortization_amount,
+        "accumulated_before": r.accumulated_before, "accumulated_after": r.accumulated_after,
+        "net_value": r.net_value
+    } for r in recs]
+
+
+@app.post("/api/intangible-assets/amortize")
+def batch_amortize(company_id: int = Query(...), period: Optional[str] = None,
+                   db: Session = Depends(get_db)):
+    """批量摊销 + 自动生成凭证"""
+    if not period:
+        period = datetime.now().strftime("%Y-%m")
+    assets = db.query(IntangibleAsset).filter(
+        IntangibleAsset.company_id == company_id, IntangibleAsset.status == "在用"
+    ).all()
+    if not assets:
+        return {"amortized_count": 0, "message": "无在用资产"}
+    
+    amortized = []
+    total_amount = 0.0
+    for ia in assets:
+        existing = db.query(IntangibleAssetAmortization).filter(
+            IntangibleAssetAmortization.company_id == company_id,
+            IntangibleAssetAmortization.asset_id == ia.id,
+            IntangibleAssetAmortization.period == period
+        ).first()
+        if existing:
+            continue
+        if ia.monthly_amortization <= 0:
+            continue
+        max_amt = ia.original_value - ia.residual_value - ia.accumulated_amortization
+        if max_amt <= 0:
+            continue
+        amt = min(ia.monthly_amortization, max_amt)
+        acc_before = ia.accumulated_amortization
+        ia.accumulated_amortization += amt
+        ia.updated_at = datetime.now()
+        rec = IntangibleAssetAmortization(
+            company_id=company_id, asset_id=ia.id, period=period,
+            amortization_amount=amt, accumulated_before=acc_before,
+            accumulated_after=ia.accumulated_amortization,
+            net_value=round(ia.original_value - ia.accumulated_amortization, 2)
+        )
+        db.add(rec)
+        amortized.append((ia, amt))
+        total_amount += amt
+    
+    if not amortized:
+        db.commit()
+        return {"amortized_count": 0, "total_amount": 0, "message": "所有资产已摊销或无需摊销"}
+    
+    # 生成摊销凭证
+    _ensure_account(db, company_id, "1702", "累计摊销", "资产", "贷")
+    _ensure_account(db, company_id, "660208", "摊销费", "损益", "借", parent_code="6602")
+    _ensure_account(db, company_id, "6602", "管理费用", "损益", "借")
+    
+    next_vno = _next_voucher_no(db, company_id, period)
+    summary = f"计提{period}无形资产摊销（{len(amortized)}项）"
+    je_debit = JournalEntry(
+        company_id=company_id, period=period, voucher_word="记", voucher_no=next_vno,
+        entry_date=datetime.now().date(), summary=summary, account_code="660208", account_name="摊销费",
+        debit_amount=round(total_amount, 2), credit_amount=0,
+        source="摊销计提"
+    )
+    db.add(je_debit)
+    je_credit = JournalEntry(
+        company_id=company_id, period=period, voucher_word="记", voucher_no=next_vno,
+        entry_date=datetime.now().date(), summary=summary, account_code="1702", account_name="累计摊销",
+        debit_amount=0, credit_amount=round(total_amount, 2),
+        source="摊销计提"
+    )
+    db.add(je_credit)
+    
+    db.commit()
+    return {
+        "amortized_count": len(amortized),
+        "total_amount": round(total_amount, 2),
+        "voucher_no": f"记-{next_vno}",
+        "message": f"摊销{len(amortized)}项资产 ¥{total_amount:,.2f}"
+    }
+
+
+@app.get("/api/intangible-assets/stats")
+def intangible_assets_stats(company_id: int = Query(...), db: Session = Depends(get_db)):
+    assets = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id).all()
+    active = [a for a in assets if a.status == "在用"]
+    return {
+        "total_count": len(assets),
+        "active_count": len(active),
+        "total_original": round(sum(a.original_value for a in assets), 2),
+        "total_amortization": round(sum(a.accumulated_amortization for a in assets), 2),
+        "total_net_value": round(sum(a.original_value - a.accumulated_amortization for a in assets), 2),
+        "monthly_amortization": round(sum(a.monthly_amortization for a in active), 2),
+    }
+
+
+@app.post("/api/intangible-assets/batch-delete")
+def batch_delete_intangible_assets(ids: List[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    deleted = 0
+    for ia_id in ids:
+        ia = db.query(IntangibleAsset).filter(IntangibleAsset.company_id == company_id, IntangibleAsset.id == ia_id).first()
+        if ia:
+            db.delete(ia)
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted, "message": f"删除 {deleted} 项"}
 
 
 # ==================== 库存管理 ====================
@@ -2262,6 +2483,167 @@ def create_inventory_transaction(data: InventoryTransactionCreate, company_id: i
     db.commit()
     db.refresh(trans)
     return {"id": trans.id, "message": f"{data.trans_type}成功，当前库存: {item.current_stock}"}
+
+
+@app.post("/api/inventory-transactions/transfer")
+def create_inventory_transfer(company_id: int = Query(...), db: Session = Depends(get_db),
+    item_code: str = Form(...), transaction_date: str = Form(...),
+    quantity: float = Form(...), warehouse_from: str = Form(...),
+    warehouse_to: str = Form(...), unit_price: float = Form(0.0),
+    reference_no: str = Form(""), operator: str = Form("管理员"),
+    remark: str = Form("")):
+    """仓库间调拨"""
+    item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == item_code).first()
+    if not item:
+        raise HTTPException(400, detail=f"商品 {item_code} 不存在")
+    if quantity <= 0:
+        raise HTTPException(400, detail="数量必须大于0")
+    total = round(quantity * unit_price, 2)
+    tx_date = datetime.strptime(transaction_date, "%Y-%m-%d").date() if transaction_date else datetime.now().date()
+    
+    # 调拨出
+    out_tx = InventoryTransaction(
+        company_id=company_id, item_code=item_code, transaction_date=tx_date,
+        trans_type="调拨出", quantity=quantity, unit_price=unit_price, total_amount=total,
+        warehouse=warehouse_from, warehouse_to=warehouse_to,
+        reference_no=reference_no, operator=operator, remark=remark
+    )
+    db.add(out_tx)
+    
+    # 调拨入
+    in_tx = InventoryTransaction(
+        company_id=company_id, item_code=item_code, transaction_date=tx_date,
+        trans_type="调拨入", quantity=quantity, unit_price=unit_price, total_amount=total,
+        warehouse=warehouse_to, warehouse_to=warehouse_from,
+        reference_no=reference_no, operator=operator, remark=remark
+    )
+    db.add(in_tx)
+    
+    db.commit()
+    return {"message": f"调拨 {quantity} {item.unit}从{warehouse_from}到{warehouse_to}", "out_tx_id": out_tx.id, "in_tx_id": in_tx.id}
+
+
+@app.post("/api/inventory-transactions/count")
+def create_inventory_count(company_id: int = Query(...), db: Session = Depends(get_db),
+    item_code: str = Form(...), transaction_date: str = Form(...),
+    actual_quantity: float = Form(...), unit_price: float = Form(0.0),
+    warehouse: str = Form(""), reference_no: str = Form(""),
+    operator: str = Form("管理员"), remark: str = Form("")):
+    """盘点（自动生成盘盈/盘亏）"""
+    item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.code == item_code).first()
+    if not item:
+        raise HTTPException(400, detail=f"商品 {item_code} 不存在")
+    diff = actual_quantity - item.current_stock
+    if abs(diff) < 0.001:
+        return {"message": "库存账实相符，无需调整", "current": item.current_stock, "actual": actual_quantity}
+    
+    tx_date = datetime.strptime(transaction_date, "%Y-%m-%d").date() if transaction_date else datetime.now().date()
+    trans_type = "盘盈" if diff > 0 else "盘亏"
+    total = round(abs(diff) * unit_price, 2)
+    
+    trans = InventoryTransaction(
+        company_id=company_id, item_code=item_code, transaction_date=tx_date,
+        trans_type=trans_type, quantity=abs(diff), unit_price=unit_price, total_amount=total,
+        warehouse=warehouse, reference_no=reference_no, operator=operator,
+        remark=f"盘点调整：账存{item.current_stock} 实盘{actual_quantity} 差异{diff} {remark}"
+    )
+    db.add(trans)
+    
+    # 更新库存
+    if diff > 0:
+        item.current_stock += diff
+    else:
+        item.current_stock += diff  # diff is negative
+    item.updated_at = datetime.now()
+    db.commit()
+    db.refresh(trans)
+    return {
+        "id": trans.id, "trans_type": trans_type,
+        "difference": round(diff, 2), "total_amount": total,
+        "message": f"{trans_type}已记录，差异: {diff:+.2f} {item.unit}，当前库存: {item.current_stock}"
+    }
+
+
+@app.get("/api/inventory-balances")
+def list_inventory_balances(company_id: int = Query(...), period: str = Query(...),
+    db: Session = Depends(get_db)):
+    """库存余额表（按期核算）"""
+    items = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.is_active == True).all()
+    
+    # 期初：取上月余额表或从0开始
+    prev_period = _prev_period(period)
+    prev_map = {}
+    if prev_period:
+        prev_balances = db.query(InventoryBalance).filter(
+            InventoryBalance.company_id == company_id, InventoryBalance.period == prev_period
+        ).all()
+        prev_map = {b.item_code: b.end_quantity for b in prev_balances}
+    
+    # 本期收发汇总
+    tx_start = datetime.strptime(period + "-01", "%Y-%m-%d").date()
+    if len(period) == 7:
+        y, m = int(period[:4]), int(period[5:7])
+        if m == 12:
+            tx_end = datetime(y + 1, 1, 1).date()
+        else:
+            tx_end = datetime(y, m + 1, 1).date()
+    else:
+        tx_end = datetime.now().date()
+    
+    txs = db.query(InventoryTransaction).filter(
+        InventoryTransaction.company_id == company_id,
+        InventoryTransaction.transaction_date >= tx_start,
+        InventoryTransaction.transaction_date < tx_end
+    ).all()
+    
+    # 按商品汇总
+    from collections import defaultdict
+    in_map = defaultdict(float)
+    out_map = defaultdict(float)
+    for t in txs:
+        if t.trans_type in ("入库", "调拨入", "盘盈"):
+            in_map[t.item_code] += t.quantity
+        elif t.trans_type in ("出库", "调拨出", "盘亏"):
+            out_map[t.item_code] += t.quantity
+    
+    results = []
+    for item in items:
+        begin = prev_map.get(item.code, 0.0)
+        in_qty = round(in_map.get(item.code, 0), 2)
+        out_qty = round(out_map.get(item.code, 0), 2)
+        end_qty = round(begin + in_qty - out_qty, 2)
+        end_amount = round(end_qty * item.cost_price, 2)
+        results.append({
+            "item_code": item.code, "item_name": item.name,
+            "spec": item.spec, "unit": item.unit, "warehouse": item.warehouse,
+            "begin_quantity": begin, "in_quantity": in_qty,
+            "out_quantity": out_qty, "end_quantity": end_qty,
+            "cost_price": item.cost_price, "end_amount": end_amount
+        })
+    
+    return {"period": period, "items": results}
+
+
+def _prev_period(period: str) -> Optional[str]:
+    """计算上月期间"""
+    if len(period) != 7:
+        return None
+    y, m = int(period[:4]), int(period[5:7])
+    if m == 1:
+        return f"{y-1}-12"
+    return f"{y}-{m-1:02d}"
+
+
+@app.post("/api/inventory-items/batch-delete")
+def batch_delete_inventory_items(ids: List[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    deleted = 0
+    for item_id in ids:
+        item = db.query(InventoryItem).filter(InventoryItem.company_id == company_id, InventoryItem.id == item_id).first()
+        if item:
+            item.is_active = False
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted, "message": f"停用 {deleted} 项"}
 
 
 # ==================== 合同管理 ====================
