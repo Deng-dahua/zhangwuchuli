@@ -250,14 +250,24 @@ function mergeRule(existing, newRule) {
   }
 }
 
-function parseAndAddRules() {
+async function parseAndAddRules() {
   var text = document.getElementById('rule-input-text').value.trim();
   if (!text) {
     toast('请输入规则描述', 'warning');
     return;
   }
 
-  // 按序号（数字+点/顿号）或空行分割多条规则
+  // 【涉税相关性预检】
+  var relevance = await checkTaxRelevance(text);
+  if (!relevance.is_tax_related) {
+    showNotTaxWarning('parse', relevance);
+    return;
+  }
+
+  doParseAndAddRules(text);
+}
+
+function doParseAndAddRules(text) {
   var blocks = splitRuleBlocks(text);
   var added = 0;
   var merged = 0;
@@ -304,6 +314,85 @@ function parseAndAddRules() {
     console.log('[解析结果]', parsedRules);
   } else {
     toast('未能从输入内容中解析出有效规则，请检查输入格式', 'warning');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  涉税内容相关性检测
+// ══════════════════════════════════════════════════════════════
+async function checkTaxRelevance(text) {
+  try {
+    var r = await fetch('/api/tax-risk-rules/check-relevance', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: text})
+    });
+    var data = await r.json();
+    if (!data.ok) {
+      console.warn('[涉税检测] API异常，跳过检测:', data.error);
+      return { is_tax_related: true, score: 100, keywords_found: [] };
+    }
+    return data;
+  } catch(e) {
+    console.warn('[涉税检测] 网络异常，跳过检测:', e.message);
+    return { is_tax_related: true, score: 100, keywords_found: [] };
+  }
+}
+
+function showNotTaxWarning(source, relevance) {
+  var score = relevance.score || 0;
+  var keywords = (relevance.keywords_found || []).join('、');
+  var levelColor = score >= 10 ? '#f59e0b' : '#dc2626';
+  var levelText = score >= 10 ? '偏低' : '极低';
+  var strongInfo = '';
+  if ((relevance.strong_count || 0) > 0) {
+    strongInfo = '<span style="color:#059669">（含 ' + relevance.strong_count + ' 个关键税务词）</span>';
+  } else if ((relevance.medium_count || 0) > 0) {
+    strongInfo = '<span style="color:#6366f1">（含 ' + relevance.medium_count + ' 个一般税务词）</span>';
+  }
+
+  var html = '<div style="max-width:520px;margin:0 auto;padding:20px;">'
+    + '<div style="text-align:center;margin-bottom:20px;">'
+    + '<div style="font-size:48px;margin-bottom:8px;">⚠️</div>'
+    + '<h3 style="margin:0 0 6px;color:#111827;font-size:18px;">涉税相关性' + levelText + '</h3>'
+    + '<p style="color:#6b7280;font-size:14px;margin:0;">评分 <strong style="color:' + levelColor + ';font-size:24px;">' + score + '</strong> / 100 ' + strongInfo + '</p>'
+    + '</div>';
+
+  if (keywords) {
+    html += '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:16px;">'
+      + '<p style="margin:0 0 6px;font-size:12px;color:#374151;"><strong>检测到的涉税关键词：</strong></p>'
+      + '<p style="margin:0;font-size:11px;color:#6b7280;line-height:1.6;max-height:80px;overflow-y:auto;">' + keywords + '</p>'
+      + '</div>';
+  }
+
+  html += '<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">系统判断该内容可能<strong>不是涉税相关</strong>内容，解析结果可能偏差较大。是否仍要继续？</p>'
+    + '<div style="display:flex;gap:10px;justify-content:center;">'
+    + '<button onclick="dismissNotTaxWarning(\'' + source + '\')" class="btn" style="background:var(--primary);color:#fff;padding:8px 20px;border-radius:6px;border:none;cursor:pointer;font-size:14px;">仍然继续解析</button>'
+    + '<button onclick="var el=document.getElementById(\'not-tax-warning-overlay\');if(el)el.remove();" class="btn" style="background:#fff;color:#374151;padding:8px 20px;border-radius:6px;border:1px solid #d1d5db;cursor:pointer;font-size:14px;">取消</button>'
+    + '</div>'
+    + '</div>';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'not-tax-warning-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:10000;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-width:560px;width:90%;">' + html + '</div>';
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
+  document.body.appendChild(overlay);
+}
+
+async function dismissNotTaxWarning(source) {
+  var el = document.getElementById('not-tax-warning-overlay');
+  if (el) el.remove();
+
+  if (source === 'parse') {
+    var text = document.getElementById('rule-input-text').value.trim();
+    if (text) doParseAndAddRules(text);
+  } else if (source === 'submit') {
+    var textInput = document.getElementById('report-text-input');
+    var text = textInput ? textInput.value.trim() : '';
+    if (text) doSubmitReportForParsing(text);
   }
 }
 
@@ -1069,7 +1158,7 @@ function setReportFile(file) {
   if (ta) ta.value = '';
 }
 
-function submitReportForParsing() {
+async function submitReportForParsing() {
   // 优先文件上传
   if (_parseReportFile) {
     uploadReportFile(_parseReportFile);
@@ -1082,6 +1171,18 @@ function submitReportForParsing() {
     return;
   }
   var text = textInput.value.trim();
+
+  // 【涉税相关性预检】
+  var relevance = await checkTaxRelevance(text);
+  if (!relevance.is_tax_related) {
+    showNotTaxWarning('submit', relevance);
+    return;
+  }
+
+  doSubmitReportForParsing(text);
+}
+
+function doSubmitReportForParsing(text) {
   var modalBody = document.querySelector('#audit-modal > div > div');
   if (modalBody) {
     modalBody.innerHTML = '<div style="text-align:center;padding:80px"><div class="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite"></div><p style="color:#6b7280">正在解析报告（' + text.length + ' 字）...</p></div>';
@@ -1122,8 +1223,24 @@ function renderParsedRules(result) {
   var rules = result.rules || [];
   var html = '<div style="margin-bottom:20px">'
     + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">📄 解析结果</h3>'
-    + '<p style="margin:0;color:#6b7280">从 ' + result.text_length + ' 字中提取了 ' + rules.length + ' 条规则</p>'
+    + '<p style="margin:0;color:#6b7280">从 ' + result.text_length + ' 字中提取了 ' + rules.length + ' 条规则'
+    + (result.source_file ? '（来源：' + result.source_file + '）' : '')
+    + '</p>'
     + '</div>';
+
+  // 涉税相关性结果显示（文件上传场景）
+  if (result.relevance && !result.relevance.is_tax_related) {
+    var rel = result.relevance;
+    var relColor = rel.score >= 10 ? '#f59e0b' : '#dc2626';
+    var relText = rel.score >= 10 ? '偏低' : '极低';
+    html += '<div style="margin-bottom:16px;padding:12px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+      + '<span style="font-size:20px;">⚠️</span>'
+      + '<span style="font-weight:600;color:#c2410c;">涉税相关性' + relText + '（' + rel.score + '分）</span>'
+      + '</div>'
+      + '<p style="margin:0;font-size:12px;color:#92400e;">该报告涉税关键词较少，解析结果可能偏差，请核实规则质量</p>'
+      + '</div>';
+  }
   if (rules.length === 0) {
     html += '<div style="text-align:center;padding:40px;color:#6b7280">未提取到规则，请检查报告内容</div>';
   } else {

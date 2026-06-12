@@ -7733,6 +7733,94 @@ def _parse_tax_report_text(report_text: str):
     }
 
 
+# ══════════════════════════════════════════════════════════════
+#  涉税内容相关性检测
+# ══════════════════════════════════════════════════════════════
+def _check_tax_relevance(text: str):
+    """检测文本是否与涉税内容相关，返回相关性评分和详情"""
+    import re as _re
+
+    if not text or len(text.strip()) < 30:
+        return {
+            "is_tax_related": False, "score": 0,
+            "keywords_found": [],
+            "message": "文本过短，无法判断是否涉税内容"
+        }
+
+    # 涉税关键词体系（三层权重：强/中/弱）
+    tax_keywords = {
+        "strong": [
+            "增值税", "企业所得税", "个人所得税", "消费税", "印花税",
+            "房产税", "契税", "土地增值税", "城建税", "教育费附加",
+            "进项税额", "销项税额", "进项税", "销项税", "留抵退税",
+            "纳税申报", "税务稽查", "税务风险", "税收优惠", "税前扣除",
+            "发票管理", "增值税专用发票", "普通发票", "数电发票",
+            "应交税费", "税金及附加", "递延所得税", "文化事业建设费",
+            "代扣代缴", "源泉扣缴", "税务登记", "小规模纳税人", "一般纳税人",
+        ],
+        "medium": [
+            "税率", "税额", "税负", "纳税", "缴税", "退税", "征税",
+            "免税", "扣税", "抵税", "完税", "涉税", "税务",
+            "发票", "抵扣", "进项", "销项", "认证", "红冲", "作废",
+            "申报", "预缴", "汇算", "清算", "留抵",
+            "个税", "所得税", "流转税", "财产税",
+            "纳税调整", "加计扣除", "加速折旧", "不征税收入",
+            "查账征收", "核定征收", "税号",
+            "进项转出", "不得抵扣", "视同销售",
+            "减免税", "即征即退", "先征后退", "出口退税",
+        ],
+        "weak": [
+            "财务报表", "利润表", "资产负债表", "现金流量表",
+            "主营业务收入", "营业收入", "营业成本", "利润总额",
+            "社保", "公积金", "工资薪金", "劳务报酬", "稿酬",
+            "财产租赁", "财产转让", "股息红利",
+            "稽查", "罚款", "滞纳金",
+            "转让定价", "关联交易", "同期资料",
+            "毛利率", "成本结构", "费用率", "应收账款", "应付账款",
+            "其他应收款", "存货", "固定资产", "无形资产",
+        ]
+    }
+
+    found_strong = [kw for kw in tax_keywords["strong"] if kw in text]
+    found_medium = [kw for kw in tax_keywords["medium"] if kw in text]
+    found_weak = [kw for kw in tax_keywords["weak"] if kw in text]
+
+    total_found = len(found_strong) + len(found_medium) + len(found_weak)
+
+    # 评分
+    if total_found == 0:
+        score = 0
+    else:
+        strong_score = len(found_strong) * 15
+        medium_score = len(found_medium) * 5
+        weak_score = len(found_weak) * 2
+        raw_score = strong_score + medium_score + weak_score
+        # 密度修正：200字出现1个关键词为基准
+        text_len = len(text)
+        density = total_found / max(text_len / 200, 1)
+        density_factor = min(density, 2.0)
+        score = min(int(raw_score * density_factor), 100)
+        # 有强信号保底
+        if len(found_strong) >= 1 and score < 20:
+            score = max(score, 25)
+
+    is_tax_related = score >= 20
+
+    all_keywords = found_strong + found_medium + found_weak
+    unique_keywords = list(dict.fromkeys(all_keywords))
+
+    return {
+        "is_tax_related": is_tax_related,
+        "score": score,
+        "strong_count": len(found_strong),
+        "medium_count": len(found_medium),
+        "weak_count": len(found_weak),
+        "total_keywords": total_found,
+        "keywords_found": unique_keywords[:40],
+        "text_length": len(text),
+    }
+
+
 @app.post("/api/tax-risk-rules/parse-report")
 async def tax_risk_rules_parse_report(request: Request):
     """接收税务报告/文章内容，智能提取风险规则"""
@@ -7811,11 +7899,29 @@ async def tax_risk_rules_upload_report(request: Request):
 
     result = _parse_tax_report_text(extracted_text.strip())
     result["source_file"] = source_desc
+    # 附加涉税相关性检测
+    relevance = _check_tax_relevance(extracted_text.strip())
+    result["relevance"] = relevance
     return result
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+@app.post("/api/tax-risk-rules/check-relevance")
+async def tax_risk_rules_check_relevance(request: Request):
+    """检测文本内容是否为涉税相关（输入文字/上传报告前预检）"""
+    try:
+        body = await request.json()
+        text = body.get("text", "")
+        if not text or not text.strip():
+            return {"ok": False, "error": "文本内容不能为空"}
+    except Exception:
+        return {"ok": False, "error": "无效的请求数据"}
+    result = _check_tax_relevance(text)
+    result["ok"] = True
+    return result
 
 # ========== 开发模式：强制无缓存 ==========
 @app.middleware('http')
