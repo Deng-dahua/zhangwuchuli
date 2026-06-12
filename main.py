@@ -7398,6 +7398,148 @@ async def tax_risk_rules_audit(request: Request):
     }
     return report
 
+# ==================== 涉税风险规则自动修复 API ====================
+@app.post("/api/tax-risk-rules/fix")
+async def tax_risk_rules_fix(request: Request):
+    """接收当前规则 JSON，自动修复可修复的问题，返回修复后规则"""
+    try:
+        data = await request.json()
+    except Exception:
+        return {"ok": False, "error": "无效的 JSON 数据"}
+
+    from difflib import SequenceMatcher as _SeqMatcher
+    from collections import Counter as _Counter
+    import copy as _copy
+
+    rules = _copy.deepcopy(data)
+    fixes = []
+    skipped = []
+
+    # ========== 修复1: 碎片分类 → 合并到语义最相关的分类 ==========
+    cat_counts = _Counter(r["category"] for r in rules)
+    fragments = {cat: cnt for cat, cnt in cat_counts.items() if cnt < 2}
+
+    # 碎片合并映射表：碎片分类 → 最相关的目标分类
+    fragment_merge_map = {
+        "印花税": "税负水平",
+        "行业专项": "经营实质",
+        "城建税": "税负水平",
+        "房产税": "税负水平",
+        "客户穿透": "交易特征",
+        "供应商穿透": "交易特征",
+        "政策执行": "征管风险",
+    }
+
+    if fragments:
+        for frag_cat in fragments:
+            target = None
+            if frag_cat in fragment_merge_map:
+                target = fragment_merge_map[frag_cat]
+            else:
+                # 默认：按名称相似度找最匹配的非碎片分类
+                best = (0, None)
+                for cat in cat_counts:
+                    if cat != frag_cat and cat_counts[cat] >= 2:
+                        ratio = _SeqMatcher(None, frag_cat, cat).ratio()
+                        if ratio > best[0]:
+                            best = (ratio, cat)
+                if best[1]:
+                    target = best[1]
+
+            if target:
+                cnt = 0
+                for r in rules:
+                    if r["category"] == frag_cat:
+                        r["category"] = target
+                        cnt += 1
+                fixes.append(f"碎片合并: {frag_cat}({cnt}条) → {target}")
+
+    # ========== 修复2: 归类不当 → 重新分配 ==========
+    tax_map = {
+        "增值税": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度", "税负水平", "城建税", "经营实质"],
+        "进项税额": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度", "交易特征", "征管风险"],
+        "销项税额": ["增值税专项", "申报比对", "发票合规", "发票异常", "发票深度"],
+        "企业所得税": ["企业所得税", "纳税调整", "成本结构", "财务健康", "税负水平", "发票深度"],
+        "汇算清缴": ["企业所得税", "纳税调整", "个人所得税"],
+        "纳税调增": ["企业所得税", "纳税调整", "成本结构"],
+        "个人所得税": ["个人所得税", "企业所得税"],
+        "个税": ["个人所得税", "薪酬福利", "资金往来", "隐匿虚增", "发票深度", "企业所得税"],
+        "代扣代缴": ["个人所得税"],
+    }
+
+    # 关键词→首选分类映射（当多个允许时选第一个）
+    keyword_preferred = {
+        "增值税": "增值税专项",
+        "进项税额": "增值税专项",
+        "销项税额": "增值税专项",
+        "企业所得税": "企业所得税",
+        "汇算清缴": "纳税调整",
+        "纳税调增": "纳税调整",
+        "个人所得税": "个人所得税",
+        "个税": "个人所得税",
+        "代扣代缴": "个人所得税",
+    }
+
+    for r in rules:
+        detail = r["detail"] + r["suggestion"]
+        for tax_kw, allowed_cats in tax_map.items():
+            if tax_kw in detail and r["category"] not in allowed_cats:
+                # 找到关键词 → 选首选分类
+                preferred = keyword_preferred.get(tax_kw, allowed_cats[0])
+                old_cat = r["category"]
+                r["category"] = preferred
+                fixes.append(f"归类纠正: '{r['item'][:30]}' {old_cat} → {preferred} (关键词: {tax_kw})")
+                break  # 只修第一个触发的
+
+    # ========== 修复3: level 标准化 ==========
+    level_map = {
+        "高": "高风险", "中": "中风险", "低": "低风险",
+        "较高": "高风险", "较低": "低风险", "中等风险": "中风险",
+        "高危": "高风险",
+    }
+    for r in rules:
+        if r["level"] in level_map:
+            old = r["level"]
+            r["level"] = level_map[old]
+            fixes.append(f"级别标准化: '{r['item'][:30]}' {old} → {r['level']}")
+
+    # ========== 重新生成审计报告 ==========
+    # 轻量审计（仅检查是否还有问题）
+    cat_counts2 = _Counter(r["category"] for r in rules)
+    fragments2 = {cat: cnt for cat, cnt in cat_counts2.items() if cnt < 2}
+    mismatches2 = []
+    for r in rules:
+        detail = r["detail"] + r["suggestion"]
+        for tax_kw, allowed_cats in tax_map.items():
+            if tax_kw in detail and r["category"] not in allowed_cats:
+                mismatches2.append(r["item"])
+                break
+
+    remaining = []
+    if fragments2:
+        remaining.append(f"还有 {len(fragments2)} 个碎片分类需手动处理")
+        skipped.extend([f"{cat}({cnt}条)" for cat, cnt in fragments2.items()])
+    if mismatches2:
+        remaining.append(f"还有 {len(mismatches2)} 项归类不当需手动处理")
+        skipped.extend(mismatches2[:5])
+
+    all_fixed = len(fragments2) == 0 and len(mismatches2) == 0
+
+    return {
+        "ok": True,
+        "fixed_rules": rules,
+        "fixes_applied": fixes,
+        "fixes_count": len(fixes),
+        "remaining_issues": remaining,
+        "skipped_items": skipped,
+        "all_fixed": all_fixed,
+        "summary": {
+            "total": len(rules),
+            "categories": len(cat_counts2),
+            "category_distribution": dict(cat_counts2.most_common()),
+        }
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

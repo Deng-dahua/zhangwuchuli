@@ -76,6 +76,7 @@ function renderTaxRiskRules(container) {
     + '<button class="btn-toolbar" onclick="clearAllRules()">🗑️ 清空规则</button>'
     + '<button class="btn-toolbar" onclick="uploadLocalRulesToServer()" style="background:#8b5cf6;color:#fff">📤 上传规则到服务器</button>'
     + '<button class="btn-toolbar" onclick="auditTaxRiskRules()" style="background:#059669;color:#fff">🔍 检查规则</button>'
+    + '<button class="btn-toolbar" onclick="autoFixTaxRiskRules()" style="background:#d97706;color:#fff">🔧 一键修复</button>'
     + '</div>'
     + '</div>'
     // 主体：左侧输入区 + 右侧显示区
@@ -703,6 +704,94 @@ function auditTaxRiskRules() {
   }).catch(function(e) {
     showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">审计失败: ' + e.message + '</p></div>');
   });
+}
+
+// ========== 一键修复 ==========
+function autoFixTaxRiskRules() {
+  if (taxRiskRulesData.length === 0) {
+    toast('没有规则可修复', 'warning');
+    return;
+  }
+
+  showAuditModal('<div style="text-align:center;padding:80px"><div class="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#d97706;border-radius:50%;animation:spin 1s linear infinite"></div><p style="color:#6b7280">正在自动修复 ' + taxRiskRulesData.length + ' 条规则...</p></div>');
+
+  fetch('/api/tax-risk-rules/fix', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(taxRiskRulesData)
+  }).then(function(r) { return r.json(); })
+  .then(function(result) {
+    if (!result.ok) { showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">修复失败: ' + (result.error || '未知错误') + '</p></div>'); return; }
+    renderFixResult(result);
+  }).catch(function(e) {
+    showAuditModal('<div style="text-align:center;padding:80px"><p style="color:#dc2626">修复失败: ' + e.message + '</p></div>');
+  });
+}
+
+function renderFixResult(result) {
+  var html = '<div style="margin-bottom:24px">'
+    + '<h3 style="margin:0 0 8px;color:#111827;font-size:20px">🔧 自动修复结果</h3>'
+    + '<p style="margin:0;color:#6b7280">共修复 ' + result.fixes_count + ' 项问题</p>'
+    + '</div>';
+
+  // 修复列表
+  if (result.fixes_applied && result.fixes_applied.length > 0) {
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:16px">'
+      + '<div style="font-weight:600;color:#059669;margin-bottom:8px">✅ 已修复 (' + result.fixes_applied.length + '项)</div>';
+    result.fixes_applied.forEach(function(fix) {
+      html += '<div style="font-size:13px;color:#374151;padding:4px 0;border-bottom:1px solid #d1fae5">' + fix + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // 遗留问题
+  if (result.remaining_issues && result.remaining_issues.length > 0) {
+    html += '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin-bottom:16px">'
+      + '<div style="font-weight:600;color:#d97706;margin-bottom:8px">⚠️ 需手动处理 (' + result.remaining_issues.length + '项)</div>';
+    result.remaining_issues.forEach(function(issue) {
+      html += '<div style="font-size:13px;color:#374151;padding:4px 0">' + issue + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // 状态
+  if (result.all_fixed) {
+    html += '<div style="background:#f0fdf4;border:2px solid #059669;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px">'
+      + '<div style="font-size:48px;margin-bottom:8px">✅</div>'
+      + '<div style="font-size:18px;font-weight:600;color:#059669">全部修复完成！</div>'
+      + '<div style="font-size:13px;color:#6b7280;margin-top:4px">' + result.summary.total + '条规则, ' + result.summary.categories + '个分类</div>'
+      + '</div>';
+  }
+
+  // 操作按钮
+  html += '<div style="display:flex;gap:8px;justify-content:center">';
+  if (result.fixes_count > 0) {
+    html += '<button onclick="applyFixedRules(' + JSON.stringify(JSON.stringify(result.fixed_rules)).replace(/"/g, '&quot;') + ')" style="padding:10px 24px;background:#d97706;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">✅ 应用修复结果</button>';
+  }
+  html += '<button onclick="closeAuditModal()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-size:14px">取消</button>';
+  html += '</div>';
+
+  // 隐藏 data
+  html += '<script id="temp-fixed-rules" type="application/json" style="display:none">' + JSON.stringify(result.fixed_rules) + '</' + 'script>';
+
+  showAuditModal(html);
+}
+
+function applyFixedRules(fixedRulesJson) {
+  try {
+    var fixed = JSON.parse(fixedRulesJson);
+    if (!Array.isArray(fixed) || fixed.length === 0) {
+      toast('修复数据无效', 'error');
+      return;
+    }
+    taxRiskRulesData = fixed;
+    saveTaxRiskRulesToCache();
+    closeAuditModal();
+    renderTaxRiskRules();
+    toast('已应用修复结果: ' + fixed.length + '条规则', 'success');
+  } catch(e) {
+    toast('应用失败: ' + e.message, 'error');
+  }
 }
 
 function showAuditModal(html) {
