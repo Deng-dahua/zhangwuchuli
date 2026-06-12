@@ -1809,6 +1809,13 @@ def _classify_purchase_debit(db, company_id, inv):
     仅使用 goods_name 分类，remark 是备注字段不参与分类判断。"""
     goods = (inv.goods_name or "").lower().strip()
 
+    # ★ 主营业务成本：广告/设计/信息技术等服务类采购（对应开具发票的主营业务收入）
+    _MAIN_BIZ_KEYWORDS = ["广告服务", "设计服务", "信息技术服务", "现代服务", "信息服务费", "广告发布"]
+    for kw in _MAIN_BIZ_KEYWORDS:
+        if kw in (inv.goods_name or ""):
+            _ensure_account(db, company_id, "6401", "主营业务成本", "损益", "借")
+            return ("6401", "主营业务成本")
+
     # 费用类科目映射（品名关键词 → 费用科目）
     _EXPENSE_MAP = [
         # 租赁类
@@ -1983,29 +1990,49 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         for inv in unprocessed:
             debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
 
-            # 借方1：费用/成本（不含税金额）
-            db.add(JournalEntry(
-                company_id=company_id,
-                entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=voucher_no,
-                summary=summary, account_code=debit_code, account_name=debit_name,
-                debit_amount=inv.amount, credit_amount=0,
-                contact_project=seller,
-                source="取得发票", ref_id=inv.id,
-            ))
-            # 借方2：进项税额（若有）
-            if inv.tax_amount and inv.tax_amount != 0:
+            # 判断是否为专票（税额可抵扣）
+            is_special = "专用" in (inv.invoice_category or "")
+
+            if is_special:
+                # 专票：税额单独记进项税额
+                # 借方1：费用/成本（不含税金额）
                 db.add(JournalEntry(
                     company_id=company_id,
                     entry_date=entry_date,
                     period=period, voucher_word="记", voucher_no=voucher_no,
-                    summary=summary, account_code=tax_code, account_name=tax_name,
-                    debit_amount=abs(inv.tax_amount), credit_amount=0,
+                    summary=summary, account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv.amount, credit_amount=0,
                     contact_project=seller,
                     source="取得发票", ref_id=inv.id,
                 ))
-            # 贷方：应付账款（价税合计）
-            inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+                # 借方2：进项税额（若有）
+                if inv.tax_amount and inv.tax_amount != 0:
+                    db.add(JournalEntry(
+                        company_id=company_id,
+                        entry_date=entry_date,
+                        period=period, voucher_word="记", voucher_no=voucher_no,
+                        summary=summary, account_code=tax_code, account_name=tax_name,
+                        debit_amount=abs(inv.tax_amount), credit_amount=0,
+                        contact_project=seller,
+                        source="取得发票", ref_id=inv.id,
+                    ))
+                # 贷方：应付账款（价税合计）
+                inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+            else:
+                # 普票：税额不可抵扣，并入成本费用
+                # 借方：费用/成本（价税合计，税额包含在成本中）
+                inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+                db.add(JournalEntry(
+                    company_id=company_id,
+                    entry_date=entry_date,
+                    period=period, voucher_word="记", voucher_no=voucher_no,
+                    summary=summary, account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv_total, credit_amount=0,
+                    contact_project=seller,
+                    source="取得发票", ref_id=inv.id,
+                ))
+
+            # 贷方：应付账款（价税合计）——专票和普票共用
             db.add(JournalEntry(
                 company_id=company_id,
                 entry_date=entry_date,
