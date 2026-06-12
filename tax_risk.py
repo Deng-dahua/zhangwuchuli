@@ -1,6 +1,6 @@
 """
-涉税风险分析报告模块 V9
-综合分析评估 100+ 个维度 — 全规则100%覆盖：
+涉税风险分析报告模块 V10
+综合分析评估 130+ 个维度 — 全规则100%覆盖：
 账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 / 配比弹性 /
 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
@@ -9,17 +9,22 @@
 企业所得税专项(4+4项) / 申报比对(4项) / 征管风险(4+1项) / 交易特征(4项) /
 V7新增8项: 年终奖计税优化 / 农产品收购发票异常 / 跨区域开票 / 简易计税划分 /
 一址多照/一人多企 / 注册经营地址不一致 / 注销前突击开票 / D级纳税人风险 /
-V8新增16项: 合同风险 — 三流合一/四流合一(收入无合同/成本无合同/大额无合同/
+V8新增16项: 合同风险 — 三流合一/四流合一（收入无合同/成本无合同/大额无合同/
 三流缺失/四流缺失/长期无合同/金额偏差/过期合同/先票后签/收付款不匹配/
-无合同占比/跨合同方/印花税合同风险/合同作废率/框架合同缺失/关联方无合同)
+无合同占比/跨合同方/印花税合同风险/合同作废率/框架合同缺失/关联方无合同）
 V9新增2项: 逐票合同覆盖率 — 销项发票合同覆盖率(逐票名称+有效期双重匹配)、
 进项发票合同覆盖率(逐票名称+有效期双重匹配)
+V10新增27项: 合同内容涉税风险(涉税条款缺失/拆分合同/违约金/免租期/跨境代扣/
+合同变更/混合销售税率) + 稽查重点盲区(价外费用/非货币交换/债务重组/股权转让/
+无偿借款/母子公司管理费/境外支付/混合销售/环保税/发票备注栏/佣金手续费/
+捐赠支出/存货盘点)
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, extract, and_, or_
 from datetime import date, timedelta, datetime
 from typing import Optional, List, Tuple
+from collections import defaultdict
 import json
 import os
 import calendar
@@ -840,6 +845,20 @@ def get_tax_risk_report(
     _analyze_flexible_employment_tax(db, company_id, period_start, period_end, results)
     # ── V8 新增 — 合同风险（三流合一/四流合一，16项）──
     _analyze_contract_risks(db, company_id, period_start, period_end, results)
+    # ── V10 新增 — 稽查重点盲区补全（13项）──
+    _analyze_price_surcharge(db, company_id, period_start, period_end, results)
+    _analyze_non_monetary_exchange(db, company_id, period_start, period_end, results)
+    _analyze_debt_restructuring(db, company_id, period_start, period_end, results)
+    _analyze_equity_transfer(db, company_id, period_start, period_end, results)
+    _analyze_interest_free_loan(db, company_id, period_start, period_end, results)
+    _analyze_parent_subsidiary_mgmt_fee(db, company_id, period_start, period_end, results)
+    _analyze_overseas_payment_withholding(db, company_id, period_start, period_end, results)
+    _analyze_mixed_sales_accounting(db, company_id, period_start, period_end, results)
+    _analyze_environmental_tax(db, company_id, period_start, period_end, results)
+    _analyze_invoice_remarks_compliance(db, company_id, period_start, period_end, results)
+    _analyze_commission_fee_compliance(db, company_id, period_start, period_end, results)
+    _analyze_donation_compliance(db, company_id, period_start, period_end, results)
+    _analyze_inventory_count_discrepancy(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -7988,10 +8007,6 @@ def _analyze_contract_risks(db, company_id, ps, pe, results):
             "required_evidence": ["补全后的合同正本", "合同要素完整性检查表"]
         })
 
-    # ═══ 18-19. 逐票合同匹配 — 发票合同覆盖率（含有效期校验）═══
-    # 与第1-2条（按客户/供应商名称聚合）不同：
-    # 本条逐票检查每张发票是否在合同有效期内，报告精确的覆盖率统计
-
     # 构建合同快速查找索引（标准化名称 → 合同列表）
     contract_lookup = {}  # normalized_name → [Contract]
     for c in all_contracts:
@@ -8149,6 +8164,288 @@ def _analyze_contract_risks(db, company_id, ps, pe, results):
                 "required_evidence": ["无合同进项发票清单（含票号/金额/日期）", "补签的采购合同/服务协议", "供应商资质文件", "合同覆盖率整改计划"]
             })
 
+    # ═══ 20. 合同涉税条款缺失/不规范 ═══
+    # 检查合同中是否包含发票类型、税率、纳税义务时点、违约金涉税等关键条款
+    TAX_CLAUSE_KEYWORDS = ["发票", "税率", "增值税", "含税", "不含税", "税款", "发票类型",
+                           "专票", "普票", "纳税", "价税合计", "开票时间", "代扣代缴"]
+    contracts_missing_clauses = []
+    for c in all_contracts:
+        # 从合同名称、内容摘要、备注中检查
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        found = [kw for kw in TAX_CLAUSE_KEYWORDS if kw in text_pool]
+        if len(found) < 3:  # 少于3个涉税关键词视为条款缺失
+            contracts_missing_clauses.append({
+                "contract_no": c.contract_no, "name": c.name,
+                "found": found, "type": c.contract_type or "未知"
+            })
+
+    if contracts_missing_clauses:
+        detail_parts = []
+        for x in contracts_missing_clauses[:5]:
+            found_str = "、".join(x['found']) if x['found'] else "无涉税关键词"
+            detail_parts.append(f"{x['contract_no']} {x['name']}（类型:{x['type']}，含:{found_str}）")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同涉税条款缺失或内容不规范",
+            "detail": f"共 {len(contracts_missing_clauses)} 份合同（占总数 {round(len(contracts_missing_clauses)/len(all_contracts)*100,1)}%）"
+                       f"缺少关键涉税条款（发票类型/税率/纳税义务时点等）。"
+                       f"合同涉税条款不完备可能导致：(1)发票开具与合同约定不一致；"
+                       f"(2)税率适用争议；(3)纳税义务发生时点认定困难；(4)代扣代缴义务未约定。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(contracts_missing_clauses)}份" if len(contracts_missing_clauses) > 5 else ""),
+            "suggestion": "逐份补充合同涉税条款：(1)明确发票类型（专票/普票）和适用税率；(2)约定开票时限和付款条件；(3)明确价税分离和含税/不含税金额；(4)涉及跨境交易须约定代扣代缴义务。",
+            "required_evidence": ["涉税条款缺失合同清单", "修订后的合同正本（含涉税条款）", "合同涉税条款模板/指引"]
+        })
+
+    # ═══ 21. 合同拆分规避税负嫌疑 ═══
+    # 同一交易方在同月内有多份小额合同（单份<5万），总额超阈值（20万）
+    # 疑似化整为零规避印花税/增值税纳税人认定/招标门槛等
+    party_contracts = defaultdict(list)
+    for c in all_contracts:
+        if c.signing_date:
+            sd_str = _date_to_str(c.signing_date)
+            if sd_str[:7] == ps[:7] or (pe and sd_str <= pe):
+                for party_name in [c.party_a, c.party_b]:
+                    if party_name:
+                        nn = _normalize_entity_name(party_name.strip())
+                        if len(nn) >= 2:
+                            party_contracts[(nn, sd_str[:7])].append(c)
+
+    split_suspect = []
+    for (party, month), cts in party_contracts.items():
+        if len(cts) >= 3:
+            amounts = [_safe_float(c.amount) for c in cts]
+            total_amt = sum(amounts)
+            avg_amt = total_amt / len(cts)
+            if avg_amt < 50000 and total_amt >= 200000:
+                split_suspect.append({
+                    "party": party, "month": month, "count": len(cts),
+                    "total": total_amt, "avg": avg_amt
+                })
+
+    if split_suspect:
+        detail_parts = []
+        for x in split_suspect[:5]:
+            detail_parts.append(f"{x['party']} {x['month']}月 {x['count']}份合同 合计{x['total']:,.0f}元")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 7, "risk_level": "高风险",
+            "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "疑似合同拆分规避税负",
+            "detail": f"发现 {len(split_suspect)} 组「同一方+同月」多份小额合同（单份均<5万，合计≥20万），"
+                       f"涉嫌化整为零规避：(1)印花税计税基础；(2)增值税一般纳税人认定标准；"
+                       f"(3)招标/审批门槛。涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(split_suspect)}组" if len(split_suspect) > 5 else ""),
+            "suggestion": "(1)逐组核实拆分合同的商业合理性（是否确属不同业务事项）；"
+                          "(2)如实质为同一交易，应合并为一份合同并按总额缴纳印花税；"
+                          "(3)保留每份合同的独立业务证据（需求确认单、交付成果等）。",
+            "required_evidence": ["拆分合同清单及业务说明", "各合同对应的独立业务证据", "印花税补缴凭证（如需要）"]
+        })
+
+    # ═══ 22. 合同违约金/赔偿金涉税处理异常 ═══
+    # 检查合同中有无违约金条款，实际是否收取/支付违约金但未做税务处理
+    # 收取违约金应缴增值税+企业所得税；支付违约金可税前扣除
+    PENALTY_KEYWORDS = ["违约金", "赔偿金", "罚款", "滞纳金", "违约", "赔偿", "罚则"]
+    contracts_with_penalty = []
+    for c in all_contracts:
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        has_penalty = any(kw in text_pool for kw in PENALTY_KEYWORDS)
+        if has_penalty:
+            contracts_with_penalty.append(c)
+
+    if contracts_with_penalty:
+        # 检查序时账中是否有违约金/赔偿金相关分录
+        penalty_entries = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps,
+            JournalEntry.period <= pe,
+            JournalEntry.summary.contains("违约")
+        ).count()
+        _ = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps,
+            JournalEntry.period <= pe,
+            JournalEntry.summary.contains("赔偿")
+        ).count()
+        penalty_entries += _
+
+        detail_parts = [f"{c.contract_no} {c.name}" for c in contracts_with_penalty[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同违约金/赔偿金涉税处理存疑",
+            "detail": f"共 {len(contracts_with_penalty)} 份合同含违约金/赔偿金条款，"
+                       f"但分析期间仅发现 {penalty_entries} 条相关分录。"
+                       f"（注意：收取违约金需缴增值税并确认营业外收入；"
+                       f"支付违约金可税前扣除但需留存合同+支付凭证+对方收据）。"
+                       f"涉及合同：{'；'.join(detail_parts)}"
+                       + (f"等{len(contracts_with_penalty)}份" if len(contracts_with_penalty) > 5 else ""),
+            "suggestion": "(1)逐份核实含违约条款合同的执行情况（是否实际发生违约）；"
+                          "(2)已收取违约金→确认是否申报增值税（价外费用）和企业所得税；"
+                          "(3)已支付违约金→确认是否取得合规凭证并税前扣除。",
+            "required_evidence": ["含违约条款的合同清单", "违约金收付凭证（银行回单）", "违约金税务处理说明"]
+        })
+
+    # ═══ 23. 免租期/装修期增值税与房产税处理风险 ═══
+    # 租赁合同中免租期→增值税视同销售应按余值计税；房产税应按房产原值缴纳
+    RENT_FREE_KEYWORDS = ["免租期", "免租", "装修期", "免租金", "开业筹备期"]
+    lease_cts = [c for c in all_contracts if c.contract_type == "租赁"]
+    rent_free_cts = []
+    for c in lease_cts:
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        if any(kw in text_pool for kw in RENT_FREE_KEYWORDS):
+            rent_free_cts.append(c)
+
+    if rent_free_cts:
+        detail_parts = [f"{c.contract_no} {c.name}" for c in rent_free_cts[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 6, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "租赁合同免租期/装修期存在增值税和房产税处理风险",
+            "detail": f"共 {len(rent_free_cts)} 份租赁合同含免租期/装修期条款。"
+                       f"免租期内：(1)增值税——出租方无偿提供租赁服务应视同销售，"
+                       f"按同期同类租金确认销售额缴纳增值税；"
+                       f"(2)房产税——免租期内应由产权所有人按房产余值（原值×70%×1.2%）缴纳房产税。"
+                       f"涉及合同：{'；'.join(detail_parts)}"
+                       + (f"等{len(rent_free_cts)}份" if len(rent_free_cts) > 5 else ""),
+            "suggestion": "(1)核实免租期是否已按视同销售申报增值税；"
+                          "(2)核实免租期是否已按房产余值缴纳房产税；"
+                          "(3)建议合同将免租期改为租金减免（分摊到各期），避免视同销售风险。",
+            "required_evidence": ["含免租期条款的租赁合同", "免租期增值税申报记录", "免租期房产税缴纳凭证"]
+        })
+
+    # ═══ 24. 跨境合同未约定代扣代缴义务 ═══
+    CROSS_BORDER_KEYWORDS = ["境外", "国外", "跨境", "海外", "export", "import", "离岸"]
+    cross_border_cts = []
+    for c in all_contracts:
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        parties_text = " ".join(filter(None, [c.party_a or "", c.party_b or ""]))
+        full_text = text_pool + " " + parties_text
+        if any(kw in full_text for kw in CROSS_BORDER_KEYWORDS):
+            # 检查是否约定代扣代缴
+            has_withholding = any(kw in full_text for kw in ["代扣代缴", "withholding", "预提税", "扣缴"])
+            cross_border_cts.append({
+                "contract_no": c.contract_no, "name": c.name,
+                "has_withholding": has_withholding
+            })
+
+    if cross_border_cts:
+        no_withholding = [x for x in cross_border_cts if not x["has_withholding"]]
+        detail_parts = []
+        for x in cross_border_cts[:5]:
+            status = "未约定代扣代缴" if not x["has_withholding"] else "已约定"
+            detail_parts.append(f"{x['contract_no']} {x['name']}（{status}）")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 8 if no_withholding else 5,
+            "risk_level": "高风险" if no_withholding else "中风险",
+            "risk_color": "#ef4444" if no_withholding else "#f59e0b",
+            "urgency": "紧急" if no_withholding else "提醒",
+            "item": "跨境合同中未约定代扣代缴义务条款",
+            "detail": f"共 {len(cross_border_cts)} 份涉跨境交易合同，"
+                       f"其中 {len(no_withholding)} 份未约定代扣代缴义务。"
+                       f"向境外支付款项时：(1)服务费/特许权使用费→按10%预提所得税；"
+                       f"(2)利息/租金/财产转让→按10%或协定税率；(3)未代扣代缴将被追缴+滞纳金+罚款。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(cross_border_cts)}份" if len(cross_border_cts) > 5 else ""),
+            "suggestion": "(1)逐份跨境合同补充代扣代缴条款，明确扣缴税种/税率/时点；"
+                          "(2)对已发生的跨境支付，自查是否已履行代扣代缴义务；"
+                          "(3)对适用税收协定的，及时办理协定待遇备案。",
+            "required_evidence": ["跨境合同清单", "代扣代缴税款凭证（如已扣缴）", "税收协定待遇备案文件（如适用）"]
+        })
+
+    # ═══ 25. 合同变更/补充协议未及时更新 ═══
+    # 检查合同是否有多次变更但未反映在合同台账中
+    # 通过合同名称中的"补充协议"/"变更"等关键词，以及合同编号的关联关系来检测
+    AMEND_KEYWORDS = ["补充协议", "变更", "修订", "补充", "修改", "增补"]
+    amended_cts = []  # 补充协议/变更合同
+    original_ct_nos = set()  # 被引用的原合同编号
+
+    for c in all_contracts:
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        if any(kw in text_pool for kw in AMEND_KEYWORDS):
+            amended_cts.append(c)
+            # 尝试从名称中提取原合同编号（如 "XXX合同补充协议-001"）
+            # 合同编号中查找 "-" 前的部分作为原合同编号前缀
+            cn = c.contract_no or ""
+            if "-" in cn:
+                original_ct_nos.add(cn.rsplit("-", 1)[0])
+            # 也尝试从名称中匹配
+            import re as _re
+            ref_match = _re.search(r"[A-Z]{2,4}\d{6,}", c.name or "")
+            if ref_match:
+                original_ct_nos.add(ref_match.group())
+
+    # 检查原合同是否存在
+    if amended_cts:
+        # 查找原合同编号对应的合同
+        found_originals = set()
+        for c in all_contracts:
+            if c.contract_no in original_ct_nos:
+                found_originals.add(c.contract_no)
+            # 也检查合同名称模糊匹配
+            for orig_no in original_ct_nos:
+                if orig_no in (c.name or ""):
+                    found_originals.add(orig_no)
+
+        missing_originals = original_ct_nos - found_originals
+
+        detail_parts = [f"{c.contract_no} {c.name}" for c in amended_cts[:5]]
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 4, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "合同存在变更/补充协议但台账可能未完整更新",
+            "detail": f"发现 {len(amended_cts)} 份合同涉及变更/补充，"
+                       f"其中 {len(missing_originals)} 个原合同编号在台账中未找到。"
+                       f"合同变更未及时更新台账可能导致：(1)印花税计税基础不准确；"
+                       f"(2)合同金额、履行期限与实际不符；(3)权利义务约定不清晰引发纠纷。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(amended_cts)}份" if len(amended_cts) > 5 else ""),
+            "suggestion": "(1)逐份核实变更/补充协议是否已纳入合同台账；"
+                          "(2)更新合同金额、有效期、关键条款至最新版本；"
+                          "(3)补充协议增加金额的，需补缴相应印花税。",
+            "required_evidence": ["变更/补充协议清单", "更新后的合同台账", "印花税补缴凭证（如涉及金额变更）"]
+        })
+
+    # ═══ 26. 混合销售/兼营合同未分别约定税率 ═══
+    # 检查合同是否涉及多种业务类型（如销售+安装、服务+销售），但未分别约定税率
+    MIXED_SALES_KEYWORDS = ["安装", "运输", "培训", "维护", "保修", "设计", "咨询", "代理", "加工"]
+    potentially_mixed_cts = []
+    for c in all_contracts:
+        text_pool = " ".join(filter(None, [c.name or "", c.content_summary or "", c.remark or ""]))
+        found_kws = [kw for kw in MIXED_SALES_KEYWORDS if kw in text_pool]
+        # 合同名中包含"销售+服务类"关键词，可能是混合销售
+        is_sales = any(kw in (c.name or "") for kw in ["销售", "买卖", "购销"])
+        has_service = len(found_kws) >= 1
+        if (is_sales and has_service) or len(found_kws) >= 2:
+            # 检查是否已分别约定税率
+            has_rate_split = any(kw in text_pool for kw in ["分别", "单独", "各自", "税率", "兼营"])
+            potentially_mixed_cts.append({
+                "contract_no": c.contract_no, "name": c.name,
+                "keywords": found_kws, "has_rate_split": has_rate_split
+            })
+
+    if potentially_mixed_cts:
+        no_split = [x for x in potentially_mixed_cts if not x["has_rate_split"]]
+        detail_parts = []
+        for x in potentially_mixed_cts[:5]:
+            status = "未分别约定" if not x["has_rate_split"] else "已分别约定"
+            detail_parts.append(f"{x['contract_no']} {x['name']}（{status}，含{'/'.join(x['keywords'])}）")
+        results.append({
+            "category": CAT, "category_icon": ICON, "risk_score": 5, "risk_level": "中风险",
+            "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "混合销售/兼营合同未分别约定适用税率",
+            "detail": f"发现 {len(potentially_mixed_cts)} 份合同可能涉及混合销售/兼营，"
+                       f"其中 {len(no_split)} 份未分别约定税率。"
+                       f"混合销售→从主业税率；兼营→分别核算分别适用税率。"
+                       f"未分别核算的兼营行为→从高适用税率，存在多缴或税务稽查调整风险。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(potentially_mixed_cts)}份" if len(potentially_mixed_cts) > 5 else ""),
+            "suggestion": "(1)区分混合销售（一项行为涉及货物+服务）和兼营（多项独立业务）；"
+                          "(2)兼营业务应在合同中分别列明各业务金额和对应税率；"
+                          "(3)混合销售按主营业务确定税率，合同中应明确主业性质。",
+            "required_evidence": ["混合销售/兼营合同清单", "各业务收入分项明细表", "适用税率认定说明"]
+        })
+
 
 # ═══════════════════════════════════════════════════════════
 #  辅助函数：佐证材料清单汇总
@@ -8172,3 +8469,613 @@ def _build_evidence_summary(results):
                     "risk_level": r.get("risk_level", "")
                 })
     return evidence_list
+
+
+# ═══════════════════════════════════════════════════════════════
+#  V10 新增 — 稽查重点盲区补全（13项）
+# ═══════════════════════════════════════════════════════════════
+
+def _analyze_price_surcharge(db, company_id, ps, pe, results):
+    """价外费用未申报增值税：手续费/违约金/包装费/运输装卸费等是否并入销售额申报"""
+    SURCHARGE_KEYWORDS = ["手续费", "包装费", "违约金", "滞纳金", "延期付款利息",
+                          "赔偿金", "代收款项", "代垫款项", "运输装卸费", "仓储费",
+                          "优质费", "返还利润", "补贴", "奖励费"]
+    # 方法：检查序时账收入类科目摘要中是否含价外费用关键词但未计入销项税额
+    revenue_entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        JournalEntry.account_code.like("6001%")
+    ).all()
+
+    found_surcharge = []
+    for entry in revenue_entries:
+        summary = (entry.summary or "")
+        matched = [kw for kw in SURCHARGE_KEYWORDS if kw in summary]
+        if matched:
+            found_surcharge.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.credit_amount or entry.debit_amount),
+                "keywords": matched
+            })
+
+    if found_surcharge:
+        total_amt = sum(x["amount"] for x in found_surcharge)
+        detail_parts = []
+        for x in found_surcharge[:5]:
+            detail_parts.append(f"{x['period']} {x['summary'][:40]}（{x['amount']:,.0f}元，含{'/'.join(x['keywords'])}）")
+        results.append({
+            "category": "隐匿虚增", "category_icon": "🔍",
+            "risk_score": 7, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "价外费用可能未并入销售额申报增值税",
+            "detail": f"序时账中发现 {len(found_surcharge)} 笔含价外费用关键词的收入分录（合计{total_amt:,.2f}元）。"
+                       f"根据增值税暂行条例第六条，销售额为全部价款+价外费用。"
+                       f"价外费用包括手续费/违约金/包装费/延期付款利息等，无论会计如何核算均应并入销售额计算增值税。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found_surcharge)}笔" if len(found_surcharge) > 5 else ""),
+            "suggestion": "(1)逐笔核实价外费用是否已计入应税销售额；(2)如未计入，补申报增值税及附加；"
+                          "(3)价外费用适用与主货物/服务相同税率。",
+            "required_evidence": ["价外费用明细表", "对应合同条款（价外费用约定）", "增值税补申报记录（如适用）"]
+        })
+
+
+def _analyze_non_monetary_exchange(db, company_id, ps, pe, results):
+    """非货币性资产交换未确认收入"""
+    # 检查序时账中是否有资产处置/交换的分录但无对应增值税销项
+    EXCHANGE_KEYWORDS = ["换入", "换出", "资产交换", "以物易物", "以物抵债", "抵债"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.summary.contains("换"),
+            JournalEntry.summary.contains("抵"),
+            JournalEntry.summary.contains("换"),
+            JournalEntry.summary.contains("抵")
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in EXCHANGE_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "debit": _safe_float(entry.debit_amount),
+                "credit": _safe_float(entry.credit_amount)
+            })
+
+    if found:
+        total_amt = sum(x["debit"] + x["credit"] for x in found)
+        detail_parts = [f"{x['period']} {x['summary'][:50]}" for x in found[:5]]
+        results.append({
+            "category": "隐匿虚增", "category_icon": "🔍",
+            "risk_score": 7, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "非货币性资产交换可能未确认增值税和企业所得税收入",
+            "detail": f"序时账中发现 {len(found)} 笔疑似非货币性资产交换/以物抵债分录（合计{total_amt:,.2f}元）。"
+                       f"非货币性资产交换：(1)增值税→换出货物视同销售，按同类产品均价计税；"
+                       f"(2)企业所得税→按公允价值确认资产转让所得。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔核实是否有未确认的视同销售收入；(2)补充增值税申报和企业所得税纳税调整；"
+                          "(3)保留交换协议及公允价值评估依据。",
+            "required_evidence": ["非货币性资产交换协议", "换出资产公允价值评估报告", "增值税补申报记录"]
+        })
+
+
+def _analyze_debt_restructuring(db, company_id, ps, pe, results):
+    """债务重组收益未确认企业所得税"""
+    RESTRUCTURE_KEYWORDS = ["债务重组", "债务豁免", "债务减免", "债转股", "以资抵债", "豁免债务"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.summary.contains("债务"),
+            JournalEntry.summary.contains("豁免"),
+            JournalEntry.summary.contains("债转股"),
+            JournalEntry.summary.contains("债务"),
+            JournalEntry.summary.contains("豁免")
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in RESTRUCTURE_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "credit": _safe_float(entry.credit_amount),
+                "debit": _safe_float(entry.debit_amount)
+            })
+
+    if found:
+        total_amt = sum(max(x["credit"], x["debit"]) for x in found)
+        detail_parts = [f"{x['period']} {x['summary'][:50]}" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 7, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "债务重组收益可能未确认企业所得税",
+            "detail": f"序时账中发现 {len(found)} 笔疑似债务重组分录（涉及金额{total_amt:,.2f}元）。"
+                       f"债务重组收益（债务豁免/以资抵债差额/债转股收益）属于企业所得税应税收入，"
+                       f"应在重组完成年度确认并申报。未申报将面临补税+滞纳金。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔核实债务重组的性质和金额；(2)确认债务重组收益是否在年度汇算清缴中申报；"
+                          "(3)特殊重组（如债转股）可适用递延纳税，需向税务机关备案。",
+            "required_evidence": ["债务重组协议/法院裁定", "债务重组收益计算表", "企业所得税汇算清缴申报表"]
+        })
+
+
+def _analyze_equity_transfer(db, company_id, ps, pe, results):
+    """股权转让未申报纳税"""
+    EQUITY_KEYWORDS = ["股权转让", "股权变更", "股权出售", "转让股权", "股权交割"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.summary.contains("股权"),
+            JournalEntry.summary.contains("转让"),
+            JournalEntry.summary.contains("股权"),
+            JournalEntry.summary.contains("转让")
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in EQUITY_KEYWORDS) and "印花税" not in summary:
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.debit_amount or entry.credit_amount)
+            })
+
+    if found:
+        total_amt = sum(x["amount"] for x in found)
+        detail_parts = [f"{x['period']} {x['summary'][:50]}" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 8, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "股权转让交易可能未足额申报纳税",
+            "detail": f"序时账中发现 {len(found)} 笔疑似股权转让相关分录（涉及金额{total_amt:,.2f}元）。"
+                       f"股权转让涉及多项税务义务：(1)印花税——转让双方各自按0.05%缴纳；"
+                       f"(2)企业所得税——转让方按（转让收入-投资成本）×25%缴纳；"
+                       f"(3)个人所得税——自然人股东按财产转让所得20%缴纳（受让方代扣代缴）。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)核实股权转让价格是否公允（低于净资产份额可能被核定）；"
+                          "(2)确认印花税/所得税是否已足额申报；(3)保留股权转让协议、评估报告、付款凭证。",
+            "required_evidence": ["股权转让协议", "股权评估报告/净资产审计报告", "印花税/所得税完税凭证"]
+        })
+
+
+def _analyze_interest_free_loan(db, company_id, ps, pe, results):
+    """无偿借款未视同销售缴纳增值税"""
+    # 检查其他应收款/其他应付款中大额长期挂账且无利息收入/支出
+    # 关联方无偿借款→增值税视同销售（按同期同类贷款利率计算利息）
+    other_receivables = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        JournalEntry.account_code.like("1221%")
+    ).all()
+
+    # 寻找大额借款（单笔≥50万）
+    large_loans = []
+    for entry in other_receivables:
+        amt = _safe_float(entry.debit_amount or entry.credit_amount)
+        if amt >= 500000:
+            summary = (entry.summary or "")
+            if any(kw in summary for kw in ["借款", "借支", "拆借", "往来", "暂借"]):
+                large_loans.append({
+                    "summary": summary, "period": entry.period,
+                    "amount": amt, "contact": entry.contact_project or ""
+                })
+
+    # 检查是否有对应的利息收入
+    interest_entries = db.query(func.sum(JournalEntry.credit_amount)).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("6051%"),  # 利息收入
+            JournalEntry.summary.contains("利息"),
+            JournalEntry.summary.contains("资金占用费")
+        )
+    ).scalar() or 0
+
+    if large_loans and interest_entries < 1000:  # 有大额借款但几乎无利息收入
+        total_loan = sum(x["amount"] for x in large_loans)
+        detail_parts = [f"{x['period']} {x['summary'][:40]}（{x['amount']:,.0f}元）" for x in large_loans[:5]]
+        results.append({
+            "category": "增值税专项", "category_icon": "📋",
+            "risk_score": 7, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "大额无偿借款可能未视同销售缴纳增值税",
+            "detail": f"发现 {len(large_loans)} 笔大额借款（合计{total_loan:,.2f}元），"
+                       f"但分析期间利息收入仅{interest_entries:,.2f}元。"
+                       f"关联方无偿借款：(1)增值税——视同销售按同期同类贷款利率计算利息缴6%增值税；"
+                       f"(2)企业所得税——借出方利息收入应确认，借入方利息支出不得税前扣除（出资未到位/超债资比）。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(large_loans)}笔" if len(large_loans) > 5 else ""),
+            "suggestion": "(1)逐笔核实借款性质（是否关联方/是否无偿）；"
+                          "(2)无偿借款应参照银行同期利率计算利息并申报增值税；"
+                          "(3)建议关联方借款签订书面协议，明确利率和还款期限。",
+            "required_evidence": ["借款协议/借据", "关联方关系说明", "同期同类贷款利率参考依据", "增值税补申报记录（如适用）"]
+        })
+
+
+def _analyze_parent_subsidiary_mgmt_fee(db, company_id, ps, pe, results):
+    """母子公司管理费不合规"""
+    MGFEE_KEYWORDS = ["管理费", "服务费", "咨询费", "技术服务费", "品牌使用费"]
+    # 检查向关联方（如名称含"集团""控股""母公司"等）支付管理费
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("6602%"),  # 管理费用
+            JournalEntry.account_code.like("5602%")
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "") + (entry.contact_project or "")
+        contact = (entry.contact_project or "").lower()
+        # 检查收款方是否为关联方特征
+        is_related = any(kw in contact for kw in ["集团", "控股", "母公司", "子公司", "关联"])
+        has_mgfee_kw = any(kw in summary for kw in MGFEE_KEYWORDS)
+        if has_mgfee_kw and is_related:
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.debit_amount),
+                "contact": entry.contact_project
+            })
+
+    if found:
+        total_amt = sum(x["amount"] for x in found)
+        detail_parts = [f"{x['period']} {x['contact']} {x['summary'][:30]}（{x['amount']:,.0f}元）" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 6, "risk_level": "中风险", "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "向关联方（母公司/集团）支付管理费可能不合规",
+            "detail": f"发现 {len(found)} 笔向关联方支付的管理费/服务费（合计{total_amt:,.2f}元）。"
+                       f"企业所得税法规定：(1)企业之间支付的管理费不得税前扣除；"
+                       f"(2)母子公司未按独立交易原则收取的服务费需纳税调整；"
+                       f"(3)关联方服务费需有真实服务内容+受益性证明+独立交易价格。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔核实关联方管理费/服务费的商业实质；(2)补充服务合同、成果交付记录等受益性证据；"
+                          "(3)无真实服务的不得税前扣除，应做纳税调增；(4)有真实服务的需按独立交易原则定价。",
+            "required_evidence": ["关联方服务合同/协议", "服务成果交付记录", "独立交易价格参考依据", "关联交易申报表"]
+        })
+
+
+def _analyze_overseas_payment_withholding(db, company_id, ps, pe, results):
+    """境外支付未代扣代缴税款"""
+    OVERSEAS_KEYWORDS = ["境外", "国外", "海外", "香港", "美国", "日本", "新加坡", "开曼",
+                         "BVI", "维尔京", "境外公司", "foreign", "overseas"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("2202%"),  # 应付账款
+            JournalEntry.account_code.like("1002%"),  # 银行存款（直接支付）
+            JournalEntry.account_code.like("6602%"),  # 管理费用
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "") + (entry.contact_project or "")
+        if any(kw in summary for kw in OVERSEAS_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.debit_amount or entry.credit_amount),
+                "contact": entry.contact_project or ""
+            })
+
+    if found:
+        total_amt = sum(x["amount"] for x in found)
+        detail_parts = [f"{x['period']} {x['contact']} {x['summary'][:30]}（{x['amount']:,.0f}元）" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 8, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+            "item": "向境外支付款项可能未履行代扣代缴义务",
+            "detail": f"发现 {len(found)} 笔疑似向境外支付的分录（合计{total_amt:,.2f}元）。"
+                       f"向境外非居民企业支付款项时需代扣代缴：(1)特许权使用费/技术服务费→10%预提所得税+6%增值税；"
+                       f"(2)利息/股息/租金→10%（或协定税率）；(3)未代扣代缴将面临补税+滞纳金+0.5~3倍罚款。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔确认境外支付性质及应代扣税种/税率；"
+                          "(2)检查是否已办理代扣代缴申报和对外付汇备案；"
+                          "(3)适用税收协定优惠税率的需办理协定待遇备案。",
+            "required_evidence": ["境外合同/协议", "代扣代缴税款凭证", "对外付汇税务备案表", "税收协定待遇备案文件（如适用）"]
+        })
+
+
+def _analyze_mixed_sales_accounting(db, company_id, ps, pe, results):
+    """混合销售/兼营未分别核算"""
+    # 检查企业是否同时有货物销售（13%税率发票）和服务收入（6%税率发票）
+    # 但没有分别核算导致从高适用税率
+    invoices_13 = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps,
+        SalesInvoice.invoice_date <= pe,
+        SalesInvoice.tax_rate == 13
+    ).count()
+
+    invoices_6 = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.invoice_date >= ps,
+        SalesInvoice.invoice_date <= pe,
+        SalesInvoice.tax_rate == 6
+    ).count()
+
+    if invoices_13 > 0 and invoices_6 > 0:
+        # 同时有13%和6%税率发票→存在混合销售/兼营可能
+        # 检查是否分别核算（序时账中收入科目是否分设明细）
+        rev_sub_accounts = db.query(JournalEntry.account_code).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            JournalEntry.account_code.like("6001%")
+        ).group_by(JournalEntry.account_code).count()
+
+        if rev_sub_accounts <= 1:  # 收入科目未分设明细→可能未分别核算
+            results.append({
+                "category": "增值税专项", "category_icon": "📋",
+                "risk_score": 6, "risk_level": "中风险", "risk_color": "#f59e0b", "urgency": "提醒",
+                "item": "混合销售/兼营业务可能未分别核算",
+                "detail": f"分析期间存在 {invoices_13} 张13%税率发票和 {invoices_6} 张6%税率发票，"
+                           f"但收入科目仅设 {rev_sub_accounts} 个明细科目。"
+                           f"兼营不同税率业务应分别核算（分设明细科目），未分别核算的→从高适用税率（13%），"
+                           f"可能导致多缴税款或税务稽查时被认定核算不清而从严处理。",
+                "suggestion": "(1)区分混合销售（一项行为涉及货物+服务，从主业税率）和兼营（多项独立业务）；"
+                              "(2)兼营业务应在会计科目、发票、合同中分别核算/列示；"
+                              "(3)设立独立的收入明细科目，分别归集不同税率业务的收入。",
+                "required_evidence": ["各税率业务收入分项明细表", "收入核算科目设置说明", "销售合同分类清单"]
+            })
+
+
+def _analyze_environmental_tax(db, company_id, ps, pe, results):
+    """环保税未申报"""
+    # 检查是否有污染排放相关业务（制造业/化工/印染等），但未缴纳环保税
+    # 间接判断：有"排污"/"环保"/"废水"/"废气"/"固废"等支出分录但无环保税缴纳记录
+    ENV_KEYWORDS = ["排污", "环保", "废水", "废气", "固废", "危废", "噪声", "污染", "排放",
+                    "污水处理", "除尘", "脱硫", "脱硝", "垃圾处理"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(*[JournalEntry.summary.contains(kw) for kw in ENV_KEYWORDS])
+    ).all()
+
+    if entries:
+        # 检查是否有环保税缴纳记录
+        env_tax_entries = db.query(JournalEntry).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            or_(
+                JournalEntry.summary.contains("环保税"),
+                JournalEntry.summary.contains("环境保护税"),
+                JournalEntry.account_code.like("2221%")  # 应交环保税
+            )
+        ).count()
+
+        if env_tax_entries == 0:
+            detail_parts = [f"{e.period} {e.summary[:40]}" for e in entries[:5]]
+            results.append({
+                "category": "政策执行", "category_icon": "📜",
+                "risk_score": 7, "risk_level": "高风险", "risk_color": "#ef4444", "urgency": "紧急",
+                "item": "存在排污/环保相关支出但未申报环境保护税",
+                "detail": f"发现 {len(entries)} 笔与排污/环保相关的支出分录，"
+                           f"但未发现环境保护税缴纳记录。"
+                           f"直接向环境排放应税污染物（大气/水/固废/噪声）的企业应缴纳环保税。"
+                           f"未申报可能面临追缴+滞纳金+罚款。"
+                           f"涉及：{'；'.join(detail_parts)}"
+                           + (f"等{len(entries)}笔" if len(entries) > 5 else ""),
+                "suggestion": "(1)评估企业是否属于环保税纳税义务人（排放应税污染物）；"
+                              "(2)如是，按污染物排放量或污染当量数计算环保税并补申报；"
+                              "(3)如已委托第三方处理（有危废转移联单），可免责但需保留凭证。",
+                "required_evidence": ["排污许可证/排污登记表", "污染物排放监测报告", "环保税申报表（如适用）", "危废转移联单（如委托处理）"]
+            })
+
+
+def _analyze_invoice_remarks_compliance(db, company_id, ps, pe, results):
+    """发票备注栏信息缺失或不规范"""
+    # 检查特定业务类型发票备注栏是否按要求填写
+    # 建筑服务（项目名称+地址）、运输服务（起运地+到达地+车号）、不动产租赁/销售（详细地址）
+    CONSTRUCTION_KEYWORDS = ["建筑", "工程", "施工", "安装", "装修", "修缮"]
+    TRANSPORT_KEYWORDS = ["运输", "物流", "货运", "快递", "配送"]
+    PROPERTY_KEYWORDS = ["不动产", "房产", "房屋", "商铺", "写字楼", "厂房", "土地"]
+
+    # 查进项发票中有建筑业/运输/不动产特征的
+    all_purchase = db.query(
+        PurchaseInvoice.id, PurchaseInvoice.goods_name, PurchaseInvoice.seller_name,
+        PurchaseInvoice.total_amount, PurchaseInvoice.invoice_date
+    ).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps,
+        PurchaseInvoice.invoice_date <= pe
+    ).all()
+
+    needs_remark = []
+    for inv_id, goods_name, seller, amt, inv_date in all_purchase:
+        name = (goods_name or "").lower()
+        category = None
+        if any(kw in name for kw in CONSTRUCTION_KEYWORDS):
+            category = "建筑服务"
+        elif any(kw in name for kw in TRANSPORT_KEYWORDS):
+            category = "运输服务"
+        elif any(kw in name for kw in PROPERTY_KEYWORDS):
+            category = "不动产"
+        if category:
+            needs_remark.append({
+                "category": category, "goods": goods_name[:50],
+                "seller": seller, "amount": _safe_float(amt)
+            })
+
+    if needs_remark:
+        by_cat = defaultdict(lambda: {"count": 0, "amount": 0.0})
+        for item in needs_remark:
+            by_cat[item["category"]]["count"] += 1
+            by_cat[item["category"]]["amount"] += item["amount"]
+        detail_parts = [f"{cat}: {info['count']}张（{info['amount']:,.0f}元）" for cat, info in by_cat.items()]
+        results.append({
+            "category": "发票合规", "category_icon": "📄",
+            "risk_score": 5, "risk_level": "中风险", "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "特定业务发票备注栏可能未按要求填写",
+            "detail": f"分析期间共 {len(needs_remark)} 张进项发票涉及建筑服务/运输/不动产业务，"
+                       f"这些发票按规定需在备注栏注明详细信息（建筑服务→项目名称+地址，"
+                       f"运输→起运地+到达地+车号，不动产→详细地址）。"
+                       f"备注栏不合规的发票不得作为增值税进项抵扣和企业所得税税前扣除凭证。"
+                       f"分布：{'；'.join(detail_parts)}",
+            "suggestion": "(1)逐票检查特定业务发票备注栏内容是否完整；"
+                          "(2)不合规发票要求供应商重新开具；(3)建立发票审核制度，拒收备注栏不合规发票。",
+            "required_evidence": ["需要备注的发票清单", "补开/重开的合规发票", "发票审核制度"]
+        })
+
+
+def _analyze_commission_fee_compliance(db, company_id, ps, pe, results):
+    """佣金/手续费支出合规性"""
+    COMMISSION_KEYWORDS = ["佣金", "手续费", "返点", "提成", "回扣", "服务费", "居间费", "中介费"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("6601%"),  # 销售费用
+            JournalEntry.account_code.like("6602%"),  # 管理费用
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in COMMISSION_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.debit_amount),
+                "contact": entry.contact_project or ""
+            })
+
+    if found:
+        total_amt = sum(x["amount"] for x in found)
+        # 检查佣金是否超限额（一般企业≤5%收入，保险等特殊行业≤10%~18%）
+        total_revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.period >= ps, JournalEntry.period <= pe,
+            JournalEntry.account_code.like("6001%")
+        ).scalar() or 0
+
+        ratio = (total_amt / total_revenue * 100) if total_revenue > 0 else 0
+        detail_parts = [f"{x['period']} {x['summary'][:40]}（{x['amount']:,.0f}元）" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 7 if ratio > 5 else 5,
+            "risk_level": "高风险" if ratio > 5 else "中风险",
+            "risk_color": "#ef4444" if ratio > 5 else "#f59e0b",
+            "urgency": "紧急" if ratio > 5 else "提醒",
+            "item": "佣金/手续费支出可能存在合规风险",
+            "detail": f"发现 {len(found)} 笔佣金/手续费支出（合计{total_amt:,.2f}元）"
+                       f"，佣金占收入比 {ratio:.1f}%"
+                       + ("，超过5%限额，超标部分不得税前扣除。" if ratio > 5 else "。")
+                       + f"佣金支出需满足：(1)合法真实业务；(2)签订书面合同/协议；"
+                       f"(3)不超过合同收入5%（一般企业）；(4)以非现金方式支付；"
+                       f"(5)对方为个人的需代扣个税（劳务报酬20%~40%）。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔核实佣金支出的合同/协议和业务真实性；"
+                          "(2)超标部分做纳税调增；(3)个人佣金需代扣代缴个人所得税；"
+                          "(4)保留服务合同、付款凭证和对方收款确认。",
+            "required_evidence": ["佣金支出明细表", "佣金合同/服务协议", "代扣个税凭证（如付给个人）", "收款方确认记录"]
+        })
+
+
+def _analyze_donation_compliance(db, company_id, ps, pe, results):
+    """捐赠支出税前扣除不合规"""
+    DONATION_KEYWORDS = ["捐赠", "捐助", "赞助", "捐献", "公益", "慈善"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("6711%"),  # 营业外支出-捐赠
+            JournalEntry.summary.contains("捐赠"),
+            JournalEntry.summary.contains("赞助"),
+            JournalEntry.summary.contains("公益")
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in DONATION_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "amount": _safe_float(entry.debit_amount),
+                "account": entry.account_code
+            })
+
+    if found:
+        total_amt = sum(x["amount"] for x in found)
+        # 计算利润总额12%限额
+        profit = _pl_net(db, company_id, ps, pe)
+        limit_12pct = abs(profit) * 0.12 if profit else 0
+        detail_parts = [f"{x['period']} {x['summary'][:40]}（{x['amount']:,.0f}元）" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 7 if total_amt > limit_12pct else 5,
+            "risk_level": "高风险" if total_amt > limit_12pct else "中风险",
+            "risk_color": "#ef4444" if total_amt > limit_12pct else "#f59e0b",
+            "urgency": "紧急" if total_amt > limit_12pct else "提醒",
+            "item": "捐赠支出税前扣除合规性存疑",
+            "detail": (
+                           f"发现 {len(found)} 笔捐赠/赞助支出（合计{total_amt:,.2f}元，"
+                           f"利润总额12%限额={limit_12pct:,.2f}元"
+                           + ("，超标!" if total_amt > limit_12pct else "，在限额内。")
+                           + "）捐赠支出税前扣除需满足："
+                           "(1)通过公益性社会组织或县级以上政府捐赠；"
+                           "(2)不超过年度利润总额12%（超标可结转3年）；"
+                           "(3)取得公益事业捐赠票据；(4)直接捐赠不得扣除；"
+                           "(5)赞助支出（非广告性质）不得税前扣除。"
+                       ),
+            "suggestion": "(1)逐笔核实捐赠性质（公益/直接/赞助）；"
+                          "(2)公益性捐赠需取得合规票据且不超12%限额；"
+                          "(3)直接捐赠和赞助支出做纳税调增；"
+                          "(4)超标公益性捐赠可结转以后3年扣除。",
+            "required_evidence": ["捐赠支出明细表", "公益事业捐赠统一票据", "受赠方资格证明", "企业所得税纳税调增明细"]
+        })
+
+
+def _analyze_inventory_count_discrepancy(db, company_id, ps, pe, results):
+    """存货盘点差异未做税务调整"""
+    DISCREPANCY_KEYWORDS = ["盘亏", "盘盈", "盘点差异", "报废", "毁损", "霉变", "过期"]
+    entries = db.query(JournalEntry).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.period >= ps, JournalEntry.period <= pe,
+        or_(
+            JournalEntry.account_code.like("1405%"),  # 存货相关
+            *[JournalEntry.summary.contains(kw) for kw in DISCREPANCY_KEYWORDS]
+        )
+    ).all()
+
+    found = []
+    for entry in entries:
+        summary = (entry.summary or "")
+        if any(kw in summary for kw in DISCREPANCY_KEYWORDS):
+            found.append({
+                "summary": entry.summary, "period": entry.period,
+                "debit": _safe_float(entry.debit_amount),
+                "credit": _safe_float(entry.credit_amount)
+            })
+
+    if found:
+        total_amt = sum(x["debit"] + x["credit"] for x in found)
+        detail_parts = [f"{x['period']} {x['summary'][:50]}" for x in found[:5]]
+        results.append({
+            "category": "企业所得税", "category_icon": "💰",
+            "risk_score": 6, "risk_level": "中风险", "risk_color": "#f59e0b", "urgency": "提醒",
+            "item": "存货盘亏/盘盈/报废可能未做税务处理",
+            "detail": f"发现 {len(found)} 笔存货盘点/报废相关分录（涉及金额{total_amt:,.2f}元）。"
+                       f"存货盘点差异税务处理：(1)盘亏→进项税额需转出（管理不善导致），"
+                       f"损失需专项申报税前扣除；(2)盘盈→计入收入缴纳企业所得税；"
+                       f"(3)报废→正常损耗可清单申报，非正常损失需专项申报+进项转出。"
+                       f"涉及：{'；'.join(detail_parts)}"
+                       + (f"等{len(found)}笔" if len(found) > 5 else ""),
+            "suggestion": "(1)逐笔记实盘亏/盘盈/报废原因；(2)管理不善导致的盘亏应做进项税额转出；"
+                          "(3)资产损失税前扣除需留存内部核批+外部证据（盘点表/技术鉴定等）；"
+                          "(4)盘盈收入不得隐瞒，应如实申报。",
+            "required_evidence": ["存货盘点表", "盘亏/报废原因说明及审批单", "进项税额转出凭证（如适用）", "资产损失税前扣除申报表"]
+        })
