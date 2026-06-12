@@ -1859,8 +1859,13 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
     贷：2202 应付账款 / 供应商 = 不含税金额
     （若银行流水有对应付款，则贷方用 1002 银行存款）
 
+    三号合并规则：发票代码+发票号码+数电发票号码三者相同的行视为同一张发票，
+    合并为一个凭证号（一组 = 一张凭证），每行分录共享 voucher_no，
+    ref_id 各自指向对应 PurchaseInvoice.id 保证追溯。
+
     若 invoice_id 为 None，则为所有未取得凭证的取得发票生成凭证。
-    若 invoice_id 不为 None，则仅为指定发票生成凭证。
+    若 invoice_id 为 int，则仅为该张发票生成凭证。
+    若 invoice_id 为 list，则为列表中的发票生成凭证（同组三号仍合并）。
     """
     get_full_name, account_map = _build_account_name_resolver(db, company_id)
 
@@ -1909,94 +1914,110 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         PurchaseInvoice.skip_accounting == False
     )
     if invoice_id is not None:
-        query = query.filter(PurchaseInvoice.id == invoice_id)
+        if isinstance(invoice_id, (list, tuple)):
+            query = query.filter(PurchaseInvoice.id.in_(invoice_id))
+        else:
+            query = query.filter(PurchaseInvoice.id == invoice_id)
 
     invoices = query.all()
+
+    # ── 按三号分组：发票代码+发票号码+数电发票号码相同 = 同一张发票 ──
+    # 同一复选框勾选的多行合并为一个凭证号，借方/贷方金额为各行合计
+    groups = {}
+    for inv in invoices:
+        key = (inv.invoice_code or "", inv.invoice_no or "", inv.digital_invoice_no or "")
+        groups.setdefault(key, []).append(inv)
+
     total = 0
 
-    for inv in invoices:
-        # 跳过标记为暂不记账的发票（双重保护）
-        if inv.skip_accounting:
-            continue
-        # 幂等检查：该发票已生成过凭证则跳过
-        _existing = db.query(JournalEntry).filter(
-            JournalEntry.company_id == company_id,
-            JournalEntry.source == "取得发票",
-            JournalEntry.ref_id == inv.id
-        ).first()
-        if _existing:
+    for key, group_invs in groups.items():
+        # 过滤已入账和暂不记账的发票
+        unprocessed = []
+        for inv in group_invs:
+            if inv.skip_accounting:
+                continue
+            _existing = db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.source == "取得发票",
+                JournalEntry.ref_id == inv.id
+            ).first()
+            if not _existing:
+                unprocessed.append(inv)
+        if not unprocessed:
             continue
 
-        seller = inv.seller_name or "供应商"
-        goods = inv.goods_name or ""
-        summary = f"向{seller}采购{goods or '货物'}"
-
-        # 兼容 invoice_date 为字符串或 date 对象两种情况
-        if inv.invoice_date:
-            if isinstance(inv.invoice_date, str):
-                period = inv.invoice_date[:7] if len(inv.invoice_date) >= 7 else datetime.now().strftime("%Y-%m")
-                date_str = inv.invoice_date if len(inv.invoice_date) >= 10 else (period + "-01")
+        # 取第一条发票确定期间和日期
+        first = unprocessed[0]
+        if first.invoice_date:
+            if isinstance(first.invoice_date, str):
+                period = first.invoice_date[:7] if len(first.invoice_date) >= 7 else datetime.now().strftime("%Y-%m")
+                date_str = first.invoice_date if len(first.invoice_date) >= 10 else (period + "-01")
             else:
-                period = inv.invoice_date.strftime("%Y-%m")
-                date_str = inv.invoice_date.strftime("%Y-%m-%d")
+                period = first.invoice_date.strftime("%Y-%m")
+                date_str = first.invoice_date.strftime("%Y-%m-%d")
         else:
             period = datetime.now().strftime("%Y-%m")
             date_str = period + "-01"
 
-        next_voucher_no = _next_voucher_no(db, company_id, period, "记")
+        entry_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-        # ── 根据品名智能分类借方科目（费用/存货/资产）──
-        # 铁律：发票定成本费用，银行流水走往来
-        debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
+        # 整组合并：共享一个凭证号
+        voucher_no = _next_voucher_no(db, company_id, period, "记")
+        seller = first.seller_name or "供应商"
 
-        # 确保进项税额科目存在（专票需要拆分税额）
+        # 汇总品名用于摘要
+        goods_set = {inv.goods_name for inv in unprocessed if inv.goods_name}
+        goods = "、".join(goods_set) if goods_set else "货物"
+        summary = f"向{seller}采购{goods}"
+
+        # 确保进项税额科目存在
         tax_code = "221001002"
         tax_name = "进项税额"
-        if inv.tax_amount and inv.tax_amount != 0:
+        has_tax = any(inv.tax_amount and inv.tax_amount != 0 for inv in unprocessed)
+        if has_tax:
             _ensure_account(db, company_id, tax_code, tax_name, "负债", "借")
 
-        # 贷方：应付账款（价税合计）
-        # 铁律：发票入账永远贷应付账款，不做银行存款
         credit_code, credit_name = "2202", get_full_name("2202") or "应付账款"
-        total_amount = (inv.amount or 0) + abs(inv.tax_amount or 0)
 
-        entries = []
-        # 借方1：费用/成本（不含税金额）
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary, account_code=debit_code, account_name=debit_name,
-            debit_amount=inv.amount, credit_amount=0,
-            contact_project=seller,
-            source="取得发票", ref_id=inv.id,
-        ))
-        # 借方2：进项税额（若有）
-        if inv.tax_amount and inv.tax_amount != 0:
-            entries.append(JournalEntry(
+        # 为组内每行发票生成分录，共享同一个 voucher_no
+        for inv in unprocessed:
+            debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
+
+            # 借方1：费用/成本（不含税金额）
+            db.add(JournalEntry(
                 company_id=company_id,
-                entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                period=period, voucher_word="记", voucher_no=next_voucher_no,
-                summary=summary, account_code=tax_code, account_name=tax_name,
-                debit_amount=abs(inv.tax_amount), credit_amount=0,
+                entry_date=entry_date,
+                period=period, voucher_word="记", voucher_no=voucher_no,
+                summary=summary, account_code=debit_code, account_name=debit_name,
+                debit_amount=inv.amount, credit_amount=0,
                 contact_project=seller,
                 source="取得发票", ref_id=inv.id,
             ))
-        # 贷方：应付账款（价税合计）
-        entries.append(JournalEntry(
-            company_id=company_id,
-            entry_date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-            period=period, voucher_word="记", voucher_no=next_voucher_no,
-            summary=summary, account_code=credit_code, account_name=credit_name,
-            debit_amount=0, credit_amount=total_amount,
-            contact_project=seller,
-            source="取得发票", ref_id=inv.id,
-        ))
+            # 借方2：进项税额（若有）
+            if inv.tax_amount and inv.tax_amount != 0:
+                db.add(JournalEntry(
+                    company_id=company_id,
+                    entry_date=entry_date,
+                    period=period, voucher_word="记", voucher_no=voucher_no,
+                    summary=summary, account_code=tax_code, account_name=tax_name,
+                    debit_amount=abs(inv.tax_amount), credit_amount=0,
+                    contact_project=seller,
+                    source="取得发票", ref_id=inv.id,
+                ))
+            # 贷方：应付账款（价税合计）
+            inv_total = (inv.amount or 0) + abs(inv.tax_amount or 0)
+            db.add(JournalEntry(
+                company_id=company_id,
+                entry_date=entry_date,
+                period=period, voucher_word="记", voucher_no=voucher_no,
+                summary=summary, account_code=credit_code, account_name=credit_name,
+                debit_amount=0, credit_amount=inv_total,
+                contact_project=seller,
+                source="取得发票", ref_id=inv.id,
+            ))
 
-        for e in entries:
-            db.add(e)
         db.flush()
-        total += 1
+        total += 1  # 一组（一个复选框）= 一张凭证
 
     return total
 

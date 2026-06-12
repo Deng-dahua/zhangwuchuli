@@ -3799,9 +3799,16 @@ def purchase_invoice_batch_to_journal(
 
 
     # 生成采购入账凭证（借：库存商品 / 贷：应付账款）
-    purchase_count = auto_generate_purchase_journal(db, company_id)
+    # 只处理本次勾选的发票，避免全量重算
+    if ids:
+        _inv_ids = [inv.id for inv in invoices]
+        purchase_count = auto_generate_purchase_journal(db, company_id, invoice_id=_inv_ids)
+    else:
+        purchase_count = auto_generate_purchase_journal(db, company_id)
     db.commit()
-    msg = f"批量生成完成：{generated} 张发票 → {voucher_count} 笔凭证"
+    msg = f"批量生成完成：{generated} 张发票 → 进项抵扣凭证 {voucher_count} 笔"
+    if purchase_count:
+        msg += f"，采购凭证 {purchase_count} 笔"
     if skipped > 0:
         msg += f"，跳过 {skipped} 张"
     if errors:
