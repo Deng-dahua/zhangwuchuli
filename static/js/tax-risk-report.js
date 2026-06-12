@@ -80,11 +80,9 @@ function renderTaxRiskReport(container) {
     }, 100);
   }
 
-  if (!taxRiskReportData) {
-    loadTaxRiskReport();
-  } else {
-    renderTaxRiskReportData(taxRiskReportData);
-  }
+  // 每次进入模块都重新加载，避免切换公司后显示旧数据缓存
+  taxRiskReportData = null;
+  loadTaxRiskReport();
 }
 
 async function loadTaxRiskReport() {
