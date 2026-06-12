@@ -2582,40 +2582,92 @@ def _next_voucher_no(db, company_id, period, voucher_word="记"):
     return (max_no[0] + 1) if max_no and max_no[0] else 1
 
 
+# ============================================================
+# 会计科目去重规则（三重保障）
+# ============================================================
+# 规则A: 编码去重 —— 同公司、同code → 禁止重复创建
+# 规则B: 名称精确去重 —— 同公司、同parent、同name → 禁止重复创建
+# 规则C: 名称语义去重 —— 同公司、同parent、标准化名→与原用编码取并集
+
+# 语义等价映射：短名/别名 → 标准名称
+ACCOUNT_NAME_SEMANTIC_MAP = {
+    "社保费": "社会保险费",
+}
+
+def _normalize_account_name(name: str) -> str:
+    """标准化科目名称：去掉服务标记前缀，应用语义等价映射"""
+    import re
+    # 去掉 *XXX* 类服务标记前缀
+    cleaned = re.sub(r'\*[^*]*\*', '', name).strip()
+    # 应用语义等价映射
+    return ACCOUNT_NAME_SEMANTIC_MAP.get(cleaned, cleaned)
+
+def _ACCOUNT_PARENT_MAP():
+    """科目→父级编码静态映射（延迟构建避免循环import）"""
+    return {
+        "2211": None, "221101": "2211", "221102": "2211", "221103": "2211",
+        "2221": None, "222101": "2221",
+        "2210": None, "221001": "2210", "221001001": "221001", "221001002": "221001", "221001003": "221001",
+        "221002": "2210", "221003": "2210", "221004": "2210", "221005": "2210",
+        "221006": "2210", "221007": "2210", "221008": "2210",
+        "6602": None, "660201": "6602", "660202": "6602", "660203": "6602",
+        "660204": "6602", "660206": "6602", "660207": "6602",
+        "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
+        "660213": "6602", "660214": "6602", "660215": "6602", "660216": "6602",
+        "6603": None, "660301": "6603",
+        "1221": None,
+        "1122": None,
+        "1123": None,
+        "1002": None,
+        "6001": None,
+    }
+
 def _ensure_account(db, company_id, code, name, category, direction, parent_code=None):
-    """确保科目存在，不存在则创建"""
-    if not db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
-        if parent_code is None:
-            # 确定 parent_code（静态映射）
-            parent_map = {
-                "2211": None, "221101": "2211", "221102": "2211", "221103": "2211",
-                "2221": None, "222101": "2221",
-                "2210": None, "221001": "2210", "221001001": "221001", "221001002": "221001", "221001003": "221001",
-                "221002": "2210", "221003": "2210", "221004": "2210", "221005": "2210",
-                "221006": "2210", "221007": "2210", "221008": "2210",
-                "6602": None, "660201": "6602", "660202": "6602", "660203": "6602",
-                "660204": "6602", "660205": "6602", "660206": "6602", "660207": "6602",
-                "660209": "6602", "660210": "6602", "660211": "6602", "660212": "6602",
-                "660213": "6602", "660214": "6602", "660215": "6602", "660216": "6602",
-                "6603": None, "660301": "6603",
-                "2241": None,
-                "1221": None,
-                "1122": None,
-                "1123": None,
-                "1002": None,
-                "6001": None,
-            }
-            parent_code = parent_map.get(code)
-        level = 1
-        if parent_code:
-            parent_acc = db.query(Account).filter(Account.company_id == company_id, Account.code == parent_code).first()
-            level = (parent_acc.level + 1) if parent_acc else 2
-        db.add(Account(
-            company_id=company_id, code=code, name=name,
-            category=category, balance_direction=direction,
-            level=level, parent_code=parent_code,
-        ))
-        db.flush()
+    """确保科目存在，不存在则创建。
+
+    去重规则（自动执行）：
+    - 规则A: 编码去重 —— 同公司+同code已存在→直接跳过
+    - 规则B: 名称去重 —— 同公司+同parent+标准化名已→跳过（日志输出）
+    - 规则C: 语义等价 —— 短名自动映射为标准名再查重
+    """
+    # 规则A: 编码去重（主键级）
+    if db.query(Account).filter(Account.company_id == company_id, Account.code == code).first():
+        return
+
+    # 确定 parent_code
+    if parent_code is None:
+        parent_code = _ACCOUNT_PARENT_MAP().get(code)
+
+    # 规则B+C: 名称去重 —— 同公司、同parent下查标准化名
+    normalized = _normalize_account_name(name)
+    if parent_code:
+        siblings = db.query(Account).filter(
+            Account.company_id == company_id,
+            Account.parent_code == parent_code,
+        ).all()
+        for sib in siblings:
+            sib_norm = _normalize_account_name(sib.name)
+            if sib_norm == normalized:
+                # 名称语义重复 → 防止发散创建
+                import logging
+                logging.getLogger("caishui").warning(
+                    f"[科目去重] 公司{company_id} parent={parent_code} "
+                    f"编码{code}名称\"{name}\"与已有编码{sib.code}名称\"{sib.name}\"语义重复，跳过创建"
+                )
+                return
+
+    # 计算层级
+    level = 1
+    if parent_code:
+        parent_acc = db.query(Account).filter(Account.company_id == company_id, Account.code == parent_code).first()
+        level = (parent_acc.level + 1) if parent_acc else 2
+
+    db.add(Account(
+        company_id=company_id, code=code, name=name,
+        category=category, balance_direction=direction,
+        level=level, parent_code=parent_code,
+    ))
+    db.flush()
 
 
 def _ensure_personal_ar_account(db, company_id, employee_name: str) -> str:
@@ -2744,7 +2796,8 @@ def _generate_bank_journals(db: Session, company_id: int, tx_ids: Optional[List[
     _ensure_account(db, company_id, "660202", "差旅费", "损益", "借")
     _ensure_account(db, company_id, "660203", "折旧费", "损益", "借")
     _ensure_account(db, company_id, "660204", "工资", "损益", "借")
-    _ensure_account(db, company_id, "660205", "社保费", "损益", "借")
+    # 660205已被660212(社会保险费)语义合并，确保660212存在即可
+    _ensure_account(db, company_id, "660212", "社会保险费", "损益", "借")
     _ensure_account(db, company_id, "660206", "交通费", "损益", "借")
     _ensure_account(db, company_id, "660207", "通讯费", "损益", "借")
     _ensure_account(db, company_id, "660209", "摊销费", "损益", "借")
@@ -3903,7 +3956,8 @@ ACCOUNTS_TEMPLATE = [
     ("660202", "差旅费", "损益", "借", 2, "6602"),
     ("660203", "折旧费", "损益", "借", 2, "6602"),
     ("660204", "工资", "损益", "借", 2, "6602"),
-    ("660205", "社保费", "损益", "借", 2, "6602"),
+    # 660205已语义合并到660212(社会保险费)
+    ("660212", "社会保险费", "损益", "借", 2, "6602"),
     ("660206", "交通费", "损益", "借", 2, "6602"),
     ("660207", "通讯费", "损益", "借", 2, "6602"),
     ("660208", "摊销费", "损益", "借", 2, "6602"),

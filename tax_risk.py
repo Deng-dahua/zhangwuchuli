@@ -7508,7 +7508,7 @@ def _analyze_flexible_employment_tax(db, company_id, ps, pe, results):
 
     # 3. 检查是否有对应的人员薪金/个税记录
     revenue = _get_account_sum(db, company_id, "6001", ps, pe, "credit")
-    salary_expense = _get_account_sum(db, company_id, "660205", ps, pe, "debit")  # 工资薪金
+    salary_expense = _get_account_sum(db, company_id, "660204", ps, pe, "debit")  # 工资薪金
 
     # 4. 判断风险：劳务费用高但工资薪金低/无
     # 将劳务报酬伪装为经营所得（不代扣个税）是常见避税手段
