@@ -765,7 +765,6 @@ function renderVATToolbar(yearOpts, monthOpts) {
     + '<button class="btn-toolbar" onclick="vatClearFilter()" title="清除筛选条件">清除</button>'
     + '<button class="btn-toolbar" onclick="vatGenerateVoucher()" title="生成增值税相关凭证">生成凭证</button>'
     + '<button class="btn-toolbar" onclick="vatSaveManualData()" title="保存手动填列的数据" style="background:#059669;color:#fff">保存数据</button>'
-    + '<button class="btn-toolbar" onclick="vatResetAllFormulas()" title="重置所有公式单元格，恢复自动计算" style="background:#f59e0b;color:#fff">重置公式</button>'
     + '<button class="btn-toolbar-danger" onclick="vatDeleteCurrent()" title="删除当前申报表">删除报表</button>'
     + '</div>';
 }
