@@ -206,10 +206,11 @@ def get_tax_risk_report(
 ):
     results = []
     if period_from and period_to:
-        period_start = period_from
-        period_end = period_to
+        # 规范化：前端可能传 YYYY-MM-DD，统一截为 YYYY-MM
+        period_start = period_from[:7] if len(period_from) > 7 else period_from
+        period_end = period_to[:7] if len(period_to) > 7 else period_to
     elif period:
-        period_start = period_end = period
+        period_start = period_end = period[:7] if len(period) > 7 else period
     else:
         latest = db.query(func.max(VATDeclaration.period)).filter(
             VATDeclaration.company_id == company_id).scalar()
