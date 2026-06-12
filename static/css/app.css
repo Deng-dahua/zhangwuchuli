@@ -654,3 +654,103 @@
     }
     #ss-table thead th { background: #f8fafc; position: sticky; top: 0; z-index: 1; text-align: center; vertical-align: middle; }
   
+    /* ═════════════════════════════════════════════════════════════
+       涉税风险分析规则管理模块样式
+       ═════════════════════════════════════════════════════════════ */
+    .risk-rules-container { padding: 8px; }
+
+    /* 顶部标题栏 */
+    .risk-rules-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--gray-100); flex-wrap: wrap; }
+    .risk-rules-title h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--gray-800); }
+    .risk-rules-title p { font-size: 13px; color: var(--gray-400); }
+    .risk-rules-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* 主体：左侧输入区 + 右侧显示区 */
+    .risk-rules-body { display: flex; gap: 16px; min-height: calc(100vh - 220px); flex-wrap: wrap; }
+
+    /* 左侧输入区 */
+    .risk-rules-input { flex: 0 0 420px; min-width: 380px; background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .input-panel-header { padding: 12px 16px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+    .input-panel-header h3 { font-size: 15px; font-weight: 700; color: var(--gray-800); margin-bottom: 2px; }
+    .input-panel-hint { font-size: 11px; color: var(--gray-400); }
+    .input-panel-body { padding: 16px; flex: 1; overflow-y: auto; }
+    .input-panel-footer { padding: 12px 16px; background: var(--gray-50); border-top: 1px solid var(--gray-200); display: flex; gap: 8px; }
+
+    /* 表单样式 */
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 4px; }
+    .required { color: #ef4444; margin-left: 2px; }
+    .form-input, .form-select, .form-textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 13px; color: var(--gray-900); background: #fff; outline: none; transition: all 0.15s; box-sizing: border-box; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.08); }
+    .form-textarea { min-height: 60px; resize: vertical; font-family: inherit; }
+    .form-hint { display: block; font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+    .form-row { display: flex; gap: 12px; }
+    .form-group-half { flex: 1; min-width: 0; }
+
+    /* 右侧显示区 */
+    .risk-rules-display { flex: 1; min-width: 400px; background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .display-panel-header { padding: 12px 16px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+    .display-panel-header h3 { font-size: 15px; font-weight: 700; color: var(--gray-800); margin-bottom: 8px; }
+    .display-panel-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .search-input { flex: 1; min-width: 120px; padding: 6px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 12px; outline: none; }
+    .search-input:focus { border-color: var(--primary); }
+    .filter-select { padding: 6px 8px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 12px; outline: none; background: #fff; }
+    .filter-select:focus { border-color: var(--primary); }
+    .display-panel-body { padding: 16px; flex: 1; overflow-y: auto; }
+    .display-panel-footer { padding: 8px 16px; background: var(--gray-50); border-top: 1px solid var(--gray-200); font-size: 12px; color: var(--gray-400); }
+
+    /* 规则分类分组 */
+    .risk-rules-category { margin-bottom: 16px; background: #fff; border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; }
+    .category-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); font-size: 14px; }
+    .category-icon { font-size: 18px; }
+    .category-name { font-weight: 700; color: var(--gray-800); }
+    .category-count { font-size: 12px; color: var(--gray-400); font-weight: 400; margin-left: auto; }
+
+    /* 规则卡片 */
+    .risk-rule-card { padding: 12px 14px; border-bottom: 1px solid var(--gray-100); transition: background 0.15s; }
+    .risk-rule-card:last-child { border-bottom: none; }
+    .risk-rule-card:hover { background: var(--gray-50); }
+    .rule-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .rule-level-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+    .rule-score-badge { font-size: 11px; color: var(--gray-500); }
+    .rule-card-body { margin-bottom: 6px; }
+    .rule-item-name { font-size: 14px; font-weight: 600; color: var(--gray-800); margin-bottom: 4px; }
+    .rule-detail { font-size: 12px; color: var(--gray-500); line-height: 1.6; margin-bottom: 4px; }
+    .rule-suggestion { font-size: 12px; color: var(--gray-600); background: var(--primary-light); padding: 6px 10px; border-radius: 6px; line-height: 1.6; margin-bottom: 4px; }
+    .rule-evidence { font-size: 12px; color: var(--gray-600); background: #f0fdf4; padding: 6px 10px; border-radius: 6px; line-height: 1.6; margin-bottom: 4px; }
+    .rule-data-source { font-size: 11px; color: var(--gray-400); }
+    .rule-card-footer { display: flex; align-items: center; justify-content: space-between; }
+    .rule-urgency { font-size: 11px; color: var(--gray-500); }
+    .rule-actions { display: flex; gap: 4px; }
+    .btn-icon { background: none; border: 1px solid var(--gray-300); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
+    .btn-icon:hover { background: var(--gray-100); }
+
+    .risk-rules-empty { text-align: center; color: var(--gray-400); padding: 40px; font-size: 14px; }
+
+    @media (max-width: 900px) {
+      .risk-rules-body { flex-direction: column; }
+      .risk-rules-input, .risk-rules-display { flex: 1; min-width: 0; }
+    }
+
+    /* 纯文本输入区专用样式 */
+    #rule-input-text {
+      min-height: 400px;
+      font-size: 14px;
+      line-height: 1.7;
+      background: #fafbfc;
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px;
+      resize: vertical;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    #rule-input-text:focus {
+      background: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(26,86,219,0.08);
+    }
+    #rule-input-text::placeholder {
+      color: var(--gray-400);
+      font-size: 13px;
+    }

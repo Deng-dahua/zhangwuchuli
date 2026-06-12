@@ -5069,9 +5069,9 @@ def _cf_net_cash_by_accounts(company_id, period_from, period_to, cash_codes, db,
         for l in lines:
             if l.account_code and any(l.account_code.startswith(c) for c in cash_codes):
                 if inflow:
-                    total += (l.credit_amount or 0)  # 现金流入：贷现金
+                    total += float(l.credit_amount or 0)  # 现金流入：贷现金
                 else:
-                    total += (l.debit_amount or 0)  # 现金流出：借现金
+                    total += float(l.debit_amount or 0)  # 现金流出：借现金
     return round(total, 2)
 
 
@@ -5111,7 +5111,7 @@ def _cf_op_classified(company_id, period_from, period_to, cash_codes, activity_c
         cash_cond
     ).scalar()
 
-    return round(total or 0, 2)
+    return round(float(total or 0), 2)
 
 
 def _cf_activity(company_id, period_from, period_to, cash_codes, activity_codes, db, is_inflow=True):
@@ -5154,7 +5154,7 @@ def _cf_activity(company_id, period_from, period_to, cash_codes, activity_codes,
         cash_cond
     ).scalar()
 
-    return round(total or 0, 2)
+    return round(float(total or 0), 2)
 
 
 @app.get("/api/reports/cash-flow")
