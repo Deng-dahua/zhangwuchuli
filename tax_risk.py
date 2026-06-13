@@ -1005,6 +1005,10 @@ def get_tax_risk_report(
     _analyze_supplier_naming_pattern(db, company_id, period_start, period_end, results)
     _analyze_expense_structure_mismatch(db, company_id, period_start, period_end, results)
     _analyze_invoice_time_concentration(db, company_id, period_start, period_end, results)
+    # ── V14 新增 — 资料完备度 + 多源交叉 + 人均效能 ──
+    _analyze_document_completeness(db, company_id, period_start, period_end, results)
+    _analyze_multi_source_cross(db, company_id, period_start, period_end, results)
+    _analyze_efficiency_metrics(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -10708,3 +10712,146 @@ def _analyze_invoice_time_concentration(db, company_id, ps, pe, results):
                 "银行付款时间线对比",
             ]
         })
+
+
+# ═══════════════════════════════════════════════════════════
+# 域14·15·16 新增分析函数
+# ═══════════════════════════════════════════════════════════
+
+def _analyze_document_completeness(db, company_id, ps, pe, results):
+    """ID 218: 资料完备度"""
+    checks = {
+        "银行流水": db.query(BankTransaction).filter(BankTransaction.company_id == company_id).first(),
+        "销项发票": db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).first(),
+        "进项发票": db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).first(),
+        "记账凭证": db.query(JournalEntry).filter(JournalEntry.company_id == company_id).first(),
+    }
+    has_salary = db.query(SalaryRecord).filter(SalaryRecord.company_id == company_id).first() is not None
+    has_ss = db.query(SocialSecurityDetail).first() is not None
+    has_contract = db.query(Contract).filter(Contract.company_id == company_id).first() is not None
+    has_inv = db.query(JournalEntry.account_name).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.account_name.contains("库存")
+    ).first() is not None
+
+    doc_status = {"银行流水": checks["银行流水"] is not None, "销项发票": checks["销项发票"] is not None,
+        "进项发票": checks["进项发票"] is not None, "记账凭证": checks["记账凭证"] is not None,
+        "工资表": has_salary, "社保明细": has_ss, "合同": has_contract, "进销存台账": has_inv}
+    present = [k for k, v in doc_status.items() if v]
+    missing = [k for k, v in doc_status.items() if not v]
+
+    if missing:
+        results.append({
+            "category": "资料完备度", "category_icon": "📁",
+            "risk_score": min(5 + len(missing), 10),
+            "risk_level": "高风险" if len(missing) >= 3 else "中风险",
+            "risk_color": "#dc2626" if len(missing) >= 3 else "#f59e0b",
+            "urgency": "紧急" if len(missing) >= 3 else "重要",
+            "item": "关键经营资料缺失",
+            "detail": f"系统中有{'、'.join(present)}等{len(present)}类资料，缺少{'、'.join(missing)}等{len(missing)}类。稽查时无法提供完整资料，税务机关将按最不利方式核定应纳税额。",
+            "suggestion": "、".join([f"补充{m}资料" for m in missing]) + "。按稽查必查清单提前归档全部经营资料。",
+            "required_evidence": ["已提交资料清单", "缺失资料列表", "稽查必查资料对照表"],
+        })
+
+
+def _analyze_multi_source_cross(db, company_id, ps, pe, results):
+    """ID 219-222/230: 多源交叉验证"""
+    from collections import defaultdict
+
+    if ps and pe:
+        bts = db.query(BankTransaction).filter(BankTransaction.company_id == company_id,
+            BankTransaction.transaction_date >= ps + "-01",
+            BankTransaction.transaction_date <= pe + "-31").all()
+        pis = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.invoice_date >= ps + "-01",
+            PurchaseInvoice.invoice_date <= pe + "-31").all()
+        sis = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id,
+            SalesInvoice.invoice_date >= ps + "-01",
+            SalesInvoice.invoice_date <= pe + "-31").all()
+    else:
+        bts = db.query(BankTransaction).filter(BankTransaction.company_id == company_id).all()
+        pis = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all()
+        sis = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all()
+
+    # 采购三源: 付款×进项
+    if bts and pis:
+        bank_payees = defaultdict(float)
+        for bt in bts:
+            if (bt.debit_amount or 0) > 0 and bt.counterparty_name:
+                bank_payees[bt.counterparty_name[:20]] += (bt.debit_amount or 0)
+        inv_sellers = defaultdict(float)
+        for pi in pis:
+            s = (pi.seller_name or "")[:20]
+            if s: inv_sellers[s] += _safe_float(pi.total_amount)
+
+        pay_no_inv = [(n, a) for n, a in sorted(bank_payees.items(), key=lambda x: -x[1])[:15]
+                      if a >= 5000 and not any(n[:6] in s for s in inv_sellers)]
+        inv_no_pay = [(n, a) for n, a in sorted(inv_sellers.items(), key=lambda x: -x[1])[:15]
+                      if a >= 5000 and not any(n[:6] in p for p in bank_payees)]
+
+        if pay_no_inv:
+            total = sum(a for _, a in pay_no_inv)
+            results.append({"category": "多源交叉", "category_icon": "🔗", "risk_score": 9,
+                "risk_level": "高风险", "risk_color": "#dc2626", "urgency": "紧急",
+                "item": "付款无进项发票（三源交叉）",
+                "detail": f"银行向{len(pay_no_inv)}个供应商付款{total:,.2f}元（{pay_no_inv[0][0]}{pay_no_inv[0][1]:,.0f}元等），但进项发票中无对应记录。付款无票，支出不得税前扣除。",
+                "suggestion": "逐笔核实无票付款的交易背景，联系供应商补开发票；建立付款前审核发票的内部控制。",
+                "required_evidence": ["银行付款与进项发票交叉比对表", "供应商对账单"]})
+        if inv_no_pay:
+            total = sum(a for _, a in inv_no_pay)
+            results.append({"category": "多源交叉", "category_icon": "🔗", "risk_score": 7,
+                "risk_level": "中风险", "risk_color": "#f59e0b", "urgency": "紧急",
+                "item": "进项发票无付款记录（三源交叉）",
+                "detail": f"{len(inv_no_pay)}个供应商开具进项发票{total:,.2f}元（{inv_no_pay[0][0]}），但银行无付款记录。有票无款是虚开发票典型特征。",
+                "suggestion": "核实未付款发票的真实性；若为挂账确认账龄；若无法证明真实性，主动做进项税额转出。",
+                "required_evidence": ["进项发票与银行流水交叉比对表", "应付账款明细账"]})
+
+    # 收入三源
+    if bts and sis:
+        bank_income = sum((bt.credit_amount or 0) for bt in bts)
+        inv_income = sum(_safe_float(si.total_amount) for si in sis)
+        if inv_income > 0 and bank_income > 0:
+            gap_pct = abs(bank_income - inv_income) / max(inv_income, 1)
+            if gap_pct > 0.2:
+                results.append({"category": "多源交叉", "category_icon": "🔗", "risk_score": 9,
+                    "risk_level": "高风险", "risk_color": "#dc2626", "urgency": "紧急",
+                    "item": "收款与开票金额偏差大（三源交叉）",
+                    "detail": f"银行入账{bank_income:,.2f}元 vs 销项开票{inv_income:,.2f}元，差异{abs(bank_income-inv_income):,.2f}元（{gap_pct*100:.0f}%）。银行入账>开票是隐匿收入的重要线索。",
+                    "suggestion": "逐笔核对银行入账记录，区分经营性/非经营性收款；对经营性收款确保开票或申报未开票收入。",
+                    "required_evidence": ["银行入账与销项发票交叉比对表", "收入明细台账"]})
+
+    # 税务四源
+    vat_output = sum(_safe_float(si.tax_amount) for si in sis)
+    vat_input = sum(_safe_float(pi.tax_amount) for pi in pis)
+    vat_net = vat_output - vat_input
+    tax_paid = sum((bt.debit_amount or 0) for bt in bts if bt.summary and "税务" in str(bt.summary))
+    vat = db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id).order_by(VATDeclaration.period.desc()).first()
+    if vat:
+        main = json.loads(vat.form_main or '{}') if isinstance(vat.form_main, str) else (vat.form_main or {})
+        vat_payable = _safe_float(main.get("row19_tax_payable", 0))
+        if vat_payable > 0 and abs(vat_net - vat_payable) > max(vat_payable * 0.1, 500):
+            results.append({"category": "多源交叉", "category_icon": "🔗", "risk_score": 8,
+                "risk_level": "高风险", "risk_color": "#dc2626", "urgency": "紧急",
+                "item": "税务四源数据偏差",
+                "detail": f"发票净税额{vat_net:,.2f}元 vs 申报应缴{vat_payable:,.2f}元 vs 银行缴税{tax_paid:,.2f}元。四源数据不一致。",
+                "suggestion": "逐环节排查发票税额→申报表→银行缴税的差异原因，确保四源数据一致。",
+                "required_evidence": ["税务四源对比表", "各期增值税申报表", "银行缴税凭证"]})
+
+
+def _analyze_efficiency_metrics(db, company_id, ps, pe, results):
+    """ID 229: 人均效能"""
+    employees = db.query(SalaryRecord).filter(SalaryRecord.company_id == company_id).all()
+    sis = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all() if not ps else \
+          db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id,
+              SalesInvoice.invoice_date >= ps + "-01", SalesInvoice.invoice_date <= pe + "-31").all()
+    if employees and sis:
+        emp_count = len(set(e.name for e in employees if e.name))
+        total_revenue = sum(_safe_float(si.total_amount) for si in sis)
+        if emp_count > 0 and total_revenue > 0:
+            rev_per_person = total_revenue / emp_count
+            results.append({"category": "薪酬合规", "category_icon": "👥", "risk_score": 4,
+                "risk_level": "低风险", "risk_color": "#6b7280", "urgency": "一般",
+                "item": "人均效能评估",
+                "detail": f"{emp_count}名员工创造销项收入{total_revenue:,.2f}元，人均{rev_per_person:,.2f}元。",
+                "suggestion": "对比同行业人均产值水平；如偏低明显，核查是否存在虚列人员或未申报收入。",
+                "required_evidence": ["员工名册与工资表", "同行业人均效能对比数据"]})
