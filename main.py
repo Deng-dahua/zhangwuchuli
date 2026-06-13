@@ -6992,6 +6992,14 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
     }
 
 
+@app.post("/api/bank-transactions/auto-voucher")
+def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """导入银行流水后自动生成全部未处理凭证"""
+    result = _generate_bank_journals(db, company_id, None)
+    db.commit()
+    return {"message": f"自动生成 {result['generated']} 条银行流水凭证", "generated": result["generated"]}
+
+
 @app.post("/api/bank-transactions/classify")
 def classify_bank_transactions(ids: List[int] = Body(...), company_id: int = Query(...), db: Session = Depends(get_db)):
     """预览银行流水凭证分类结果（不生成凭证），返回每条流水的建议科目"""

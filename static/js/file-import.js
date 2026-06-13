@@ -369,7 +369,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
 
   closeModal();
   // 刷新列表（同原代码）
-  if (module === 'bank-transaction') renderBankTransactions();
+  if (module === 'bank-transaction') {
+    renderBankTransactions();
+    // 导入后自动生成银行流水凭证
+    api('/api/bank-transactions/auto-voucher', { method: 'POST' }).then(function(r) {
+      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 条银行流水凭证', 'success');
+    }).catch(function(){});
+  }
   else if (module === 'sales-invoice') {
     renderSalesInvoices();
     // 导入后自动生成序时账凭证
