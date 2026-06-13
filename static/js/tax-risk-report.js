@@ -50,13 +50,17 @@ function renderTaxRiskReport(container) {
       + '</div></div>';
     clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
 
+    // 删除报告按钮（下载按钮后面）
+    var deleteWrap = document.createElement('span');
+    deleteWrap.id = 'risk-delete-btn-wrap';
+    deleteWrap.style.marginLeft = '16px';
+    deleteWrap.style.display = 'none';
+    deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>';
+    clearBtn.parentNode.insertBefore(deleteWrap, downloadWrap.nextSibling);
+
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
-    spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>'
-      + ''
-      + '<span id="risk-delete-btn-wrap" style="margin-left:16px;display:none">'
-      + '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>'
-      + '</span>';
+    spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>';
     trBar.appendChild(spacer);
 
     // 下载菜单交互
