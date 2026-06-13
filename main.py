@@ -41,7 +41,7 @@ from database import (
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals, _match_tax_payment_journals,
-    auto_generate_purchase_journal, _next_voucher_no, _classify_purchase_debit,
+    auto_generate_purchase_journal, auto_generate_bookkeeping_journal, _next_voucher_no, _classify_purchase_debit,
 )
 
 from vat import router as vat_router
@@ -1534,9 +1534,11 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
     supp_result = _do_auto_create_suppliers(db, company_id)
     db.commit()
 
-    # ── 第二步：取得发票生成凭证 ──
-    pi_invoices = db.query(PurchaseInvoice).filter(
-        PurchaseInvoice.company_id == company_id
+    # ── 第二步：未记账发票生成凭证 ──
+    from database import BookkeepingInvoice
+    pi_invoices = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.voucher_no.is_(None)
     ).all()
 
     pi_generated = 0
@@ -1552,7 +1554,7 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
             if existing:
                 pi_skipped += 1
                 continue
-            count = auto_generate_purchase_journal(db, company_id, inv.id)
+            count = auto_generate_bookkeeping_journal(db, company_id, inv.id)
             if count > 0:
                 pi_generated += 1
         except Exception as e:
@@ -4611,6 +4613,14 @@ def delete_bookkeeping_invoice(invoice_id: int, company_id: int = Query(...), db
     db.delete(inv)
     db.commit()
     return {"message": "删除成功"}
+
+
+@app.post("/api/bookkeeping-invoices/auto-voucher")
+def bookkeeping_invoices_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """未记账发票一键生成凭证"""
+    count = auto_generate_bookkeeping_journal(db, company_id)
+    db.commit()
+    return {"message": f"自动生成 {count} 张未记账发票凭证", "generated": count}
 
 
 @app.post("/api/bookkeeping-invoices/batch-delete")

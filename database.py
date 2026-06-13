@@ -2025,31 +2025,45 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                 continue
 
             group_generated = True
+            inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
 
-            # 已认证专票：税额单独记进项税额
-            # 借方1：成本/费用（不含税金额）
-            db.add(JournalEntry(
-                company_id=company_id,
-                entry_date=entry_date,
-                period=period, voucher_word="记", voucher_no=voucher_no,
-                summary=summary, account_code=debit_code, account_name=debit_name,
-                debit_amount=inv.amount, credit_amount=0,
-                contact_project=seller,
-                source="未记账发票", ref_id=inv.id,
-            ))
-            # 借方2：进项税额（若有）
-            if inv.tax_amount and inv.tax_amount != 0:
+            # 判断票种：专用发票 → 税额分立；普通发票 → 税额并入成本
+            is_special = inv.invoice_category and "专用" in (inv.invoice_category or "")
+
+            if is_special:
+                # 专用发票：成本/费用记不含税金额，税额单独记进项税额
                 db.add(JournalEntry(
                     company_id=company_id,
                     entry_date=entry_date,
                     period=period, voucher_word="记", voucher_no=voucher_no,
-                    summary=summary, account_code=tax_code, account_name=tax_name,
-                    debit_amount=inv.tax_amount, credit_amount=0,
+                    summary=summary, account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv.amount, credit_amount=0,
                     contact_project=seller,
                     source="未记账发票", ref_id=inv.id,
                 ))
+                if inv.tax_amount and inv.tax_amount != 0:
+                    db.add(JournalEntry(
+                        company_id=company_id,
+                        entry_date=entry_date,
+                        period=period, voucher_word="记", voucher_no=voucher_no,
+                        summary=summary, account_code=tax_code, account_name=tax_name,
+                        debit_amount=inv.tax_amount, credit_amount=0,
+                        contact_project=seller,
+                        source="未记账发票", ref_id=inv.id,
+                    ))
+            else:
+                # 普通发票：税额并入成本/费用，不单独记进项税额
+                db.add(JournalEntry(
+                    company_id=company_id,
+                    entry_date=entry_date,
+                    period=period, voucher_word="记", voucher_no=voucher_no,
+                    summary=summary, account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv_total, credit_amount=0,
+                    contact_project=seller,
+                    source="未记账发票", ref_id=inv.id,
+                ))
+
             # 贷方：应付账款（价税合计）
-            inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
             db.add(JournalEntry(
                 company_id=company_id,
                 entry_date=entry_date,
@@ -2079,6 +2093,120 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                 ).all() if (digital_no or inv_code) else []
                 for bk in bks:
                     bk.voucher_no = voucher_str
+            db.flush()
+
+    return total
+
+
+def auto_generate_bookkeeping_journal(db, company_id, invoice_id=None):
+    """从未记账发票（BookkeepingInvoice, voucher_no为空）生成序时账凭证。
+    规则同 auto_generate_purchase_journal，区别是数据源为 BookkeepingInvoice。
+    """
+    query = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.voucher_no.is_(None)
+    )
+    if invoice_id is not None:
+        if isinstance(invoice_id, (list, tuple)):
+            query = query.filter(BookkeepingInvoice.id.in_(invoice_id))
+        else:
+            query = query.filter(BookkeepingInvoice.id == invoice_id)
+
+    invoices = query.all()
+
+    # ── 按三号分组 ──
+    groups = {}
+    for inv in invoices:
+        key = (inv.invoice_code or "", inv.invoice_no or "", inv.digital_invoice_no or "")
+        groups.setdefault(key, []).append(inv)
+
+    # ── 供应商档案匹配 ──
+    supplier_norm_map = {}
+    for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        supplier_norm_map[_normalize_customer_name(s.name)] = s
+
+    total = 0
+
+    for key, group_invs in groups.items():
+        first = group_invs[0]
+        if first.invoice_date:
+            if isinstance(first.invoice_date, str):
+                period = first.invoice_date[:7] if len(first.invoice_date) >= 7 else datetime.now().strftime("%Y-%m")
+                date_str = first.invoice_date if len(first.invoice_date) >= 10 else (period + "-01")
+            else:
+                period = first.invoice_date.strftime("%Y-%m")
+                date_str = first.invoice_date.strftime("%Y-%m-%d")
+        else:
+            period = datetime.now().strftime("%Y-%m")
+            date_str = period + "-01"
+        entry_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+        voucher_no = _next_voucher_no(db, company_id, period, "记")
+        seller = first.seller_name or "供应商"
+
+        goods_set = {inv.goods_name for inv in group_invs if inv.goods_name}
+        goods = "、".join(goods_set) if goods_set else "货物"
+        summary = f"向{seller}采购{goods}"
+
+        tax_code = "221001002"
+        tax_acc = db.query(Account).filter(Account.company_id == company_id, Account.code == tax_code).first()
+        tax_name = tax_acc.name if tax_acc else "应交税费/进项税额"
+
+        group_generated = False
+        for inv in group_invs:
+            result = _classify_purchase_debit(db, company_id, inv)
+            if result is None:
+                continue
+            debit_code, debit_name = result
+
+            seller_norm = _normalize_customer_name(seller)
+            if seller_norm not in supplier_norm_map:
+                continue
+
+            group_generated = True
+            inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
+            is_special = inv.invoice_category and "专用" in (inv.invoice_category or "")
+
+            if is_special:
+                db.add(JournalEntry(
+                    company_id=company_id, entry_date=entry_date, period=period,
+                    voucher_word="记", voucher_no=voucher_no, summary=summary,
+                    account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv.amount, credit_amount=0,
+                    contact_project=seller, source="未记账发票", ref_id=inv.id,
+                ))
+                if inv.tax_amount and inv.tax_amount != 0:
+                    db.add(JournalEntry(
+                        company_id=company_id, entry_date=entry_date, period=period,
+                        voucher_word="记", voucher_no=voucher_no, summary=summary,
+                        account_code=tax_code, account_name=tax_name,
+                        debit_amount=inv.tax_amount, credit_amount=0,
+                        contact_project=seller, source="未记账发票", ref_id=inv.id,
+                    ))
+            else:
+                db.add(JournalEntry(
+                    company_id=company_id, entry_date=entry_date, period=period,
+                    voucher_word="记", voucher_no=voucher_no, summary=summary,
+                    account_code=debit_code, account_name=debit_name,
+                    debit_amount=inv_total, credit_amount=0,
+                    contact_project=seller, source="未记账发票", ref_id=inv.id,
+                ))
+
+            db.add(JournalEntry(
+                company_id=company_id, entry_date=entry_date, period=period,
+                voucher_word="记", voucher_no=voucher_no, summary=summary,
+                account_code="2202", account_name="应付账款",
+                debit_amount=0, credit_amount=inv_total,
+                contact_project=seller, source="未记账发票", ref_id=inv.id,
+            ))
+
+        db.flush()
+        if group_generated:
+            voucher_str = f"记-{voucher_no}"
+            total += 1
+            # 回写voucher_no
+            for inv in group_invs:
+                inv.voucher_no = voucher_str
             db.flush()
 
     return total
