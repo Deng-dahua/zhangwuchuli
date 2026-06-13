@@ -1536,30 +1536,8 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
 
     # ── 第二步：未记账发票生成凭证 ──
     from database import BookkeepingInvoice
-    pi_invoices = db.query(BookkeepingInvoice).filter(
-        BookkeepingInvoice.company_id == company_id,
-        BookkeepingInvoice.voucher_no.is_(None)
-    ).all()
-
-    pi_generated = 0
-    pi_skipped = 0
-    pi_errors = []
-    for inv in pi_invoices:
-        try:
-            existing = db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.source == "未记账发票",
-                JournalEntry.ref_id == inv.id
-            ).first()
-            if existing:
-                pi_skipped += 1
-                continue
-            count = auto_generate_bookkeeping_journal(db, company_id, inv.id)
-            if count > 0:
-                pi_generated += 1
-        except Exception as e:
-            pi_errors.append(f"发票ID={inv.id}: {str(e)}")
-            db.rollback()
+    pi_count = auto_generate_bookkeeping_journal(db, company_id)
+    db.commit()
 
     db.commit()
 
@@ -1595,11 +1573,8 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
         "step0_archive_gap": gap_result,
         "step0_5_enrich": enrich_result,
         "step1_suppliers": supp_result,
-        "step2_purchase_invoices": {
-            "total": len(pi_invoices),
-            "generated": pi_generated,
-            "skipped": pi_skipped,
-            "errors": pi_errors[:10],
+        "step2_bookkeeping": {
+            "generated": pi_count,
         },
         "step3_bank_transactions": bank_result,
         "step4_social_security": ss_result,
