@@ -3637,6 +3637,7 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Sess
         "issuer": inv.issuer or "",
         "remark": inv.remark or "",
         "journal_voucher_no": voucher_no,
+        "skip_accounting": bool(inv.skip_accounting) if inv.skip_accounting is not None else False,
         "created_at": str(inv.created_at) if inv.created_at else "",
         "updated_at": str(inv.updated_at) if inv.updated_at else ""
     }
