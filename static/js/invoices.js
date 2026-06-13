@@ -578,11 +578,11 @@ async function renderPurchaseInvoices(container) {
     // 表格
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="piSelectAll" onclick="togglePiSelectAll()" title="全选"></th>';
-    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>凭证号</th><th style="width:90px">生成凭证</th><th>操作</th>';
+    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="30" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
+      html += '<tr><td colspan="28" style="text-align:center;color:#9ca3af;padding:40px">暂无取得发票记录</td></tr>';
     } else {
       // 按发票三号分组
       const piGroups = [];
@@ -634,11 +634,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
-        // 凭证号（每行独立）
-        html += '<td>' + (pjv ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + pjv + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + pjv + '</a>' : '-') + '</td>';
-        // 生成凭证（每行独立）
-        html += '<td style="width:90px">' + (pjv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromPurchase(' + i.id + ')">生成凭证</button>') + '</td>';
-        // 操作（每行独立）
+        // 操作
         html += '<td style="white-space:nowrap">';
         if (pjv) {
           html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
