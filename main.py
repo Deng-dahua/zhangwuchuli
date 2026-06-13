@@ -1546,7 +1546,7 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
         try:
             existing = db.query(JournalEntry).filter(
                 JournalEntry.company_id == company_id,
-                JournalEntry.source == "取得发票",
+                JournalEntry.source == "未记账发票",
                 JournalEntry.ref_id == inv.id
             ).first()
             if existing:

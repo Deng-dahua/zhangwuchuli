@@ -2016,7 +2016,7 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                 continue
             _existing = db.query(JournalEntry).filter(
                 JournalEntry.company_id == company_id,
-                JournalEntry.source == "取得发票",
+                JournalEntry.source == "未记账发票",
                 JournalEntry.ref_id == inv.id
             ).first()
             if not _existing:
@@ -2097,7 +2097,7 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                 summary=summary, account_code=debit_code, account_name=debit_name,
                 debit_amount=inv.amount, credit_amount=0,
                 contact_project=seller,
-                source="取得发票", ref_id=inv.id,
+                source="未记账发票", ref_id=inv.id,
             ))
             # 借方2：进项税额（若有）
             if inv.tax_amount and inv.tax_amount != 0:
@@ -2108,7 +2108,7 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                     summary=summary, account_code=tax_code, account_name=tax_name,
                     debit_amount=inv.tax_amount, credit_amount=0,
                     contact_project=seller,
-                    source="取得发票", ref_id=inv.id,
+                    source="未记账发票", ref_id=inv.id,
                 ))
             # 贷方：应付账款（价税合计）
             inv_total = (inv.amount or 0) + (inv.tax_amount or 0)
@@ -2119,7 +2119,7 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
                 summary=summary, account_code=credit_code, account_name=credit_name,
                 debit_amount=0, credit_amount=inv_total,
                 contact_project=seller,
-                source="取得发票", ref_id=inv.id,
+                source="未记账发票", ref_id=inv.id,
             ))
 
         db.flush()
