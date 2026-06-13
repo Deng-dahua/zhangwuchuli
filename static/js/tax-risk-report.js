@@ -380,7 +380,29 @@ function renderDocsReport(rpt) {
     + '<div style="flex:1;background:#ecfdf5;border-radius:6px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#059669">' + rpt.low_risk + '</div><div style="font-size:12px">低风险</div></div>'
     + '</div>';
 
-  // 阶段2: 统计表格
+  // 处理流水
+  if (rpt.pipeline_log && rpt.pipeline_log.length > 0) {
+    html += '<div style="margin:16px 0"><b style="font-size:15px">处理流水</b></div>';
+    html += '<div style="background:#f0fdf4;border-radius:6px;padding:10px 16px;margin-bottom:12px">';
+    rpt.pipeline_log.forEach(function(log) {
+      html += '<div style="font-size:12px;padding:2px 0;color:var(--gray-600)">' + escapeHtml(log) + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // 文件处理结果
+  if (rpt.file_results && rpt.file_results.length > 0) {
+    html += '<div style="margin:16px 0"><b style="font-size:15px">文件处理详情</b></div>';
+    rpt.file_results.forEach(function(fr) {
+      var icon = fr.error ? '❌' : (fr.type === 'bank' ? '🏦' : (fr.type === 'invoice' ? '🧾' : (fr.type === 'vat' ? '📋' : '📄')));
+      html += '<div style="padding:4px 0;font-size:12px;border-bottom:1px solid #f1f5f9">'
+        + icon + ' <b>' + escapeHtml(fr.file) + '</b>'
+        + ' <span style="color:var(--gray-400)">→ ' + escapeHtml(fr.type || 'unknown') + '</span>'
+        + (fr.actions ? fr.actions.map(function(a) { return ' <span style="color:#059669">✅ ' + escapeHtml(a) + '</span>'; }).join('') : '')
+        + (fr.error ? ' <span style="color:#dc2626">' + escapeHtml(fr.error) + '</span>' : '')
+        + '</div>';
+    });
+  }
   if (rpt.stats && Object.keys(rpt.stats).length > 0) {
     html += '<div style="margin:16px 0"><b style="font-size:15px">数据统计分析</b></div>';
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px">';

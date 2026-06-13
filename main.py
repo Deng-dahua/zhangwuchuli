@@ -9412,125 +9412,276 @@ def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
     raise HTTPException(404, "文件不存在")
 
 
+def _classify_file_type(text, filename):
+    """识别文件类型：返回 (模块名, 置信度)"""
+    fn = filename.lower()
+    # 文件名优先
+    if any(k in fn for k in ["银行流水","对账单","bank","交易明细","流水"]): return ("bank", 0.9)
+    if any(k in fn for k in ["增值税","vat","增值税申报"]): return ("vat", 0.9)
+    if any(k in fn for k in ["发票","invoice","开票","销项","进项","取得发票","开具发票"]): return ("invoice", 0.9)
+    if any(k in fn for k in ["社保","社会保险","养老","医疗","失业","工伤","生育"]): return ("social_security", 0.9)
+    if any(k in fn for k in ["公积金","住房公积金","住房"]): return ("housing_fund", 0.9)
+    if any(k in fn for k in ["工资","薪酬","薪资","salary","payroll","个税"]): return ("salary", 0.9)
+    if any(k in fn for k in ["合同","协议","contract"]): return ("contract", 0.8)
+    if any(k in fn for k in ["审计","稽查","检查报告","风险评估","涉税"]): return ("audit", 0.8)
+
+    # 内容特征
+    t = text[:500].lower()
+    if "借方" in t and "贷方" in t and any(k in t for k in ["对方户名","交易日期","余额","摘要"]): return ("bank", 0.8)
+    if "销项税额" in t and "进项税额" in t: return ("vat", 0.8)
+    if any(k in t for k in ["发票代码","发票号码","数电发票","货物或应税劳务名称"]) and "税率" in t: return ("invoice", 0.8)
+    if "缴费基数" in t and any(k in t for k in ["养老","医疗","工伤","生育","失业"]): return ("social_security", 0.8)
+    if "公积金" in t and "缴存" in t: return ("housing_fund", 0.8)
+    if any(k in t for k in ["应发工资","实发工资","应纳税所得额","代扣个税"]): return ("salary", 0.8)
+    return ("unknown", 0.3)
+
+
+def _import_bank_statement(db, company_id, text, file_texts):
+    """提取银行流水并导入"""
+    import re
+    rows = []
+    # 按行扫描
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line or len(line) < 10: continue
+        # 提取日期 + 金额模式
+        date_m = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})', line)
+        amt_m = re.findall(r'([\d,]+\.?\d{0,2})', line)
+        if not date_m or len(amt_m) < 2: continue
+        date_str = date_m.group(1).replace("/", "-").replace(".", "-")
+        amounts = [float(a.replace(",", "")) for a in amt_m[:4]]
+        # 取最大两个
+        amounts.sort(reverse=True)
+        if len(amounts) >= 2:
+            row = {"date": date_str, "debit": amounts[1], "credit": amounts[0],
+                   "amount": amounts[0] - amounts[1], "raw": line}
+            rows.append(row)
+    # 尝试导入
+    imported = 0
+    for row in rows[:200]:
+        try:
+            # 简单去重：按日期+金额
+            exists = db.query(BankTransaction).filter(
+                BankTransaction.company_id == company_id,
+                BankTransaction.transaction_date == row["date"],
+                func.abs(BankTransaction.amount - abs(row["amount"])) < 0.01,
+            ).first()
+            if exists: continue
+            db.add(BankTransaction(
+                company_id=company_id, transaction_date=row["date"],
+                amount=abs(row["amount"]),
+                debit_amount=abs(row["debit"]) if row["debit"] > 0 else 0,
+                credit_amount=abs(row["credit"]) if row["credit"] > 0 else 0,
+                summary=row["raw"][:200]
+            ))
+            imported += 1
+        except: pass
+    db.flush()
+    return imported
+
+
+def _import_invoices_from_text(db, company_id, text, file_texts):
+    """从文本提取发票并导入到 BookkeepingInvoice"""
+    import re
+    imported = 0
+    # 匹配发票行模式
+    for line in text.split("\n"):
+        line = line.strip()
+        if len(line) < 20: continue
+        digital = re.search(r'(\d{20})', line)
+        inv_code = re.search(r'(\d{12})', line)
+        inv_no = re.search(r'(\d{8})', line)
+        amounts = re.findall(r'([\d,]+\.?\d{0,2})', line)
+        if not (digital or (inv_code and inv_no)): continue
+        if len(amounts) < 2: continue
+        vals = [float(a.replace(",", "")) for a in amounts]
+        try:
+            total = max(vals[:4])
+            tax_rate = 0.06  # default
+            db.add(BookkeepingInvoice(
+                company_id=company_id,
+                digital_invoice_no=digital.group(1) if digital else "",
+                invoice_code=inv_code.group(1) if inv_code else "",
+                invoice_no=inv_no.group(1) if inv_no else "",
+                amount=round(total / (1 + tax_rate), 2),
+                tax_amount=round(total - total / (1 + tax_rate), 2),
+                total_amount=total,
+                goods_name=line[:100],
+                invoice_date=datetime.now().strftime("%Y-%m-%d"),
+            ))
+            imported += 1
+        except: pass
+    db.flush()
+    return imported
+
+
 @app.post("/api/tax-risk-docs/analyze")
 async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """全量分析上传资料：提取结构化数据 + 统计 + 交叉比对 + 涉税规则匹配"""
-    from database import Supplier, Customer
+    """全面分析：识别文件类型 → 提取数据导入对应模块 → 交叉验证 → 运行真实风险引擎"""
+    from database import Supplier, Customer, BankTransaction, BookkeepingInvoice, SalesInvoice, PurchaseInvoice, JournalEntry
     from collections import Counter, defaultdict
-    import re as _re
 
     docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
 
-    # ── 阶段1: 全量数据提取 ──
+    pipeline_log = []  # 处理流水日志
     all_entities = []
     all_amounts = []
-    all_tax_ids = []
-    all_invoices = []
     all_text = ""
-    file_texts = {}
+    file_results = []  # 每文件处理结果
 
+    # ═══════ 阶段1: 读取+识别+导入 ═══════
     for doc in docs:
         try:
             text = _read_file_text(doc["path"], doc["original_name"])
-            if not text or len(text.strip()) < 20:
-                continue
+            if not text or len(text.strip()) < 20: continue
             fname = doc["original_name"]
-            file_texts[fname] = text
             all_text += "\n" + text
+            ftype, confidence = _classify_file_type(text, fname)
+
+            fr = {"file": fname, "type": ftype, "confidence": confidence, "actions": []}
+
+            # 银行流水 → 导入银行流水
+            if ftype == "bank" and confidence >= 0.7:
+                count = _import_bank_statement(db, company_id, text, {fname: text})
+                if count > 0:
+                    fr["actions"].append(f"导入{count}条银行流水")
+                    pipeline_log.append(f"{fname} → 导入{count}条银行流水")
+                    # 自动做账
+                    try:
+                        from database import _generate_bank_journals
+                        _generate_bank_journals(db, company_id, None)
+                        db.commit()
+                        fr["actions"].append("已自动生成银行流水凭证")
+                    except: pass
+
+            # 发票 → 导入未记账发票
+            elif ftype == "invoice" and confidence >= 0.7:
+                count = _import_invoices_from_text(db, company_id, text, {fname: text})
+                if count > 0:
+                    fr["actions"].append(f"导入{count}张发票")
+                    pipeline_log.append(f"{fname} → 导入{count}张发票到未记账发票")
+
+            # VAT/审计 → 仅提取数据
+            elif ftype in ("vat", "audit"):
+                pipeline_log.append(f"{fname} → 识别为{ftype}类型，提取数据用于交叉比对")
+
+            # 提取结构化数据
             data = _extract_structured_data(text, fname)
             if data:
                 for e in data.get("entities", []): all_entities.append({**e, "source_file": fname})
                 for a in data.get("amounts", []): all_amounts.append({**a, "source_file": fname})
-                for t in data.get("tax_ids", []): all_tax_ids.append({**t, "source_file": fname})
-                for inv in data.get("invoice_nos", []): all_invoices.append({**inv, "source_file": fname})
-        except: pass
+
+            file_results.append(fr)
+        except Exception as e:
+            file_results.append({"file": doc["original_name"], "error": str(e)})
 
     if not all_text.strip():
         return {"ok": False, "message": "无法读取文件内容"}
 
-    # 现有档案
+    db.commit()
+
+    # ═══════ 阶段2: 交叉验证 ═══════
+    cross = []
+    entity_names = set(e["name"] for e in all_entities)
+
+    # 档案覆盖率
     suppliers = {s.name: s for s in db.query(Supplier).filter(Supplier.company_id == company_id).all()}
     customers = {c.name: c for c in db.query(Customer).filter(Customer.company_id == company_id).all()}
     existing = set(suppliers.keys()) | set(customers.keys())
-    entity_names = set(e["name"] for e in all_entities)
 
-    # ── 阶段2: 统计分析 ──
     stats = {
+        "分析文件数": len(docs),
         "实体总数": len(entity_names),
         "已知实体": len(entity_names & existing),
         "新实体": len(entity_names - existing),
     }
     if entity_names:
         stats["档案覆盖率"] = f"{stats['已知实体']/max(len(entity_names),1)*100:.0f}%"
-    if all_tax_ids:
-        valid = [t for t in all_tax_ids if len(t["value"].strip()) in (15,17,18)]
-        stats["税号数量"] = len(all_tax_ids)
-        stats["有效税号"] = len(valid)
-    if all_invoices:
-        stats["发票号数量"] = len(all_invoices)
 
-    vals = sorted([a["value"] for a in all_amounts if a["value"] > 0 and a["value"] <= 99999999])
+    vals = sorted([a["value"] for a in all_amounts if 0 < a["value"] <= 99999999])
     if vals:
         stats["金额总笔数"] = len(vals)
-        stats["金额总额"] = f"{sum(vals):,.2f}"
-        stats["万元以下"] = len([v for v in vals if v < 10000])
-        stats["1-10万元"] = len([v for v in vals if 10000 <= v < 100000])
-        stats["10万元以上"] = len([v for v in vals if v >= 100000])
+        stats["金额总额(万元)"] = f"{sum(vals)/10000:,.1f}"
+        stats["大额(>=10万)"] = len([v for v in vals if v >= 100000])
 
-    # ── 阶段3: 交叉关联 ──
-    cross = []
+    # 交叉验证：文件数据 vs 系统数据
+    # 银行流水 vs 序时账
+    bank_count = db.query(BankTransaction).filter(BankTransaction.company_id == company_id).count()
+    je_count = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).count()
+    if bank_count > 0 and je_count == 0:
+        cross.append({"type": "银行流水未记账", "level": "高风险", "score": 8,
+                      "detail": f"已导入{bank_count}条银行流水但序时账为0，请运行process-all生成凭证。",
+                      "category": "交叉验证"})
+
+    # 发票数量对比
+    pi_count = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).count()
+    bk_count = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id).count()
+    if bk_count > 0 and pi_count == 0:
+        cross.append({"type": "发票未同步", "level": "中风险", "score": 5,
+                      "detail": f"未记账发票{bk_count}张，取得发票{pi_count}张，数据可能不同步。",
+                      "category": "交叉验证"})
+
+    # 新实体发现
     new_ents = entity_names - existing
     if new_ents:
-        cross.append({
-            "type": "新实体发现", "level": "中风险", "score": 6,
-            "detail": f"资料中发现{len(new_ents)}个未在档案中登记的企业：{'、'.join(list(new_ents)[:8])}",
-            "suggestion": "建议核实这些实体的业务关系，必要时补建档案并核查交易真实性。", "category": "交叉比对"
-        })
-    big = [a for a in all_amounts if 10000 <= a["value"] <= 99999999]
-    if big:
-        big_total = sum(a["value"] for a in big)
-        items = [f"{a['value']:,.0f}" for a in big[:5]]
-        cross.append({
-            "type": "大额交易", "level": "高风险" if any(a["value"]>=100000 for a in big) else "中风险",
-            "score": 8 if any(a["value"]>=100000 for a in big) else 6,
-            "detail": f"发现{len(big)}笔大额交易，合计{big_total:,.2f}：{'、'.join(items)}",
-            "suggestion": "逐笔核查大额交易对应的合同、发票和银行流水。", "category": "交叉比对"
-        })
+        cross.append({"type": "新实体发现", "level": "中风险", "score": 6,
+                      "detail": f"资料中发现{len(new_ents)}个未在档案中登记的实体：{'、'.join(list(new_ents)[:8])}",
+                      "suggestion": "建议核实并补建档案。", "category": "交叉比对"})
 
-    # ── 阶段4: 规则匹配 ──
+    # ═══════ 阶段3: 运行真实涉税风险引擎 ═══════
+    risk_results = []
+    try:
+        from tax_risk import get_tax_risk_report
+        ps = (datetime.now().replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%Y-%m")
+        pe = datetime.now().strftime("%Y-%m")
+        risk_data = get_tax_risk_report(db, company_id, ps, pe)
+        risk_results = risk_data.get("results", []) if risk_data else []
+        pipeline_log.append(f"运行真实风险引擎 → 发现{len(risk_results)}条风险")
+    except Exception as e:
+        pipeline_log.append(f"风险引擎运行失败: {e}")
+
+    # ═══════ 阶段4: 全文规则匹配(兜底) ═══════
     rules = _load_tax_risk_rules()
+    file_texts = {doc["original_name"]: (_read_file_text(doc["path"], doc["original_name"]) or "") for doc in docs}
     rule_findings = _match_all_rules(all_text, file_texts, rules)
-    all_findings = cross + rule_findings
 
-    high = sum(1 for f in all_findings if f.get("level") == "高风险")
-    mid = sum(1 for f in all_findings if f.get("level") == "中风险")
+    # 合并：真实引擎结果 + 文本规则匹配
+    all_findings = cross + risk_results + rule_findings
+
+    high = sum(1 for f in all_findings if f.get("level") == "高风险" or f.get("risk_level") == "高风险")
+    mid = sum(1 for f in all_findings if f.get("level") == "中风险" or f.get("risk_level") == "中风险")
     total = len(all_findings)
     overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
+
+    summary = f"对{len(docs)}份资料进行了四阶段深度分析。"
+    for log in pipeline_log[:5]: summary += f" {log}"
+    summary += f" 综合风险等级：{overall}，共{total}项风险（高{high}/中{mid}/低{total-high-mid}）。"
 
     categories = {}
     for f in all_findings:
         cat = f.get("category", f.get("type", "其他"))
         categories.setdefault(cat, {"name": cat, "count": 0, "high": 0, "mid": 0})
         categories[cat]["count"] += 1
-        if f.get("level") == "高风险": categories[cat]["high"] += 1
-        elif f.get("level") == "中风险": categories[cat]["mid"] += 1
-
-    summary = f"基于{len(rules) if isinstance(rules,list) else 217}条涉税风险规则，对{len(docs)}份资料深度分析。"
-    summary += f"提取{len(entity_names)}个实体、{len(all_amounts)}个金额。"
-    summary += f"综合风险等级：{overall}，共{total}项风险（高{high}/中{mid}/低{total-high-mid}）。"
+        lv = f.get("level") or f.get("risk_level", "")
+        if "高" in lv: categories[cat]["high"] += 1
+        elif "中" in lv: categories[cat]["mid"] += 1
 
     report = {
         "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid,
         "low_risk": total - high - mid, "files_count": len(docs),
         "rules_used": len(rules) if isinstance(rules, list) else 217,
+        "pipeline_log": pipeline_log, "file_results": file_results,
         "stats": stats, "cross_findings": cross,
         "categories": sorted(categories.values(), key=lambda x: -x["high"]*100 - x["mid"]*10 - x["count"]),
-        "all_findings": sorted(all_findings, key=lambda x: -x.get("score", 0))[:30],
+        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or x.get("risk_score") or 0))[:40],
         "summary_text": summary
     }
     return {"ok": True, "report": report}
+
+
+from datetime import timedelta
 
 
 if __name__ == "__main__":
