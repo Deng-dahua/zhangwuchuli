@@ -7032,24 +7032,48 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
 
 @app.post("/api/bank-transactions/auto-voucher")
 def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """导入银行流水后自动生成全部未处理凭证（含国家金库/社保/公积金专项匹配）"""
-    result = _generate_bank_journals(db, company_id, None)
+    """导入银行流水后自动全链路处理：
+    1. 双源供应商智能建档（发票∩银行流水 → 供应商档案）
+    2. 常规银行流水凭证生成（_classify_bank_tx 11级分类）
+    3. 社保缴纳匹配
+    4. 国家金库税费组合缴纳匹配（含单税兜底）
+    5. 公积金缴纳匹配
+    """
+    result = {"generated": 0, "suppliers_created": 0, "infos": []}
 
-    # 社保缴纳匹配（对方户名含"社保/税务"且金额匹配）
+    # 第0步：双源供应商智能建档（必须先建档，后续凭证生成才能正确匹配往来科目）
+    try:
+        supp_result = _do_auto_create_suppliers(db, company_id)
+        result["suppliers_created"] = supp_result.get("created", 0)
+        if supp_result.get("infos"):
+            result["infos"].extend(supp_result["infos"])
+    except Exception:
+        pass
+
+    # 第1步：常规银行流水凭证生成
+    try:
+        bk_result = _generate_bank_journals(db, company_id, None)
+        result["generated"] += bk_result.get("generated", 0)
+        if bk_result.get("infos"):
+            result["infos"].extend(bk_result["infos"])
+    except Exception:
+        pass
+
+    # 第2步：社保缴纳匹配
     try:
         ss_result = _match_ss_payment_journals(db, company_id)
         result["generated"] += ss_result.get("generated", 0)
     except Exception:
         pass
 
-    # 国家金库税费组合缴纳匹配（含单一税种兜底：个税/印花税等）
+    # 第3步：国家金库税费组合缴纳匹配
     try:
         tax_result = _match_tax_payment_journals(db, company_id)
         result["generated"] += tax_result.get("generated", 0)
     except Exception:
         pass
 
-    # 公积金缴纳匹配
+    # 第4步：公积金缴纳匹配
     try:
         hf_result = _match_hf_payment_journals(db, company_id)
         result["generated"] += hf_result.get("generated", 0)
@@ -7058,8 +7082,9 @@ def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = D
 
     db.commit()
     return {
-        "message": f"自动生成 {result['generated']} 条银行流水凭证",
+        "message": f"自动生成 {result['generated']} 条凭证，新建 {result['suppliers_created']} 个供应商",
         "generated": result["generated"],
+        "suppliers_created": result["suppliers_created"],
         "detail": result
     }
 
