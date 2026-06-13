@@ -9739,7 +9739,7 @@ def _parse_invoice_sheet(sheet, direction):
     nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
     for r in range(2, min(nrows, 2000)):
         raw_vals = _get_row_values(sheet, r)
-        if _is_summary_row(raw_vals) or _is_repeat_header(raw_vals, header): continue
+        if _is_summary_row(raw_vals): continue
         vals = {}
         for field, col in cols.items():
             try:
