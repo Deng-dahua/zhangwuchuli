@@ -372,7 +372,11 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   if (module === 'bank-transaction') renderBankTransactions();
   else if (module === 'sales-invoice') {
     renderSalesInvoices();
-    // 导入发票会自动生成凭证，重置序时账和客户档案的渲染缓存，确保下次切换时刷新数据
+    // 导入后自动生成序时账凭证
+    api('/api/sales-invoices/auto-voucher', { method: 'POST' }).then(function(r) {
+      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 笔凭证', 'success');
+    }).catch(function(){});
+    // 重置序时账和客户档案的渲染缓存
     ['page-journal', 'page-customers'].forEach(function(id) {
       let el = document.getElementById(id);
       if (el) delete el.dataset.rendered;

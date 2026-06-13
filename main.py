@@ -6423,6 +6423,40 @@ def sales_invoice_batch_to_journal(
     return {"message": msg, "generated": generated, "skipped": skipped, "errors": errors}
 
 
+@app.post("/api/sales-invoices/auto-voucher")
+def sales_invoice_auto_voucher(company_id: int = Query(...), db=Depends(get_db)):
+    """导入后自动为所有未生成凭证的销项发票生成序时账"""
+    # 查询已有凭证的发票ID（通过 JournalEntry.source=销项发票 + ref_id 判断）
+    existing_ids = set(r[0] for r in db.query(JournalEntry.ref_id).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.source == "销项发票",
+        JournalEntry.ref_id.isnot(None)
+    ).all())
+    
+    invoices = db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        ~SalesInvoice.id.in_(existing_ids) if existing_ids else True
+    ).order_by(SalesInvoice.invoice_date, SalesInvoice.id).all()
+    if not invoices:
+        return {"message": "无待生成凭证的发票", "generated": 0}
+    
+    generated = 0
+    errors = []
+    for inv in invoices:
+        try:
+            from database import auto_generate_single_invoice
+            auto_generate_single_invoice(db, inv)
+            generated += 1
+        except Exception as e:
+            errors.append(f"发票{inv.id}({inv.invoice_no}): {str(e)}")
+    
+    db.commit()
+    msg = f"自动生成 {generated} 笔凭证"
+    if errors:
+        msg += f"，{len(errors)} 笔失败"
+    return {"message": msg, "generated": generated, "errors": errors}
+
+
 @app.post("/api/sales-invoices/{invoice_id}/to-journal")
 def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db=Depends(get_db)):
     """将单张销项发票生成记账凭证（分录）到序时账（允许重新生成，先删旧凭证）"""
