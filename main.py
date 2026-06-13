@@ -9696,6 +9696,23 @@ def _parse_by_sheet_name(names, get_sheet):
         return _parse_inventory_sheet(get_sheet(0))
     return None
 
+# ── 数据清洗：跳过小计/合计/空行/重复表头 ──
+_SUBTOTAL_PATTERNS = ["小计", "合计", "总计", "累计", "本页小计", "本页合计", "本期合计", "本年累计", "当月合计"]
+
+def _is_summary_row(vals):
+    """判断是否为小计/合计行"""
+    text = "".join(str(v) for v in vals if v)
+    if not text.strip(): return True  # 全空行
+    for p in _SUBTOTAL_PATTERNS:
+        if p in text: return True
+    return False
+
+def _is_repeat_header(vals, header):
+    """判断是否为重复表头行"""
+    if not header or not vals: return False
+    match = sum(1 for v in vals if v and any(str(v).strip() in str(h).strip() for h in header if h))
+    return match >= min(3, len(header) - 1)  # 3个以上匹配视为重复表头
+
 def _get_row_values(sheet, row_idx):
     try: return [str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols)]
     except:
@@ -9721,6 +9738,8 @@ def _parse_invoice_sheet(sheet, direction):
     rows = []
     nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
     for r in range(2, min(nrows, 2000)):
+        raw_vals = _get_row_values(sheet, r)
+        if _is_summary_row(raw_vals) or _is_repeat_header(raw_vals, header): continue
         vals = {}
         for field, col in cols.items():
             try:
@@ -10166,37 +10185,145 @@ def _domain_contract_comparison(db, company_id, sal_invs, pur_invs):
             "category": "域11 合同比对"})
     return findings
 
-def _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs):
-    """域12: 经营实质"""
-    findings, biz_types = [], set()
-    biz_keywords = {"租赁": ["租金","租赁","房租","场地"], "水电": ["电费","水费","电","水","自来水","供电"],
-                    "物业": ["物业","物管","管理费-物业"], "通信": ["通信","网络","宽带","电话"],
-                    "物流": ["快递","物流","运输","配送"], "办公": ["办公用品","文具","打印"]}
+def _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs, salaries):
+    """域12: 经营实质深度稽查 — 多角度、多维度、多样化手段"""
+    findings = []
+
+    # ═══════ 维度1: 基础经营费用六要素检测 ═══════
+    biz_types = set()
+    biz_keywords = {
+        "租赁": ["租金","租赁","房租","场地","物业费-房租"],
+        "水电": ["电费","水费","电","水","自来水","供电","用水"],
+        "物业": ["物业","物管","管理费-物业","物业管理"],
+        "通信": ["通信","网络","宽带","电话","电信","移动","联通"],
+        "物流": ["快递","物流","运输","配送","货运","快运"],
+        "办公": ["办公用品","文具","打印","复印","墨盒","硒鼓","纸张"],
+        "维修": ["维修","维护","保养","修缮","修理"],
+        "安保": ["保安","安保","门卫","监控","消防"],
+    }
     for i in pur_invs:
         g = str(i.get("goods", ""))
         for bt, kws in biz_keywords.items():
             if any(k in g for k in kws): biz_types.add(bt)
+    # 也从银行流水检查
+    bank_biz_types = set()
+    bank_kw_map = {"租赁": ("房租","租金","租赁","场地费"), "水电": ("电费","水费","自来水"),
+                   "物业": ("物业费","物管费"), "工资": ("工资","代发","薪")}
+    for tx in bank_txs:
+        raw = tx.get("raw", "")
+        for bt, kws in bank_kw_map.items():
+            if any(k in raw for k in kws): bank_biz_types.add(bt)
+    all_biz = biz_types | bank_biz_types
+
     expected = ["租赁", "水电", "物业", "通信", "物流", "办公"]
-    missing = [m for m in expected if m not in biz_types]
-    # 分析银行流水中的固定支出
-    rent_from_bank = sum(1 for tx in bank_txs if any(k in tx.get("raw","") for k in ("房租","租金","租赁")))
+    missing = [m for m in expected if m not in all_biz]
     if missing:
         msgs = []
         for m in missing:
-            if m == "租赁": msgs.append("无房租或场地租赁支出")
+            if m == "租赁": msgs.append("无房租/场地租赁支出")
             elif m == "水电": msgs.append("无水电费支出")
             elif m == "物业": msgs.append("无物业管理费支出")
             elif m == "通信": msgs.append("无通信网络支出")
             elif m == "物流": msgs.append("无物流快递支出")
             elif m == "办公": msgs.append("无办公用品支出")
-        findings.append({"type": "经营场所及运营证据缺失", "level": "高风险", "score": 9,
-        "how_found": "扫描进项发票的货物名称和银行流水的交易摘要，检测是否包含租金、水电费、物业费、通信费、物流费、办公用品费等基本经营支出关键词。",
-            "detail": f"进项发票与银行流水中{'；'.join(msgs[:4])}。",
-            "description": f"贵公司作为正常经营的企业，理论上应产生基本的经营费用，但分析发现进项发票和银行流水中{'；'.join(msgs)}。这些是最基本的经营支出，缺失意味着以下可能：公司可能无实际经营场所（注册地址与经营地址分离）、经营场所费用由关联方代为支付、或以现金方式支付且未取得发票。无实际经营场所是税务机关认定'空壳企业'或'无实际经营能力'的重要依据。",
-            "tax_impact": "若被认定为无实际经营场所或经营能力与业务规模不匹配，增值税一般纳税人资格可能被取消，已抵扣的进项税额需转出。虚开发票的刑事风险也大幅上升。",
-            "policy_ref": "《增值税暂行条例》关于一般纳税人认定标准的规定；《国家税务总局关于纳税人认定或登记为一般纳税人前进项税额抵扣问题的公告》。",
-            "suggestion": "1）如确有经营场所，收集并归档租赁合同、租金发票、水电费发票等证明文件；2）如经营场所为股东或关联方无偿提供，应签订租赁协议并按公允价值纳税；3）所有经营费用应通过对公账户支付并取得正规发票；4）确保工商注册地址与实际经营地址一致。",
+        findings.append({"type": "基础经营费用缺失", "level": "高风险", "score": 9,
+            "how_found": "扫描进项发票品名+银行流水摘要，检测六类基础经营费用(租赁/水电/物业/通信/物流/办公)关键词。",
+            "detail": f"缺失{'；'.join(msgs)}。",
+            "description": f"正常经营企业必然产生基本费用，但分析发现{'；'.join(msgs)}。缺失去向：(1)可能无实际经营场所→空壳企业嫌疑；(2)费用由关联方代付→关联交易未披露；(3)现金支付未取票→账外经营。无固定经营场所是税务机关认定'无实际经营能力'的核心依据。",
+            "tax_impact": "被认定无实际经营场所或经营能力与业务规模不匹配→一般纳税人资格可能被取消→已抵扣进项税额需转出。虚开发票刑事风险大幅上升。",
+            "policy_ref": "《增值税暂行条例》关于一般纳税人认定标准；国税总局关于纳税人认定或登记为一般纳税人前进项税额抵扣问题的公告。",
+            "suggestion": "1）有经营场所→收集租赁合同+租金发票+水电费发票；2）股东无偿提供→签租赁协议并按公允价值纳税；3）所有经营费用通过对公账户支付并取得正规发票；4）工商注册地址与实际经营地址必须一致。",
             "category": "域12 经营实质"})
+
+    # ═══════ 维度2: 收入-费用弹性系数检测 ═══════
+    total_sales = sum(float(i.get("total", 0) or 0) for i in sal_invs) if sal_invs else 0
+    total_purchases = sum(float(i.get("total", 0) or 0) for i in pur_invs) if pur_invs else 0
+    bank_in = sum(tx["credit"] for tx in bank_txs) if bank_txs else 0
+    bank_out = sum(tx["debit"] for tx in bank_txs) if bank_txs else 0
+
+    if total_sales > 0 and total_purchases > 0:
+        # 购销弹性 = 销货成本/销售收入，正常应<1
+        purchase_ratio = total_purchases / total_sales
+        if purchase_ratio > 2:
+            findings.append({"type": "购销弹性严重失衡", "level": "高风险", "score": 9,
+                "how_found": f"进项总额{total_purchases:,.0f}÷销项总额{total_sales:,.0f}={purchase_ratio:.1f}倍。购销比=(进货/销货)，正常<1，>2表示严重的进销脱节。",
+                "detail": f"进项总额是销项的{purchase_ratio:.1f}倍，远超正常范围。",
+                "description": f"进项发票总额{total_purchases:,.0f}元，销项发票总额{total_sales:,.0f}元，进项是销项的{purchase_ratio:.1f}倍。正常的商贸或制造业企业，采购成本通常小于销售收入（有毛利）。购销弹性严重失衡要么说明存在大量未开票的隐匿销售收入，要么进项发票存在虚开虚抵。",
+                "tax_impact": "此指标是税务稽查最高优先级重点关注项。差额部分将被推定为隐匿收入或虚增进项，面临补税+罚款+滞纳金。",
+                "policy_ref": "《税收征收管理法》第三十五条（核定应纳税额）；《增值税暂行条例》关于销售额的规定。",
+                "suggestion": "1）立即核实所有已发货未开票的销售，补开发票或申报未开票收入；2）检查进项发票是否与实际采购量匹配；3）进行存货盘点，核实库存真实性。",
+                "category": "域12 经营实质"})
+
+    # ═══════ 维度3: 人均产值合理性检测 ═══════
+    emp_count = len(set(s.get("name", "") for s in salaries if s.get("name")))
+    if total_sales > 0 and emp_count > 0:
+        rev_per_person = total_sales / emp_count
+        if rev_per_person < 50000:
+            findings.append({"type": "人均产值过低", "level": "中风险", "score": 6,
+                "how_found": f"销项{total_sales:,.0f}元÷{emp_count}人=人均{rev_per_person:,.0f}元。低于5万元/人触发预警。",
+                "detail": f"{emp_count}名员工，人均产值仅{rev_per_person:,.0f}元（月均{rev_per_person/3:,.0f}元）。",
+                "description": f"根据工资表和销项发票计算，{emp_count}名员工人均产值仅{rev_per_person:,.0f}元。人均产值远低于正常水平，可能表明：存在虚列人员工资（多列成本但无对应产出）、存在大量未开票的隐匿收入、或企业经营效率极低。",
+                "tax_impact": "虚列人员→企业所得税多列成本→补税+罚款。隐匿收入→增值税+企业所得税双重补税。",
+                "policy_ref": "《企业所得税法实施条例》第三十四条关于工资薪金合理性判断的规定。",
+                "suggestion": "1）核查是否存在挂名未实际出勤的人员；2）确认所有销售均已开票或申报未开票收入；3）对比同行业人均产值水平。",
+                "category": "域12 经营实质"})
+
+    # ═══════ 维度4: 银行流水活跃度检测 ═══════
+    if bank_txs:
+        tx_count = len(bank_txs)
+        avg_tx = (bank_in + bank_out) / max(tx_count, 1)
+        if avg_tx > 100000:
+            findings.append({"type": "单笔平均交易额过大", "level": "中风险", "score": 5,
+                "how_found": f"银行流水{tx_count}笔，总进出{(bank_in+bank_out):,.0f}元，笔均{avg_tx:,.0f}元。>10万触发预警。",
+                "detail": f"{tx_count}笔交易，笔均{avg_tx:,.0f}元。",
+                "description": f"银行流水共{tx_count}笔交易，平均每笔{avg_tx:,.0f}元。单笔交易金额过大意味着交易笔数少但单笔金额高，这种特征可能表明：企业业务集中度极高（依赖少数大客户）、或存在整笔资金过桥（非真实经营）、或通过大额交易规避细分监控。",
+                "tax_impact": "大额整笔交易易触发反洗钱监控，且无法体现正常经营的频繁小额交易特征，税务机关会质疑交易真实性。",
+                "policy_ref": "《反洗钱法》关于大额交易报告的规定。",
+                "suggestion": "1）核实大额交易的商业合同和物流单据；2）尽量通过多批次小金额结算，还原真实经营节奏。",
+                "category": "域12 经营实质"})
+
+    # ═══════ 维度5: 固定资产/折旧缺失检测 ═══════
+    has_fixed_asset = False
+    for i in pur_invs:
+        g = str(i.get("goods", ""))
+        if any(k in g for k in ("设备","机器","电脑","车辆","家具","空调","装修")):
+            has_fixed_asset = True; break
+    if not has_fixed_asset and total_sales > 500000:
+        findings.append({"type": "无固定资产购置记录", "level": "中风险", "score": 5,
+            "how_found": f"扫描进项发票品名，未找到设备/机器/电脑/车辆/家具/空调/装修等固定资产类采购。销项>{total_sales:,.0f}元触发。",
+            "detail": f"销项{total_sales:,.0f}元，但无任何固定资产采购记录。",
+            "description": f"年销售额{total_sales:,.0f}元的企业，正常应有一定规模的固定资产投入（电脑、办公设备、生产设备等）。完全没有固定资产采购记录，表明：可能经营场所和设备由他人提供（非独立经营）、或固定资产以费用化方式处理（会计处理不当）、或企业实际不具备与其收入规模匹配的经营能力。",
+            "tax_impact": "固定资产缺失削弱经营真实性的证明力，稽查中会被作为'空壳经营'的辅助证据。",
+            "policy_ref": "《企业所得税法实施条例》关于固定资产折旧扣除的规定。",
+            "suggestion": "1）如有自有设备，整理固定资产台账和折旧明细；2）如为租赁设备，保留租赁合同和发票。",
+            "category": "域12 经营实质"})
+
+    # ═══════ 维度6: 资金沉淀率（银行余额合理性） ═══════
+    if bank_in > 0:
+        net_flow = bank_in - bank_out
+        retain_rate = net_flow / bank_in * 100
+        if retain_rate < 0 and abs(retain_rate) > 30:
+            findings.append({"type": "资金净流出过大", "level": "中风险", "score": 6,
+                "how_found": f"银行入账{bank_in:,.0f}元，出账{bank_out:,.0f}元，净流出{abs(net_flow):,.0f}元(净流出率{abs(retain_rate):.0f}%)。",
+                "detail": f"资金净流出{abs(net_flow):,.0f}元，净流出率{abs(retain_rate):.0f}%。",
+                "description": f"银行账户收入{bank_in:,.0f}元，支出{bank_out:,.0f}元，净流出{abs(net_flow):,.0f}元（净流出率{abs(retain_rate):.0f}%）。资金持续大额净流出而账户余额不降，说明可能有其他资金来源（未入账收入、借款、股东投入）维持运营，提示存在账外资金循环的可能。",
+                "tax_impact": "净流出异常可能导致税务机关追溯资金来源，发现未申报的收入或违规资金往来。",
+                "policy_ref": "《税收征收管理法》第五十四条关于税务检查可查询银行存款账户的规定。",
+                "suggestion": "1）核实净流出对应的交易是否有真实业务背景；2）检查是否存在未入账的补充资金来源；3）确保所有经营收入均通过对公账户并如实申报。",
+                "category": "域12 经营实质"})
+
+    # ═══════ 维度7: 综合经营真实性评分 ═══════
+    anomaly_count = sum(1 for f in findings if f["level"] == "高风险")
+    if anomaly_count >= 2:
+        findings.append({"type": "经营实质综合预警", "level": "高风险", "score": 10,
+            "how_found": f"综合以上{len(findings)}项经营实质检测，触发{anomaly_count}项高风险预警。多维度交叉印证经营异常。",
+            "detail": f"多项经营实质指标异常：{anomaly_count}项高风险。",
+            "description": f"综合以上{len(findings)}项经营实质检测维度，共有{anomaly_count}项触发高风险预警。多维度、多角度的检测相互印证，表明企业经营实质存在系统性疑点，强烈建议进行全面自查和规范整改。税务机关在稽查中会综合运用这些指标来评估企业的经营真实性和纳税遵从度。",
+            "tax_impact": "多项经营实质指标同时异常，将触发税务机关的重点关注和全面稽查，企业面临较大的补税和处罚风险。",
+            "policy_ref": "《税收征收管理法》、《增值税暂行条例》、《企业所得税法》及其实施条例关于经营实质和收入确认的综合规定。",
+            "suggestion": "1）建议委托专业税务顾问进行全面自查；2）针对每项预警逐项整改并保留整改记录；3）建立经营费用管理制度，确保所有支出有票有据；4）定期进行经营实质的自我评估。",
+            "category": "域12 经营实质"})
+
     return findings
 
 def _domain_invoice_deep(invoices):
@@ -10681,7 +10808,7 @@ async def _run_analyze(company_id, db):
     if salaries or social_security: domain_results.append({"domain": "工资社保比对", "findings": _domain_salary_ss_hf_compare(salaries, social_security)})
     if invoices: domain_results.append({"domain": "发票生命周期", "findings": _domain_invoice_lifecycle(invoices)})
     domain_results.append({"domain": "合同比对分析", "findings": _domain_contract_comparison(db, company_id, sal_invs, pur_invs)})
-    domain_results.append({"domain": "经营实质分析", "findings": _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs)})
+    domain_results.append({"domain": "经营实质分析", "findings": _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs, salaries)})
     if invoices: domain_results.append({"domain": "发票深度特征", "findings": _domain_invoice_deep(invoices)})
     # 域14: 资料完备度
     domain_results.append({"domain": "资料完备度评估", "findings": _domain_document_completeness(docs, bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory)})

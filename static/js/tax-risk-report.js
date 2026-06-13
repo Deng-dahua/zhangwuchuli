@@ -20,6 +20,7 @@ function renderTaxRiskReport(container) {
     + '<label class="btn-toolbar" style="background:var(--blue-500);color:#fff;border-color:var(--blue-500);cursor:pointer">'
     + '<input type="file" id="risk-docs-input" multiple style="display:none" onchange="uploadRiskDocs()">上传资料</label>'
     + '<button class="btn-toolbar" onclick="analyzeAllRiskDocs()" style="background:#059669;color:#fff">一键分析资料</button>'
+    + '<button class="btn-toolbar" onclick="exportDocsReport()" id="btn-export-report" style="background:#6366f1;color:#fff;display:none">导出分析报告</button>'
     + '</div></div>'
     + '<div id="risk-docs-list" style="font-size:12px;color:var(--gray-500)">暂无上传资料</div>'
     + '</div>'
@@ -529,6 +530,33 @@ function renderDocsReport(rpt) {
 
   html += '</div>';
   reportDiv.innerHTML = html;
+  // 显示导出按钮
+  var exportBtn = document.getElementById('btn-export-report');
+  if (exportBtn) exportBtn.style.display = 'inline-block';
+}
+
+function exportDocsReport() {
+  var reportDiv = document.getElementById('risk-docs-report');
+  if (!reportDiv) return;
+  var content = reportDiv.innerHTML;
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>涉税风险分析报告</title>'
+    + '<style>body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#333;line-height:1.8}'
+    + 'h2{color:#1e293b;border-bottom:2px solid #e2e8f0;padding-bottom:8px}'
+    + '.risk-high{background:#fef2f2;border-left:3px solid #dc2626;padding:10px;margin:8px 0}'
+    + '.risk-mid{background:#fffbeb;border-left:3px solid #f59e0b;padding:10px;margin:8px 0}'
+    + '.risk-low{background:#f0fdf4;border-left:3px solid #059669;padding:10px;margin:8px 0}'
+    + '@media print{body{padding:0;font-size:11pt}}</style></head><body>'
+    + '<h1 style="text-align:center">涉税风险分析报告</h1>'
+    + '<p style="text-align:center;color:#64748b">生成时间：' + new Date().toLocaleString('zh-CN') + '</p>'
+    + content + '</body></html>';
+  var blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '涉税风险分析报告_' + new Date().toISOString().substring(0,10) + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('报告已导出', 'success');
 }
 
 setTimeout(refreshRiskDocsList, 500);
