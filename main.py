@@ -9800,90 +9800,55 @@ def _parse_pdf_bank_statement(filepath):
         with open(filepath, "rb") as f:
             reader = PyPDF2.PdfReader(f)
         text = ""
-        for page in reader.pages[:5]:
+        for page in reader.pages[:3]:
             t = page.extract_text() or ""
             text += t + "\n"
     except: return []
 
-    # 合并被换行打断的银行名和交易记录
     lines = text.split("\n")
+    # Step 1: merge multi-line records
     merged = []
     i = 0
     while i < len(lines):
         line = lines[i].strip()
         if not line: i += 1; continue
-        # 以数字序号开头的行：合并后续行直到遇到下一个序号或空行
-        if re.match(r'^\d+\s', line) and len(line) < 60:
+        if re.match(r'^\d+\s', line):
             combined = line
             i += 1
-            # 继续合并，直到遇到下一个序号行或空行
-            while i < len(lines) and lines[i].strip():
-                nxt = lines[i].strip()
-                # 如果下一行以序号开头→停止
-                if re.match(r'^\d+\s', nxt) and len(nxt) < 60: break
-                combined += nxt
-                i += 1
+            while i < len(lines) and lines[i].strip() and not re.match(r'^\d+\s', lines[i].strip()):
+                combined += lines[i].strip(); i += 1
             merged.append(combined)
         else:
-            merged.append(line)
-            i += 1
+            merged.append(line); i += 1
 
-    # 处理仍未合并的行：上一行有日期无金额，下一行有金额
-    final = []
-    for j, line in enumerate(merged):
-        has_date = bool(re.search(r'20[2-3]\d\d[01]\d[0-3]\d', line))
-        has_amount = bool(re.search(r'[\d,]+\.\d{2}', line))
-        if has_date and not has_amount and j + 1 < len(merged):
-            nxt = merged[j+1]
-            if re.search(r'[\d,]+\.\d{2}', nxt) and not re.search(r'20[2-3]\d\d[01]\d[0-3]\d', nxt):
-                merged[j+1] = line + nxt
-                continue
-        if has_date:
-            final.append(line)
-
-    # 从合并行中提取交易记录
     txs = []
-    for line in final:
-        # 日期：202xMMDD格式
-        date_m = re.search(r'(20[2-3]\d)([01]\d)([0-3]\d)', line)
-        if not date_m: continue
-        date_str = date_m.group(0)
-
-        # 提取所有金额
+    for line in merged:
+        dates = re.findall(r'20[2-3]\d[01]\d[0-3]\d', line)
         amounts = re.findall(r'([\d,]+\.\d{2})', line)
-        if not amounts: continue
+        if not dates or not amounts: continue
 
-        vals = [float(a.replace(",", "")) for a in amounts]
-        if len(vals) >= 2:
-            debit, credit = vals[0], vals[1]
-        elif "营收" in line or "入账" in line or "结算" in line:
-            credit, debit = max(vals), 0
-        elif "税务" in line or "缴" in line or "收费" in line or "所得税" in line or "社保" in line or "失业" in line:
-            debit, credit = max(vals), 0
-        elif "货款" in line or "快递" in line or "包装" in line or "动物医院" in line:
-            debit, credit = max(vals), 0
-        else:
-            credit, debit = max(vals), 0
+        date_str = dates[0]
+        vals = [float(a.replace(',','')) for a in amounts]
 
-        # 提取对方名称：大兴支行{名称} 日期
+        if len(vals) >= 2: debit, credit = vals[0], vals[1]
+        elif '营收' in line or '入账' in line or '结算' in line: credit, debit = max(vals), 0
+        elif '税务' in line or '收费' in line or '所得税' in line or '社保' in line or '失业' in line: debit, credit = max(vals), 0
+        elif '货款' in line or '快递' in line or '包装' in line: debit, credit = max(vals), 0
+        else: credit, debit = max(vals), 0
+
         counterparty = ""
-        # 招商银行大兴支行后的内容就是交易对手
         bank_end = line.find("大兴支行")
         if bank_end >= 0:
-            rest = line[bank_end+4:]  # "大兴支行"之后
-            # 取日期之前的部分作为对方名称
-            date_pos = rest.find(date_str)
-            if date_pos > 0:
-                counterparty = rest[:date_pos].strip()
-                # 清理尾部的账号数字
+            rest = line[bank_end+4:]
+            dp = rest.find(date_str)
+            if dp > 0:
+                counterparty = rest[:dp].strip()
                 counterparty = re.sub(r'\s*\d{6,}\s*$', '', counterparty).strip()
 
-        summary = line[:200]
-
         txs.append({
-            "date": date_str, "debit": round(debit, 2), "credit": round(credit, 2),
-            "amount": round(credit - debit, 2),
-            "counterparty": counterparty[:60], "summary": summary, "raw": line[:200]
+            "date": date_str, "debit": round(debit,2), "credit": round(credit,2),
+            "amount": round(credit-debit,2),
+            "counterparty": counterparty[:60], "raw": line[:200]
         })
     return txs
 
@@ -10189,7 +10154,7 @@ async def _run_analyze(company_id, db):
 
         # 跑真实引擎
         from tax_risk import get_tax_risk_report
-        risk_data = get_tax_risk_report(db, company_id, "2025-01", datetime.now().strftime("%Y-%m"))
+        risk_data = get_tax_risk_report(company_id=company_id, period_from="2025-01", period_to=datetime.now().strftime("%Y-%m"), db=db)
         if risk_data:
             engine_results = risk_data.get("results", [])
             all_findings.extend(engine_results)
