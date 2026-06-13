@@ -9686,6 +9686,28 @@ async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depe
     from database import Supplier, Customer, BankTransaction, BookkeepingInvoice, SalesInvoice, PurchaseInvoice, JournalEntry
     from collections import Counter, defaultdict
 
+    # 从磁盘重建文档列表（_tax_risk_docs 重启后丢失）
+    global _tax_risk_docs, _tax_doc_counter
+    if os.path.exists(UPLOAD_DIR):
+        for fname in os.listdir(UPLOAD_DIR):
+            parts = fname.split("_")
+            if len(parts) < 3: continue
+            try:
+                f_cid = int(parts[0])
+                f_doc_id = int(parts[1])
+            except: continue
+            if f_cid != company_id: continue
+            if any(d["id"] == f_doc_id and d["company_id"] == company_id for d in _tax_risk_docs): continue
+            fpath = os.path.join(UPLOAD_DIR, fname)
+            _tax_risk_docs.append({
+                "id": f_doc_id, "filename": fname,
+                "original_name": fname, "path": fpath,
+                "size": os.path.getsize(fpath),
+                "uploaded_at": datetime.fromtimestamp(os.path.getmtime(fpath)).isoformat(),
+                "company_id": company_id
+            })
+            if f_doc_id > _tax_doc_counter[0]: _tax_doc_counter[0] = f_doc_id
+
     docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
