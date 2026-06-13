@@ -539,6 +539,7 @@ async function renderPurchaseInvoices(container) {
     var piParts = piPeriod ? piPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('pi', piParts[0] || '', piParts[1] || '', 'onPIPeriodQuery');
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
+    html += '<button class="btn-toolbar" id="piBatchGenBtn" onclick="piGenerateVoucherOnly()">生成凭证</button>';
     html += '<button class="btn-toolbar" id="piTransferBookkeepingBtn" onclick="transferPIToBookkeeping()" style="background:#059669;color:#fff;" disabled>转入记账发票</button>';
     html += '<button class="btn-toolbar" id="piTransferUnbookkeptBtn" onclick="transferPIToUnbookkept()" style="background:#d97706;color:#fff;" disabled>转入未记账</button>';
     html += '<button class="btn-toolbar-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
@@ -716,6 +717,11 @@ function updatePiBatchBtn() {
     delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
+  const genBtn = document.getElementById('piBatchGenBtn');
+  if (genBtn) {
+    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
+    genBtn.disabled = count === 0;
+  }
   const tbkBtn = document.getElementById('piTransferBookkeepingBtn');
   if (tbkBtn) {
     tbkBtn.textContent = count > 0 ? '转入记账发票（' + count + '）' : '转入记账发票';
@@ -751,6 +757,28 @@ async function batchDeletePurchaseInvoices() {
     toast(e.message, 'error');
   }
   navigateTo('purchase-invoices');
+}
+
+// 取得发票 → 仅生成凭证（不入进项认证模块）
+async function piGenerateVoucherOnly() {
+  let ids = getCheckedPiIds();
+  if (ids.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
+  if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成凭证？\n\n仅生成序时账分录，不会同步到进项认证模块。')) return;
+  let btn = document.getElementById('piBatchGenBtn');
+  if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
+  try {
+    let res = await api('/api/purchase-invoices/generate-voucher-only', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    });
+    toast(res.message, 'success');
+    navigateTo('purchase-invoices');
+  } catch (e) {
+    handleError(e, '生成凭证');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 }
 
 async function showPurchaseDetail(id) {

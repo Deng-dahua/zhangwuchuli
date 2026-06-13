@@ -3769,6 +3769,54 @@ def transfer_purchase_to_unbookkept(ids: list[int], company_id: int = Query(...)
     return {"message": f"成功转入 {transferred} 条发票到未记账发票", "transferred": transferred}
 
 
+@app.post("/api/purchase-invoices/generate-voucher-only")
+def purchase_invoice_generate_voucher_only(body: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
+    """取得发票 → 仅生成序时账凭证（不入进项认证模块）"""
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(400, "请提供发票ID列表")
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).all()
+    if not invoices:
+        raise HTTPException(400, "未找到匹配的发票")
+    
+    # 按期分组
+    period_groups = {}
+    for inv in invoices:
+        if not inv.invoice_date: continue
+        p = str(inv.invoice_date)[:7]
+        period_groups.setdefault(p, []).append(inv)
+    if not period_groups:
+        raise HTTPException(400, "所选发票均无开票日期")
+    
+    count = 0
+    for period, invs in period_groups.items():
+        vno = _next_voucher_no(db, company_id, period, "记")
+        for inv in invs:
+            debit_account, _ = _classify_purchase_debit(db, company_id, inv)
+            amt = float(inv.amount or 0); tax = float(inv.tax_amount or 0)
+            is_special = inv.invoice_category and "专用发票" in str(inv.invoice_category)
+            # 费用/成本（借方）
+            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                account_code=debit_account, debit=amt, credit=0,
+                summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
+            # 进项税额（专票）
+            if is_special and tax > 0:
+                db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                    account_code="221001002", debit=tax, credit=0,
+                    summary=f"{inv.invoice_date} {inv.seller_name or ''} 进项税额"))
+            # 应付账款（贷方）
+            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                account_code="2202", debit=0, credit=amt + (tax if is_special else 0),
+                summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
+            count += 1
+        vno += 1
+    db.commit()
+    return {"message": f"成功生成 {count} 张凭证（不入进项认证）", "count": count}
+
+
 @app.post("/api/purchase-invoices/{invoice_id}/to-journal")
 def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     """将单张取得发票生成进项抵扣记录并生成凭证"""
