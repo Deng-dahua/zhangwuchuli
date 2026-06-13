@@ -9531,6 +9531,8 @@ def _run_declaration_consistency(db, company_id, cross):
                     "score": 9 if diff > 1000 else 6,
                     "detail": f"申报进项税{declared_input:,.2f} vs 抵扣合计{actual_input:,.2f}，差异{diff:,.2f}元。",
                     "suggestion": "进项税额申报与抵扣数据不匹配。", "category": "申报一致性"})
+
+@app.post("/api/tax-risk-docs/upload")
 async def upload_tax_risk_docs(
     files: list[UploadFile] = File(...),
     company_id: int = Query(...),
