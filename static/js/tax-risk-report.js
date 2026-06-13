@@ -23,7 +23,7 @@ function renderTaxRiskReport(container) {
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
 
-  // 按钮顺序：清除 → 生成/刷新报告（btn-toolbar 样式）
+  // 按钮顺序：清除 → 生成/刷新报告 → 下载报告
   var trBar = document.getElementById('tr-period-bar');
   if (trBar) {
     var queryBtn = trBar.querySelector('.std-query-btn');
@@ -38,7 +38,7 @@ function renderTaxRiskReport(container) {
       refreshBtn.addEventListener('click', loadTaxRiskReport);
       clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
-    // 下载报告按钮（下拉菜单）
+    // 下载报告按钮（在生成/刷新按钮后面）
     var downloadWrap = document.createElement('span');
     downloadWrap.style.marginRight = '8px';
     downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
@@ -48,7 +48,7 @@ function renderTaxRiskReport(container) {
       + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📝 Word 下载</div>'
       + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📊 PPT 下载</div>'
       + '</div></div>';
-    clearBtn.parentNode.insertBefore(downloadWrap, clearBtn);
+    clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
 
     var spacer = document.createElement('span');
     spacer.style.marginLeft = '16px';
