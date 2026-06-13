@@ -9198,6 +9198,170 @@ async def tax_risk_rules_upload_report(request: Request):
     result["relevance"] = relevance
     return result
 
+# ── 涉税风险分析资料库 ──
+
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads", "tax-risk-docs")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# 资料文件元数据（存内存，重启丢失，正式环境需改为 DB）
+_tax_risk_docs = []  # [{id, filename, original_name, path, size, uploaded_at}]
+_tax_doc_counter = [0]
+
+@app.post("/api/tax-risk-docs/upload")
+async def upload_tax_risk_docs(
+    files: list[UploadFile] = File(...),
+    company_id: int = Query(...),
+):
+    """上传涉税分析资料（支持多文件）"""
+    uploaded = []
+    for f in files:
+        _tax_doc_counter[0] += 1
+        doc_id = _tax_doc_counter[0]
+        ext = os.path.splitext(f.filename or "doc")[1] or ".pdf"
+        safe_name = f"{company_id}_{doc_id}_{int(datetime.now().timestamp())}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, safe_name)
+        content = await f.read()
+        with open(filepath, "wb") as fw:
+            fw.write(content)
+        doc = {
+            "id": doc_id, "filename": safe_name, "original_name": f.filename,
+            "path": filepath, "size": len(content), "uploaded_at": datetime.now().isoformat(),
+            "company_id": company_id
+        }
+        _tax_risk_docs.append(doc)
+        uploaded.append({"id": doc_id, "filename": f.filename, "size": len(content)})
+    return {"ok": True, "uploaded": uploaded, "total": len(_tax_risk_docs)}
+
+
+@app.get("/api/tax-risk-docs/list")
+def list_tax_risk_docs(company_id: int = Query(...)):
+    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
+    return [{"id": d["id"], "original_name": d["original_name"], "size": d["size"],
+             "uploaded_at": d["uploaded_at"]} for d in docs]
+
+
+@app.delete("/api/tax-risk-docs/{doc_id}")
+def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
+    global _tax_risk_docs
+    for i, d in enumerate(_tax_risk_docs):
+        if d["id"] == doc_id and d["company_id"] == company_id:
+            try: os.remove(d["path"])
+            except: pass
+            _tax_risk_docs.pop(i)
+            return {"ok": True, "message": "删除成功"}
+    raise HTTPException(404, "文件不存在")
+
+
+@app.post("/api/tax-risk-docs/analyze")
+async def analyze_tax_risk_docs(company_id: int = Query(...)):
+    """分析所有上传资料，提取文本并基于规则生成分析报告"""
+    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
+    if not docs:
+        return {"ok": False, "message": "暂无上传资料"}
+
+    findings = []
+    for doc in docs:
+        try:
+            text = _read_file_text(doc["path"], doc["original_name"])
+            if text and len(text.strip()) > 20:
+                risks = _analyze_doc_against_rules(text)
+                if risks:
+                    findings.append({
+                        "doc_id": doc["id"], "doc_name": doc["original_name"],
+                        "risk_count": len(risks), "risks": risks
+                    })
+        except Exception as e:
+            findings.append({"doc_id": doc["id"], "doc_name": doc["original_name"],
+                           "error": str(e)})
+
+    # 汇总统计
+    total_risks = sum(f.get("risk_count", 0) for f in findings)
+    high = sum(1 for f in findings for r in f.get("risks", []) if r.get("level") == "高风险")
+    mid = sum(1 for f in findings for r in f.get("risks", []) if r.get("level") == "中风险")
+
+    return {
+        "ok": True, "files_analyzed": len(docs),
+        "total_risks": total_risks, "high_risk": high, "mid_risk": mid,
+        "findings": findings
+    }
+
+
+def _read_file_text(filepath, original_name):
+    """读取文件文本内容"""
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext == ".txt":
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    elif ext == ".pdf":
+        try:
+            import PyPDF2
+            text = []
+            with open(filepath, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                for page in reader.pages[:20]:
+                    t = page.extract_text()
+                    if t: text.append(t)
+            return "\n".join(text)
+        except ImportError:
+            return None
+    elif ext in (".xlsx", ".xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            rows = []
+            for sheet in wb.worksheets[:3]:
+                for row in sheet.iter_rows(values_only=True):
+                    rows.append(" ".join(str(c) for c in row if c is not None))
+                if len(rows) > 2000: break
+            return "\n".join(rows)
+        except ImportError:
+            return None
+    elif ext in (".docx",):
+        try:
+            import docx
+            doc = docx.Document(filepath)
+            return "\n".join(p.text for p in doc.paragraphs[:500])
+        except ImportError:
+            return None
+    else:
+        return None
+
+
+def _analyze_doc_against_rules(text):
+    """根据涉税风险规则匹配文本中的风险线索"""
+    risks = []
+    text_lower = text.lower()
+
+    RULE_PATTERNS = [
+        (["虚开发票", "虚假发票", "购买发票", "无真实交易", "资金回流", "空壳"], "发票虚开嫌疑", "高风险", 9),
+        (["隐匿收入", "未开票", "不开发票", "账外", "体外循环", "私户收款", "个人账户收款"], "隐匿收入嫌疑", "高风险", 9),
+        (["骗取退税", "虚增进项", "虚假抵扣", "骗取留抵"], "骗取退税嫌疑", "高风险", 10),
+        (["偷税", "逃税", "偷逃税款", "少缴税款", "漏税"], "偷逃税款嫌疑", "高风险", 9),
+        (["关联交易", "转让定价", "利润转移", "避税安排"], "关联交易避税嫌疑", "中风险", 7),
+        (["虚列成本", "多列支出", "虚增费用", "费用造假", "假发票入账"], "虚列成本嫌疑", "高风险", 8),
+        (["未代扣", "未扣缴", "个税未缴", "未申报个税", "未履行扣缴义务"], "个税扣缴义务缺失", "中风险", 7),
+        (["长期亏损", "长亏不倒", "持续亏损但持续经营"], "长亏不倒异常", "中风险", 6),
+        (["发票异常", "发票数据异常", "进销不匹配", "开票数据异常"], "发票数据异常", "中风险", 5),
+        (["社保未缴", "未缴社保", "未参加社保", "社保缴纳异常", "未办理社会保险"], "社保缴纳异常", "中风险", 7),
+        (["欠税", "拖欠税款", "税款未缴", "税金未交"], "欠税风险", "高风险", 8),
+        (["注销", "非正常户", "经营异常", "吊销"], "经营状态异常", "高风险", 9),
+    ]
+
+    for keywords, item, level, score in RULE_PATTERNS:
+        matches = [kw for kw in keywords if kw in text_lower]
+        if matches:
+            # 在原文中定位匹配点
+            for kw in matches[:2]:
+                idx = text_lower.find(kw)
+                context = text[max(0, idx-30):idx+len(kw)+30] if idx >= 0 else kw
+                risks.append({
+                    "item": f"资料中发现「{item}」",
+                    "level": level, "score": score,
+                    "keyword": kw, "context": f"...{context}..."
+                })
+    return risks[:15]  # 最多15条
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

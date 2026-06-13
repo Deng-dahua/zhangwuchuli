@@ -17,8 +17,21 @@ function renderTaxRiskReport(container) {
     + '<div class="risk-report-header">'
     + '<div id="tr-period-bar" style="display:flex;align-items:center;gap:4px;margin-top:12px"></div>'
     + '</div>'
+    // 涉税资料上传区
+    + '<div id="risk-docs-section" style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:12px 16px;margin-bottom:16px">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+    + '<span style="font-weight:600;font-size:14px;color:var(--gray-700)">📁 涉税分析资料</span>'
+    + '<div style="display:flex;gap:8px">'
+    + '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:var(--blue-500);color:#fff;border-radius:4px;cursor:pointer;font-size:13px">'
+    + '<input type="file" id="risk-docs-input" multiple accept=".pdf,.xlsx,.xls,.docx,.txt" style="display:none" onchange="uploadRiskDocs()">选择文件</label>'
+    + '<button class="btn-toolbar" onclick="analyzeAllRiskDocs()" style="background:#059669;color:#fff">一键分析资料</button>'
+    + '</div></div>'
+    + '<div id="risk-docs-list" style="font-size:12px;color:var(--gray-500)">暂无上传资料</div>'
+    + '</div>'
     + '<div id="risk-summary-cards" class="risk-summary-cards"></div>'
     + '<div id="risk-report-body" class="risk-report-body"></div>'
+    // 资料分析报告区
+    + '<div id="risk-docs-report"></div>'
     + '</div>';
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
@@ -38,7 +51,7 @@ function renderTaxRiskReport(container) {
       refreshBtn.addEventListener('click', loadTaxRiskReport);
       clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
-    // 下载报告按钮（在生成/刷新按钮后面）
+    // 下载报告按钮（在生成/刷新按钮后面，间距一致）
     var downloadWrap = document.createElement('span');
     downloadWrap.style.marginRight = '8px';
     downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
@@ -50,10 +63,10 @@ function renderTaxRiskReport(container) {
       + '</div></div>';
     clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
 
-    // 删除报告按钮（下载按钮后面）
+    // 删除报告按钮（下载按钮后面，间距一致）
     var deleteWrap = document.createElement('span');
     deleteWrap.id = 'risk-delete-btn-wrap';
-    deleteWrap.style.marginLeft = '16px';
+    deleteWrap.style.marginRight = '8px';
     deleteWrap.style.display = 'none';
     deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>';
     clearBtn.parentNode.insertBefore(deleteWrap, downloadWrap.nextSibling);
@@ -479,3 +492,106 @@ function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── 涉税资料上传与分析 ──
+
+function refreshRiskDocsList() {
+  api('/api/tax-risk-docs/list').then(function(docs) {
+    var el = document.getElementById('risk-docs-list');
+    if (!el) return;
+    if (!docs || docs.length === 0) {
+      el.innerHTML = '暂无上传资料';
+      return;
+    }
+    el.innerHTML = docs.map(function(d) {
+      var size = d.size > 1024 ? (d.size/1024).toFixed(1)+'KB' : d.size+'B';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9">'
+        + '<span>📄 '+escapeHtml(d.original_name)+' <span style="color:var(--gray-400)">'+size+'</span></span>'
+        + '<span style="color:var(--gray-400);font-size:11px">'+d.uploaded_at.substring(0,10)+'</span>'
+        + '<span class="btn-toolbar" style="color:#dc2626;cursor:pointer;font-size:11px;padding:2px 6px" onclick="delRiskDoc('+d.id+')">删除</span>'
+        + '</div>';
+    }).join('');
+  }).catch(function(e) { console.error(e); });
+}
+
+function uploadRiskDocs() {
+  var input = document.getElementById('risk-docs-input');
+  if (!input || !input.files.length) return;
+  var form = new FormData();
+  for (var i = 0; i < input.files.length; i++) {
+    form.append('files', input.files[i]);
+  }
+  api('/api/tax-risk-docs/upload', { method: 'POST', body: form }).then(function(r) {
+    if (r.ok) {
+      toast('已上传 '+r.uploaded.length+' 个文件', 'success');
+      refreshRiskDocsList();
+    }
+    input.value = '';
+  }).catch(function(e) { toast('上传失败: '+e.message, 'error'); });
+}
+
+function delRiskDoc(id) {
+  if (!confirm('确定删除此文件？')) return;
+  api('/api/tax-risk-docs/'+id, { method: 'DELETE' }).then(function(r) {
+    if (r.ok) { toast('已删除', 'success'); refreshRiskDocsList(); }
+  });
+}
+
+function analyzeAllRiskDocs() {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '分析中...';
+  var reportDiv = document.getElementById('risk-docs-report');
+  if (reportDiv) reportDiv.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)">分析中...</div>';
+
+  api('/api/tax-risk-docs/analyze', { method: 'POST' }).then(function(r) {
+    btn.disabled = false;
+    btn.textContent = '一键分析资料';
+    if (!r.ok) { toast(r.message, 'error'); return; }
+    renderDocsReport(r, reportDiv);
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '一键分析资料';
+    toast('分析失败: '+e.message, 'error');
+  });
+}
+
+function renderDocsReport(data, reportDiv) {
+  if (!reportDiv) reportDiv = document.getElementById('risk-docs-report');
+  if (!reportDiv) return;
+
+  var html = '<div style="background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:16px;margin-top:16px">'
+    + '<h3 style="margin:0 0 12px 0;font-size:16px">📋 资料分析报告</h3>'
+    + '<div style="display:flex;gap:16px;margin-bottom:12px">'
+    + '<span>分析文件: <b>'+data.files_analyzed+'</b> 个</span>'
+    + '<span style="color:#dc2626">高风险: <b>'+data.high_risk+'</b></span>'
+    + '<span style="color:#f59e0b">中风险: <b>'+data.mid_risk+'</b></span>'
+    + '<span>风险线索: <b>'+data.total_risks+'</b></span>'
+    + '</div>';
+
+  if (data.total_risks === 0) {
+    html += '<p style="color:var(--gray-400)">未发现涉税风险线索</p>';
+  }
+
+  data.findings.forEach(function(f) {
+    html += '<div style="margin-bottom:8px"><b>📄 '+escapeHtml(f.doc_name)+'</b>';
+    if (f.error) { html += '<span style="color:#dc2626"> — '+f.error+'</span>'; }
+    else if (f.risks) {
+      f.risks.forEach(function(r) {
+        var color = r.level === '高风险' ? '#dc2626' : '#f59e0b';
+        html += '<div style="margin:4px 0 4px 16px;font-size:13px">'
+          + '<span style="color:'+color+';font-weight:600">['+r.level+']</span> '
+          + escapeHtml(r.item)+' (score='+r.score+')'
+          + '<div style="color:var(--gray-500);font-size:11px">匹配词: '+escapeHtml(r.keyword)+' | '+escapeHtml(r.context||'')+'</div>'
+          + '</div>';
+      });
+    }
+    html += '</div>';
+  });
+
+  html += '</div>';
+  reportDiv.innerHTML = html;
+}
+
+// 页面加载时刷新资料列表
+setTimeout(refreshRiskDocsList, 500);
