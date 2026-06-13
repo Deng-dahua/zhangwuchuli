@@ -9625,299 +9625,395 @@ def _classify_file_type(text, filename):
     return ("unknown", 0.3)
 
 
-def _import_bank_statement(db, company_id, text, file_texts):
-    """提取银行流水并导入"""
-    import re
-    rows = []
-    # 按行扫描
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line or len(line) < 10: continue
-        # 提取日期 + 金额模式
-        date_m = re.search(r'(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})', line)
-        amt_m = re.findall(r'([\d,]+\.?\d{0,2})', line)
-        if not date_m or len(amt_m) < 2: continue
-        date_str = date_m.group(1).replace("/", "-").replace(".", "-")
-        amounts = [float(a.replace(",", "")) for a in amt_m[:4]]
-        # 取最大两个
-        amounts.sort(reverse=True)
-        if len(amounts) >= 2:
-            row = {"date": date_str, "debit": amounts[1], "credit": amounts[0],
-                   "amount": amounts[0] - amounts[1], "raw": line}
-            rows.append(row)
-    # 尝试导入
-    imported = 0
-    for row in rows[:200]:
-        try:
-            # 简单去重：按日期+金额
-            exists = db.query(BankTransaction).filter(
-                BankTransaction.company_id == company_id,
-                BankTransaction.transaction_date == row["date"],
-                func.abs(BankTransaction.amount - abs(row["amount"])) < 0.01,
-            ).first()
-            if exists: continue
-            db.add(BankTransaction(
-                company_id=company_id, transaction_date=row["date"],
-                amount=abs(row["amount"]),
-                debit_amount=abs(row["debit"]) if row["debit"] > 0 else 0,
-                credit_amount=abs(row["credit"]) if row["credit"] > 0 else 0,
-                summary=row["raw"][:200]
-            ))
-            imported += 1
-        except: pass
-    db.flush()
-    return imported
-
-
-def _import_invoices_from_text(db, company_id, text, file_texts):
-    """从文本提取发票并导入到 BookkeepingInvoice"""
-    import re
-    imported = 0
-    for line in text.split("\n"):
-        line = line.strip()
-        if len(line) < 20: continue
-        digital = re.search(r'(\d{20})', line)
-        inv_code = re.search(r'(\d{12})', line)
-        inv_no = re.search(r'(\d{8})', line)
-        if not (digital or (inv_code and inv_no)): continue
-        # 提取金额，过滤科学计数法和超大数字
-        amounts = re.findall(r'([\d,]+\.?\d{1,2})(?![\d.eE])', line)
-        if len(amounts) < 2: continue
-        vals = []
-        for a in amounts:
-            try:
-                v = float(a.replace(",", ""))
-                if v <= 0 or v > 99999999: continue  # 过滤异常值和科学计数
-                vals.append(v)
-            except: pass
-        if len(vals) < 2: continue
-        try:
-            total = max(vals[:4])
-            tax_rate = 0.06
-            db.add(BookkeepingInvoice(
-                company_id=company_id,
-                digital_invoice_no=digital.group(1) if digital else "",
-                invoice_code=inv_code.group(1) if inv_code else "",
-                invoice_no=inv_no.group(1) if inv_no else "",
-                amount=round(total / (1 + tax_rate), 2),
-                tax_amount=round(total - total / (1 + tax_rate), 2),
-                total_amount=total,
-                goods_name=line[:100],
-                invoice_date=datetime.now().date(),
-            ))
-            imported += 1
-        except: pass
-    db.flush()
-    return imported
-
-
-@app.post("/api/tax-risk-docs/analyze")
-async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """全面分析：识别文件类型 → 提取数据导入对应模块 → 交叉验证 → 运行真实风险引擎"""
-    from database import Supplier, Customer, BankTransaction, BookkeepingInvoice, SalesInvoice, PurchaseInvoice, JournalEntry
-    from collections import Counter, defaultdict
-
-    # 从磁盘重建文档列表（_tax_risk_docs 重启后丢失）
-    global _tax_risk_docs, _tax_doc_counter
-    if os.path.exists(UPLOAD_DIR):
-        for fname in os.listdir(UPLOAD_DIR):
-            parts = fname.split("_")
-            if len(parts) < 3: continue
-            try:
-                f_cid = int(parts[0])
-                f_doc_id = int(parts[1])
-            except: continue
-            if f_cid != company_id: continue
-            if any(d["id"] == f_doc_id and d["company_id"] == company_id for d in _tax_risk_docs): continue
-            fpath = os.path.join(UPLOAD_DIR, fname)
-            _tax_risk_docs.append({
-                "id": f_doc_id, "filename": fname,
-                "original_name": fname, "path": fpath,
-                "size": os.path.getsize(fpath),
-                "uploaded_at": datetime.fromtimestamp(os.path.getmtime(fpath)).isoformat(),
-                "company_id": company_id
-            })
-            if f_doc_id > _tax_doc_counter[0]: _tax_doc_counter[0] = f_doc_id
-
-    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
-    if not docs:
-        return {"ok": False, "message": "暂无上传资料"}
-
-    # 清除之前的错误事务
-    try: db.rollback()
-    except: pass
-
-    pipeline_log = []  # 处理流水日志
-    all_entities = []
-    all_amounts = []
-    all_text = ""
-    file_results = []  # 每文件处理结果
-
-    # ═══════ 阶段1: 读取+识别+导入 ═══════
-    for doc in docs:
-        try:
-            text = _read_file_text(doc["path"], doc["original_name"])
-            if not text or len(text.strip()) < 20: continue
-            fname = doc["original_name"]
-            all_text += "\n" + text
-            ftype, confidence = _classify_file_type(text, fname)
-
-            fr = {"file": fname, "type": ftype, "confidence": confidence, "actions": []}
-
-            # 银行流水 → 导入银行流水
-            if ftype == "bank" and confidence >= 0.7:
-                try:
-                    count = _import_bank_statement(db, company_id, text, {fname: text})
-                    if count > 0:
-                        fr["actions"].append(f"导入{count}条银行流水")
-                        pipeline_log.append(f"{fname} -> 导入{count}条银行流水")
-                        try:
-                            from database import _generate_bank_journals
-                            _generate_bank_journals(db, company_id, None)
-                            db.commit()
-                            fr["actions"].append("已自动生成凭证")
-                        except: pass
-                except Exception as e:
-                    fr["actions"].append(f"导入失败: {e}")
-
-            # 发票 → 导入未记账发票
-            elif ftype == "invoice" and confidence >= 0.7:
-                try:
-                    count = _import_invoices_from_text(db, company_id, text, {fname: text})
-                    if count > 0:
-                        fr["actions"].append(f"导入{count}张发票")
-                        pipeline_log.append(f"{fname} -> 导入{count}张发票")
-                except Exception as e:
-                    fr["actions"].append(f"发票导入失败: {e}")
-
-            # VAT/审计 → 仅提取数据
-            elif ftype in ("vat", "audit"):
-                pipeline_log.append(f"{fname} → 识别为{ftype}类型，提取数据用于交叉比对")
-
-            # 提取结构化数据
-            data = _extract_structured_data(text, fname)
-            if data:
-                for e in data.get("entities", []): all_entities.append({**e, "source_file": fname})
-                for a in data.get("amounts", []): all_amounts.append({**a, "source_file": fname})
-
-            file_results.append(fr)
-        except Exception as e:
-            file_results.append({"file": doc["original_name"], "error": str(e)})
-
-    if not all_text.strip():
-        return {"ok": False, "message": "无法读取文件内容"}
-
-    db.commit()
-
-    # ═══════ 阶段2: 交叉验证 ═══════
-    cross = []
-    entity_names = set(e["name"] for e in all_entities)
-
-    # 档案覆盖率
-    suppliers = {s.name: s for s in db.query(Supplier).filter(Supplier.company_id == company_id).all()}
-    customers = {c.name: c for c in db.query(Customer).filter(Customer.company_id == company_id).all()}
-    existing = set(suppliers.keys()) | set(customers.keys())
-
-    stats = {
-        "分析文件数": len(docs),
-        "实体总数": len(entity_names),
-        "已知实体": len(entity_names & existing),
-        "新实体": len(entity_names - existing),
-    }
-    if entity_names:
-        stats["档案覆盖率"] = f"{stats['已知实体']/max(len(entity_names),1)*100:.0f}%"
-
-    vals = sorted([a["value"] for a in all_amounts if 0 < a["value"] <= 99999999])
-    if vals:
-        stats["金额总笔数"] = len(vals)
-        stats["金额总额(万元)"] = f"{sum(vals)/10000:,.1f}"
-        stats["大额(>=10万)"] = len([v for v in vals if v >= 100000])
-
-    # 交叉验证：文件数据 vs 系统数据
-    # 银行流水 vs 序时账
-    bank_count = db.query(BankTransaction).filter(BankTransaction.company_id == company_id).count()
-    je_count = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).count()
-    if bank_count > 0 and je_count == 0:
-        cross.append({"type": "银行流水未记账", "level": "高风险", "score": 8,
-                      "detail": f"已导入{bank_count}条银行流水但序时账为0，请运行process-all生成凭证。",
-                      "category": "交叉验证"})
-
-    # 发票数量对比
-    pi_count = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).count()
-    bk_count = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id).count()
-    if bk_count > 0 and pi_count == 0:
-        cross.append({"type": "发票未同步", "level": "中风险", "score": 5,
-                      "detail": f"未记账发票{bk_count}张，取得发票{pi_count}张，数据可能不同步。",
-                      "category": "交叉验证"})
-
-    # ── P0核心：财税票三流比对 ──
-    _run_three_way_matching(db, company_id, cross)
-
-    # ── P0核心：进销匹配分析 ──
-    _run_purchase_sales_match(db, company_id, cross)
-
-    # ── P1：申报一致性 ──
-    _run_declaration_consistency(db, company_id, cross)
-
-    # 新实体发现
-    new_ents = entity_names - existing
-    if new_ents:
-        cross.append({"type": "新实体发现", "level": "中风险", "score": 6,
-                      "detail": f"资料中发现{len(new_ents)}个未在档案中登记的实体：{'、'.join(list(new_ents)[:8])}",
-                      "suggestion": "建议核实并补建档案。", "category": "交叉比对"})
-
-    # ═══════ 阶段3: 运行真实涉税风险引擎 ═══════
-    risk_results = []
-    try:
-        from tax_risk import get_tax_risk_report
-        ps = (datetime.now().replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%Y-%m")
-        pe = datetime.now().strftime("%Y-%m")
-        risk_data = get_tax_risk_report(db, company_id, ps, pe)
-        risk_results = risk_data.get("results", []) if risk_data else []
-        pipeline_log.append(f"运行真实风险引擎 → 发现{len(risk_results)}条风险")
-    except Exception as e:
-        pipeline_log.append(f"风险引擎运行失败: {e}")
-
-    # ═══════ 阶段4: 全文规则匹配(兜底) ═══════
-    rules = _load_tax_risk_rules()
-    file_texts = {doc["original_name"]: (_read_file_text(doc["path"], doc["original_name"]) or "") for doc in docs}
-    rule_findings = _match_all_rules(all_text, file_texts, rules)
-
-    # 合并：真实引擎结果 + 文本规则匹配
-    all_findings = cross + risk_results + rule_findings
-
-    high = sum(1 for f in all_findings if f.get("level") == "高风险" or f.get("risk_level") == "高风险")
-    mid = sum(1 for f in all_findings if f.get("level") == "中风险" or f.get("risk_level") == "中风险")
-    total = len(all_findings)
-    overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
-
-    summary = f"对{len(docs)}份资料进行了四阶段深度分析。"
-    for log in pipeline_log[:5]: summary += f" {log}"
-    summary += f" 综合风险等级：{overall}，共{total}项风险（高{high}/中{mid}/低{total-high-mid}）。"
-
-    categories = {}
-    for f in all_findings:
-        cat = f.get("category", f.get("type", "其他"))
-        categories.setdefault(cat, {"name": cat, "count": 0, "high": 0, "mid": 0})
-        categories[cat]["count"] += 1
-        lv = f.get("level") or f.get("risk_level", "")
-        if "高" in lv: categories[cat]["high"] += 1
-        elif "中" in lv: categories[cat]["mid"] += 1
-
-    report = {
-        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid,
-        "low_risk": total - high - mid, "files_count": len(docs),
-        "rules_used": len(rules) if isinstance(rules, list) else 217,
-        "pipeline_log": pipeline_log, "file_results": file_results,
-        "stats": stats, "cross_findings": cross,
-        "categories": sorted(categories.values(), key=lambda x: -x["high"]*100 - x["mid"]*10 - x["count"]),
-        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or x.get("risk_score") or 0))[:40],
-        "summary_text": summary
-    }
-    return {"ok": True, "report": report}
-
 
 from datetime import timedelta
+
+# ═══════════ Excel 结构化提取 ═══════════
+
+def _parse_excel_structured(filepath, ext):
+    """按Sheet名和列名提取Excel结构化数据"""
+    try:
+        if ext == ".xls":
+            import xlrd
+            wb = xlrd.open_workbook(filepath)
+            return _parse_by_sheet_name(wb.sheet_names(), lambda i: wb.sheet_by_index(i))
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            return _parse_by_sheet_name(wb.sheetnames, lambda i: wb[wb.sheetnames[i]])
+    except: return None
+
+def _parse_by_sheet_name(names, get_sheet):
+    first_sheet = str(names[0]) if names else ""
+    if first_sheet in ("销项", "进项"):
+        return _parse_invoice_sheet(get_sheet(0), first_sheet)
+    if "工资" in first_sheet:
+        return _parse_salary_sheet(get_sheet(0))
+    if first_sheet == "人员明细":
+        s = get_sheet(0)
+        header = _get_row_values(s, 0)
+        return {"type": "social_security", "rows": _parse_social_sheet(s, header)}
+    if "凭证" in first_sheet:
+        return _parse_voucher_sheet(get_sheet(0))
+    if "进销存" in first_sheet:
+        return _parse_inventory_sheet(get_sheet(0))
+    return None
+
+def _get_row_values(sheet, row_idx):
+    try: return [str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols)]
+    except:
+        try: return [str(c) for c in list(sheet.iter_rows(min_row=row_idx+1, max_row=row_idx+1, values_only=True))[0]]
+        except: return []
+
+def _find_cols(header, mapping):
+    cols = {}
+    for keyword, field in mapping.items():
+        for i, h in enumerate(header):
+            if keyword in str(h).strip():
+                cols[field] = i; break
+    return cols
+
+def _parse_invoice_sheet(sheet, direction):
+    header = _get_row_values(sheet, 1)
+    cols = _find_cols(header, {
+        "发票类型": "inv_type", "发票号码": "inv_no", "购方名称": "buyer", "购方税号": "buyer_tax",
+        "销方名称": "seller", "销方税号": "seller_tax", "开票项目": "goods",
+        "金额": "amount", "税额": "tax", "价税合计": "total", "业务类型": "biz_type",
+    })
+    if not cols: return None
+    rows = []
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    for r in range(2, min(nrows, 2000)):
+        vals = {}
+        for field, col in cols.items():
+            try:
+                v = str(sheet.cell_value(r, col)).strip() if hasattr(sheet, 'cell_value') else str(list(sheet.iter_rows(min_row=r+1, max_row=r+1, values_only=True))[0][col] or '')
+                vals[field] = v
+            except: vals[field] = ""
+        if not vals.get("inv_no") and not vals.get("buyer") and not vals.get("seller") and not vals.get("goods"):
+            continue
+        try: vals["amount"] = float(vals.get("amount", 0) or 0)
+        except: vals["amount"] = 0
+        try: vals["tax"] = float(vals.get("tax", 0) or 0)
+        except: vals["tax"] = 0
+        try: vals["total"] = float(vals.get("total", 0) or 0)
+        except: vals["total"] = vals["amount"] + vals["tax"]
+        rows.append(vals)
+    atype = "sales_invoice" if direction == "销项" else "purchase_invoice"
+    return {"type": atype, "rows": rows}
+
+def _parse_salary_sheet(sheet):
+    header = _get_row_values(sheet, 2)
+    cols = _find_cols(header, {
+        "姓名": "name", "证件号码": "id_card", "工资": "salary",
+        "代扣社保": "ss_deduct", "代扣公积金": "hf_deduct",
+        "代扣个税": "tax", "实发": "net"
+    })
+    if not cols: return None
+    rows = []
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    for r in range(4, min(nrows, 100)):
+        vals = {}
+        for field, col in cols.items():
+            try:
+                v = str(sheet.cell_value(r, col)).strip() if hasattr(sheet, 'cell_value') else str(list(sheet.iter_rows(min_row=r+1, max_row=r+1, values_only=True))[0][col] or '')
+                vals[field] = v
+            except: vals[field] = ""
+        if not vals.get("name"): continue
+        for k in ["salary","ss_deduct","hf_deduct","tax","net"]:
+            try: vals[k] = float(vals.get(k, 0) or 0)
+            except: vals[k] = 0
+        rows.append(vals)
+    return {"type": "salary", "rows": rows}
+
+def _parse_social_sheet(sheet, header):
+    cols = _find_cols(header, {
+        "人员": "name", "证件号码": "id_card", "缴费工资": "base",
+        "单位承担": "company_pay", "个人承担": "personal_pay", "险种": "insurance"
+    })
+    if not cols: return None
+    rows = []
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    for r in range(1, min(nrows, 200)):
+        vals = {}
+        for field, col in cols.items():
+            try:
+                v = str(sheet.cell_value(r, col)).strip() if hasattr(sheet, 'cell_value') else str(list(sheet.iter_rows(min_row=r+1, max_row=r+1, values_only=True))[0][col] or '')
+                vals[field] = v
+            except: vals[field] = ""
+        if not vals.get("name"): continue
+        for k in ["base","company_pay","personal_pay"]:
+            try: vals[k] = float(vals.get(k, 0) or 0)
+            except: vals[k] = 0
+        rows.append(vals)
+    return rows
+
+def _parse_voucher_sheet(sheet):
+    header = _get_row_values(sheet, 1)
+    cols = _find_cols(header, {"日期": "date", "凭证字号": "voucher_no", "摘要": "summary",
+        "科目": "account", "借方": "debit", "贷方": "credit"})
+    if not cols: return None
+    rows = []
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    for r in range(2, min(nrows, 5000)):
+        vals = {}
+        for field, col in cols.items():
+            try:
+                v = str(sheet.cell_value(r, col)).strip() if hasattr(sheet, 'cell_value') else str(list(sheet.iter_rows(min_row=r+1, max_row=r+1, values_only=True))[0][col] or '')
+                vals[field] = v
+            except: vals[field] = ""
+        if not vals.get("account") and not vals.get("summary"): continue
+        for k in ["debit","credit"]:
+            try: vals[k] = float(vals.get(k, 0) or 0)
+            except: vals[k] = 0
+        rows.append(vals)
+    return {"type": "voucher", "rows": rows}
+
+def _parse_inventory_sheet(sheet):
+    header = _get_row_values(sheet, 0)
+    cols = _find_cols(header, {"日期": "date", "凭证字号": "voucher_no",
+        "入库": "in_qty", "出库": "out_qty", "存货": "item", "数量": "qty", "金额": "amount"})
+    if not cols: return None
+    rows = []
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    for r in range(1, min(nrows, 5000)):
+        vals = {}
+        for field, col in cols.items():
+            try:
+                v = str(sheet.cell_value(r, col)).strip() if hasattr(sheet, 'cell_value') else str(list(sheet.iter_rows(min_row=r+1, max_row=r+1, values_only=True))[0][col] or '')
+                vals[field] = v
+            except: vals[field] = ""
+        if not vals.get("date") and not vals.get("item"): continue
+        for k in ["in_qty","out_qty","amount"]:
+            try: vals[k] = float(vals.get(k, 0) or 0)
+            except: vals[k] = 0
+        rows.append(vals)
+    return {"type": "inventory", "rows": rows}
+
+# ═══════════ PDF 银行流水解析 ═══════════
+
+def _parse_pdf_bank_statement(filepath):
+    import re
+    try:
+        import PyPDF2
+        with open(filepath, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+        text = ""
+        for page in reader.pages[:5]:
+            t = page.extract_text()
+            if t: text += t + "\n"
+    except: return []
+    txs = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line or len(line) < 30: continue
+        m = re.search(r'(\d{8})', line)
+        if not m: continue
+        date_str = m.group(1)
+        amounts = re.findall(r'(\d{1,3}(?:,\d{3})*\.\d{2})', line)
+        if len(amounts) < 2: continue
+        try:
+            a1 = float(amounts[0].replace(",",""))
+            a2 = float(amounts[1].replace(",",""))
+            debit, credit = (a1, a2) if a1 < a2 else (a2, a1)
+            txs.append({"date": date_str, "debit": debit, "credit": credit, "amount": credit - debit, "raw": line[:150]})
+        except: pass
+    return txs
+
+# ═══════════ 13域分析函数 ═══════════
+
+def _domain_bank_tracking(txs):
+    """域1: 资金全链路追踪"""
+    from collections import defaultdict
+    findings = []
+    cats = defaultdict(float)
+    for tx in txs:
+        raw = tx.get("raw", "")
+        if any(k in raw for k in ("支付宝","微信","财付通")): cats["third_party"] += tx["credit"]
+        elif "税务" in raw: cats["tax"] += tx["debit"]
+    income = sum(tx["credit"] for tx in txs)
+    expense = sum(tx["debit"] for tx in txs)
+    if income > 0 and cats.get("third_party", 0) / income > 0.5:
+        findings.append({"type": "第三方收款占比高", "level": "高风险", "score": 9,
+            "detail": f"支付宝/微信收款{cats['third_party']:,.2f}元占总收入{cats['third_party']/income*100:.0f}%。",
+            "suggestion": "第三方收款需逐笔匹配订单。", "category": "域1 资金全链路"})
+    findings.append({"type": "资金统计", "level": "低风险", "score": 2,
+        "detail": f"收入{income:,.2f}元，支出{expense:,.2f}元，缴税{cats.get('tax',0):,.2f}元。",
+        "category": "域1 资金全链路"})
+    return findings
+
+def _domain_profit_analysis(sal_invs, pur_invs, inventory):
+    """域2: 进销毛利率"""
+    findings = []
+    s_total = sum(i["total"] for i in sal_invs if i["total"] > 0)
+    p_total = sum(i["total"] for i in pur_invs if i["total"] > 0)
+    if s_total > 0 and p_total > 0 and p_total / s_total > 1.5:
+        findings.append({"type": "进销倒挂", "level": "高风险", "score": 8,
+            "detail": f"进项{p_total:,.2f}/销项{s_total:,.2f}={p_total/s_total*100:.0f}%。",
+            "category": "域2 进销毛利"})
+    if s_total > 0:
+        findings.append({"type": "进销统计", "level": "低风险", "score": 2,
+            "detail": f"销项{s_total:,.2f}元，进项{p_total:,.2f}元。", "category": "域2 进销毛利"})
+    return findings
+
+def _domain_personal_transactions(sal_invs):
+    """域3: 个人交易风险"""
+    findings = []
+    personal = [i for i in sal_invs if "个人" in str(i.get("buyer", ""))]
+    if personal:
+        p_total = sum(i["total"] for i in personal if i["total"] > 0)
+        all_total = sum(i["total"] for i in sal_invs if i["total"] > 0)
+        pct = p_total / all_total * 100 if all_total > 0 else 0
+        if pct > 30:
+            findings.append({"type": "个人交易占比高", "level": "高风险", "score": 8,
+                "detail": f"{len(personal)}张发票卖个人{p_total:,.2f}元({pct:.0f}%)。",
+                "category": "域3 个人交易"})
+    untaxed = [i for i in sal_invs if "无票" in str(i.get("inv_type", ""))]
+    if untaxed:
+        findings.append({"type": "无票收入", "level": "中风险", "score": 6,
+            "detail": f"销项{len(untaxed)}条无票收入{sum(i['total'] for i in untaxed if i['total']>0):,.2f}元。",
+            "category": "域3 个人交易"})
+    return findings
+
+def _domain_supplier_deep(pur_invs):
+    """域4: 供应商穿透"""
+    from collections import defaultdict
+    findings, by_supplier, by_city = [], defaultdict(float), defaultdict(set)
+    import re
+    for i in pur_invs:
+        name = i.get("seller", ""); by_supplier[name] += i["total"]
+        m = re.search(r'(广州|深圳|北京|上海|杭州|武汉|成都|重庆|南京|天津|苏州)', name)
+        if m: by_city[m.group(1)].add(name)
+    top3 = sorted(by_supplier.items(), key=lambda x: -x[1])[:3]
+    if top3 and sum(v for _, v in top3) / max(sum(by_supplier.values()), 1) > 0.7:
+        findings.append({"type": "供应商集中度", "level": "中风险", "score": 6,
+            "detail": f"前3大供应商占比{sum(v for _,v in top3)/sum(by_supplier.values())*100:.0f}%",
+            "category": "域4 供应商穿透"})
+    for city, sellers in by_city.items():
+        if len(sellers) >= 3:
+            findings.append({"type": "同城供应商群集", "level": "中风险", "score": 5,
+                "detail": f"{city}地区{len(sellers)}家同类供应商。", "category": "域4 供应商穿透"})
+    return findings
+
+def _domain_voucher_anomaly(vouchers):
+    """域5: 凭证科目异常"""
+    findings, by_vn = [], {}
+    for v in vouchers:
+        vn = v.get("voucher_no", ""); by_vn.setdefault(vn, {"d": 0, "c": 0})
+        by_vn[vn]["d"] += v.get("debit", 0); by_vn[vn]["c"] += v.get("credit", 0)
+    unbalanced = [(vn, b) for vn, b in by_vn.items() if abs(b["d"] - b["c"]) > 1]
+    if unbalanced:
+        findings.append({"type": "凭证借贷不平", "level": "高风险", "score": 9,
+            "detail": f"{len(unbalanced)}张凭证借贷不平衡。", "category": "域5 凭证异常"})
+    return findings
+
+def _domain_inventory_turnover(inventory, sal_invs):
+    """域6: 存货周转"""
+    findings = []
+    total_in = sum(i.get("in_qty", 0) for i in inventory if i.get("in_qty", 0) > 0)
+    total_out = sum(i.get("out_qty", 0) for i in inventory if i.get("out_qty", 0) > 0)
+    if total_in > 0:
+        findings.append({"type": "存货统计", "level": "低风险", "score": 2,
+            "detail": f"入库{total_in:.0f}件，出库{total_out:.0f}件。", "category": "域6 存货"})
+    return findings
+
+def _domain_tax_consistency(bank_txs, db, company_id):
+    """域7: 税务缴纳一致性"""
+    import json
+    findings = []
+    tax_paid = sum(tx["debit"] for tx in bank_txs if "税务" in tx.get("raw", ""))
+    vat = db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id).order_by(VATDeclaration.period.desc()).first()
+    if vat:
+        main = json.loads(vat.form_main or '{}') if isinstance(vat.form_main, str) else (vat.form_main or {})
+        payable = float(main.get("row19_tax_payable", 0) or 0)
+        if payable > 0 and tax_paid > 0 and abs(payable - tax_paid) > 100:
+            findings.append({"type": "缴税与申报差异", "level": "高风险" if abs(payable-tax_paid)>1000 else "中风险",
+                "score": 9 if abs(payable-tax_paid)>1000 else 6,
+                "detail": f"申报{payable:,.2f}元 vs 缴款{tax_paid:,.2f}元，差{abs(payable-tax_paid):,.2f}元。",
+                "category": "域7 税务一致性"})
+    return findings
+
+def _domain_salary_ss_hf_compare(salaries, social_security):
+    """域8: 工资社保比对"""
+    findings = []
+    sal_names = set(s.get("name", "") for s in salaries if s.get("name"))
+    ss_names = set(s.get("name", "") for s in social_security if s.get("name"))
+    only_sal = sal_names - ss_names
+    if only_sal:
+        findings.append({"type": "有工资无社保", "level": "高风险", "score": 8,
+            "detail": f"{len(only_sal)}人有工资无社保：{'、'.join(list(only_sal)[:5])}",
+            "category": "域8 工资社保"})
+    for s in salaries:
+        name, salary = s.get("name", ""), s.get("salary", 0)
+        for ss in social_security:
+            if ss.get("name") == name and ss.get("base", 0) > 0 and salary > 0 and ss["base"] < salary * 0.6:
+                findings.append({"type": "低基数参保", "level": "中风险", "score": 6,
+                    "detail": f"{name}工资{salary:.0f}元，社保基数{ss['base']:.0f}元({ss['base']/salary*100:.0f}%)。",
+                    "category": "域8 工资社保"})
+    return findings
+
+def _domain_invoice_lifecycle(invoices):
+    """域9: 发票生命周期"""
+    findings, types = [], {}
+    for i in invoices: types[i.get("inv_type", "")] = types.get(i.get("inv_type", ""), 0) + 1
+    voided = types.get("作废", 0) + types.get("红冲", 0)
+    if len(invoices) > 0 and voided / len(invoices) > 0.1:
+        findings.append({"type": "作废/红冲率偏高", "level": "中风险", "score": 6,
+            "detail": f"{voided}/{len(invoices)}张({voided/len(invoices)*100:.0f}%)",
+            "category": "域9 发票生命周期"})
+    return findings
+
+def _domain_contract_comparison(db, company_id, sal_invs, pur_invs):
+    """域11: 合同比对"""
+    from database import Contract, _normalize_customer_name
+    findings = []
+    cts = db.query(Contract).filter(Contract.company_id == company_id).all()
+    parties = set()
+    for ct in cts:
+        if ct.party_a: parties.add(_normalize_customer_name(ct.party_a))
+        if ct.party_b: parties.add(_normalize_customer_name(ct.party_b))
+    buyers = set()
+    for i in sal_invs:
+        n = _normalize_customer_name(i.get("buyer", ""))
+        if n: buyers.add(n)
+    no_ct = buyers - parties
+    if no_ct and len(no_ct) >= 2:
+        findings.append({"type": "销项无合同", "level": "中风险", "score": 6,
+            "detail": f"{len(no_ct)}个销项客户无合同，覆盖率{len(buyers)-len(no_ct)}/{len(buyers)}。",
+            "category": "域11 合同比对"})
+    return findings
+
+def _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs):
+    """域12: 经营实质"""
+    findings, biz_types = [], set()
+    for i in pur_invs:
+        g = str(i.get("goods", ""))
+        if "租金" in g or "租赁" in g: biz_types.add("租赁")
+        if "电" in g or "水" in g: biz_types.add("水电")
+        if "物业" in g: biz_types.add("物业")
+    missing = [f"无{m}" for m in ["租金支出","水电支出","物业支出"] if m.replace("支出","") not in biz_types]
+    if missing:
+        findings.append({"type": "经营场所证据缺失", "level": "高风险", "score": 9,
+            "detail": f"进项发票中{'、'.join(missing)}，可能无固定经营场所。",
+            "category": "域12 经营实质"})
+    return findings
+
+def _domain_invoice_deep(invoices):
+    """域13: 发票深度特征"""
+    findings = []
+    sensitive = sum(1 for i in invoices if any(k in str(i.get("goods","")) for k in ("咨询","服务费","技术")))
+    total = len(invoices)
+    if total > 0 and sensitive / total > 0.3:
+        findings.append({"type": "敏感业务发票占比高", "level": "中风险", "score": 7,
+            "detail": f"{sensitive}/{total}张服务/咨询/技术类发票({sensitive/total*100:.0f}%)。",
+            "category": "域13 发票深度"})
+    general = sum(1 for i in invoices if "普通" in str(i.get("inv_type", "")))
+    if total > 0 and general / total > 0.8:
+        findings.append({"type": "普票占比过高", "level": "中风险", "score": 6,
+            "detail": f"{general}/{total}张普通发票({general/total*100:.0f}%)。",
+            "category": "域13 发票深度"})
+    return findings
+
 
 
 if __name__ == "__main__":

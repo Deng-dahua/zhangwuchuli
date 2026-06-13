@@ -412,8 +412,31 @@ function renderDocsReport(rpt) {
     html += '</div>';
   }
 
-  // 阶段3: 交叉比对
-  if (rpt.cross_findings && rpt.cross_findings.length > 0) {
+  // 阶段3: 交叉比对 + 域分析
+  if (rpt.domain_summary && rpt.domain_summary.length > 0) {
+    html += '<div style="margin:16px 0"><b style="font-size:15px">13域分析结果</b></div>';
+    rpt.domain_summary.forEach(function(dr) {
+      if (!dr.findings || dr.findings.length === 0) return;
+      var dColor = dr.high > 0 ? '#dc2626' : (dr.mid > 0 ? '#f59e0b' : '#059669');
+      html += '<div style="margin-bottom:12px;border:1px solid var(--gray-200);border-radius:6px;overflow:hidden">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border-bottom:1px solid var(--gray-200)">'
+        + '<span style="font-weight:600;font-size:13px">' + escapeHtml(dr.name) + '</span>'
+        + '<span style="font-size:12px;color:' + dColor + '">' + dr.count + '项发现'
+        + (dr.high > 0 ? ' <span style="color:#dc2626">' + dr.high + '高</span>' : '')
+        + (dr.mid > 0 ? ' <span style="color:#f59e0b">' + dr.mid + '中</span>' : '')
+        + '</span></div>';
+      dr.findings.forEach(function(f) {
+        var cfColor = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#059669');
+        html += '<div style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:12px">'
+          + '<span style="display:inline-block;padding:1px 6px;background:' + cfColor + ';color:#fff;border-radius:3px;font-size:10px;margin-right:6px">' + f.level + '</span>'
+          + '<b>' + escapeHtml(f.type || '') + '</b>'
+          + '<div style="color:var(--gray-600);margin-top:2px">' + escapeHtml(f.detail || '') + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    });
+  }
+  else if (rpt.cross_findings && rpt.cross_findings.length > 0) {
     html += '<div style="margin:16px 0"><b style="font-size:15px">数据交叉比对发现</b></div>';
     rpt.cross_findings.forEach(function(f) {
       var cfColor = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#059669');
