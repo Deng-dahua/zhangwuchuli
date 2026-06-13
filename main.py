@@ -953,6 +953,125 @@ def _extract_company_names(text: str) -> set:
     return names
 
 
+def _enrich_archive_info(db: Session, company_id: int) -> dict:
+    """档案信息补全：从发票/银行流水等数据源提取缺失字段，更新客户/供应商档案。
+    触发时机：每次文件导入后自动运行，第一时间填补新信息。
+    """
+    from database import _normalize_customer_name
+    enriched_cust = 0
+    enriched_supp = 0
+    fields_filled = []
+
+    # ── 客户档案补全 ──
+    custs = db.query(Customer).filter(Customer.company_id == company_id).all()
+    cust_norm_map = {}
+    for c in custs:
+        fp = c._fingerprint or _normalize_customer_name(c.name or "")
+        if fp:
+            cust_norm_map[fp] = c
+
+    # 来源1：销项发票购方信息
+    for inv in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).all():
+        norm = _normalize_customer_name(inv.buyer_name.strip())
+        c = cust_norm_map.get(norm)
+        if not c:
+            continue
+        changed = False
+        if inv.buyer_tax_no and not c.tax_no:
+            c.tax_no = inv.buyer_tax_no.strip()
+            fields_filled.append(f"客户[{c.name}]税号←销项发票")
+            changed = True
+        if inv.buyer_address and not c.address:
+            c.address = inv.buyer_address.strip()
+            changed = True
+        if inv.buyer_bank_name and not c.bank_name:
+            c.bank_name = inv.buyer_bank_name.strip()
+            changed = True
+        if inv.buyer_bank_account and not c.bank_account:
+            c.bank_account = inv.buyer_bank_account.strip()
+            changed = True
+        if changed:
+            enriched_cust += 1
+
+    # 来源2：银行流水对方信息
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all():
+        norm = _normalize_customer_name(tx.counterparty_name.strip())
+        c = cust_norm_map.get(norm)
+        if not c:
+            continue
+        changed = False
+        if tx.counterparty_bank and not c.bank_name:
+            c.bank_name = tx.counterparty_bank.strip()
+            changed = True
+        if tx.counterparty_account and not c.bank_account:
+            c.bank_account = tx.counterparty_account.strip()
+            changed = True
+        if changed:
+            enriched_cust += 1
+
+    # ── 供应商档案补全 ──
+    supps = db.query(Supplier).filter(Supplier.company_id == company_id).all()
+    supp_norm_map = {}
+    for s in supps:
+        fp = s._fingerprint or _normalize_customer_name(s.name or "")
+        if fp:
+            supp_norm_map[fp] = s
+
+    # 来源1：取得发票销方信息
+    for inv in db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.seller_name.isnot(None)
+    ).all():
+        norm = _normalize_customer_name(inv.seller_name.strip())
+        s = supp_norm_map.get(norm)
+        if not s:
+            continue
+        changed = False
+        if inv.seller_tax_no and not s.tax_no:
+            s.tax_no = inv.seller_tax_no.strip()
+            fields_filled.append(f"供应商[{s.name}]税号←取得发票")
+            changed = True
+        if inv.seller_tax_no and not s.uscc:
+            s.uscc = inv.seller_tax_no.strip()
+            changed = True
+        if changed:
+            enriched_supp += 1
+
+    # 来源2：银行流水对方信息
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.counterparty_name.isnot(None)
+    ).all():
+        norm = _normalize_customer_name(tx.counterparty_name.strip())
+        s = supp_norm_map.get(norm)
+        if not s:
+            continue
+        changed = False
+        if tx.counterparty_bank and not s.bank_name:
+            s.bank_name = tx.counterparty_bank.strip()
+            changed = True
+        if tx.counterparty_account and not s.bank_account:
+            s.bank_account = tx.counterparty_account.strip()
+            changed = True
+        if changed:
+            enriched_supp += 1
+
+    if enriched_cust or enriched_supp:
+        db.flush()
+
+    return {
+        "customer_enriched": enriched_cust,
+        "supplier_enriched": enriched_supp,
+        "fields_filled": fields_filled,
+    }
+
+
 def _close_archive_gap(db: Session, company_id: int) -> dict:
     """档案缺失自动补齐：序时账往来科目中有contact_project但档案中不存在的实体 → 自动建档
     修复范围：1122应收账款 → 客户 / 2202应付账款 → 供应商 / 1123预付账款 → 供应商
@@ -1305,6 +1424,14 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
     except Exception:
         pass
 
+    # ── 第零步半：档案信息补全（第一时间填补缺失字段）──
+    enrich_result = {"customer_enriched": 0, "supplier_enriched": 0}
+    try:
+        enrich_result = _enrich_archive_info(db, company_id)
+        db.commit()
+    except Exception:
+        pass
+
     # ── 第一步：确定供应商档案 ──
     supp_result = _do_auto_create_suppliers(db, company_id)
     db.commit()
@@ -1366,6 +1493,7 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
 
     return {
         "step0_archive_gap": gap_result,
+        "step0_5_enrich": enrich_result,
         "step1_suppliers": supp_result,
         "step2_purchase_invoices": {
             "total": len(pi_invoices),
@@ -7127,13 +7255,15 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
 def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
     """导入银行流水后自动全链路处理：
     0. 档案缺失补齐（序时账有往来科目但档案缺失 → 自动建档，零容忍gap）
+    0.5 档案信息补全（从发票/银行流水提取税号/银行账号等，第一时间填补缺失字段）
     1. 双源供应商智能建档（发票∩银行流水 → 供应商档案）
     2. 常规银行流水凭证生成（_classify_bank_tx 11级分类）
     3. 社保缴纳匹配
     4. 国家金库税费组合缴纳匹配（含单税兜底）
     5. 公积金缴纳匹配
     """
-    result = {"generated": 0, "suppliers_created": 0, "customers_fixed": 0, "suppliers_fixed": 0, "infos": []}
+    result = {"generated": 0, "suppliers_created": 0, "customers_fixed": 0, "suppliers_fixed": 0,
+              "customers_enriched": 0, "suppliers_enriched": 0, "infos": []}
 
     # 第0步：档案缺失补齐（序时账有往来但档案缺失 → 自动建档）
     # 这是确定性规则：有明细账就必需有档案，零容忍gap
@@ -7141,6 +7271,14 @@ def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = D
         gap_result = _close_archive_gap(db, company_id)
         result["customers_fixed"] = gap_result.get("customer_created", 0)
         result["suppliers_fixed"] = gap_result.get("supplier_created", 0)
+    except Exception:
+        pass
+
+    # 第0.5步：档案信息补全（从发票/银行流水提取缺失字段）
+    try:
+        enrich_result = _enrich_archive_info(db, company_id)
+        result["customers_enriched"] = enrich_result.get("customer_enriched", 0)
+        result["suppliers_enriched"] = enrich_result.get("supplier_enriched", 0)
     except Exception:
         pass
 

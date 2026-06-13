@@ -374,10 +374,12 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     // 导入后自动生成银行流水凭证
     api('/api/bank-transactions/auto-voucher', { method: 'POST' }).then(function(r) {
       var msgs = [];
-      if (r.generated > 0) msgs.push(r.generated + ' 条银行流水凭证');
-      if (r.suppliers_created > 0) msgs.push(r.suppliers_created + ' 个供应商');
-      if (r.customers_fixed > 0) msgs.push(r.customers_fixed + ' 个客户档案');
-      if (r.suppliers_fixed > 0) msgs.push(r.suppliers_fixed + ' 个供应商档案（补缺）');
+      if (r.generated > 0) msgs.push(r.generated + ' 条凭证');
+      if (r.suppliers_created > 0) msgs.push('新建' + r.suppliers_created + '个供应商');
+      if (r.customers_fixed > 0) msgs.push('补' + r.customers_fixed + '个客户档案');
+      if (r.suppliers_fixed > 0) msgs.push('补' + r.suppliers_fixed + '个供应商档案');
+      var enrich = (r.customers_enriched || 0) + (r.suppliers_enriched || 0);
+      if (enrich > 0) msgs.push('更新' + enrich + '条档案信息');
       if (msgs.length > 0) {
         toast('导入完成：' + msgs.join('、'), 'success');
         renderBankTransactions();
