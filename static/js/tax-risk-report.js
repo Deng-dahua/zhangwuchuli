@@ -570,7 +570,9 @@ function renderDocsReport(data, reportDiv) {
     + '<div style="border-bottom:2px solid var(--gray-100);padding-bottom:16px;margin-bottom:16px">'
     + '<h2 style="margin:0 0 8px 0;font-size:20px">📋 资料综合涉税风险分析报告</h2>'
     + '<p style="margin:4px 0;color:var(--gray-500);font-size:13px">'
-    + '分析 ' + rpt.files_count + ' 份文件 · 使用 ' + rpt.rules_used + ' 条规则 · 识别 ' + rpt.total_risks + ' 项风险</p>'
+    + '分析 ' + rpt.files_count + ' 份文件 · 使用 ' + rpt.rules_used + ' 条规则 · 识别 ' + rpt.total_risks + ' 项风险'
+    + (rpt.extract_stats ? ' · 提取 ' + rpt.extract_stats.entities + ' 个实体、' + rpt.extract_stats.amounts + ' 个金额、' + (rpt.extract_stats.new_entities || 0) + ' 个新实体' : '')
+    + '</p>'
     + '<div style="display:flex;gap:16px;align-items:center;margin-top:12px">'
     + '<span style="font-size:14px;color:var(--gray-600)">综合风险等级：</span>'
     + '<span style="display:inline-block;padding:4px 16px;background:'+levelBg+';color:'+levelColor+';border-radius:6px;font-weight:700;font-size:16px">' + rpt.overall_level + '</span>'
@@ -610,6 +612,20 @@ function renderDocsReport(data, reportDiv) {
   }
 
   // 详细发现
+  // 交叉比对发现
+  if (rpt.cross_findings && rpt.cross_findings.length > 0) {
+    html += '<div style="margin:16px 0"><b style="font-size:15px">🔄 数据交叉比对发现</b></div>';
+    rpt.cross_findings.forEach(function(f) {
+      var cfColor = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#059669');
+      html += '<div style="margin-bottom:6px;padding:10px 12px;background:#f0f9ff;border-left:3px solid #3b82f6;border-radius:4px">'
+        + '<span style="display:inline-block;padding:1px 6px;background:'+cfColor+';color:#fff;border-radius:3px;font-size:11px;margin-right:8px">' + f.level + '</span>'
+        + '<b style="font-size:13px">' + escapeHtml(f.type || '') + '</b>'
+        + '<div style="font-size:12px;color:var(--gray-600);margin-top:4px">' + escapeHtml(f.detail || '') + '</div>'
+        + '<div style="font-size:12px;color:var(--gray-500);margin-top:2px">💡 ' + escapeHtml(f.suggestion || '') + '</div>'
+        + '</div>';
+    });
+  }
+
   html += '<div style="margin:16px 0"><b style="font-size:15px">🔍 详细风险发现（按风险程度排序）</b></div>';
 
   if (rpt.all_findings && rpt.all_findings.length > 0) {

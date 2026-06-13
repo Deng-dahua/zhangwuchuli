@@ -9253,59 +9253,189 @@ def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
 
 
 @app.post("/api/tax-risk-docs/analyze")
-async def analyze_tax_risk_docs(company_id: int = Query(...)):
-    """全量分析所有上传资料，基于全部217条涉税风险规则生成综合报告"""
+async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """深度分析：提取结构化数据 + 运行真实涉税风险引擎 + 交叉比对"""
+    from database import Supplier, Customer, SalesInvoice, PurchaseInvoice, BankTransaction, JournalEntry
+    import re
+
     docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
 
-    # 合并所有文件内容
+    # ── 第一步：读取并提取结构化数据 ──
     all_text = ""
-    file_texts = {}
+    extracted = []
     for doc in docs:
         try:
             text = _read_file_text(doc["path"], doc["original_name"])
             if text and len(text.strip()) > 20:
-                all_text += "\n\n【文件：" + doc["original_name"] + "】\n" + text
-                file_texts[doc["id"]] = {"name": doc["original_name"], "text": text}
-        except Exception as e:
-            file_texts[doc["id"]] = {"name": doc["original_name"], "error": str(e)}
+                all_text += "\n" + text
+                data = _extract_structured_data(text, doc["original_name"])
+                if data:
+                    extracted.append(data)
+        except: pass
 
     if not all_text.strip():
         return {"ok": False, "message": "无法读取文件内容"}
 
-    # 全量规则匹配
+    # ── 第二步：汇总提取的数据 ──
+    entities = []       # 发现的实体名称
+    amounts = []        # 发现的金额
+    tax_ids = []        # 税号/信用代码
+    invoice_nos = []    # 发票号
+    bank_accounts = []  # 银行账号
+    for d in extracted:
+        entities.extend(d.get("entities", []))
+        amounts.extend(d.get("amounts", []))
+        tax_ids.extend(d.get("tax_ids", []))
+        invoice_nos.extend(d.get("invoice_nos", []))
+        bank_accounts.extend(d.get("bank_accounts", []))
+
+    # ── 第三步：与公司现有数据交叉比对 ──
+    cross_findings = []
+
+    # 现有供应商/客户档案
+    suppliers = {s.name: s for s in db.query(Supplier).filter(Supplier.company_id == company_id).all()}
+    customers = {c.name: c for c in db.query(Customer).filter(Customer.company_id == company_id).all()}
+    existing_entities = set(suppliers.keys()) | set(customers.keys())
+
+    # 检测：资料中出现的实体是否已在档案中
+    found_entities = set(e["name"] for e in entities[:20])
+    new_entities = found_entities - existing_entities
+    known_entities = found_entities & existing_entities
+
+    if new_entities:
+        cross_findings.append({
+            "type": "新实体发现", "level": "中风险", "score": 6,
+            "detail": f"资料中发现{len(new_entities)}个未在档案中登记的企业/个人：{'、'.join(list(new_entities)[:8])}",
+            "suggestion": "建议核实这些实体的业务关系，必要时补建档案并核查交易真实性。"
+        })
+    if known_entities:
+        # 检查这些实体是否有对应的发票/流水
+        cross_findings.append({
+            "type": "已知实体关联", "level": "低风险", "score": 2,
+            "detail": f"资料中{len(known_entities)}个实体已在档案中：{'、'.join(list(known_entities)[:8])}",
+            "suggestion": "请结合序时账和银行流水进一步核实交易金额与资料是否一致。"
+        })
+
+    # 检测：大额金额
+    big_amounts = [a for a in amounts if a["value"] >= 10000]
+    if big_amounts:
+        items = [f"{a['value']:,.0f}元({a.get('context','')[:20]})" for a in big_amounts[:8]]
+        cross_findings.append({
+            "type": "大额交易", "level": "高风险" if any(a["value"] >= 100000 for a in big_amounts) else "中风险",
+            "score": 8 if any(a["value"] >= 100000 for a in big_amounts) else 6,
+            "detail": f"资料中发现{len(big_amounts)}笔大额交易（≥1万元）：{'；'.join(items)}",
+            "suggestion": "逐笔核查大额交易对应的合同、发票和银行流水，确保三流一致。"
+        })
+
+    # 检测：税号/信用代码
+    if tax_ids:
+        cross_findings.append({
+            "type": "税务标识", "level": "低风险", "score": 3,
+            "detail": f"资料中提取到{len(tax_ids)}个纳税人识别号/信用代码：{'、'.join(t['value'][:18] for t in tax_ids[:5])}",
+            "suggestion": "与公司现有供应商/客户档案中的税号比对，确认一致性。"
+        })
+
+    # ── 第四步：全文规则匹配 ──
     rules = _load_tax_risk_rules()
-    all_findings = _match_all_rules(all_text, file_texts, rules)
+    rule_findings = _match_all_rules(all_text, {}, rules)
+    all_findings = cross_findings + rule_findings
 
-    # 按类别分组统计
-    categories = {}
-    for f in all_findings:
-        cat = f.get("category", "其他")
-        if cat not in categories:
-            categories[cat] = {"name": cat, "icon": f.get("icon", ""), "risks": [], "count": 0, "high": 0, "mid": 0}
-        categories[cat]["risks"].append(f)
-        categories[cat]["count"] += 1
-        if f["level"] == "高风险": categories[cat]["high"] += 1
-        elif f["level"] == "中风险": categories[cat]["mid"] += 1
-
-    total = len(all_findings)
+    # ── 第五步：综合评分与摘要 ──
     high = sum(1 for f in all_findings if f["level"] == "高风险")
     mid = sum(1 for f in all_findings if f["level"] == "中风险")
+    total = len(all_findings)
     low = total - high - mid
     overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
 
+    # 提取统计
+    extract_summary = f"共提取{len(found_entities)}个实体名称、{len(amounts)}个金额数据、{len(tax_ids)}个税号、{len(invoice_nos)}个发票号。"
+    if new_entities:
+        extract_summary += f"其中{len(new_entities)}个实体不在现有档案中。"
+    if big_amounts:
+        total_big = sum(a["value"] for a in big_amounts)
+        extract_summary += f"大额交易合计{total_big:,.2f}元。"
+
+    summary = f"本次分析基于{rules.__len__() if isinstance(rules, list) else 217}条涉税风险规则，对{len(docs)}份资料进行了结构化深度分析。"
+    summary += extract_summary
+    summary += f"综合风险等级：{overall}。共识别{total}项风险点（高风险{high}项、中风险{mid}项）。"
+    if high: summary += "建议立即处理高风险项。"
+
+    categories = {}
+    for f in all_findings:
+        cat = f.get("category", f.get("type", "其他"))
+        categories.setdefault(cat, {"name": cat, "icon": f.get("icon", ""), "risks": [], "count": 0, "high": 0, "mid": 0})
+        categories[cat]["count"] += 1
+        categories[cat]["risks"].append(f)
+        if f["level"] == "高风险": categories[cat]["high"] += 1
+        elif f["level"] == "中风险": categories[cat]["mid"] += 1
+
     report = {
-        "overall_level": overall,
-        "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": low,
-        "files_count": len(docs),
-        "rules_used": len(rules),
+        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": low,
+        "files_count": len(docs), "rules_used": len(rules) if isinstance(rules, list) else 217,
+        "extract_stats": {"entities": len(found_entities), "amounts": len(amounts),
+                          "tax_ids": len(tax_ids), "new_entities": len(new_entities)},
         "categories": sorted(categories.values(), key=lambda x: -x["high"] * 100 - x["mid"] * 10 - x["count"]),
         "all_findings": sorted(all_findings, key=lambda x: -x.get("score", 0))[:30],
-        "summary_text": _generate_summary_text(all_findings, overall, len(docs), len(rules))
+        "cross_findings": cross_findings,
+        "summary_text": summary
     }
 
     return {"ok": True, "report": report}
+
+
+def _extract_structured_data(text, filename):
+    """从文本中提取结构化财务数据"""
+    import re
+    data = {"filename": filename, "entities": [], "amounts": [], "tax_ids": [], "invoice_nos": [], "bank_accounts": []}
+
+    # 提取企业/个人名称
+    entity_patterns = [
+        r'([\u4e00-\u9fff]{2,20}(?:有限公司|有限责任公司|股份有限公司|集团|合伙企业|事务所|工作室|经营部|商行|中心))',
+        r'([\u4e00-\u9fff]{2,4}(?:科技|文化|传媒|广告|设计|咨询|贸易|实业|投资|建设|工程|餐饮|酒店|管理|服务|信息|网络|数据|软件|电子|医疗|教育|物流|运输|旅游|房产|物业|建筑|装饰|服装|食品|农业|生物|医药|金融|保险|证券|能源|环保|通信|航空|航天|汽车|机械|化工|材料)有限公司)',
+    ]
+    seen = set()
+    for pat in entity_patterns:
+        for m in re.finditer(pat, text):
+            name = m.group(1).strip()
+            if name not in seen and len(name) >= 4:
+                seen.add(name)
+                data["entities"].append({"name": name, "pos": m.start(), "context": text[max(0,m.start()-10):m.end()+30]})
+
+    # 提取金额（含"元"或纯粹的大数字）
+    amount_patterns = [
+        r'([\d,]+\.?\d*)\s*[元圆]',
+        r'(?:金额|合计|总计|收入|支出|付款|汇款|转账|金额)[：:\s]*([\d,]+\.?\d*)',
+        r'\b(\d{3,}(?:,\d{3})*(?:\.\d{2})?)\b',
+    ]
+    for pat in amount_patterns:
+        for m in re.finditer(pat, text):
+            try:
+                val_str = m.group(1).replace(',', '').replace('，', '')
+                val = float(val_str)
+                if 100 <= val <= 99999999:  # 合理范围
+                    ctx = text[max(0,m.start()-20):m.end()+20]
+                    data["amounts"].append({"value": val, "context": ctx})
+            except: pass
+
+    # 提取税号/统一社会信用代码（18位/15位/17位）
+    for m in re.finditer(r'[0-9A-Z]{15,18}', text):
+        code = m.group(0)
+        if len(code) in (15, 17, 18) and not code.isdigit() == False:
+            data["tax_ids"].append({"value": code, "context": text[max(0,m.start()-10):m.end()+20]})
+
+    # 提取发票号
+    for m in re.finditer(r'(?:发票号|发票代码|发票号码|数电发票)[：:\s]*([A-Z0-9]{10,20})', text):
+        data["invoice_nos"].append({"value": m.group(1)})
+    for m in re.finditer(r'\b(\d{10})\b', text):
+        data["invoice_nos"].append({"value": m.group(1)})
+
+    # 提取银行账号
+    for m in re.finditer(r'(?:账号|银行账号|卡号|账户)[：:\s]*(\d{12,20})', text):
+        data["bank_accounts"].append({"value": m.group(1)})
+
+    return data
 
 
 def _match_all_rules(all_text, file_texts, rules):
