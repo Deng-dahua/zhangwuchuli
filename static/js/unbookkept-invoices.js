@@ -71,11 +71,11 @@ async function renderUnbookkeptInvoices(container) {
     // 表格
     html += '<div class="table-wrap" style="flex:1;overflow:auto;padding-bottom:15px"><table><thead><tr>';
     html += '<th style="width:36px"><input type="checkbox" id="ubiSelectAll" onclick="toggleUbiSelectAll()" title="全选"></th>';
-    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th>操作</th>';
+    html += '<th>发票代码</th><th>发票号码</th><th>数电发票号码</th><th>销方识别号</th><th>销方名称</th><th>购方识别号</th><th>购买方名称</th><th>开票日期</th><th>税收分类编码</th><th>特定业务类型</th><th>货物或应税劳务名称</th><th>规格型号</th><th>单位</th><th style="text-align:right">数量</th><th style="text-align:right">单价</th><th style="text-align:right">金额</th><th style="text-align:right">税率</th><th style="text-align:right">税额</th><th style="text-align:right">价税合计</th><th>发票来源</th><th>发票票种</th><th>发票状态</th><th>是否正数发票</th><th>发票风险等级</th><th>开票人</th><th>备注</th><th style="width:90px">生成凭证</th><th>操作</th>';
     html += '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="27" style="text-align:center;color:#9ca3af;padding:40px">暂无未记账发票记录</td></tr>';
+      html += '<tr><td colspan="28" style="text-align:center;color:#9ca3af;padding:40px">暂无未记账发票记录</td></tr>';
     } else {
       items.forEach(i => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
@@ -108,6 +108,7 @@ async function renderUnbookkeptInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
+        html += '<td style="text-align:center">' + '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateUBIVoucher(' + i.id + ')">生成凭证</button>' + '</td>';
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="showUnbookkeptInvoiceForm(' + i.id + ')">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteUnbookkeptInvoice(' + i.id + ')">删除</button>';
@@ -423,6 +424,19 @@ async function saveUnbookkeptInvoice(id) {
   } catch (e) {
     toast(e.message, 'error');
   }
+}
+
+async function generateUBIVoucher(id) {
+  if (!confirm('确认为该发票生成凭证？')) return;
+  try {
+    const result = await api('/api/bookkeeping-invoices/batch-generate-voucher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([id])
+    });
+    toast(result.message || '生成凭证成功', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  navigateTo('unbookkept-invoices');
 }
 
 async function batchGenerateUBIVouchers() {
