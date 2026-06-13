@@ -3958,14 +3958,22 @@ def _sync_pi_update_to_bi(db, company_id, pi):
         bi.remark = pi.remark
 
 def _sync_pi_delete_to_bi(db, company_id, pi):
-    """删除取得发票后同步删除未记账凭证（按三号匹配，仅删未记账的）"""
-    db.query(BookkeepingInvoice).filter(
-        BookkeepingInvoice.company_id == company_id,
-        BookkeepingInvoice.invoice_code == pi.invoice_code,
-        BookkeepingInvoice.invoice_no == pi.invoice_no,
-        BookkeepingInvoice.digital_invoice_no == pi.digital_invoice_no,
-        or_(BookkeepingInvoice.voucher_no == None, BookkeepingInvoice.voucher_no == "")
-    ).delete(synchronize_session=False)
+    """删除取得发票后同步删除未记账凭证（按三号匹配，仅删未记账的）
+    注意：三号可能为 None/空字符串，需用 IS NULL 处理，因为 SQL 中 NULL != NULL"""
+    conditions = [BookkeepingInvoice.company_id == company_id]
+    # 三号：按实际值匹配，NULL/空字符串用 IS NULL
+    for bi_field, pi_val in [
+        (BookkeepingInvoice.invoice_code, pi.invoice_code),
+        (BookkeepingInvoice.invoice_no, pi.invoice_no),
+        (BookkeepingInvoice.digital_invoice_no, pi.digital_invoice_no),
+    ]:
+        if pi_val and pi_val.strip():
+            conditions.append(bi_field == pi_val)
+        else:
+            conditions.append(or_(bi_field.is_(None), bi_field == ""))
+    # 仅删未记账的
+    conditions.append(or_(BookkeepingInvoice.voucher_no.is_(None), BookkeepingInvoice.voucher_no == ""))
+    db.query(BookkeepingInvoice).filter(and_(*conditions)).delete(synchronize_session=False)
 
 
 @app.put("/api/purchase-invoices/{invoice_id}")
