@@ -12,9 +12,6 @@ async function renderUnbookkeptInvoices(container) {
   el.style.display = '';
   el.innerHTML = '<div style="padding:40px;text-align:center;color:#9ca3af">加载中…</div>';
   try {
-    // 自动同步：取得发票 → 未记账发票
-    await api('/api/purchase-invoices/sync-to-unbookkept', { method: 'POST' });
-    
     var params = new URLSearchParams();
     params.set('is_posted', 'false');
     var tabQs = ubiTab !== 'all' ? '&tab=' + ubiTab : '';

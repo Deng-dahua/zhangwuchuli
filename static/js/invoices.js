@@ -539,6 +539,7 @@ async function renderPurchaseInvoices(container) {
     var piParts = piPeriod ? piPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('pi', piParts[0] || '', piParts[1] || '', 'onPIPeriodQuery');
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
+    html += '<button class="btn-toolbar" id="piSyncUnbookkeptBtn" onclick="syncPIToUnbookkept()" style="background:#d97706;color:#fff;">同步到未记账</button>';
     html += '<button class="btn-toolbar-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const piTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票'], ['tlp', '铁路票']];
@@ -761,6 +762,21 @@ async function piGenerateVoucherOnly() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
+}
+
+// 取得发票 → 同步到未记账发票
+async function syncPIToUnbookkept() {
+  let btn = document.getElementById('piSyncUnbookkeptBtn');
+  if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 同步中...'; }
+  try {
+    let res = await api('/api/purchase-invoices/sync-to-unbookkept', { method: 'POST' });
+    toast(res.message, 'success');
+  } catch (e) {
+    handleError(e, '同步');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+  navigateTo('purchase-invoices');
 }
 
 async function showPurchaseDetail(id) {
