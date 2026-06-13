@@ -1009,6 +1009,8 @@ def get_tax_risk_report(
     _analyze_document_completeness(db, company_id, period_start, period_end, results)
     _analyze_multi_source_cross(db, company_id, period_start, period_end, results)
     _analyze_efficiency_metrics(db, company_id, period_start, period_end, results)
+    _analyze_tax_base_cross_check(db, company_id, period_start, period_end, results)
+    _analyze_energy_revenue_ratio(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -10855,3 +10857,51 @@ def _analyze_efficiency_metrics(db, company_id, ps, pe, results):
                 "detail": f"{emp_count}名员工创造销项收入{total_revenue:,.2f}元，人均{rev_per_person:,.2f}元。",
                 "suggestion": "对比同行业人均产值水平；如偏低明显，核查是否存在虚列人员或未申报收入。",
                 "required_evidence": ["员工名册与工资表", "同行业人均效能对比数据"]})
+
+
+def _analyze_tax_base_cross_check(db, company_id, ps, pe, results):
+    """ID 258: 增值税与所得税税基勾稽断裂检测"""
+    sis = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all()
+    vat_recs = db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id).order_by(VATDeclaration.period.desc()).limit(6).all()
+    if not sis or not vat_recs:
+        return
+    import json
+    inv_total = sum(_safe_float(si.total_amount) for si in sis)
+    vat_sales = 0
+    for vat in vat_recs:
+        main = json.loads(vat.form_main or '{}') if isinstance(vat.form_main, str) else (vat.form_main or {})
+        vat_sales += _safe_float(main.get("row1_sales_amount", 0))
+    if inv_total > 0 and vat_sales > 0:
+        diff = abs(inv_total - vat_sales)
+        diff_pct = diff / max(inv_total, 1) * 100
+        if diff_pct > 10:
+            results.append({"category": "数据比对", "category_icon": "🔬", "risk_score": 10,
+                "risk_level": "高风险", "risk_color": "#dc2626", "urgency": "紧急",
+                "item": "增值税与所得税税基勾稽断裂",
+                "detail": f"销项发票价税合计{inv_total:,.2f}元 vs 增值税申报销售额{vat_sales:,.2f}元，差异{diff:,.2f}元（{diff_pct:.1f}%）。差异超过10%且无合理解释将被100%立案。",
+                "suggestion": "立即进行全税种交叉比对：增值税申报收入 = 企业所得税申报收入 + 不征增值税收入 - 征税范围外收入。差异必须有详细的调节表，并保留每项差异的合同、凭证支撑。",
+                "required_evidence": ["增值税申报表", "企业所得税年报", "收入差异调节表", "差异项的合同/凭证"]})
+
+
+def _analyze_energy_revenue_ratio(db, company_id, ps, pe, results):
+    """ID 251: 经营能耗与产出比异常 — 通过发票中电费与收入的比例检测"""
+    # 从进项发票中检测电费
+    pis = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all()
+    sis = db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all()
+    electric_cost = 0
+    electric_invoices = []
+    for pi in pis:
+        g = str(pi.goods_name or "")
+        if any(k in g for k in ("电费", "供电", "电力", "用电")):
+            electric_cost += _safe_float(pi.total_amount)
+            electric_invoices.append(pi)
+    total_revenue = sum(_safe_float(si.total_amount) for si in sis)
+    if electric_cost > 0 and total_revenue > 0:
+        ratio = electric_cost / total_revenue * 100
+        if ratio > 10:
+            results.append({"category": "经营穿透", "category_icon": "⚡", "risk_score": 10,
+                "risk_level": "高风险", "risk_color": "#dc2626", "urgency": "紧急",
+                "item": "经营能耗与产出的投入产出比异常",
+                "detail": f"账上电费{electric_cost:,.2f}元占总收入{total_revenue:,.2f}元的{ratio:.1f}%，需结合变压器容量和同行业能耗比进一步验证。电费占比异常高可能表明存在虚开电费发票或隐匿产量（电费是真实的、产量被隐瞒）。",
+                "suggestion": "立即对比本企业与同行业的单位产值能耗比。建立《生产日报表》与《能耗台账》的勾稽关系，确保产能、能耗、产出三者逻辑自洽。",
+                "required_evidence": ["电费发票", "电表抄表记录", "生产日报表", "产能统计表", "同行业能耗比参考数据"]})
