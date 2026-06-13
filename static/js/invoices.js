@@ -689,7 +689,7 @@ async function generateFromPurchase(id) {
 
 function togglePiSelectAll() {
   const all = document.getElementById('piSelectAll');
-  document.querySelectorAll('.pi-check').forEach(cb => cb.checked = all.checked);
+  document.querySelectorAll('.pi-check:not(:disabled)').forEach(cb => cb.checked = all.checked);
   updatePiBatchBtn();
 }
 
@@ -711,11 +711,11 @@ function updatePiBatchBtn() {
     delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
-  // 同步全选框状态
+  // 同步全选框状态（仅统计未禁用的复选框）
   const selectAll = document.getElementById('piSelectAll');
   if (selectAll) {
-    const boxes = document.querySelectorAll('.pi-check');
-    const checkedBoxes = document.querySelectorAll('.pi-check:checked');
+    const boxes = document.querySelectorAll('.pi-check:not(:disabled)');
+    const checkedBoxes = document.querySelectorAll('.pi-check:not(:disabled):checked');
     selectAll.checked = boxes.length > 0 && boxes.length === checkedBoxes.length;
     selectAll.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < boxes.length;
   }
