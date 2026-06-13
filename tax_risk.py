@@ -836,6 +836,7 @@ def get_tax_risk_report(
             "medium_risk_count": 0,
             "low_risk_count": 0,
             "good_count": 0,
+            "overall_risk_level": None,
             "summary": "该公司暂无业务数据（序时账/发票/银行流水/合同/员工/资产均无记录），无法进行涉税风险分析。",
         }
 

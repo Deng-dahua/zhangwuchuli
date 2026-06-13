@@ -238,7 +238,11 @@ function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) 
     '高风险': '#fef2f2', '中风险': '#fffbeb',
     '低风险': '#eff6ff', '良好': '#ecfdf5'
   };
-  var overall = summary.overall_risk_level || '良好';
+  // overall_risk_level 为 null/undefined 时表示无数据，不默认显示"良好"
+  var overall = summary.overall_risk_level || null;
+  var overallLabel = overall || '暂无数据';
+  var overallColor = overall ? (levelColor[overall] || '#10b981') : '#9ca3af';
+  var overallBg   = overall ? (levelBg[overall]   || '#ecfdf5') : '#f3f4f6';
 
   var rulesBadge = '';
   if (rulesApplied && rulesCount > 0) {
@@ -248,9 +252,9 @@ function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) 
   }
 
   el.innerHTML = ''
-    + '<div class="risk-card overall" style="border-color:' + (levelColor[overall] || '#10b981') + ';background:' + (levelBg[overall] || '#ecfdf5') + '">'
+    + '<div class="risk-card overall" style="border-color:' + overallColor + ';background:' + overallBg + '">'
     + '<div class="risk-card-label">综合风险等级' + rulesBadge + '</div>'
-    + '<div class="risk-card-value" style="color:' + (levelColor[overall] || '#10b981') + '">' + overall + '</div>'
+    + '<div class="risk-card-value" style="color:' + overallColor + '">' + overallLabel + '</div>'
     + '<div class="risk-card-sub">分析期间：' + escapeHtml(ps || '-') + ' ~ ' + escapeHtml(pe || '-') + '</div>'
     + '</div>'
     + '<div class="risk-card high" style="border-color:#dc2626">'
