@@ -692,6 +692,70 @@ function showVoucherDetail(voucherFull) {
     });
 }
 
+// ==================== 共享期间选择器组件 ====================
+
+/**
+ * 生成与"文化事业建设费"一致样式的期间选择器HTML
+ * @param {string} prefix - DOM id前缀，如 "si", "pi", "ivd", "bt"
+ * @param {string} year   - 默认年份，如 "2025"
+ * @param {string} month  - 默认月份，如 "06"
+ * @param {string} onQueryFn - 查询按钮调用的全局函数名，如 "onSIPeriodQuery"
+ */
+function buildPeriodSelectorHtml(prefix, year, month, onQueryFn) {
+  var cy = new Date().getFullYear();
+  var yearOpts = '';
+  for (var y = cy - 5; y <= cy + 3; y++) {
+    yearOpts += '<option value="' + y + '" ' + (String(y) === String(year) ? 'selected>' : '>') + y + '年</option>';
+  }
+  var monthOpts = '';
+  for (var m = 1; m <= 12; m++) {
+    var mv = String(m).padStart(2, '0');
+    monthOpts += '<option value="' + mv + '" ' + (mv === String(month) ? 'selected>' : '>') + mv + '月</option>';
+  }
+  return '<div class="period-selector-bar">'
+    + '<div class="period-stepper">'
+    + '<select id="' + prefix + '-year" class="period-selector-year">' + yearOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepModulePeriod(\'' + prefix + '\',\'year\',1)" title="下一年">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepModulePeriod(\'' + prefix + '\',\'year\',-1)" title="上一年">▼</button>'
+    + '</div></div>'
+    + '<div class="period-stepper">'
+    + '<select id="' + prefix + '-month" class="period-selector-month">' + monthOpts + '</select>'
+    + '<div class="stepper-arrows">'
+    + '<button class="stepper-btn stepper-up" onclick="stepModulePeriod(\'' + prefix + '\',\'month\',1)" title="下一月">▲</button>'
+    + '<button class="stepper-btn stepper-down" onclick="stepModulePeriod(\'' + prefix + '\',\'month\',-1)" title="上一月">▼</button>'
+    + '</div></div></div>'
+    + '<button class="btn-toolbar" onclick="' + onQueryFn + '()" title="按所选期间查询">查询</button>'
+    + '<button class="btn-toolbar" onclick="' + onQueryFn + '(true)" title="清除筛选条件">清除</button>';
+}
+
+function stepModulePeriod(prefix, type, delta) {
+  var ySel = document.getElementById(prefix + '-year');
+  var mSel = document.getElementById(prefix + '-month');
+  if (!ySel || !mSel) return;
+  var y = parseInt(ySel.value);
+  var m = parseInt(mSel.value);
+  if (isNaN(y) || isNaN(m)) return;
+  if (type === 'year') { y += delta; } else {
+    m += delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1)  { m = 12; y--; }
+  }
+  // 检查年份是否在可选范围内
+  var found = false;
+  ySel.querySelectorAll('option').forEach(function(o) { if (parseInt(o.value) === y) found = true; });
+  if (!found) return;
+  ySel.value = String(y);
+  mSel.value = String(m).padStart(2, '0');
+}
+
+function getModulePeriod(prefix) {
+  var y = document.getElementById(prefix + '-year')?.value;
+  var m = document.getElementById(prefix + '-month')?.value;
+  if (!y || !m) return '';
+  return y + '-' + m;
+}
+
 // ==================== 启动 ====================
 document.addEventListener('DOMContentLoaded', function () {
   init().catch(function (e) {

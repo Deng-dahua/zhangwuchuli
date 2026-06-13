@@ -9,9 +9,13 @@ function fmtDate(d) {
 let siTab = 'all'; // all / 正常 / 作废 / 红冲
 let siFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
-function onSIPeriodChange(val) {
-  if (!val) { siFilter.dateFrom = ''; siFilter.dateTo = ''; }
-  else { const r = periodToDateRange(val); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
+function onSIPeriodQuery(clear) {
+  if (clear) { siFilter.dateFrom = ''; siFilter.dateTo = ''; }
+  else {
+    var p = getModulePeriod('si');
+    if (!p) { siFilter.dateFrom = ''; siFilter.dateTo = ''; }
+    else { var r = periodToDateRange(p); siFilter.dateFrom = r.from; siFilter.dateTo = r.to; }
+  }
   renderSalesInvoices();
 }
 
@@ -45,7 +49,9 @@ async function renderSalesInvoices(container) {
     // 工具栏
     html += '<div class="toolbar" style="flex-wrap:wrap;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-    html += '<input type="month" id="siPeriodPicker" value="' + (siFilter.dateFrom ? siFilter.dateFrom.slice(0,7) : currentPeriod) + '" onchange="onSIPeriodChange(this.value)" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:150px;" title="选择期间">';
+    var siPeriod = siFilter.dateFrom ? siFilter.dateFrom.slice(0,7) : currentPeriod;
+    var siParts = siPeriod ? siPeriod.split('-') : [];
+    html += buildPeriodSelectorHtml('si', siParts[0] || '', siParts[1] || '', 'onSIPeriodQuery');
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'sales-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="siBatchGenBtn" onclick="batchGenerateVouchers()">生成凭证</button>';
     html += '<button class="btn-toolbar-danger" id="siBatchDelBtn" onclick="batchDeleteSalesInvoices()">批量删除</button>';
@@ -491,9 +497,13 @@ async function showSalesDetail(id) {
 let piTab = 'all'; // all / zpt / ppt / tlp (专票/普票/铁路票)
 let piFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
-function onPIPeriodChange(val) {
-  if (!val) { piFilter.dateFrom = ''; piFilter.dateTo = ''; }
-  else { const r = periodToDateRange(val); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
+function onPIPeriodQuery(clear) {
+  if (clear) { piFilter.dateFrom = ''; piFilter.dateTo = ''; }
+  else {
+    var p = getModulePeriod('pi');
+    if (!p) { piFilter.dateFrom = ''; piFilter.dateTo = ''; }
+    else { var r = periodToDateRange(p); piFilter.dateFrom = r.from; piFilter.dateTo = r.to; }
+  }
   renderPurchaseInvoices();
 }
 
@@ -525,7 +535,9 @@ async function renderPurchaseInvoices(container) {
 
     html += '<div class="toolbar" style="flex-wrap:wrap;">';
     html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-    html += '<input type="month" id="piPeriodPicker" value="' + (piFilter.dateFrom ? piFilter.dateFrom.slice(0,7) : currentPeriod) + '" onchange="onPIPeriodChange(this.value)" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:150px;" title="选择期间">';
+    var piPeriod = piFilter.dateFrom ? piFilter.dateFrom.slice(0,7) : currentPeriod;
+    var piParts = piPeriod ? piPeriod.split('-') : [];
+    html += buildPeriodSelectorHtml('pi', piParts[0] || '', piParts[1] || '', 'onPIPeriodQuery');
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">生成凭证</button>';
     html += '<button class="btn-toolbar-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
