@@ -644,6 +644,7 @@ class BookkeepingInvoice(Base):
     # 其他
     issuer = Column(String(30), comment="开票人")
     remark = Column(Text, comment="备注")
+    voucher_no = Column(String(30), comment="凭证号（为空表示未记账）")
     raw_data = Column(Text, comment="导入时的额外列数据JSON")
     _fingerprint = Column(String(64), comment="全行指纹（去重用）")
     created_at = Column(DateTime, default=datetime.now)

@@ -3900,6 +3900,7 @@ def list_bookkeeping_invoices(
     keyword: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    is_posted: Optional[bool] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
@@ -3913,6 +3914,10 @@ def list_bookkeeping_invoices(
         q = q.filter(BookkeepingInvoice.invoice_date >= date_from)
     if date_to:
         q = q.filter(BookkeepingInvoice.invoice_date <= date_to)
+    if is_posted is True:
+        q = q.filter(BookkeepingInvoice.voucher_no.isnot(None))
+    elif is_posted is False:
+        q = q.filter(BookkeepingInvoice.voucher_no.is_(None))
     if keyword:
         q = q.filter(or_(
             BookkeepingInvoice.invoice_no.contains(keyword),
@@ -3953,6 +3958,7 @@ def list_bookkeeping_invoices(
             "invoice_risk_level": inv.invoice_risk_level or "",
             "issuer": inv.issuer or "",
             "remark": inv.remark or "",
+            "voucher_no": inv.voucher_no or "",
             "created_at": str(inv.created_at) if inv.created_at else ""
         } for inv in invoices]
     }
@@ -3968,8 +3974,12 @@ def create_bookkeeping_invoice(data: BookkeepingInvoiceCreate, company_id: int =
 
 
 @app.get("/api/bookkeeping-invoices/stats")
-def bookkeeping_invoice_stats(company_id: int = Query(...), tab: str = Query("all"), db: Session = Depends(get_db)):
+def bookkeeping_invoice_stats(company_id: int = Query(...), tab: str = Query("all"), is_posted: Optional[bool] = None, db: Session = Depends(get_db)):
     base = db.query(BookkeepingInvoice).filter(BookkeepingInvoice.company_id == company_id)
+    if is_posted is True:
+        base = base.filter(BookkeepingInvoice.voucher_no.isnot(None))
+    elif is_posted is False:
+        base = base.filter(BookkeepingInvoice.voucher_no.is_(None))
     if tab == "zpt":
         base = base.filter(BookkeepingInvoice.invoice_category.contains("专用发票"))
     elif tab == "ppt":
@@ -4058,6 +4068,72 @@ def batch_delete_bookkeeping_invoices(ids: list[int], company_id: int = Query(..
     ).delete(synchronize_session=False)
     db.commit()
     return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
+
+
+@app.post("/api/bookkeeping-invoices/batch-generate-voucher")
+def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    """批量生成记账发票凭证 → 标记已记账(voucher_no)并生成序时账分录"""
+    invoices = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.id.in_(ids)
+    ).all()
+    if not invoices:
+        raise HTTPException(400, "未找到匹配的发票")
+    
+    # 生成凭证：按期分组
+    period_groups = {}
+    for inv in invoices:
+        if not inv.invoice_date:
+            continue
+        period = str(inv.invoice_date)[:7]
+        if period not in period_groups:
+            period_groups[period] = []
+        period_groups[period].append(inv)
+    
+    if not period_groups:
+        raise HTTPException(400, "所选发票均无开票日期")
+    
+    posted_count = 0
+    for period, invs in period_groups.items():
+        voucher_no = _next_voucher_no(db, company_id, period, "记")
+        for inv in invs:
+            # 借方：费用科目（根据品名智能分类）
+            debit_account, debit_account_name = _classify_purchase_debit(db, company_id, inv)
+            amount = float(inv.amount or 0)
+            tax_amount = float(inv.tax_amount or 0)
+            
+            # 费用分录（借方）
+            db.add(JournalEntry(
+                company_id=company_id, period=period,
+                voucher_word="记", voucher_no=voucher_no,
+                account_code=debit_account,
+                debit=amount, credit=0,
+                summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'} 入账"
+            ))
+            # 进项税额（专票才有）
+            if inv.invoice_category and "专用发票" in inv.invoice_category and tax_amount > 0:
+                db.add(JournalEntry(
+                    company_id=company_id, period=period,
+                    voucher_word="记", voucher_no=voucher_no,
+                    account_code="221001002",
+                    debit=tax_amount, credit=0,
+                    summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} 进项税额"
+                ))
+            # 应付账款（贷方）
+            db.add(JournalEntry(
+                company_id=company_id, period=period,
+                voucher_word="记", voucher_no=voucher_no,
+                account_code="2202",
+                debit=0, credit=amount + (tax_amount if (inv.invoice_category and "专用发票" in inv.invoice_category) else 0),
+                summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'}"
+            ))
+            # 标记已记账
+            inv.voucher_no = f"记-{voucher_no}"
+            posted_count += 1
+        voucher_no += 1
+    
+    db.commit()
+    return {"message": f"成功生成凭证，{posted_count} 条发票已记账", "posted": posted_count}
 
 
 # ==================== 银行流水规则库 ====================

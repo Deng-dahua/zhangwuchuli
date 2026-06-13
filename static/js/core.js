@@ -474,6 +474,7 @@ function navigateTo(page) {
     case 'sales-invoices': renderSalesInvoices(container); break;
     case 'purchase-invoices': renderPurchaseInvoices(container); break;
     case 'bookkeeping-invoices': renderBookkeepingInvoices(container); break;
+    case 'unbookkept-invoices': renderUnbookkeptInvoices(container); break;
     case 'input-vat-deductions': renderInputVATDeductions(container); break;
     case 'bank-transactions': renderBankTransactions(container); break;
     case 'vat-declaration': renderVATDeclaration(container); break;
