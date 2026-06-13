@@ -9287,12 +9287,11 @@ async def analyze_tax_risk_docs(company_id: int = Query(...)):
 
 
 def _read_file_text(filepath, original_name):
-    """读取文件文本内容"""
+    """读取文件文本内容，支持全格式"""
     ext = os.path.splitext(original_name)[1].lower()
-    if ext == ".txt":
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
-    elif ext == ".pdf":
+
+    # PDF
+    if ext == ".pdf":
         try:
             import PyPDF2
             text = []
@@ -9302,44 +9301,95 @@ def _read_file_text(filepath, original_name):
                     t = page.extract_text()
                     if t: text.append(t)
             return "\n".join(text)
-        except ImportError:
-            return None
-    elif ext in (".xlsx", ".xls"):
-        if ext == ".xls":
-            # 旧版 .xls 用 xlrd 读取
-            try:
-                import xlrd
-                wb = xlrd.open_workbook(filepath)
-                rows = []
-                for sheet in wb.sheets():
-                    for row_idx in range(sheet.nrows):
-                        rows.append(" ".join(str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols) if sheet.cell_value(row_idx, c)))
-                        if len(rows) > 2000: break
-                    if len(rows) > 2000: break
-                return "\n".join(rows)
-            except ImportError:
-                return None
-        else:
-            try:
-                import openpyxl
-                wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
-                rows = []
-                for sheet in wb.worksheets[:3]:
-                    for row in sheet.iter_rows(values_only=True):
-                        rows.append(" ".join(str(c) for c in row if c is not None))
-                    if len(rows) > 2000: break
-                return "\n".join(rows)
-            except ImportError:
-                return None
-    elif ext in (".docx",):
+        except: pass
+
+    # Word (.docx)
+    if ext == ".docx":
         try:
             import docx
             doc = docx.Document(filepath)
             return "\n".join(p.text for p in doc.paragraphs[:500])
-        except ImportError:
-            return None
-    else:
-        return None
+        except: pass
+
+    # Word (.doc) — 旧版
+    if ext == ".doc":
+        try:
+            # 尝试用 antiword 或 textract
+            import subprocess, tempfile
+            result = subprocess.run(["antiword", filepath], capture_output=True, text=True, timeout=30)
+            if result.returncode == 0: return result.stdout
+        except: pass
+
+    # Excel (.xlsx)
+    if ext == ".xlsx":
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            rows = []
+            for sheet in wb.worksheets[:3]:
+                for row in sheet.iter_rows(values_only=True):
+                    rows.append(" ".join(str(c) for c in row if c is not None))
+                if len(rows) > 2000: break
+            if rows: return "\n".join(rows)
+        except: pass
+
+    # Excel (.xls) 旧版
+    if ext == ".xls":
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(filepath)
+            rows = []
+            for sheet in wb.sheets():
+                for row_idx in range(sheet.nrows):
+                    rows.append(" ".join(str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols) if sheet.cell_value(row_idx, c)))
+                    if len(rows) > 2000: break
+                if len(rows) > 2000: break
+            if rows: return "\n".join(rows)
+        except: pass
+
+    # CSV
+    if ext == ".csv":
+        try:
+            import csv, io
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                reader = csv.reader(f)
+                return "\n".join(" ".join(row) for row in reader if any(row))
+        except: pass
+        # fallback: try gb2312/ansi
+        try:
+            with open(filepath, "r", encoding="gb18030", errors="replace") as f:
+                return f.read()[:50000]
+        except: pass
+
+    # 纯文本 / HTML / JSON / XML / 日志 / 及其他
+    TEXT_EXTS = {".txt", ".html", ".htm", ".json", ".xml", ".log", ".md", ".csv", ".tsv", ".ini", ".cfg", ".yaml", ".yml", ".py", ".js", ".css", ".sql"}
+    if ext in TEXT_EXTS:
+        for enc in ["utf-8", "gb18030", "gb2312", "gbk", "latin-1"]:
+            try:
+                with open(filepath, "r", encoding=enc, errors="replace") as f:
+                    text = f.read(50000)
+                    if text and len(text.strip()) > 10:
+                        return text
+            except: continue
+
+    # 兜底：尝试当文本读（适用于无扩展名或未知格式）
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read(50000)
+            if text.strip(): return text
+    except: pass
+    try:
+        with open(filepath, "r", encoding="gb18030", errors="replace") as f:
+            text = f.read(50000)
+            if text.strip(): return text
+    except: pass
+    try:
+        with open(filepath, "r", encoding="latin-1", errors="replace") as f:
+            text = f.read(50000)
+            if text.strip(): return text
+    except: pass
+
+    return None
 
 
 def _analyze_doc_against_rules(text):

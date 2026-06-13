@@ -23,7 +23,7 @@ function renderTaxRiskReport(container) {
     + '<span style="font-weight:600;font-size:14px;color:var(--gray-700)">📁 涉税分析资料</span>'
     + '<div style="display:flex;gap:8px">'
     + '<label class="btn-toolbar" style="background:var(--blue-500);color:#fff;border-color:var(--blue-500);cursor:pointer">'
-    + '<input type="file" id="risk-docs-input" multiple accept=".pdf,.xlsx,.xls,.docx,.txt" style="display:none" onchange="uploadRiskDocs()">📤 上传资料</label>'
+    + '<input type="file" id="risk-docs-input" multiple style="display:none" onchange="uploadRiskDocs()">📤 上传资料</label>'
     + '<button class="btn-toolbar" onclick="analyzeAllRiskDocs()" style="background:#059669;color:#fff">一键分析资料</button>'
     + '</div></div>'
     + '<div id="risk-docs-list" style="font-size:12px;color:var(--gray-500)">暂无上传资料</div>'
