@@ -1929,20 +1929,7 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         _ensure_account(db, company_id, code, name, "损益", "借")
     # ────────────────────────────────────────────────────────────────────────────────
 
-    # ── 第一步：进项认证 → 确定哪些发票可以做进项税额 ──
-    from sqlalchemy import text as _sa_text
-    certified_rows = db.execute(_sa_text(
-        "SELECT digital_invoice_no, invoice_no FROM input_vat_deductions "
-        "WHERE company_id = :cid AND check_status = '已勾选'"
-    ), {"cid": company_id}).fetchall()
-    certified_nos = set()
-    for r in certified_rows:
-        if r.digital_invoice_no:
-            certified_nos.add(r.digital_invoice_no)
-        if r.invoice_no:
-            certified_nos.add(r.invoice_no)
-
-    # ── 第二步：供应商档案 → 确定哪些是正式供应商 ──
+    # ── 供应商档案匹配 ──
     supplier_norm_map = {}  # normalized_name → Supplier
     for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
         supplier_norm_map[_normalize_customer_name(s.name)] = s
@@ -2072,18 +2059,12 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
         for inv in unprocessed:
             debit_code, debit_name = _classify_purchase_debit(db, company_id, inv)
 
-            # ── 三步法判断 ──
-            # 第一步：进项认证 — 发票号是否在 input_vat_deductions 中
-            inv_no = inv.digital_invoice_no or inv.invoice_no or ""
-            is_certified = inv_no in certified_nos
-
-            # 第二步：供应商档案 — 供应商是否在档案中
+            # ── 供应商档案匹配 ──
             seller_norm = _normalize_customer_name(seller)
             is_supplier = seller_norm in supplier_norm_map
 
-            # 两步必须同时通过才生成凭证
-            if not is_certified or not is_supplier:
-                # 发票未认证或供应商不在档案 → 跳过，不生成分录
+            # 供应商不在档案 → 跳过
+            if not is_supplier:
                 continue
 
             group_generated = True
