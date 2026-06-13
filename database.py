@@ -1835,17 +1835,20 @@ def _classify_purchase_debit(db, company_id, inv):
         "设计服务":     ("640102", "主营业务成本/设计服务成本",     "损益", "借"),
         "信息技术服务": ("640103", "主营业务成本/信息技术服务成本", "损益", "借"),
         "现代服务":     ("640104", "主营业务成本/现代服务成本",     "损益", "借"),
-        # === 费用类 ===
-        "经营租赁":     ("660214", "管理费用/租赁费",       "损益", "借"),
-        "供电":         ("660215", "管理费用/水电费",       "损益", "借"),
-        "水冰雪":       ("660215", "管理费用/水电费",       "损益", "借"),
-        "企业管理服务": ("660213", "管理费用/物业管理费",   "损益", "借"),
+        # === 费用类（name字段只存本级名称，全路径由get_full_name拼装） ===
+        "经营租赁":     ("660214", "租赁费",       "损益", "借"),
+        "供电":         ("660215", "水电费",       "损益", "借"),
+        "水冰雪":       ("660215", "水电费",       "损益", "借"),
+        "企业管理服务": ("660213", "物业管理费",   "损益", "借"),
     }
 
     if category in CATEGORY_ACCOUNT_MAP:
         code, name, acct_cat, direction = CATEGORY_ACCOUNT_MAP[category]
         _ensure_account(db, company_id, code, name, acct_cat, direction)
-        return (code, name)
+        # 从DB读取实际名称（_ensure_account可能找到已有科目，名称以DB为准）
+        acc = db.query(Account).filter(Account.company_id == company_id, Account.code == code).first()
+        actual_name = acc.name if acc else name
+        return (code, actual_name)
 
     # 不在7个分类中 → 返回None（调用方跳过，不生成凭证）
     return None
