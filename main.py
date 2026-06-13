@@ -10015,6 +10015,112 @@ def _domain_invoice_deep(invoices):
     return findings
 
 
+# ═══════════ 分析主函数体 ═══════════
+
+async def _run_analyze(company_id, db):
+    from database import VATDeclaration
+    from collections import defaultdict
+
+    global _tax_risk_docs, _tax_doc_counter
+    if os.path.exists(UPLOAD_DIR):
+        for fname in os.listdir(UPLOAD_DIR):
+            parts = fname.split("_")
+            if len(parts) < 3: continue
+            try: f_cid, f_doc_id = int(parts[0]), int(parts[1])
+            except: continue
+            if f_cid != company_id: continue
+            if any(d["id"] == f_doc_id for d in _tax_risk_docs): continue
+            fpath = os.path.join(UPLOAD_DIR, fname)
+            _tax_risk_docs.append({"id": f_doc_id, "filename": fname, "original_name": fname,
+                "path": fpath, "size": os.path.getsize(fpath),
+                "uploaded_at": datetime.fromtimestamp(os.path.getmtime(fpath)).isoformat(), "company_id": company_id})
+            if f_doc_id > _tax_doc_counter[0]: _tax_doc_counter[0] = f_doc_id
+
+    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
+    if not docs: return {"ok": False, "message": "暂无上传资料"}
+    try: db.rollback()
+    except: pass
+
+    bank_txs, invoices, salaries, social_security, vouchers, inventory = [], [], [], [], [], []
+    pipeline_log, file_results = [], []
+
+    for doc in docs:
+        fname, fpath, ext = doc["original_name"], doc["path"], os.path.splitext(doc["original_name"])[1].lower()
+        fr = {"file": fname, "type": "unknown", "actions": []}
+        try:
+            if ext in (".xls", ".xlsx"):
+                parsed = _parse_excel_structured(fpath, ext)
+                if parsed:
+                    ftype = parsed.get("type", "unknown"); fr["type"] = ftype
+                    n = len(parsed.get("rows", []))
+                    if ftype == "salary": salaries.extend(parsed["rows"]); fr["actions"].append(f"提取{n}条工资")
+                    elif ftype == "social_security": social_security.extend(parsed["rows"]); fr["actions"].append(f"提取{n}条社保")
+                    elif ftype == "sales_invoice": invoices.extend([{**r, "direction": "销项"} for r in parsed["rows"]]); fr["actions"].append(f"提取{n}条销项")
+                    elif ftype == "purchase_invoice": invoices.extend([{**r, "direction": "进项"} for r in parsed["rows"]]); fr["actions"].append(f"提取{n}条进项")
+                    elif ftype == "voucher": vouchers.extend(parsed["rows"]); fr["actions"].append(f"提取{n}条凭证")
+                    elif ftype == "inventory": inventory.extend(parsed["rows"]); fr["actions"].append(f"提取进销存")
+                    pipeline_log.append(f"{fname} -> {ftype}: {n}条")
+            elif ext == ".pdf":
+                txs = _parse_pdf_bank_statement(fpath)
+                if txs: bank_txs.extend(txs); fr["type"] = "bank"; fr["actions"].append(f"提取{len(txs)}条流水")
+        except Exception as e: fr["actions"].append(f"失败: {e}")
+        file_results.append(fr)
+
+    sal_invs = [i for i in invoices if i["direction"] == "销项"]
+    pur_invs = [i for i in invoices if i["direction"] == "进项"]
+    domain_results = []
+
+    if bank_txs: domain_results.append({"domain": "资金全链路追踪", "findings": _domain_bank_tracking(bank_txs)})
+    if sal_invs and pur_invs: domain_results.append({"domain": "进销毛利率分析", "findings": _domain_profit_analysis(sal_invs, pur_invs, inventory)})
+    if sal_invs: domain_results.append({"domain": "个人交易风险", "findings": _domain_personal_transactions(sal_invs)})
+    if pur_invs: domain_results.append({"domain": "供应商穿透分析", "findings": _domain_supplier_deep(pur_invs)})
+    if vouchers: domain_results.append({"domain": "凭证科目异常", "findings": _domain_voucher_anomaly(vouchers)})
+    if inventory: domain_results.append({"domain": "存货周转预警", "findings": _domain_inventory_turnover(inventory, sal_invs)})
+    if bank_txs: domain_results.append({"domain": "税务缴纳一致性", "findings": _domain_tax_consistency(bank_txs, db, company_id)})
+    if salaries or social_security: domain_results.append({"domain": "工资社保比对", "findings": _domain_salary_ss_hf_compare(salaries, social_security)})
+    if invoices: domain_results.append({"domain": "发票生命周期", "findings": _domain_invoice_lifecycle(invoices)})
+    domain_results.append({"domain": "合同比对分析", "findings": _domain_contract_comparison(db, company_id, sal_invs, pur_invs)})
+    domain_results.append({"domain": "经营实质分析", "findings": _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs)})
+    if invoices: domain_results.append({"domain": "发票深度特征", "findings": _domain_invoice_deep(invoices)})
+
+    all_findings = []
+    for dr in domain_results:
+        for f in dr["findings"]: all_findings.append({**f, "domain": dr["domain"]})
+
+    try:
+        from tax_risk import get_tax_risk_report
+        risk_data = get_tax_risk_report(db, company_id, datetime.now().strftime("%Y-01"), datetime.now().strftime("%Y-%m"))
+        if risk_data: all_findings.extend(risk_data.get("results", []))
+    except: pass
+
+    high = sum(1 for f in all_findings if f.get("level") in ("高风险",) or "高" in str(f.get("risk_level", "")))
+    mid = sum(1 for f in all_findings if f.get("level") in ("中风险",) or "中" in str(f.get("risk_level", "")))
+    total = len(all_findings)
+    overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
+
+    stats = {"分析文件数": len(docs), "银行流水": len(bank_txs), "销项发票": len(sal_invs),
+             "进项发票": len(pur_invs), "工资记录": len(salaries), "社保记录": len(social_security), "凭证记录": len(vouchers)}
+
+    domain_summary = []
+    for dr in domain_results:
+        dh = sum(1 for f in dr["findings"] if f.get("level") == "高风险")
+        dm = sum(1 for f in dr["findings"] if f.get("level") == "中风险")
+        if dr["findings"]:
+            domain_summary.append({"name": dr["domain"], "count": len(dr["findings"]), "high": dh, "mid": dm, "findings": dr["findings"]})
+
+    return {"ok": True, "report": {
+        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": total-high-mid,
+        "files_count": len(docs), "rules_used": 217, "pipeline_log": pipeline_log, "file_results": file_results,
+        "stats": stats, "domain_summary": domain_summary,
+        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"13域分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。"
+    }}
+
+
+@app.post("/api/tax-risk-docs/analyze")
+async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
+    return await _run_analyze(company_id, db)
+
+
 
 if __name__ == "__main__":
     import uvicorn
