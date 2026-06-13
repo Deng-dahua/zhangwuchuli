@@ -123,7 +123,10 @@ async function renderUnbookkeptInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
-        html += '<td style="text-align:center">' + '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateUBIVoucher(' + i.id + ')">生成凭证</button>' + '</td>';
+        // 生成凭证（同三号合并，按钮也在头行 rowspan）
+        if (idx === 0) {
+          html += '<td style="text-align:center" rowspan="' + ubiRowspan + '"><button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateUBIVoucherGroup(\'' + ubiAllIds + '\')">生成凭证</button></td>';
+        }
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="showUnbookkeptInvoiceForm(' + i.id + ')">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteUnbookkeptInvoice(' + i.id + ')">删除</button>';
@@ -466,6 +469,23 @@ async function generateUBIVoucher(id) {
     toast(result.message || '生成凭证成功', 'success');
   } catch (e) { toast(e.message, 'error'); }
   navigateTo('unbookkept-invoices');
+}
+
+async function generateUBIVoucherGroup(allIds) {
+  const ids = allIds.split(',').map(Number).filter(n => n);
+  if (ids.length === 0) return;
+  if (!confirm('确认为该组 ' + ids.length + ' 条发票生成凭证？\n\n将记入当期（' + (currentPeriod || '当前') + '）序时账。')) return;
+  try {
+    let url = '/api/bookkeeping-invoices/batch-generate-voucher';
+    if (currentPeriod) url += '?period=' + encodeURIComponent(currentPeriod);
+    const result = await api(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message || '生成凭证成功', 'success');
+    navigateTo('unbookkept-invoices');
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function batchGenerateUBIVouchers() {
