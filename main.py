@@ -6356,10 +6356,31 @@ def _clear_source_voucher_no(db, company_id, entry):
     ).update({"voucher_no": None}, synchronize_session=False)
 
     # ── 记账发票（删除凭证后回退到未记账状态）──
+    # 先查出将被清除的BI的三号key，用于后续解锁PI
+    affected_bis = db.query(BookkeepingInvoice.invoice_code, BookkeepingInvoice.invoice_no,
+                            BookkeepingInvoice.digital_invoice_no).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.voucher_no == voucher_str
+    ).all()
+    bi_keys = set((c or "", n or "", d or "") for c, n, d in affected_bis)
+    
     db.query(BookkeepingInvoice).filter(
         BookkeepingInvoice.company_id == company_id,
         BookkeepingInvoice.voucher_no == voucher_str
     ).update({"voucher_no": None}, synchronize_session=False)
+    db.flush()
+
+    # ── 取得发票：解锁对应的 skip_accounting ──
+    if bi_keys:
+        pis = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.skip_accounting == True
+        ).all()
+        for pi in pis:
+            pi_key = (pi.invoice_code or "", pi.invoice_no or "", pi.digital_invoice_no or "")
+            if pi_key in bi_keys:
+                pi.skip_accounting = False
+        db.flush()
 
     # 取得发票 / 销项发票 / 工资 / 社保 / 公积金 — 这些表没有 voucher_no 字段，无需清除
 
