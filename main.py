@@ -9537,25 +9537,49 @@ async def upload_tax_risk_docs(
     files: list[UploadFile] = File(...),
     company_id: int = Query(...),
 ):
-    """上传涉税分析资料（支持多文件）"""
+    """上传涉税分析资料（支持多文件，MD5去重）"""
+    import hashlib
+    # 计算已有文件的MD5集合
+    existing_hashes = set()
+    for d in _tax_risk_docs:
+        if d["company_id"] == company_id and "md5" in d:
+            existing_hashes.add(d["md5"])
+    # 也从磁盘扫描
+    if os.path.exists(UPLOAD_DIR):
+        for fname in os.listdir(UPLOAD_DIR):
+            try:
+                with open(os.path.join(UPLOAD_DIR, fname), "rb") as fh:
+                    existing_hashes.add(hashlib.md5(fh.read()).hexdigest())
+            except: pass
+
     uploaded = []
+    skipped = 0
     for f in files:
+        content = await f.read()
+        md5 = hashlib.md5(content).hexdigest()
+        if md5 in existing_hashes:
+            skipped += 1
+            continue
+
         _tax_doc_counter[0] += 1
         doc_id = _tax_doc_counter[0]
         ext = os.path.splitext(f.filename or "doc")[1] or ".pdf"
         safe_name = f"{company_id}_{doc_id}_{int(datetime.now().timestamp())}{ext}"
         filepath = os.path.join(UPLOAD_DIR, safe_name)
-        content = await f.read()
         with open(filepath, "wb") as fw:
             fw.write(content)
+        existing_hashes.add(md5)
         doc = {
             "id": doc_id, "filename": safe_name, "original_name": f.filename,
-            "path": filepath, "size": len(content), "uploaded_at": datetime.now().isoformat(),
-            "company_id": company_id
+            "path": filepath, "size": len(content), "md5": md5,
+            "uploaded_at": datetime.now().isoformat(), "company_id": company_id
         }
         _tax_risk_docs.append(doc)
         uploaded.append({"id": doc_id, "filename": f.filename, "size": len(content)})
-    return {"ok": True, "uploaded": uploaded, "total": len(_tax_risk_docs)}
+
+    msg = f"已上传 {len(uploaded)} 个文件"
+    if skipped > 0: msg += f"，跳过 {skipped} 个重复文件"
+    return {"ok": True, "uploaded": uploaded, "skipped": skipped, "total": len(_tax_risk_docs), "message": msg}
 
 
 @app.get("/api/tax-risk-docs/list")
