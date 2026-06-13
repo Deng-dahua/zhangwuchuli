@@ -9367,7 +9367,170 @@ def _match_all_rules(all_text, file_texts, rules):
     return findings
 
 
-@app.post("/api/tax-risk-docs/upload")
+# ═══════════════ P0 财税票三流比对 ═══════════════
+
+def _run_three_way_matching(db, company_id, cross):
+    """财税票三流比对：发票流 + 资金流 + 合同流"""
+    from database import _normalize_customer_name, Contract
+
+    # 1. 销项发票购方 vs 银行流水收款方
+    si_buyers = {}
+    for si in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
+        n = _normalize_customer_name(si.buyer_name or "")
+        if n: si_buyers[n] = si_buyers.get(n, 0) + float(si.total_amount or 0)
+
+    bt_receivers = {}
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id, BankTransaction.credit_amount > 0
+    ).all():
+        n = _normalize_customer_name(tx.counterparty_name or "")
+        if n: bt_receivers[n] = bt_receivers.get(n, 0) + float(tx.credit_amount or 0)
+
+    invoiced_no_pay = set(si_buyers.keys()) - set(bt_receivers.keys())
+    paid_no_invoice = set(bt_receivers.keys()) - set(si_buyers.keys())
+
+    if invoiced_no_pay:
+        names = list(invoiced_no_pay)[:5]
+        total = sum(si_buyers[n] for n in invoiced_no_pay)
+        cross.append({"type": "三流比对：开票未回款", "level": "中风险", "score": 7,
+            "detail": f"{len(invoiced_no_pay)}个客户已开票但银行流水无对应收款，涉及{total:,.2f}元：{'、'.join(names)}",
+            "suggestion": "关注虚开发票后资金回流或长期挂账坏账风险。", "category": "三流比对"})
+
+    if paid_no_invoice:
+        names = list(paid_no_invoice)[:5]
+        total = sum(bt_receivers[n] for n in paid_no_invoice)
+        cross.append({"type": "三流比对：收款无发票", "level": "高风险", "score": 9,
+            "detail": f"{len(paid_no_invoice)}个收款方无销项发票记录，合计{total:,.2f}元：{'、'.join(names)}",
+            "suggestion": "涉嫌未开票收入未申报增值税。", "category": "三流比对"})
+
+    # 2. 进项发票 vs 银行付款
+    pi_sellers = {}
+    for pi in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
+        n = _normalize_customer_name(pi.seller_name or "")
+        if n: pi_sellers[n] = pi_sellers.get(n, 0) + float(pi.total_amount or 0)
+
+    bt_payers = {}
+    for tx in db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id, BankTransaction.debit_amount > 0
+    ).all():
+        n = _normalize_customer_name(tx.counterparty_name or "")
+        if n: bt_payers[n] = bt_payers.get(n, 0) + float(tx.debit_amount or 0)
+
+    invoiced_no_payment = set(pi_sellers.keys()) - set(bt_payers.keys())
+    paid_no_purchase = set(bt_payers.keys()) - set(pi_sellers.keys())
+
+    if invoiced_no_payment:
+        names = list(invoiced_no_payment)[:5]
+        total = sum(pi_sellers[n] for n in invoiced_no_payment)
+        cross.append({"type": "三流比对：有票无付", "level": "中风险", "score": 6,
+            "detail": f"{len(invoiced_no_payment)}个供应商已取得发票但无付款记录，涉及{total:,.2f}元：{'、'.join(names)}",
+            "suggestion": "进项发票无资金流印证，涉嫌虚开发票虚增成本。", "category": "三流比对"})
+
+    if paid_no_purchase:
+        names = list(paid_no_purchase)[:5]
+        total = sum(bt_payers[n] for n in paid_no_purchase)
+        cross.append({"type": "三流比对：有付无票", "level": "中风险", "score": 6,
+            "detail": f"{len(paid_no_purchase)}个付款方无对应取得发票，合计{total:,.2f}元：{'、'.join(names)}",
+            "suggestion": "付款未取得发票，可能存在账外交易。", "category": "三流比对"})
+
+    # 3. 合同覆盖率
+    contracts = db.query(Contract).filter(Contract.company_id == company_id).all()
+    contract_parties = set()
+    for ct in contracts:
+        for p in [ct.party_a, ct.party_b]:
+            if p: contract_parties.add(_normalize_customer_name(p))
+
+    si_no_contract = set(si_buyers.keys()) - contract_parties
+    if si_no_contract and len(si_no_contract) >= 2:
+        cnames = list(si_no_contract)[:5]
+        cross.append({"type": "三流比对：销项无合同", "level": "中风险", "score": 6,
+            "detail": f"{len(si_no_contract)}个销项客户无对应合同：{'、'.join(cnames)}。覆盖率{len(si_buyers)-len(si_no_contract)}/{len(si_buyers)}。",
+            "suggestion": "合同流缺失增加了虚开发票风险。", "category": "三流比对"})
+
+
+# ═══════════════ P0 进销匹配分析 ═══════════════
+
+def _run_purchase_sales_match(db, company_id, cross):
+    """进销品名匹配度 + 进销比 + 费用结构"""
+    import re
+
+    def get_cat(inv):
+        m = re.match(r'\*([^*]+)\*', inv.goods_name or "")
+        return m.group(1) if m else "其他"
+
+    si_cats = {}
+    si_total = 0
+    for si in db.query(SalesInvoice).filter(SalesInvoice.company_id == company_id).all():
+        cat = get_cat(si)
+        amt = float(si.total_amount or 0)
+        si_cats[cat] = si_cats.get(cat, 0) + amt
+        si_total += amt
+
+    pi_cats = {}
+    pi_total = 0
+    for pi in db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all():
+        cat = get_cat(pi)
+        amt = float(pi.total_amount or 0)
+        pi_cats[cat] = pi_cats.get(cat, 0) + amt
+        pi_total += amt
+
+    if si_total <= 0 and pi_total <= 0:
+        return
+
+    if si_total > 0 and pi_total > 0:
+        ratio = pi_total / si_total * 100
+        if ratio > 150:
+            cross.append({"type": "进销倒挂", "level": "高风险", "score": 8,
+                "detail": f"进项{pi_total:,.2f} / 销项{si_total:,.2f} = {ratio:.0f}%（正常<100%），进销严重倒挂。",
+                "suggestion": "涉嫌虚增进项发票或严重亏损经营。", "category": "进销匹配"})
+
+    HOSPITALITY = {"餐饮服务", "住宿服务", "餐饮费", "住宿费"}
+    hospitality_amt = sum(pi_cats.get(c, 0) for c in HOSPITALITY)
+    if pi_total > 0 and hospitality_amt / pi_total * 100 > 30:
+        cross.append({"type": "费用结构异常", "level": "高风险", "score": 8,
+            "detail": f"餐饮住宿类占进项{hospitality_amt/pi_total*100:.1f}%（{hospitality_amt:,.2f}/{pi_total:,.2f}），远超正常。",
+            "suggestion": "广告公司餐饮住宿占比正常<10%，超高指向虚列费用。", "category": "进销匹配"})
+
+    mismatch = set(pi_cats.keys()) - set(si_cats.keys())
+    if mismatch and len(mismatch) >= 3:
+        cross.append({"type": "进销品名脱节", "level": "中风险", "score": 5,
+            "detail": f"{len(mismatch)}个进项分类与销项业务无关：{mismatch}",
+            "suggestion": "采购品名与销售无关，涉嫌购买与经营无关发票虚增成本。", "category": "进销匹配"})
+
+
+# ═══════════════ P1 申报一致性 ═══════════════
+
+def _run_declaration_consistency(db, company_id, cross):
+    """申报表 vs 发票/银行原始数据的一致性验证"""
+    import json
+
+    vat = db.query(VATDeclaration).filter(
+        VATDeclaration.company_id == company_id
+    ).order_by(VATDeclaration.period.desc()).first()
+
+    if vat:
+        main = json.loads(vat.form_main or '{}') if isinstance(vat.form_main, str) else (vat.form_main or {})
+        declared_output = float(main.get("row11_tax_output", 0) or 0)
+        actual_output = sum(float(si.tax_amount or 0) for si in db.query(SalesInvoice).filter(
+            SalesInvoice.company_id == company_id).all())
+        if actual_output > 0 and declared_output > 0:
+            diff = abs(declared_output - actual_output)
+            if diff > 100:
+                cross.append({"type": "申报一致性：销项税额差异", "level": "高风险" if diff > 1000 else "中风险",
+                    "score": 9 if diff > 1000 else 6,
+                    "detail": f"申报销项税{declared_output:,.2f} vs 发票销项{actual_output:,.2f}，差异{diff:,.2f}元。",
+                    "suggestion": "申报销项税额与发票系统不一致。", "category": "申报一致性"})
+
+        declared_input = float(main.get("row12_tax_input", 0) or 0)
+        actual_input = sum(float(d.deduction_amount or 0) for d in db.query(InputVATDeduction).filter(
+            InputVATDeduction.company_id == company_id).all())
+        if actual_input > 0 and declared_input > 0:
+            diff = abs(declared_input - actual_input)
+            if diff > 100:
+                cross.append({"type": "申报一致性：进项税额差异", "level": "高风险" if diff > 1000 else "中风险",
+                    "score": 9 if diff > 1000 else 6,
+                    "detail": f"申报进项税{declared_input:,.2f} vs 抵扣合计{actual_input:,.2f}，差异{diff:,.2f}元。",
+                    "suggestion": "进项税额申报与抵扣数据不匹配。", "category": "申报一致性"})
 async def upload_tax_risk_docs(
     files: list[UploadFile] = File(...),
     company_id: int = Query(...),
@@ -9622,6 +9785,15 @@ async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depe
         cross.append({"type": "发票未同步", "level": "中风险", "score": 5,
                       "detail": f"未记账发票{bk_count}张，取得发票{pi_count}张，数据可能不同步。",
                       "category": "交叉验证"})
+
+    # ── P0核心：财税票三流比对 ──
+    _run_three_way_matching(db, company_id, cross)
+
+    # ── P0核心：进销匹配分析 ──
+    _run_purchase_sales_match(db, company_id, cross)
+
+    # ── P1：申报一致性 ──
+    _run_declaration_consistency(db, company_id, cross)
 
     # 新实体发现
     new_ents = entity_names - existing
