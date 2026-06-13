@@ -9198,6 +9198,341 @@ async def tax_risk_rules_upload_report(request: Request):
     result["relevance"] = relevance
     return result
 
+# ── 涉税风险分析资料库 ──
+
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads", "tax-risk-docs")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+_tax_risk_docs = []
+_tax_doc_counter = [0]
+
+
+def _read_file_text(filepath, original_name):
+    """读取文件文本内容，支持全格式"""
+    ext = os.path.splitext(original_name)[1].lower()
+    # PDF
+    if ext == ".pdf":
+        try:
+            import PyPDF2
+            text = []
+            with open(filepath, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                for page in reader.pages[:20]:
+                    t = page.extract_text()
+                    if t: text.append(t)
+            return "\n".join(text)
+        except: pass
+    # Word (.docx)
+    if ext == ".docx":
+        try:
+            import docx
+            doc = docx.Document(filepath)
+            return "\n".join(p.text for p in doc.paragraphs[:500])
+        except: pass
+    # Excel (.xlsx)
+    if ext == ".xlsx":
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            rows = []
+            for sheet in wb.worksheets[:3]:
+                for row in sheet.iter_rows(values_only=True):
+                    rows.append(" ".join(str(c) for c in row if c is not None))
+                if len(rows) > 2000: break
+            if rows: return "\n".join(rows)
+        except: pass
+    # Excel (.xls)
+    if ext == ".xls":
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(filepath)
+            rows = []
+            for sheet in wb.sheets():
+                for row_idx in range(sheet.nrows):
+                    rows.append(" ".join(str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols) if sheet.cell_value(row_idx, c)))
+                    if len(rows) > 2000: break
+                if len(rows) > 2000: break
+            if rows: return "\n".join(rows)
+        except: pass
+    # Text files
+    TEXT_EXTS = {".txt", ".html", ".htm", ".json", ".xml", ".log", ".md", ".csv"}
+    if ext in TEXT_EXTS:
+        for enc in ["utf-8", "gb18030", "gbk", "latin-1"]:
+            try:
+                with open(filepath, "r", encoding=enc, errors="replace") as f:
+                    text = f.read(50000)
+                    if text and len(text.strip()) > 10:
+                        return text
+            except: continue
+    # Fallback: try as text
+    for enc in ["utf-8", "gb18030", "latin-1"]:
+        try:
+            with open(filepath, "r", encoding=enc, errors="replace") as f:
+                text = f.read(50000)
+                if text.strip(): return text
+        except: pass
+    return None
+
+
+def _extract_structured_data(text, filename):
+    """从文本中提取结构化财务数据"""
+    import re
+    data = {"filename": filename, "entities": [], "amounts": [], "tax_ids": [], "invoice_nos": []}
+    seen = set()
+
+    # 企业名称
+    for pat in [r'([\u4e00-\u9fff]{2,20}(?:有限公司|有限责任公司|股份有限公司|集团|合伙企业|事务所|工作室|经营部|商行|中心))',
+                r'([\u4e00-\u9fff]{2,4}(?:科技|文化|传媒|广告|设计|咨询|贸易|实业|投资|建设|工程|餐饮|酒店|管理|服务|信息)有限公司)']:
+        for m in re.finditer(pat, text):
+            name = m.group(1).strip()
+            if name not in seen and len(name) >= 4:
+                seen.add(name)
+                data["entities"].append({"name": name, "pos": m.start(), "context": text[max(0,m.start()-10):m.end()+30]})
+
+    # 金额（数字+元）
+    for m in re.finditer(r'([\d,]+\.?\d*)\s*[元圆]', text):
+        try:
+            val_str = m.group(1).replace(',', '').replace('，', '')
+            if len(val_str.replace('.', '')) > 10: continue
+            if len(val_str.replace('.', '')) == 11 and val_str.startswith('1'): continue
+            val = float(val_str)
+            if 100 <= val <= 99999999:
+                data["amounts"].append({"value": val, "pos": m.start(),
+                    "context": text[max(0,m.start()-20):m.end()+20]})
+        except: pass
+
+    # 税号
+    for m in re.finditer(r'[0-9A-Z]{15,18}', text):
+        code = m.group(0)
+        if any(c.isdigit() for c in code) and any(c.isalpha() for c in code):
+            data["tax_ids"].append({"value": code})
+
+    # 发票号
+    for m in re.finditer(r'(?:发票号|发票代码|发票号码|数电发票)[：:\s]*([A-Z0-9]{10,20})', text):
+        data["invoice_nos"].append({"value": m.group(1)})
+    for m in re.finditer(r'\b(\d{10})\b', text):
+        data["invoice_nos"].append({"value": m.group(1)})
+
+    return data
+
+
+def _load_tax_risk_rules():
+    """加载涉税风险规则JSON"""
+    import json as _json
+    rules_path = os.path.join(os.path.dirname(__file__), "static", "tax_risk_rules_local_export.json")
+    try:
+        with open(rules_path, "r", encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return []
+
+
+def _match_all_rules(all_text, file_texts, rules):
+    """逐条匹配全部规则"""
+    import re
+    findings = []
+    text_lower = all_text.lower()
+    STOP_WORDS = {"进行","存在","可能","相关","是否","需要","应当","已经","目前","本企业","该企业",
+                  "以下","以上","包括","符合","属于","涉及","超过","发现","达到","不能","没有",
+                  "不会","用于","使用","可以","并且","以及","或者","一个","这个"}
+
+    for rule in rules:
+        rule_text = (rule.get("item", "") + " " + rule.get("detail", "")).lower()
+        words = set(re.findall(r'[\u4e00-\u9fff]{2,}', rule_text))
+        keywords = [w for w in words if w not in STOP_WORDS and len(w) >= 2]
+        if len(keywords) < 4:
+            continue
+        matched = [kw for kw in keywords if kw in text_lower]
+        if len(matched) < 3 or not any(len(kw) >= 4 for kw in matched):
+            continue
+
+        main_kw = max(matched, key=len)
+        idx = text_lower.find(main_kw)
+        context = all_text[max(0, idx-40):idx+len(main_kw)+60] if idx >= 0 else ""
+
+        source_files = []
+        for fn, ft in file_texts.items():
+            if main_kw in ft.lower():
+                source_files.append(fn)
+
+        findings.append({
+            "rule_id": rule.get("id"), "item": rule.get("item", ""),
+            "category": rule.get("category", ""), "icon": rule.get("categoryIcon", ""),
+            "level": rule.get("level", "中风险"), "score": rule.get("score", 5),
+            "urgency": rule.get("urgency", ""), "detail": rule.get("detail", "")[:200],
+            "suggestion": rule.get("suggestion", "")[:200],
+            "keywords": matched[:5], "context": context[:150],
+            "source_files": source_files[:3]
+        })
+    return findings
+
+
+@app.post("/api/tax-risk-docs/upload")
+async def upload_tax_risk_docs(
+    files: list[UploadFile] = File(...),
+    company_id: int = Query(...),
+):
+    """上传涉税分析资料（支持多文件）"""
+    uploaded = []
+    for f in files:
+        _tax_doc_counter[0] += 1
+        doc_id = _tax_doc_counter[0]
+        ext = os.path.splitext(f.filename or "doc")[1] or ".pdf"
+        safe_name = f"{company_id}_{doc_id}_{int(datetime.now().timestamp())}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, safe_name)
+        content = await f.read()
+        with open(filepath, "wb") as fw:
+            fw.write(content)
+        doc = {
+            "id": doc_id, "filename": safe_name, "original_name": f.filename,
+            "path": filepath, "size": len(content), "uploaded_at": datetime.now().isoformat(),
+            "company_id": company_id
+        }
+        _tax_risk_docs.append(doc)
+        uploaded.append({"id": doc_id, "filename": f.filename, "size": len(content)})
+    return {"ok": True, "uploaded": uploaded, "total": len(_tax_risk_docs)}
+
+
+@app.get("/api/tax-risk-docs/list")
+def list_tax_risk_docs(company_id: int = Query(...)):
+    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
+    return [{"id": d["id"], "original_name": d["original_name"], "size": d["size"],
+             "uploaded_at": d["uploaded_at"]} for d in docs]
+
+
+@app.delete("/api/tax-risk-docs/{doc_id}")
+def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
+    global _tax_risk_docs
+    for i, d in enumerate(_tax_risk_docs):
+        if d["id"] == doc_id and d["company_id"] == company_id:
+            try: os.remove(d["path"])
+            except: pass
+            _tax_risk_docs.pop(i)
+            return {"ok": True, "message": "删除成功"}
+    raise HTTPException(404, "文件不存在")
+
+
+@app.post("/api/tax-risk-docs/analyze")
+async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """全量分析上传资料：提取结构化数据 + 统计 + 交叉比对 + 涉税规则匹配"""
+    from database import Supplier, Customer
+    from collections import Counter, defaultdict
+    import re as _re
+
+    docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
+    if not docs:
+        return {"ok": False, "message": "暂无上传资料"}
+
+    # ── 阶段1: 全量数据提取 ──
+    all_entities = []
+    all_amounts = []
+    all_tax_ids = []
+    all_invoices = []
+    all_text = ""
+    file_texts = {}
+
+    for doc in docs:
+        try:
+            text = _read_file_text(doc["path"], doc["original_name"])
+            if not text or len(text.strip()) < 20:
+                continue
+            fname = doc["original_name"]
+            file_texts[fname] = text
+            all_text += "\n" + text
+            data = _extract_structured_data(text, fname)
+            if data:
+                for e in data.get("entities", []): all_entities.append({**e, "source_file": fname})
+                for a in data.get("amounts", []): all_amounts.append({**a, "source_file": fname})
+                for t in data.get("tax_ids", []): all_tax_ids.append({**t, "source_file": fname})
+                for inv in data.get("invoice_nos", []): all_invoices.append({**inv, "source_file": fname})
+        except: pass
+
+    if not all_text.strip():
+        return {"ok": False, "message": "无法读取文件内容"}
+
+    # 现有档案
+    suppliers = {s.name: s for s in db.query(Supplier).filter(Supplier.company_id == company_id).all()}
+    customers = {c.name: c for c in db.query(Customer).filter(Customer.company_id == company_id).all()}
+    existing = set(suppliers.keys()) | set(customers.keys())
+    entity_names = set(e["name"] for e in all_entities)
+
+    # ── 阶段2: 统计分析 ──
+    stats = {
+        "实体总数": len(entity_names),
+        "已知实体": len(entity_names & existing),
+        "新实体": len(entity_names - existing),
+    }
+    if entity_names:
+        stats["档案覆盖率"] = f"{stats['已知实体']/max(len(entity_names),1)*100:.0f}%"
+    if all_tax_ids:
+        valid = [t for t in all_tax_ids if len(t["value"].strip()) in (15,17,18)]
+        stats["税号数量"] = len(all_tax_ids)
+        stats["有效税号"] = len(valid)
+    if all_invoices:
+        stats["发票号数量"] = len(all_invoices)
+
+    vals = sorted([a["value"] for a in all_amounts if a["value"] > 0 and a["value"] <= 99999999])
+    if vals:
+        stats["金额总笔数"] = len(vals)
+        stats["金额总额"] = f"{sum(vals):,.2f}"
+        stats["万元以下"] = len([v for v in vals if v < 10000])
+        stats["1-10万元"] = len([v for v in vals if 10000 <= v < 100000])
+        stats["10万元以上"] = len([v for v in vals if v >= 100000])
+
+    # ── 阶段3: 交叉关联 ──
+    cross = []
+    new_ents = entity_names - existing
+    if new_ents:
+        cross.append({
+            "type": "新实体发现", "level": "中风险", "score": 6,
+            "detail": f"资料中发现{len(new_ents)}个未在档案中登记的企业：{'、'.join(list(new_ents)[:8])}",
+            "suggestion": "建议核实这些实体的业务关系，必要时补建档案并核查交易真实性。", "category": "交叉比对"
+        })
+    big = [a for a in all_amounts if 10000 <= a["value"] <= 99999999]
+    if big:
+        big_total = sum(a["value"] for a in big)
+        items = [f"{a['value']:,.0f}" for a in big[:5]]
+        cross.append({
+            "type": "大额交易", "level": "高风险" if any(a["value"]>=100000 for a in big) else "中风险",
+            "score": 8 if any(a["value"]>=100000 for a in big) else 6,
+            "detail": f"发现{len(big)}笔大额交易，合计{big_total:,.2f}：{'、'.join(items)}",
+            "suggestion": "逐笔核查大额交易对应的合同、发票和银行流水。", "category": "交叉比对"
+        })
+
+    # ── 阶段4: 规则匹配 ──
+    rules = _load_tax_risk_rules()
+    rule_findings = _match_all_rules(all_text, file_texts, rules)
+    all_findings = cross + rule_findings
+
+    high = sum(1 for f in all_findings if f.get("level") == "高风险")
+    mid = sum(1 for f in all_findings if f.get("level") == "中风险")
+    total = len(all_findings)
+    overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
+
+    categories = {}
+    for f in all_findings:
+        cat = f.get("category", f.get("type", "其他"))
+        categories.setdefault(cat, {"name": cat, "count": 0, "high": 0, "mid": 0})
+        categories[cat]["count"] += 1
+        if f.get("level") == "高风险": categories[cat]["high"] += 1
+        elif f.get("level") == "中风险": categories[cat]["mid"] += 1
+
+    summary = f"基于{len(rules) if isinstance(rules,list) else 217}条涉税风险规则，对{len(docs)}份资料深度分析。"
+    summary += f"提取{len(entity_names)}个实体、{len(all_amounts)}个金额。"
+    summary += f"综合风险等级：{overall}，共{total}项风险（高{high}/中{mid}/低{total-high-mid}）。"
+
+    report = {
+        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid,
+        "low_risk": total - high - mid, "files_count": len(docs),
+        "rules_used": len(rules) if isinstance(rules, list) else 217,
+        "stats": stats, "cross_findings": cross,
+        "categories": sorted(categories.values(), key=lambda x: -x["high"]*100 - x["mid"]*10 - x["count"]),
+        "all_findings": sorted(all_findings, key=lambda x: -x.get("score", 0))[:30],
+        "summary_text": summary
+    }
+    return {"ok": True, "report": report}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
