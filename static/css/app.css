@@ -215,7 +215,7 @@
     /* Tab 切换按钮 */
     .tab-btn-group { display: flex; gap: 4px; background: #e5e7eb; border-radius: 8px; padding: 4px; }
     .tab-btn {
-      padding: 6px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500;
+      padding: 4px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 500;
       cursor: pointer; background: transparent; color: #6b7280; transition: all 0.15s;
     }
     .tab-btn:hover { color: #374151; }
