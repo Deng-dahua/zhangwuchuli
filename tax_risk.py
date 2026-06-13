@@ -826,6 +826,19 @@ def get_tax_risk_report(
     db: Session = Depends(get_db)
 ):
     results = []
+    # ── 全局数据存在性校验：无任何业务数据时直接返回空结果，避免误报 ──
+    if not _has_any_business_data(db, company_id):
+        return {
+            "company_id": company_id,
+            "results": [],
+            "total": 0,
+            "high_risk_count": 0,
+            "medium_risk_count": 0,
+            "low_risk_count": 0,
+            "good_count": 0,
+            "summary": "该公司暂无业务数据（序时账/发票/银行流水/合同/员工/资产均无记录），无法进行涉税风险分析。",
+        }
+
     if period_from and period_to:
         # 规范化：统一为 YYYY-MM 格式
         period_start = _normalize_period(period_from)
@@ -1421,6 +1434,20 @@ def _download_pptx(data):
     buf.seek(0)
     return Response(buf.read(), media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     headers={"Content-Disposition": "attachment; filename=tax_risk_report.pptx"})
+
+
+# ═══════════════════════════════════════════════════════════════
+#  通用辅助函数：业务数据存在性检查
+# ═══════════════════════════════════════════════════════════════
+
+def _has_any_business_data(db, company_id):
+    """检查公司是否有任何业务数据（序时账/发票/银行流水/合同/员工/资产）"""
+    for Model in (JournalEntry, SalesInvoice, PurchaseInvoice,
+                 BankTransaction, Contract, Employee, FixedAsset):
+        if db.query(func.count(Model.id)).filter(
+            Model.company_id == company_id).scalar() or 0 > 0:
+            return True
+    return False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2832,6 +2859,10 @@ def _analyze_financial_health(db, company_id, ps, pe, results):
 
 def _analyze_business_credit(db, company_id, ps, pe, results):
     """企业经营信用评估（基于系统内数据）"""
+    # 无业务数据时跳过，避免将"无数据"误判为"空壳公司"
+    if not _has_any_business_data(db, company_id):
+        return
+
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         return
@@ -3130,6 +3161,10 @@ def _analyze_business_premise(db, company_id, ps, pe, results):
     4. 序时账无，合同有（免费场地）→ 低风险「可能为免费使用场地」
     5. 序时账有 → 无风险
     """
+    # 无业务数据时跳过，四源全不等于空壳公司
+    if not _has_any_business_data(db, company_id):
+        return
+
     evidence = _check_premise_evidence_all(db, company_id, ps, pe)
     overall = evidence["overall"]
     je = evidence["je"]
@@ -7255,6 +7290,10 @@ def _analyze_pre_cancellation_spike(db, company_id, ps, pe, results):
 
 def _analyze_same_address_multi_company(db, company_id, ps, pe, results):
     """一址多照/一人多企（经营实质）"""
+    # 无业务数据时跳过，避免对无数据的公司误报
+    if not _has_any_business_data(db, company_id):
+        return
+
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         return
@@ -7311,6 +7350,10 @@ def _analyze_same_address_multi_company(db, company_id, ps, pe, results):
 
 def _analyze_address_mismatch(db, company_id, ps, pe, results):
     """注册地址与经营地址不一致（经营实质）"""
+    # 无业务数据时跳过，四源全不等于地址不一致
+    if not _has_any_business_data(db, company_id):
+        return
+
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company or not company.address:
         return
