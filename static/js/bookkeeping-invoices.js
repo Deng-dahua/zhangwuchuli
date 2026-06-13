@@ -130,7 +130,10 @@ async function renderBookkeepingInvoices(container) {
         html += '<td>' + (i.invoice_risk_level || '-') + '</td>';
         html += '<td>' + (i.issuer || '-') + '</td>';
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
-        html += '<td>' + (i.voucher_no ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + i.voucher_no + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + i.voucher_no + '</a>' : '-') + '</td>';
+        // 凭证号（同三号合并 rowspan）
+        if (idx === 0) {
+          html += '<td rowspan="' + biRowspan + '">' + (i.voucher_no ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + i.voucher_no + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + i.voucher_no + '</a>' : '-') + '</td>';
+        }
         html += '<td style="white-space:nowrap">';
         html += '<button class="btn btn-sm btn-secondary" onclick="showBookkeepingInvoiceForm(' + i.id + ')">编辑</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="deleteBookkeepingInvoice(' + i.id + ')">删除</button>';
