@@ -42,21 +42,18 @@ function renderTaxRiskReport(container) {
     var queryBtn = trBar.querySelector('.std-query-btn');
     if (queryBtn) queryBtn.remove();
     var clearBtn = trBar.querySelector('.std-clear-btn');
-    // 刷新按钮
+    // 所有按钮间距由父容器 tr-period-bar 的 flex gap 统一控制
+    // 清除 → 生成/刷新报告 → 下载报告 → 删除报告
     if (clearBtn) {
-      var refreshWrap = document.createElement('span');
-      refreshWrap.style.marginRight = '8px';
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'btn-toolbar';
       refreshBtn.id = 'risk-refresh-btn';
       refreshBtn.textContent = '生成/刷新报告';
       refreshBtn.addEventListener('click', loadTaxRiskReport);
-      refreshWrap.appendChild(refreshBtn);
-      clearBtn.parentNode.insertBefore(refreshWrap, clearBtn.nextSibling);
+      clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
-    // 下载按钮（间距一致 8px）
+    // 下载按钮
     var downloadWrap = document.createElement('span');
-    downloadWrap.style.marginRight = '8px';
     downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
       + '<button class="btn-toolbar" id="risk-download-btn" style="display:none">下载报告</button>'
       + '<div class="download-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;min-width:120px">'
@@ -64,12 +61,11 @@ function renderTaxRiskReport(container) {
       + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📝 Word 下载</div>'
       + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📊 PPT 下载</div>'
       + '</div></div>';
-    clearBtn.parentNode.insertBefore(downloadWrap, refreshWrap.nextSibling);
+    clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
 
-    // 删除按钮（间距一致 8px）
+    // 删除按钮
     var deleteWrap = document.createElement('span');
     deleteWrap.id = 'risk-delete-btn-wrap';
-    deleteWrap.style.marginRight = '8px';
     deleteWrap.style.display = 'none';
     deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>';
     clearBtn.parentNode.insertBefore(deleteWrap, downloadWrap.nextSibling);
