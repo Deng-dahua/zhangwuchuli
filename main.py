@@ -9207,6 +9207,43 @@ _tax_risk_docs = []
 _tax_doc_counter = [0]
 
 
+def _recover_tax_risk_docs():
+    """启动时从磁盘恢复资料列表"""
+    import hashlib
+    if not os.path.exists(UPLOAD_DIR):
+        return
+    for fname in sorted(os.listdir(UPLOAD_DIR)):
+        fpath = os.path.join(UPLOAD_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+        # 文件名格式: {company_id}_{doc_id}_{timestamp}.ext
+        stem = os.path.splitext(fname)[0]
+        parts = stem.split("_")
+        if len(parts) < 3:
+            continue
+        try:
+            company_id = int(parts[0])
+            doc_id = int(parts[1])
+        except ValueError:
+            continue
+        stat = os.stat(fpath)
+        sz = stat.st_size
+        with open(fpath, "rb") as fh:
+            md5 = hashlib.md5(fh.read()).hexdigest()
+        doc = {
+            "id": doc_id, "filename": fname, "original_name": fname,
+            "path": fpath, "size": sz, "md5": md5,
+            "uploaded_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "company_id": company_id,
+        }
+        _tax_risk_docs.append(doc)
+        if doc_id >= _tax_doc_counter[0]:
+            _tax_doc_counter[0] = doc_id
+
+
+_recover_tax_risk_docs()
+
+
 def _read_file_text(filepath, original_name):
     """读取文件文本内容，支持全格式"""
     ext = os.path.splitext(original_name)[1].lower()
@@ -9770,13 +9807,21 @@ def _parse_voucher_sheet(sheet):
     return {"type": "voucher", "rows": rows}
 
 def _parse_inventory_sheet(sheet):
-    header = _get_row_values(sheet, 0)
+    # 扫描前5行找到表头行
+    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
+    header_row = 0
+    header = []
+    for r in range(min(5, nrows)):
+        h = _get_row_values(sheet, r)
+        if sum(1 for v in h if any(k in str(v) for k in ("日期","凭证","入库","出库","存货","数量","金额"))) >= 2:
+            header = h; header_row = r; break
+    if not header:
+        header = _get_row_values(sheet, 0); header_row = 0
     cols = _find_cols(header, {"日期": "date", "凭证字号": "voucher_no",
         "入库": "in_qty", "出库": "out_qty", "存货": "item", "数量": "qty", "金额": "amount"})
     if not cols: return None
     rows = []
-    nrows = sheet.nrows if hasattr(sheet, 'nrows') else sheet.max_row
-    for r in range(1, min(nrows, 5000)):
+    for r in range(header_row + 1, min(nrows, 5000)):
         vals = {}
         for field, col in cols.items():
             try:
@@ -9799,14 +9844,14 @@ def _parse_pdf_bank_statement(filepath):
         import PyPDF2
         with open(filepath, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-        text = ""
-        for page in reader.pages[:3]:
-            t = page.extract_text() or ""
-            text += t + "\n"
+            text = ""
+            for page in reader.pages:
+                t = page.extract_text() or ""
+                text += t + "\n"
     except: return []
 
     lines = text.split("\n")
-    # Step 1: merge multi-line records
+    # Step 1: merge multi-line records (lines starting with number+space are begin, continue until next number+space)
     merged = []
     i = 0
     while i < len(lines):
@@ -9823,6 +9868,7 @@ def _parse_pdf_bank_statement(filepath):
 
     txs = []
     for line in merged:
+        # 提取日期和金额
         dates = re.findall(r'20[2-3]\d[01]\d[0-3]\d', line)
         amounts = re.findall(r'([\d,]+\.\d{2})', line)
         if not dates or not amounts: continue
@@ -9830,12 +9876,20 @@ def _parse_pdf_bank_statement(filepath):
         date_str = dates[0]
         vals = [float(a.replace(',','')) for a in amounts]
 
-        if len(vals) >= 2: debit, credit = vals[0], vals[1]
-        elif '营收' in line or '入账' in line or '结算' in line: credit, debit = max(vals), 0
-        elif '税务' in line or '收费' in line or '所得税' in line or '社保' in line or '失业' in line: debit, credit = max(vals), 0
-        elif '货款' in line or '快递' in line or '包装' in line: debit, credit = max(vals), 0
-        else: credit, debit = max(vals), 0
+        # 判断借贷方向
+        raw_line = line
+        if len(vals) >= 2:
+            debit, credit = vals[0], vals[1]
+        elif any(k in raw_line for k in ('营收','入账','结算','退款','结息','汇入')):
+            credit, debit = max(vals), 0
+        elif any(k in raw_line for k in ('税务','收费','社保','失业','工伤','养老','医疗','印花','增值','教育','城建','工资','代发','公积金','委托收款','提回定借')):
+            debit, credit = max(vals), 0
+        elif any(k in raw_line for k in ('货款','快递','包装','服务费','材料')):
+            debit, credit = max(vals), 0
+        else:
+            credit, debit = max(vals), 0
 
+        # 提取对方名称（大兴支行之后、日期之前的内容）
         counterparty = ""
         bank_end = line.find("大兴支行")
         if bank_end >= 0:
@@ -9843,12 +9897,17 @@ def _parse_pdf_bank_statement(filepath):
             dp = rest.find(date_str)
             if dp > 0:
                 counterparty = rest[:dp].strip()
+                # 去掉末尾的纯数字（账号）
                 counterparty = re.sub(r'\s*\d{6,}\s*$', '', counterparty).strip()
 
+        # 金额符号修正：贷方金额可能是负数表示退款，以实际金额为准
+        amt = round(credit - debit, 2)
         txs.append({
-            "date": date_str, "debit": round(debit,2), "credit": round(credit,2),
-            "amount": round(credit-debit,2),
-            "counterparty": counterparty[:60], "raw": line[:200]
+            "date": date_str, "debit": round(debit, 2), "credit": round(credit, 2),
+            "amount": amt,
+            "counterparty": counterparty[:80] if counterparty else "",
+            "summary": raw_line[raw_line.find("人民币")+3:].strip() if "人民币" in raw_line else "",
+            "raw": line[:200]
         })
     return txs
 
@@ -10122,6 +10181,7 @@ async def _run_analyze(company_id, db):
     # ═══════ 阶段14: 217规则引擎 — 临时导入数据跑真实引擎 ═══════
     temp_ids = {"bk": [], "bt": []}  # 记录临时导入的ID，分析后清理
     try:
+        from datetime import date
         from database import BookkeepingInvoice, BankTransaction
         # 将提取的发票临时导入 BookkeepingInvoice
         for inv in invoices[:500]:
@@ -10141,11 +10201,13 @@ async def _run_analyze(company_id, db):
         # 将提取的银行流水临时导入 BankTransaction
         for tx in bank_txs[:500]:
             try:
+                d_str = tx["date"]  # 格式: 20260101
+                tx_date = date(int(d_str[:4]), int(d_str[4:6]), int(d_str[6:8]))
                 bt = BankTransaction(company_id=company_id,
-                    transaction_date=tx["date"][:4] + "-" + tx["date"][4:6] + "-" + tx["date"][6:8],
-                    counterparty_name=tx["counterparty"][:100],
-                    debit_amount=tx["debit"], credit_amount=tx["credit"],
-                    amount=abs(tx["amount"]), summary=tx.get("summary", "")[:200])
+                    transaction_date=tx_date,
+                    counterparty_name=str(tx.get("counterparty", ""))[:100],
+                    debit_amount=float(tx.get("debit", 0)), credit_amount=float(tx.get("credit", 0)),
+                    amount=abs(float(tx.get("amount", 0))), summary=str(tx.get("summary", ""))[:200])
                 db.add(bt); db.flush()
                 temp_ids["bt"].append(bt.id)
             except: pass

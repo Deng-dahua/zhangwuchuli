@@ -325,9 +325,13 @@ function uploadRiskDocs() {
     form.append('files', input.files[i]);
   }
   api('/api/tax-risk-docs/upload', { method: 'POST', body: form }).then(function(r) {
-    if (r.ok) { toast('已上传 ' + r.uploaded.length + ' 个文件', 'success'); refreshRiskDocsList(); }
+    if (r.ok) {
+      var type = r.uploaded.length > 0 ? 'success' : 'warning';
+      toast(r.message || '已上传 ' + r.uploaded.length + ' 个文件', type);
+      refreshRiskDocsList();
+    }
     input.value = '';
-  }).catch(function(e) { toast('上传失败', 'error'); });
+  }).catch(function(e) { toast('上传失败: ' + (e.message || e), 'error'); });
 }
 
 function delRiskDoc(id) {
