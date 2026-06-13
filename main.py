@@ -1039,9 +1039,10 @@ def _enrich_archive_info(db: Session, company_id: int) -> dict:
     custs = db.query(Customer).filter(Customer.company_id == company_id).all()
     cust_norm_map = {}
     for c in custs:
-        fp = c._fingerprint or _normalize_customer_name(c.name or "")
-        if fp:
-            cust_norm_map[fp] = c
+        # 用归一化名称做键（_fingerprint是SHA256，不能直接匹配银行流水的归一化名）
+        norm = _normalize_customer_name(c.name or "")
+        if norm:
+            cust_norm_map[norm] = c
 
     # 来源1：销项发票购方信息
     for inv in db.query(SalesInvoice).filter(
@@ -1106,9 +1107,9 @@ def _enrich_archive_info(db: Session, company_id: int) -> dict:
     supps = db.query(Supplier).filter(Supplier.company_id == company_id).all()
     supp_norm_map = {}
     for s in supps:
-        fp = s._fingerprint or _normalize_customer_name(s.name or "")
-        if fp:
-            supp_norm_map[fp] = s
+        norm = _normalize_customer_name(s.name or "")
+        if norm:
+            supp_norm_map[norm] = s
 
     # 来源1：取得发票销方信息
     for inv in db.query(PurchaseInvoice).filter(
