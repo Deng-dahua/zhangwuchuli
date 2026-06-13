@@ -421,12 +421,16 @@ async function renderInputVATDeductions(container) {
     });
     ivdGroups.forEach(g => {
       const ivdAllIds = g.items.map(x => x.id).join(',');
+      const ivdRowspan = g.items.length;
+      const ivdAllHasJv = g.items.every(x => x.journal_voucher_no);
       g.items.forEach((it, idx) => {
       const stCls = it.invoice_status === STATUS.NORMAL ? 'badge-green' : it.invoice_status === STATUS.VOID ? 'badge-gray' : 'badge-red';
       const jv2 = it.journal_voucher_no || '';
       html += '<tr>';
-      // 每组只显示一个复选框，垂直居中
-      html += '<td style="text-align:center;vertical-align:middle">' + (idx === 0 ? '<input type="checkbox" class="ivd-check" data-id="' + it.id + '" data-all-ids="' + ivdAllIds + '" onchange="updateIVDBatchBtn()" ' + (jv2 ? 'disabled title="已生成凭证，不可操作"' : '') + '>' : '') + '</td>';
+      // 复选框 rowspan 合并
+      if (idx === 0) {
+        html += '<td style="text-align:center;vertical-align:middle" rowspan="' + ivdRowspan + '"><input type="checkbox" class="ivd-check" data-all-ids="' + ivdAllIds + '" onchange="updateIVDBatchBtn()" ' + (ivdAllHasJv ? 'disabled title="已生成凭证，不可操作"' : '') + '></td>';
+      }
       html += '<td><span style="color:' + (it.check_status === STATUS.CHECKED ? 'var(--success)' : 'var(--gray-400)') + ';font-weight:500;">' + (it.check_status || '-') + '</span></td>';
       html += '<td>' + (it.invoice_source || '-') + '</td>';
       html += '<td>' + (it.domestic_sale_cert_no || '-') + '</td>';
@@ -444,10 +448,14 @@ async function renderInputVATDeductions(container) {
       html += '<td><span class="' + stCls + '">' + (it.invoice_status || '-') + '</span></td>';
       html += '<td>' + (it.check_time ? it.check_time.slice(0,16).replace('T',' ') : '-') + '</td>';
       html += '<td><span style="color:' + (riskColors[it.risk_level] || '#333') + ';font-weight:500;">' + (it.risk_level || '-') + '</span></td>';
-      // 凭证号（每行独立）
-      html += '<td>' + (jv2 ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv2 + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv2 + '</a>' : '-') + '</td>';
-      // 生成凭证（每行独立）
-      html += '<td style="width:90px">' + (jv2 ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVD(' + it.id + ')">生成凭证</button>') + '</td>';
+      // 凭证号（合并到首行 rowspan）
+      if (idx === 0) {
+        html += '<td rowspan="' + ivdRowspan + '">' + (ivdAllHasJv && jv2 ? '<a href="javascript:void(0)" onclick="showVoucherDetail(\'' + jv2 + '\')" style="color:#1d4ed8;font-weight:500;text-decoration:none;border-bottom:1px dashed #1d4ed8;cursor:pointer">' + jv2 + '</a>' : '-') + '</td>';
+      }
+      // 生成凭证（合并到首行 rowspan，传全组ID）
+      if (idx === 0) {
+        html += '<td style="width:90px" rowspan="' + ivdRowspan + '">' + (ivdAllHasJv ? '<button class="btn btn-sm" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed;font-size:12px" disabled>已生成</button>' : '<button class="btn btn-primary btn-sm" style="font-size:12px" onclick="generateFromIVDGroup(\'' + ivdAllIds + '\')">生成凭证</button>') + '</td>';
+      }
       // 操作（每行独立）
       html += '<td style="white-space:nowrap">';
       if (jv2) {
@@ -708,6 +716,21 @@ async function deleteVATDeduction(id) {
   await api('/api/input-vat-deductions/' + id, { method: 'DELETE' });
   renderInputVATDeductions();
   toast('已删除');
+}
+
+async function generateFromIVDGroup(allIds) {
+  const ids = allIds.split(',').map(Number).filter(n => n);
+  if (ids.length === 0) return;
+  if (!confirm('确认为该组 ' + ids.length + ' 条认证记录生成凭证？')) return;
+  try {
+    const result = await api('/api/input-vat-deductions/batch-to-journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message || '生成凭证成功', 'success');
+    renderInputVATDeductions();
+  } catch (e) { toast(e.message || '生成失败', 'error'); }
 }
 
 async function generateFromIVD(id) {
