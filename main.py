@@ -9461,7 +9461,10 @@ def _match_all_rules(all_text, file_texts, rules):
             continue
 
         matched = [kw for kw in keywords if kw in text_lower]
-        if len(matched) < 2:
+        # 至少3个关键词命中，且至少1个是4字以上的长词（提高匹配精度，减少误报）
+        if len(matched) < 3:
+            continue
+        if not any(len(kw) >= 4 for kw in matched):
             continue
 
         # 定位出处
