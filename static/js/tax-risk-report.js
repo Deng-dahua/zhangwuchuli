@@ -22,8 +22,8 @@ function renderTaxRiskReport(container) {
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
     + '<span style="font-weight:600;font-size:14px;color:var(--gray-700)">📁 涉税分析资料</span>'
     + '<div style="display:flex;gap:8px">'
-    + '<label style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:var(--blue-500);color:#fff;border-radius:4px;cursor:pointer;font-size:13px">'
-    + '<input type="file" id="risk-docs-input" multiple accept=".pdf,.xlsx,.xls,.docx,.txt" style="display:none" onchange="uploadRiskDocs()">选择文件</label>'
+    + '<label class="btn-toolbar" style="background:var(--blue-500);color:#fff;border-color:var(--blue-500);cursor:pointer">'
+    + '<input type="file" id="risk-docs-input" multiple accept=".pdf,.xlsx,.xls,.docx,.txt" style="display:none" onchange="uploadRiskDocs()">📤 上传资料</label>'
     + '<button class="btn-toolbar" onclick="analyzeAllRiskDocs()" style="background:#059669;color:#fff">一键分析资料</button>'
     + '</div></div>'
     + '<div id="risk-docs-list" style="font-size:12px;color:var(--gray-500)">暂无上传资料</div>'
@@ -42,16 +42,19 @@ function renderTaxRiskReport(container) {
     var queryBtn = trBar.querySelector('.std-query-btn');
     if (queryBtn) queryBtn.remove();
     var clearBtn = trBar.querySelector('.std-clear-btn');
-    // 在清除按钮后插入生成/刷新报告按钮
+    // 刷新按钮
     if (clearBtn) {
+      var refreshWrap = document.createElement('span');
+      refreshWrap.style.marginRight = '8px';
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'btn-toolbar';
       refreshBtn.id = 'risk-refresh-btn';
       refreshBtn.textContent = '生成/刷新报告';
       refreshBtn.addEventListener('click', loadTaxRiskReport);
-      clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
+      refreshWrap.appendChild(refreshBtn);
+      clearBtn.parentNode.insertBefore(refreshWrap, clearBtn.nextSibling);
     }
-    // 下载报告按钮（在生成/刷新按钮后面，间距一致）
+    // 下载按钮（间距一致 8px）
     var downloadWrap = document.createElement('span');
     downloadWrap.style.marginRight = '8px';
     downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
@@ -61,9 +64,9 @@ function renderTaxRiskReport(container) {
       + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📝 Word 下载</div>'
       + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📊 PPT 下载</div>'
       + '</div></div>';
-    clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
+    clearBtn.parentNode.insertBefore(downloadWrap, refreshWrap.nextSibling);
 
-    // 删除报告按钮（下载按钮后面，间距一致）
+    // 删除按钮（间距一致 8px）
     var deleteWrap = document.createElement('span');
     deleteWrap.id = 'risk-delete-btn-wrap';
     deleteWrap.style.marginRight = '8px';
