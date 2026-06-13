@@ -598,6 +598,7 @@ async function renderPurchaseInvoices(container) {
       piGroups.forEach(g => {
         const piAllIds = g.items.map(i => i.id).join(',');
         const piRowspan = g.items.length;
+        const piAllHasJv = g.items.every(i => i.journal_voucher_no);
         g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
@@ -605,7 +606,7 @@ async function renderPurchaseInvoices(container) {
         html += '<tr>';
         // 三号相同的行 → 复选框 rowspan 合并为一个，data-ids 存该组全部ID
         if (idx === 0) {
-          html += '<td style="text-align:center" rowspan="' + piRowspan + '"><input type="checkbox" class="pi-check" data-ids="' + piAllIds + '" onchange="updatePiBatchBtn()"></td>';
+          html += '<td style="text-align:center" rowspan="' + piRowspan + '"><input type="checkbox" class="pi-check" data-ids="' + piAllIds + '" onchange="updatePiBatchBtn()"' + (piAllHasJv ? ' disabled title="已生成凭证，不可操作"' : '') + '></td>';
         }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
