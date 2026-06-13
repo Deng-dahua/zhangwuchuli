@@ -11087,7 +11087,7 @@ async def _run_analyze(company_id, db):
         "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": total-high-mid,
         "files_count": len(docs), "rules_used": 290, "pipeline_log": pipeline_log, "file_results": file_results,
         "stats": stats, "domain_summary": domain_summary,
-        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"17域全面分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。凭证主营业务收入{voucher_revenue['total']:,.0f}元（未开票{voucher_revenue['uninvoiced']:,.0f}元）。涵盖13专题+完备度+多源交叉+扩展规则+凭证发票对比。"
+        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:200], "summary_text": f"17域+290规则双引擎分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。凭证主营收入{voucher_revenue['total']:,.0f}元（未开票{voucher_revenue['uninvoiced']:,.0f}元）。290规则引擎基于100%上传文件数据运行。"
     }}
 
 
