@@ -485,17 +485,17 @@ async function renderDepartments(container) {
           <table>
             <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleDeptAll(this);updateDeptBatchBtn()"></th><th>编码</th><th>部门名称</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => `
-                <tr>
-                  <td><input type="checkbox" class="dept-cb" value="${d.id}" onchange="updateDeptBatchBtn()"></td>
-                  <td>${d.code}</td>
-                  <td>${d.name}</td>
-                  <td style="white-space:nowrap">
-                    <button class="btn btn-sm btn-secondary" onclick="showDeptForm(${d.id},'${d.code}','${esc(d.name)}')">编辑</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteDept(${d.id})">删除</button>
-                  </td>
-                </tr>
-              `).join('')}
+              ${data.length === 0 ? '<tr><td colspan="4"><div class="empty-state"><p>暂无部门，请添加</p></div></td></tr>' : data.map(d => {
+                const locked = d.has_journal;
+                const cbAttr = locked ? 'disabled title="该部门已被序时账引用"' : '';
+                const editBtn = locked
+                  ? '<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该部门已被序时账引用，不可编辑">编辑</button>'
+                  : '<button class="btn btn-sm btn-secondary" onclick="showDeptForm(' + d.id + ',\'' + d.code + '\',\'' + esc(d.name) + '\')">编辑</button>';
+                const delBtn = locked
+                  ? '<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该部门已被序时账引用，不可删除">删除</button>'
+                  : '<button class="btn btn-sm btn-danger" onclick="deleteDept(' + d.id + ')">删除</button>';
+                return '<tr><td><input type="checkbox" class="dept-cb" value="' + d.id + '" onchange="updateDeptBatchBtn()" ' + cbAttr + '></td><td>' + d.code + '</td><td>' + d.name + '</td><td style="white-space:nowrap">' + editBtn + delBtn + '</td></tr>';
+              }).join('')}
             </tbody>
           </table>
         </div>

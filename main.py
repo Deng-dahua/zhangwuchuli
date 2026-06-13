@@ -275,13 +275,58 @@ def list_departments(
             Department.name.contains(keyword)
         ))
     depts = q.order_by(Department.code).offset(skip).limit(limit).all()
+    # 部门被序时账引用判定：code或name出现在序时账的department字段
+    used_dept_names = set()
+    entries = db.query(JournalEntry.department).filter(
+        JournalEntry.company_id == company_id,
+        JournalEntry.department.isnot(None),
+        JournalEntry.department != ""
+    ).distinct().all()
+    for (dn,) in entries:
+        if dn:
+            used_dept_names.add(dn.strip())
     return [
         {
             "id": d.id, "code": d.code, "name": d.name,
             "parent_code": d.parent_code, "manager": d.manager,
-            "description": d.description, "is_active": d.is_active
+            "description": d.description, "is_active": d.is_active,
+            "has_journal": d.name in used_dept_names if d.name else False
         } for d in depts
     ]
+
+# ── 档案锁定检查（被序时账引用时禁止编辑/删除）──
+
+def _check_archive_lock(db, company_id, archive_type, archive_id) -> bool:
+    """检查档案是否被序时账引用。返回 True=已锁定"""
+    if archive_type == "department":
+        dept = db.query(Department).filter(Department.company_id == company_id, Department.id == archive_id).first()
+        if dept and dept.name:
+            return db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.department == dept.name
+            ).first() is not None
+    elif archive_type == "employee":
+        emp = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == archive_id).first()
+        if emp and emp.name:
+            return db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.contact_project == emp.name
+            ).first() is not None
+    elif archive_type == "customer":
+        cust = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == archive_id).first()
+        if cust and cust.name:
+            return db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.contact_project == cust.name
+            ).first() is not None
+    elif archive_type == "supplier":
+        supp = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == archive_id).first()
+        if supp and supp.name:
+            return db.query(JournalEntry).filter(
+                JournalEntry.company_id == company_id,
+                JournalEntry.contact_project == supp.name
+            ).first() is not None
+    return False
 
 @app.post("/api/departments")
 def create_department(data: DepartmentCreate, company_id: int = Query(...), db: Session = Depends(get_db)):
@@ -292,6 +337,8 @@ def create_department(data: DepartmentCreate, company_id: int = Query(...), db: 
 
 @app.put("/api/departments/{dept_id}")
 def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "department", dept_id):
+        raise HTTPException(403, detail="该部门已被序时账引用，不可编辑")
     d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
@@ -302,6 +349,8 @@ def update_department(dept_id: int, data: DepartmentUpdate, company_id: int = Qu
 
 @app.delete("/api/departments/{dept_id}")
 def delete_department(dept_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "department", dept_id):
+        raise HTTPException(403, detail="该部门已被序时账引用，不可删除")
     d = db.query(Department).filter(Department.company_id == company_id, Department.id == dept_id).first()
     if not d:
         raise HTTPException(404, detail="部门不存在")
@@ -316,9 +365,14 @@ class DeptBatchDelete(BaseModel):
 
 @app.post("/api/departments/batch-delete")
 def batch_delete_departments(req: DeptBatchDelete, company_id: int = Query(...), db: Session = Depends(get_db)):
+    # 过滤掉被序时账引用的部门
+    locked_ids = [did for did in req.ids if _check_archive_lock(db, company_id, "department", did)]
+    deletable_ids = [did for did in req.ids if did not in locked_ids]
+    if not deletable_ids:
+        raise HTTPException(403, detail="所选部门均已被序时账引用，不可删除")
     deleted = db.query(Department).filter(
         Department.company_id == company_id,
-        Department.id.in_(req.ids)
+        Department.id.in_(deletable_ids)
     ).delete(synchronize_session=False)
     db.flush()
     _renumber_archive(db, company_id, Department, 'BM')
@@ -632,6 +686,8 @@ def create_customer(data: CustomerCreate, company_id: int = Query(...), db: Sess
 
 @app.put("/api/customers/{cust_id}")
 def update_customer(cust_id: int, data: CustomerUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "customer", cust_id):
+        raise HTTPException(403, detail="该客户已被序时账引用，不可编辑")
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
@@ -670,9 +726,14 @@ def batch_delete_customers(
     company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
+    # 过滤被序时账引用的客户
+    locked_ids = [cid for cid in body.ids if _check_archive_lock(db, company_id, "customer", cid)]
+    deletable_ids = [cid for cid in body.ids if cid not in locked_ids]
+    if not deletable_ids:
+        raise HTTPException(403, detail="所选客户均已被序时账引用，不可删除")
     deleted = db.query(Customer).filter(
         Customer.company_id == company_id,
-        Customer.id.in_(body.ids)
+        Customer.id.in_(deletable_ids)
     ).delete(synchronize_session=False)
     db.flush()
     _renumber_archive(db, company_id, Customer, 'KH')
@@ -681,6 +742,8 @@ def batch_delete_customers(
 
 @app.delete("/api/customers/{cust_id}")
 def delete_customer(cust_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "customer", cust_id):
+        raise HTTPException(403, detail="该客户已被序时账引用，不可删除")
     c = db.query(Customer).filter(Customer.company_id == company_id, Customer.id == cust_id).first()
     if not c:
         raise HTTPException(404, detail="客户不存在")
@@ -865,6 +928,8 @@ def create_supplier(data: SupplierCreate, company_id: int = Query(...), db: Sess
 
 @app.put("/api/suppliers/{supp_id}")
 def update_supplier(supp_id: int, data: SupplierUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "supplier", supp_id):
+        raise HTTPException(403, detail="该供应商已被序时账引用，不可编辑")
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
@@ -883,9 +948,13 @@ def batch_delete_suppliers(
     company_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
+    locked_ids = [sid for sid in body.ids if _check_archive_lock(db, company_id, "supplier", sid)]
+    deletable_ids = [sid for sid in body.ids if sid not in locked_ids]
+    if not deletable_ids:
+        raise HTTPException(403, detail="所选供应商均已被序时账引用，不可删除")
     deleted = db.query(Supplier).filter(
         Supplier.company_id == company_id,
-        Supplier.id.in_(body.ids)
+        Supplier.id.in_(deletable_ids)
     ).delete(synchronize_session=False)
     db.flush()
     _renumber_archive(db, company_id, Supplier, 'GYS')
@@ -894,6 +963,8 @@ def batch_delete_suppliers(
 
 @app.delete("/api/suppliers/{supp_id}")
 def delete_supplier(supp_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
+    if _check_archive_lock(db, company_id, "supplier", supp_id):
+        raise HTTPException(403, detail="该供应商已被序时账引用，不可删除")
     s = db.query(Supplier).filter(Supplier.company_id == company_id, Supplier.id == supp_id).first()
     if not s:
         raise HTTPException(404, detail="供应商不存在")
