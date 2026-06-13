@@ -598,7 +598,7 @@ async function renderPurchaseInvoices(container) {
       piGroups.forEach(g => {
         const piAllIds = g.items.map(i => i.id).join(',');
         const piRowspan = g.items.length;
-        const piAllLocked = g.items.every(i => i.skip_accounting);
+        const piAllLocked = g.items.every(i => i.skip_accounting || i.journal_voucher_no);
         g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
@@ -635,7 +635,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
         // 操作
         html += '<td style="white-space:nowrap">';
-        if (i.skip_accounting) {
+        if (i.skip_accounting || i.journal_voucher_no) {
           html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
           html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
         } else {
