@@ -9649,20 +9649,27 @@ def _import_invoices_from_text(db, company_id, text, file_texts):
     """从文本提取发票并导入到 BookkeepingInvoice"""
     import re
     imported = 0
-    # 匹配发票行模式
     for line in text.split("\n"):
         line = line.strip()
         if len(line) < 20: continue
         digital = re.search(r'(\d{20})', line)
         inv_code = re.search(r'(\d{12})', line)
         inv_no = re.search(r'(\d{8})', line)
-        amounts = re.findall(r'([\d,]+\.?\d{0,2})', line)
         if not (digital or (inv_code and inv_no)): continue
+        # 提取金额，过滤科学计数法和超大数字
+        amounts = re.findall(r'([\d,]+\.?\d{1,2})(?![\d.eE])', line)
         if len(amounts) < 2: continue
-        vals = [float(a.replace(",", "")) for a in amounts]
+        vals = []
+        for a in amounts:
+            try:
+                v = float(a.replace(",", ""))
+                if v <= 0 or v > 99999999: continue  # 过滤异常值和科学计数
+                vals.append(v)
+            except: pass
+        if len(vals) < 2: continue
         try:
             total = max(vals[:4])
-            tax_rate = 0.06  # default
+            tax_rate = 0.06
             db.add(BookkeepingInvoice(
                 company_id=company_id,
                 digital_invoice_no=digital.group(1) if digital else "",
@@ -9672,7 +9679,7 @@ def _import_invoices_from_text(db, company_id, text, file_texts):
                 tax_amount=round(total - total / (1 + tax_rate), 2),
                 total_amount=total,
                 goods_name=line[:100],
-                invoice_date=datetime.now().strftime("%Y-%m-%d"),
+                invoice_date=datetime.now().date(),
             ))
             imported += 1
         except: pass
@@ -9712,6 +9719,10 @@ async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depe
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
 
+    # 清除之前的错误事务
+    try: db.rollback()
+    except: pass
+
     pipeline_log = []  # 处理流水日志
     all_entities = []
     all_amounts = []
@@ -9731,24 +9742,29 @@ async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depe
 
             # 银行流水 → 导入银行流水
             if ftype == "bank" and confidence >= 0.7:
-                count = _import_bank_statement(db, company_id, text, {fname: text})
-                if count > 0:
-                    fr["actions"].append(f"导入{count}条银行流水")
-                    pipeline_log.append(f"{fname} → 导入{count}条银行流水")
-                    # 自动做账
-                    try:
-                        from database import _generate_bank_journals
-                        _generate_bank_journals(db, company_id, None)
-                        db.commit()
-                        fr["actions"].append("已自动生成银行流水凭证")
-                    except: pass
+                try:
+                    count = _import_bank_statement(db, company_id, text, {fname: text})
+                    if count > 0:
+                        fr["actions"].append(f"导入{count}条银行流水")
+                        pipeline_log.append(f"{fname} -> 导入{count}条银行流水")
+                        try:
+                            from database import _generate_bank_journals
+                            _generate_bank_journals(db, company_id, None)
+                            db.commit()
+                            fr["actions"].append("已自动生成凭证")
+                        except: pass
+                except Exception as e:
+                    fr["actions"].append(f"导入失败: {e}")
 
             # 发票 → 导入未记账发票
             elif ftype == "invoice" and confidence >= 0.7:
-                count = _import_invoices_from_text(db, company_id, text, {fname: text})
-                if count > 0:
-                    fr["actions"].append(f"导入{count}张发票")
-                    pipeline_log.append(f"{fname} → 导入{count}张发票到未记账发票")
+                try:
+                    count = _import_invoices_from_text(db, company_id, text, {fname: text})
+                    if count > 0:
+                        fr["actions"].append(f"导入{count}张发票")
+                        pipeline_log.append(f"{fname} -> 导入{count}张发票")
+                except Exception as e:
+                    fr["actions"].append(f"发票导入失败: {e}")
 
             # VAT/审计 → 仅提取数据
             elif ftype in ("vat", "audit"):
