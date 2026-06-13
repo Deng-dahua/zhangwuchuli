@@ -717,23 +717,27 @@ async function renderCustomers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table class="single-line-table">
-            <thead><tr><th style="width:36px"><input type="checkbox" id="custSelectAll" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="custSelectAll" onchange="toggleSelectAllCust(this)" title="全选"></th><th>编码</th><th>客户名称</th><th style="font-size:11px">统一社会信用代码/税号</th><th>地址</th><th>开户行</th><th>银行账号</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
+              ${data.length === 0 ? '<tr><td colspan="8"><div class="empty-state"><p>暂无客户，请添加</p></div></td></tr>' : data.map(c => {
                 const locked = c.has_journal;
                 const editBtn = locked
                   ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可编辑">编辑</button>`
-                  : `<button class="btn btn-sm btn-secondary" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}')">编辑</button>`;
+                  : `<button class="btn btn-sm btn-secondary" onclick="showCustForm(${c.id},'${esc(c.code)}','${esc(c.name)}','${esc(c.uscc||'')}','${esc(c.tax_no||'')}','${esc(c.address||'')}','${esc(c.bank_name||'')}','${esc(c.bank_account||'')}')">编辑</button>`;
                 const delBtn = locked
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该客户已被序时账引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteCust(${c.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该客户已被序时账引用"' : '';
+                const usccDisplay = c.uscc || c.tax_no || '-';
                 return `
                 <tr>
                   <td><input type="checkbox" class="cust-check" value="${c.id}" onchange="updateBatchDelCustBtn()" ${cbAttr}></td>
                   <td class="single-line">${c.code}</td>
                   <td class="single-line">${c.name}</td>
-                  <td class="single-line" style="font-family:monospace;font-size:12px">${c.uscc || '-'}</td>
+                  <td class="single-line" style="font-family:monospace;font-size:11px">${usccDisplay}</td>
+                  <td class="single-line" style="font-size:11px">${c.address || '-'}</td>
+                  <td class="single-line" style="font-size:11px">${c.bank_name || '-'}</td>
+                  <td class="single-line" style="font-family:monospace;font-size:11px">${c.bank_account || '-'}</td>
                   <td style="white-space:nowrap">
                     ${editBtn}
                     ${delBtn}
@@ -780,7 +784,7 @@ async function batchDeleteCust() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-function showCustForm(id, code, name, uscc) {
+function showCustForm(id, code, name, uscc, tax_no, address, bank_name, bank_account) {
   const isEdit = !!id;
   const nextCode = isEdit ? (code || '') : _nextArchiveCode('KH', custList);
   showModal(`
@@ -788,7 +792,10 @@ function showCustForm(id, code, name, uscc) {
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-field"><label>编码</label><input id="cust-code" value="${nextCode}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="cust-name" value="${name||''}"></div>
-      <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
+      <div class="form-field"><label>统一社会信用代码/税号</label><input id="cust-uscc" value="${uscc||''}" placeholder="18位代码" style="font-family:monospace"></div>
+      <div class="form-field"><label>地址</label><input id="cust-address" value="${address||''}"></div>
+      <div class="form-field"><label>开户行</label><input id="cust-bank-name" value="${bank_name||''}"></div>
+      <div class="form-field"><label>银行账号</label><input id="cust-bank-account" value="${bank_account||''}" style="font-family:monospace"></div>
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveCust(${id||0})">保存</button>
@@ -801,7 +808,11 @@ async function saveCust(id) {
   const body = {
     code: document.getElementById('cust-code').value.trim(),
     name: document.getElementById('cust-name').value.trim(),
-    uscc: document.getElementById('cust-uscc')?.value.trim() || null
+    uscc: document.getElementById('cust-uscc')?.value.trim() || null,
+    tax_no: document.getElementById('cust-uscc')?.value.trim() || null,
+    address: document.getElementById('cust-address')?.value.trim() || null,
+    bank_name: document.getElementById('cust-bank-name')?.value.trim() || null,
+    bank_account: document.getElementById('cust-bank-account')?.value.trim() || null
   };
   if (!body.name) { toast('请填写客户名称', 'error'); return; }
   if (!id && !body.code) body.code = '';
@@ -848,23 +859,26 @@ async function renderSuppliers(container) {
         </div>
         <div class="table-wrap" style="flex:1;overflow:auto">
           <table class="single-line-table">
-            <thead><tr><th style="width:36px"><input type="checkbox" id="suppSelectAll" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th>统一社会信用代码</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="suppSelectAll" onchange="toggleSelectAllSupp(this)" title="全选"></th><th>编码</th><th>供应商名称</th><th style="font-size:11px">统一社会信用代码/税号</th><th>开户行</th><th>银行账号</th><th>操作</th></tr></thead>
             <tbody>
-              ${data.length === 0 ? '<tr><td colspan="5"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => {
+              ${data.length === 0 ? '<tr><td colspan="7"><div class="empty-state"><p>暂无供应商，请添加</p></div></td></tr>' : data.map(s => {
                 const locked = s.has_journal;
                 const editBtn = locked
                   ? `<button class="btn btn-sm btn-secondary" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可编辑">编辑</button>`
-                  : `<button class="btn btn-sm btn-secondary" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}')">编辑</button>`;
+                  : `<button class="btn btn-sm btn-secondary" onclick="showSuppForm(${s.id},'${s.code}','${esc(s.name)}','${esc(s.uscc||'')}','${esc(s.tax_no||'')}','${esc(s.bank_name||'')}','${esc(s.bank_account||'')}')">编辑</button>`;
                 const delBtn = locked
                   ? `<button class="btn btn-sm btn-danger" disabled style="opacity:0.35;cursor:not-allowed" title="该供应商已被序时账引用，不可删除">删除</button>`
                   : `<button class="btn btn-sm btn-danger" onclick="deleteSupp(${s.id})">删除</button>`;
                 const cbAttr = locked ? 'disabled title="该供应商已被序时账引用"' : '';
+                const usccDisplay = s.uscc || s.tax_no || '-';
                 return `
                 <tr>
                   <td><input type="checkbox" class="supp-check" value="${s.id}" onchange="updateBatchDelSuppBtn()" ${cbAttr}></td>
                   <td class="single-line">${s.code}</td>
                   <td class="single-line">${s.name}</td>
-                  <td class="single-line" style="font-family:monospace;font-size:12px">${s.uscc || '-'}</td>
+                  <td class="single-line" style="font-family:monospace;font-size:11px">${usccDisplay}</td>
+                  <td class="single-line" style="font-size:11px">${s.bank_name || '-'}</td>
+                  <td class="single-line" style="font-family:monospace;font-size:11px">${s.bank_account || '-'}</td>
                   <td style="white-space:nowrap">
                     ${editBtn}
                     ${delBtn}
@@ -910,7 +924,7 @@ async function batchDeleteSupp() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-function showSuppForm(id, code, name, uscc) {
+function showSuppForm(id, code, name, uscc, tax_no, bank_name, bank_account) {
   const isEdit = !!id;
   const nextCode = isEdit ? (code || '') : _nextArchiveCode('GYS', suppList);
   showModal(`
@@ -918,7 +932,9 @@ function showSuppForm(id, code, name, uscc) {
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-field"><label>编码</label><input id="supp-code" value="${nextCode}" ${isEdit ? 'disabled style="background:#f3f4f6"' : 'readonly style="background:#f3f4f6;color:#6b7280" placeholder="自动生成"'}</div>
       <div class="form-field"><label>名称 <span style="color:red">*</span></label><input id="supp-name" value="${name||''}"></div>
-      <div class="form-field" style="grid-column:1/-1"><label>统一社会信用代码</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位统一社会信用代码" style="font-family:monospace"></div>
+      <div class="form-field"><label>统一社会信用代码/税号</label><input id="supp-uscc" value="${uscc||''}" placeholder="18位代码" style="font-family:monospace"></div>
+      <div class="form-field"><label>开户行</label><input id="supp-bank-name" value="${bank_name||''}"></div>
+      <div class="form-field" style="grid-column:1/-1"><label>银行账号</label><input id="supp-bank-account" value="${bank_account||''}" style="font-family:monospace"></div>
     </div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="saveSupp(${id||0})">保存</button>
@@ -931,7 +947,10 @@ async function saveSupp(id) {
   const body = {
     code: document.getElementById('supp-code').value.trim(),
     name: document.getElementById('supp-name').value.trim(),
-    uscc: document.getElementById('supp-uscc')?.value.trim() || null
+    uscc: document.getElementById('supp-uscc')?.value.trim() || null,
+    tax_no: document.getElementById('supp-uscc')?.value.trim() || null,
+    bank_name: document.getElementById('supp-bank-name')?.value.trim() || null,
+    bank_account: document.getElementById('supp-bank-account')?.value.trim() || null
   };
   if (!body.name) { toast('请填写供应商名称', 'error'); return; }
   if (!id && !body.code) body.code = '';

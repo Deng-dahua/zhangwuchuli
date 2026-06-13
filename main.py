@@ -152,6 +152,7 @@ class CustomerCreate(BaseModel):
     name: str
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
+    address: Optional[str] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     remark: Optional[str] = None
@@ -161,6 +162,7 @@ class CustomerUpdate(BaseModel):
     name: Optional[str] = None
     uscc: Optional[str] = None
     tax_no: Optional[str] = None
+    address: Optional[str] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     is_active: Optional[bool] = None
@@ -980,18 +982,32 @@ def _enrich_archive_info(db: Session, company_id: int) -> dict:
         if not c:
             continue
         changed = False
-        if inv.buyer_tax_no and not c.tax_no:
-            c.tax_no = inv.buyer_tax_no.strip()
-            fields_filled.append(f"客户[{c.name}]税号←销项发票")
-            changed = True
+        # 税号=统一社会信用代码（双向同步）
+        inv_tax = (inv.buyer_tax_no or "").strip()
+        if inv_tax:
+            if not c.tax_no:
+                c.tax_no = inv_tax
+                fields_filled.append(f"客户[{c.name}]税号←销项发票")
+                changed = True
+            if not c.uscc:
+                c.uscc = inv_tax
+                changed = True
         if inv.buyer_address and not c.address:
             c.address = inv.buyer_address.strip()
+            fields_filled.append(f"客户[{c.name}]地址←销项发票")
             changed = True
         if inv.buyer_bank_name and not c.bank_name:
             c.bank_name = inv.buyer_bank_name.strip()
             changed = True
         if inv.buyer_bank_account and not c.bank_account:
             c.bank_account = inv.buyer_bank_account.strip()
+            changed = True
+        # uscc→tax_no 反向
+        if c.uscc and not c.tax_no:
+            c.tax_no = c.uscc
+            changed = True
+        if c.tax_no and not c.uscc:
+            c.uscc = c.tax_no
             changed = True
         if changed:
             enriched_cust += 1
@@ -1033,12 +1049,22 @@ def _enrich_archive_info(db: Session, company_id: int) -> dict:
         if not s:
             continue
         changed = False
-        if inv.seller_tax_no and not s.tax_no:
-            s.tax_no = inv.seller_tax_no.strip()
-            fields_filled.append(f"供应商[{s.name}]税号←取得发票")
+        # 税号=统一社会信用代码（双向同步）
+        inv_tax = (inv.seller_tax_no or "").strip()
+        if inv_tax:
+            if not s.tax_no:
+                s.tax_no = inv_tax
+                fields_filled.append(f"供应商[{s.name}]税号←取得发票")
+                changed = True
+            if not s.uscc:
+                s.uscc = inv_tax
+                changed = True
+        # uscc→tax_no 反向
+        if s.uscc and not s.tax_no:
+            s.tax_no = s.uscc
             changed = True
-        if inv.seller_tax_no and not s.uscc:
-            s.uscc = inv.seller_tax_no.strip()
+        if s.tax_no and not s.uscc:
+            s.uscc = s.tax_no
             changed = True
         if changed:
             enriched_supp += 1
