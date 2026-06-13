@@ -10743,6 +10743,80 @@ def _domain_advanced_rules(bank_txs, sal_invs, pur_invs, salaries, social_securi
     return findings
 
 
+# ═══════════ 域17: 凭证收入 vs 发票收入对比 ═══════════
+
+def _domain_voucher_invoice_revenue_compare(voucher_rev, sal_invs, bank_txs):
+    """对比凭证中主营业务收入（区分开票/未开票）与销项发票收入、银行入账"""
+    findings = []
+    
+    inv_total = sum(float(i.get("total", 0) or 0) for i in sal_invs)
+    bank_income = sum(tx["credit"] for tx in bank_txs) if bank_txs else 0
+    
+    vr_total = voucher_rev["total"]
+    vr_invoiced = voucher_rev["invoiced"]
+    vr_uninvoiced = voucher_rev["uninvoiced"]
+    
+    # 收入三源对比总览
+    findings.append({
+        "type": "收入三源对比总览",
+        "level": "低风险", "score": 2,
+        "detail": f"凭证主营业务收入{vr_total:,.2f}元（开票{vr_invoiced:,.2f} + 未开票{vr_uninvoiced:,.2f}） vs 销项发票{inv_total:,.2f}元 vs 银行入账{bank_income:,.2f}元。",
+        "description": f"这是稽查中最核心的三源收入对比。凭证记录的主营业务收入为{vr_total:,.2f}元，其中明确标注开票收入{vr_invoiced:,.2f}元、未开票收入{vr_uninvoiced:,.2f}元（占比{vr_uninvoiced/max(vr_total,1)*100:.0f}%）。销项发票价税合计{inv_total:,.2f}元，银行流水入账{bank_income:,.2f}元。",
+        "how_found": "从凭证文件中提取所有主营业务收入科目贷方发生额，按摘要区分'开票收入'和'未开票收入'（无票收入），汇总后与销项发票价税合计、银行入账三方比对。",
+        "category": "域17 凭证发票收入对比"
+    })
+    
+    # 未开票收入占比过大
+    if vr_total > 0 and vr_uninvoiced / vr_total > 0.3:
+        pct = vr_uninvoiced / vr_total * 100
+        findings.append({
+            "type": "未开票收入占比过高",
+            "level": "高风险", "score": 9,
+            "detail": f"凭证主营业务收入{vr_total:,.2f}元中，未开票收入{vr_uninvoiced:,.2f}元（占比{pct:.0f}%）。",
+            "description": f"贵公司{vr_total:,.2f}元的主营业务收入中，有{vr_uninvoiced:,.2f}元（{pct:.0f}%）为未开票收入。这个比例非常高。未开票收入本身并不违法，但必须确认是否已在增值税申报表中'未开具发票'栏次如实填报了{vr_uninvoiced:,.2f}元。如果申报表中未填报或填报金额不一致，将构成少申报销售额的严重问题。",
+            "how_found": "从凭证主营业务收入科目中，筛选摘要含'未开票'/'无票'或未标注发票类型的贷方发生额，汇总后计算占总收入的比例。超过30%触发预警。",
+            "tax_impact": f"未开票收入{vr_uninvoiced:,.2f}元若未在增值税申报中如实填报，将少缴增值税约{vr_uninvoiced*0.13:,.0f}元（按13%税率估算），需补缴税款+滞纳金+可能罚款。同时企业所得税也存在少申报营业收入的风险。",
+            "policy_ref": "《增值税暂行条例》第十九条关于纳税义务发生时间的规定；增值税申报表附表一'未开具发票'栏次；《税收征收管理法》第六十三条关于偷税的规定。",
+            "suggestion": f"1）立即核实{vr_uninvoiced:,.2f}元未开票收入是否已在对应税款所属期的增值税申报中填报；2）若未申报，尽快做补充申报并补缴税款；3）建立未开票收入台账，确保每期申报完整；4）考虑将未开票收入逐步转为规范开票。",
+            "category": "域17 凭证发票收入对比"
+        })
+    
+    # 凭证开票收入 vs 销项发票差异
+    if vr_invoiced > 0 and inv_total > 0:
+        gap = abs(vr_invoiced - inv_total)
+        if gap / max(vr_invoiced, 1) > 0.1:
+            findings.append({
+                "type": "凭证开票收入与发票金额不一致",
+                "level": "高风险", "score": 8,
+                "detail": f"凭证记录开票收入{vr_invoiced:,.2f}元 vs 销项发票价税合计{inv_total:,.2f}元，差异{gap:,.2f}元。",
+                "description": f"凭证中标注为开票收入的金额为{vr_invoiced:,.2f}元，但销项发票价税合计为{inv_total:,.2f}元，两者差异{gap:,.2f}元（{gap/max(vr_invoiced,1)*100:.0f}%）。这个差异意味着：要么凭证中有些标注为开票的收入实际未开票，要么存在发票未入账（发票已开但凭证未记），要么金额录入有误。",
+                "how_found": "将凭证中主营业务收入科目摘要含'普票'/'专票'/'发票'关键字的发生额汇总，与销项发票价税合计比对。差异超过10%触发预警。",
+                "tax_impact": "凭证与发票金额不一致，说明会计核算与税务申报之间存在脱节，稽查时会深究每一笔差异的来源和性质。",
+                "policy_ref": "《会计法》关于会计核算真实性的要求；《发票管理办法》关于发票入账的规定。",
+                "suggestion": "1）逐月核对凭证主营业务收入与销项发票金额；2）差异编制调节表并逐笔说明原因（如含税/不含税差异、发票跨期等）；3）确保会计记账与开票系统数据同步。",
+                "category": "域17 凭证发票收入对比"
+            })
+    
+    # 银行入账 vs 凭证收入差异
+    if vr_total > 0 and bank_income > 0:
+        gap = abs(vr_total - bank_income)
+        gap_pct = gap / max(vr_total, 1) * 100
+        if gap_pct > 20:
+            findings.append({
+                "type": "凭证收入与银行入账偏差大",
+                "level": "高风险", "score": 8,
+                "detail": f"凭证收入{vr_total:,.2f}元 vs 银行入账{bank_income:,.2f}元，差异{gap:,.2f}元（{gap_pct:.0f}%）。",
+                "description": f"凭证记录的主营业务收入为{vr_total:,.2f}元，银行流水贷方入账{bank_income:,.2f}元，两者差异{gap:,.2f}元（{gap_pct:.0f}%）。银行入账大于凭证收入，说明存在未确认收入的资金入账；凭证收入大于银行入账，说明存在非银行渠道收款（现金、第三方平台等）或收入确认时点与收款时点不一致。",
+                "how_found": "将凭证主营业务收入贷方总额与银行流水贷方（收入）金额进行比对，差异超过20%触发预警。",
+                "tax_impact": "银行入账与账面收入不匹配，会触发税务机关对隐匿收入或虚列收入的质疑。若银行入账多但账面收入少，差额可能被推定为隐匿收入。",
+                "policy_ref": "《税收征收管理法》第三十五条关于核定应纳税额的规定。",
+                "suggestion": "1）逐月编制银行入账与主营业务收入的调节表；2）区分经营性收款和非经营性收款；3）确保所有经营收款及时确认收入并如实申报。",
+                "category": "域17 凭证发票收入对比"
+            })
+    
+    return findings
+
+
 # ═══════════ 分析主函数体 ═══════════
 
 async def _run_analyze(company_id, db):
@@ -10796,6 +10870,24 @@ async def _run_analyze(company_id, db):
 
     sal_invs = [i for i in invoices if i["direction"] == "销项"]
     pur_invs = [i for i in invoices if i["direction"] == "进项"]
+    
+    # ── 凭证收入提取（区分开票/未开票）──
+    voucher_revenue = {"invoiced": 0.0, "uninvoiced": 0.0, "total": 0.0, "rows": 0}
+    for v in vouchers:
+        acct = str(v.get("account", ""))
+        if "主营业务收入" in acct:
+            credit = float(v.get("credit", 0) or 0)
+            summary = str(v.get("summary", ""))
+            if credit <= 0: continue  # 结转行
+            if "未开票" in summary or "无票" in summary:
+                voucher_revenue["uninvoiced"] += credit
+            elif "普票" in summary or "专票" in summary or "发票" in summary:
+                voucher_revenue["invoiced"] += credit
+            else:
+                voucher_revenue["uninvoiced"] += credit
+            voucher_revenue["total"] += credit
+            voucher_revenue["rows"] += 1
+    
     domain_results = []
 
     if bank_txs: domain_results.append({"domain": "资金全链路追踪", "findings": _domain_bank_tracking(bank_txs)})
@@ -10816,6 +10908,8 @@ async def _run_analyze(company_id, db):
     domain_results.append({"domain": "多源交叉验证", "findings": _domain_multi_source_cross(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory, db, company_id)})
     # 域16: 扩展规则
     domain_results.append({"domain": "扩展审查规则", "findings": _domain_advanced_rules(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory)})
+    # 域17: 凭证收入 vs 发票收入对比
+    domain_results.append({"domain": "凭证发票收入对比", "findings": _domain_voucher_invoice_revenue_compare(voucher_revenue, sal_invs, bank_txs)})
 
     all_findings = []
     for dr in domain_results:
@@ -10881,7 +10975,8 @@ async def _run_analyze(company_id, db):
     overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
 
     stats = {"分析文件数": len(docs), "银行流水": len(bank_txs), "销项发票": len(sal_invs),
-             "进项发票": len(pur_invs), "工资记录": len(salaries), "社保记录": len(social_security), "凭证记录": len(vouchers)}
+             "进项发票": len(pur_invs), "工资记录": len(salaries), "社保记录": len(social_security), "凭证记录": len(vouchers),
+             "凭证主营收入": f"{voucher_revenue['total']:,.0f}元", "其中未开票": f"{voucher_revenue['uninvoiced']:,.0f}元"}
 
     domain_summary = []
     for dr in domain_results:
@@ -10894,7 +10989,7 @@ async def _run_analyze(company_id, db):
         "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": total-high-mid,
         "files_count": len(docs), "rules_used": 290, "pipeline_log": pipeline_log, "file_results": file_results,
         "stats": stats, "domain_summary": domain_summary,
-        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"16域全面分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。涵盖13专题+完备度+多源交叉+扩展规则。"
+        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"17域全面分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。凭证主营业务收入{voucher_revenue['total']:,.0f}元（未开票{voucher_revenue['uninvoiced']:,.0f}元）。涵盖13专题+完备度+多源交叉+扩展规则+凭证发票对比。"
     }}
 
 
