@@ -373,14 +373,20 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     renderBankTransactions();
     // 导入后自动生成银行流水凭证
     api('/api/bank-transactions/auto-voucher', { method: 'POST' }).then(function(r) {
-      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 条银行流水凭证', 'success');
+      if (r.generated > 0) {
+        toast('已自动生成 ' + r.generated + ' 条银行流水凭证', 'success');
+        renderBankTransactions();
+      }
     }).catch(function(){});
   }
   else if (module === 'sales-invoice') {
     renderSalesInvoices();
     // 导入后自动生成序时账凭证
     api('/api/sales-invoices/auto-voucher', { method: 'POST' }).then(function(r) {
-      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 笔凭证', 'success');
+      if (r.generated > 0) {
+        toast('已自动生成 ' + r.generated + ' 笔凭证', 'success');
+        renderSalesInvoices();
+      }
     }).catch(function(){});
     // 重置序时账和客户档案的渲染缓存
     ['page-journal', 'page-customers'].forEach(function(id) {
@@ -392,7 +398,10 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     renderPurchaseInvoices();
     // 导入后自动同步到未记账发票
     api('/api/purchase-invoices/sync-to-unbookkept', { method: 'POST' }).then(function(r) {
-      if (r.synced > 0) toast('已自动同步 ' + r.synced + ' 条到未记账发票', 'success');
+      if (r.synced > 0) {
+        toast('已自动同步 ' + r.synced + ' 条到未记账发票', 'success');
+        renderPurchaseInvoices();
+      }
     }).catch(function(){});
   }
   else if (module === 'bookkeeping-invoice') renderBookkeepingInvoices();
@@ -400,7 +409,10 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     renderInputVATDeductions();
     // 导入后自动生成序时账凭证
     api('/api/input-vat-deductions/auto-voucher', { method: 'POST' }).then(function(r) {
-      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 条进项抵扣凭证', 'success');
+      if (r.generated > 0) {
+        toast('已自动生成 ' + r.generated + ' 条进项抵扣凭证', 'success');
+        renderInputVATDeductions();
+      }
     }).catch(function(){});
   }
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
