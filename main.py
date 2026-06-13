@@ -9254,36 +9254,130 @@ def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
 
 @app.post("/api/tax-risk-docs/analyze")
 async def analyze_tax_risk_docs(company_id: int = Query(...)):
-    """分析所有上传资料，提取文本并基于规则生成分析报告"""
+    """全量分析所有上传资料，基于全部217条涉税风险规则生成综合报告"""
     docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
 
-    findings = []
+    # 合并所有文件内容
+    all_text = ""
+    file_texts = {}
     for doc in docs:
         try:
             text = _read_file_text(doc["path"], doc["original_name"])
             if text and len(text.strip()) > 20:
-                risks = _analyze_doc_against_rules(text)
-                if risks:
-                    findings.append({
-                        "doc_id": doc["id"], "doc_name": doc["original_name"],
-                        "risk_count": len(risks), "risks": risks
-                    })
+                all_text += "\n\n【文件：" + doc["original_name"] + "】\n" + text
+                file_texts[doc["id"]] = {"name": doc["original_name"], "text": text}
         except Exception as e:
-            findings.append({"doc_id": doc["id"], "doc_name": doc["original_name"],
-                           "error": str(e)})
+            file_texts[doc["id"]] = {"name": doc["original_name"], "error": str(e)}
 
-    # 汇总统计
-    total_risks = sum(f.get("risk_count", 0) for f in findings)
-    high = sum(1 for f in findings for r in f.get("risks", []) if r.get("level") == "高风险")
-    mid = sum(1 for f in findings for r in f.get("risks", []) if r.get("level") == "中风险")
+    if not all_text.strip():
+        return {"ok": False, "message": "无法读取文件内容"}
 
-    return {
-        "ok": True, "files_analyzed": len(docs),
-        "total_risks": total_risks, "high_risk": high, "mid_risk": mid,
-        "findings": findings
+    # 全量规则匹配
+    rules = _load_tax_risk_rules()
+    all_findings = _match_all_rules(all_text, file_texts, rules)
+
+    # 按类别分组统计
+    categories = {}
+    for f in all_findings:
+        cat = f.get("category", "其他")
+        if cat not in categories:
+            categories[cat] = {"name": cat, "icon": f.get("icon", ""), "risks": [], "count": 0, "high": 0, "mid": 0}
+        categories[cat]["risks"].append(f)
+        categories[cat]["count"] += 1
+        if f["level"] == "高风险": categories[cat]["high"] += 1
+        elif f["level"] == "中风险": categories[cat]["mid"] += 1
+
+    total = len(all_findings)
+    high = sum(1 for f in all_findings if f["level"] == "高风险")
+    mid = sum(1 for f in all_findings if f["level"] == "中风险")
+    low = total - high - mid
+    overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
+
+    report = {
+        "overall_level": overall,
+        "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": low,
+        "files_count": len(docs),
+        "rules_used": len(rules),
+        "categories": sorted(categories.values(), key=lambda x: -x["high"] * 100 - x["mid"] * 10 - x["count"]),
+        "all_findings": sorted(all_findings, key=lambda x: -x.get("score", 0))[:30],
+        "summary_text": _generate_summary_text(all_findings, overall, len(docs), len(rules))
     }
+
+    return {"ok": True, "report": report}
+
+
+def _match_all_rules(all_text, file_texts, rules):
+    """逐条匹配全部规则"""
+    findings = []
+    text_lower = all_text.lower()
+
+    import re
+    STOP_WORDS = {"进行","存在","可能","相关","是否","需要","应当","已经","目前","本企业",
+                  "该企业","以下","以上","包括","符合","属于","涉及","超过","发现","达到",
+                  "不能","没有","不会","用于","使用","可以","并且","以及","或者","一个","这个",
+                  "我们","他们","你们","什么","怎么","多少","哪里","所以","因为","但是","如果"}
+
+    for rule in rules:
+        rule_text = (rule.get("item", "") + " " + rule.get("detail", "")).lower()
+        words = set(re.findall(r'[\u4e00-\u9fff]{2,}', rule_text))
+        keywords = [w for w in words if w not in STOP_WORDS and len(w) >= 2]
+        if len(keywords) < 2:
+            continue
+
+        matched = [kw for kw in keywords if kw in text_lower]
+        if len(matched) < 2:
+            continue
+
+        # 定位出处
+        main_kw = max(matched, key=len)
+        idx = text_lower.find(main_kw)
+        context = all_text[max(0, idx-40):idx+len(main_kw)+60] if idx >= 0 else ""
+
+        # 确定来源文件
+        source_files = []
+        for fid, ft in file_texts.items():
+            if "text" in ft and main_kw in ft["text"].lower():
+                source_files.append(ft["name"])
+
+        findings.append({
+            "rule_id": rule.get("id"),
+            "item": rule.get("item", ""),
+            "category": rule.get("category", ""),
+            "icon": rule.get("categoryIcon", ""),
+            "level": rule.get("level", "中风险"),
+            "score": rule.get("score", 5),
+            "urgency": rule.get("urgency", ""),
+            "detail": rule.get("detail", "")[:200],
+            "suggestion": rule.get("suggestion", "")[:200],
+            "keywords": matched[:5],
+            "context": context[:150],
+            "source_files": source_files[:3]
+        })
+
+    return findings
+
+
+def _generate_summary_text(findings, overall, files_count, rules_used):
+    """生成综合分析摘要"""
+    high = [f for f in findings if f["level"] == "高风险"]
+    mid = [f for f in findings if f["level"] == "中风险"]
+
+    cats = {}
+    for f in findings:
+        c = f.get("category", "其他")
+        cats[c] = cats.get(c, 0) + 1
+    top_cat = max(cats, key=cats.get) if cats else "无"
+
+    summary = f"本次分析基于{rules_used}条涉税风险规则，对{files_count}份资料进行了全面扫描。"
+    summary += f"综合风险等级：{overall}。共识别{len(findings)}项风险点，其中高风险{len(high)}项、中风险{len(mid)}项。"
+    if high:
+        summary += f"最突出的高风险项为「{high[0]['item']}」(score={high[0]['score']})。"
+    if cats:
+        summary += f"风险主要集中在{top_cat}类别({cats[top_cat]}项)。"
+    summary += "建议优先处理高风险项，逐项核实并制定整改措施。"
+    return summary
 
 
 def _read_file_text(filepath, original_name):

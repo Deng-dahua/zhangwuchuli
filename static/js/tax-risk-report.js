@@ -559,34 +559,83 @@ function renderDocsReport(data, reportDiv) {
   if (!reportDiv) reportDiv = document.getElementById('risk-docs-report');
   if (!reportDiv) return;
 
-  var html = '<div style="background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:16px;margin-top:16px">'
-    + '<h3 style="margin:0 0 12px 0;font-size:16px">📋 资料分析报告</h3>'
-    + '<div style="display:flex;gap:16px;margin-bottom:12px">'
-    + '<span>分析文件: <b>'+data.files_analyzed+'</b> 个</span>'
-    + '<span style="color:#dc2626">高风险: <b>'+data.high_risk+'</b></span>'
-    + '<span style="color:#f59e0b">中风险: <b>'+data.mid_risk+'</b></span>'
-    + '<span>风险线索: <b>'+data.total_risks+'</b></span>'
+  var rpt = data.report;
+  if (!rpt) { reportDiv.innerHTML = '<p style="color:var(--gray-400)">无分析结果</p>'; return; }
+
+  var levelColor = rpt.overall_level === '高风险' ? '#dc2626' : (rpt.overall_level === '中风险' ? '#f59e0b' : '#059669');
+  var levelBg = rpt.overall_level === '高风险' ? '#fef2f2' : (rpt.overall_level === '中风险' ? '#fffbeb' : '#ecfdf5');
+
+  var html = '<div style="background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:20px;margin-top:16px">'
+    // 标题和综合评级
+    + '<div style="border-bottom:2px solid var(--gray-100);padding-bottom:16px;margin-bottom:16px">'
+    + '<h2 style="margin:0 0 8px 0;font-size:20px">📋 资料综合涉税风险分析报告</h2>'
+    + '<p style="margin:4px 0;color:var(--gray-500);font-size:13px">'
+    + '分析 ' + rpt.files_count + ' 份文件 · 使用 ' + rpt.rules_used + ' 条规则 · 识别 ' + rpt.total_risks + ' 项风险</p>'
+    + '<div style="display:flex;gap:16px;align-items:center;margin-top:12px">'
+    + '<span style="font-size:14px;color:var(--gray-600)">综合风险等级：</span>'
+    + '<span style="display:inline-block;padding:4px 16px;background:'+levelBg+';color:'+levelColor+';border-radius:6px;font-weight:700;font-size:16px">' + rpt.overall_level + '</span>'
+    + '</div></div>'
+
+    // 摘要
+    + '<div style="background:#f8fafc;border-radius:6px;padding:12px 16px;margin-bottom:16px">'
+    + '<b style="font-size:14px">📝 综合分析摘要</b>'
+    + '<p style="margin:8px 0 0 0;font-size:13px;color:var(--gray-600);line-height:1.6">' + escapeHtml(rpt.summary_text || '') + '</p>'
+    + '</div>'
+
+    // 统计卡片
+    + '<div style="display:flex;gap:12px;margin-bottom:16px">'
+    + '<div style="flex:1;background:#fef2f2;border-radius:6px;padding:12px;text-align:center">'
+    + '<div style="font-size:24px;font-weight:700;color:#dc2626">' + rpt.high_risk + '</div><div style="font-size:12px;color:#991b1b">高风险</div></div>'
+    + '<div style="flex:1;background:#fffbeb;border-radius:6px;padding:12px;text-align:center">'
+    + '<div style="font-size:24px;font-weight:700;color:#f59e0b">' + rpt.mid_risk + '</div><div style="font-size:12px;color:#92400e">中风险</div></div>'
+    + '<div style="flex:1;background:#ecfdf5;border-radius:6px;padding:12px;text-align:center">'
+    + '<div style="font-size:24px;font-weight:700;color:#059669">' + rpt.low_risk + '</div><div style="font-size:12px;color:#065f46">低风险</div></div>'
+    + '<div style="flex:1;background:#f1f5f9;border-radius:6px;padding:12px;text-align:center">'
+    + '<div style="font-size:24px;font-weight:700;color:#475569">' + rpt.files_count + '</div><div style="font-size:12px;color:#64748b">分析文件</div></div>'
     + '</div>';
 
-  if (data.total_risks === 0) {
-    html += '<p style="color:var(--gray-400)">未发现涉税风险线索</p>';
+  // 按类别展示
+  if (rpt.categories && rpt.categories.length > 0) {
+    html += '<div style="margin-bottom:16px"><b style="font-size:15px">📊 风险分类统计</b></div>';
+    rpt.categories.forEach(function(cat) {
+      var cColor = cat.high > 0 ? '#dc2626' : (cat.mid > 0 ? '#f59e0b' : '#6b7280');
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid #f1f5f9">'
+        + '<span style="font-size:16px">' + (cat.icon || '📋') + '</span>'
+        + '<span style="flex:1;font-size:13px;font-weight:500">' + escapeHtml(cat.name) + '</span>'
+        + '<span style="font-size:13px;font-weight:700;color:' + cColor + '">' + cat.count + '项</span>'
+        + (cat.high > 0 ? '<span style="font-size:11px;background:#fef2f2;color:#dc2626;padding:1px 6px;border-radius:3px">' + cat.high + '高</span>' : '')
+        + (cat.mid > 0 ? '<span style="font-size:11px;background:#fffbeb;color:#f59e0b;padding:1px 6px;border-radius:3px">' + cat.mid + '中</span>' : '')
+        + '</div>';
+    });
   }
 
-  data.findings.forEach(function(f) {
-    html += '<div style="margin-bottom:8px"><b>📄 '+escapeHtml(f.doc_name)+'</b>';
-    if (f.error) { html += '<span style="color:#dc2626"> — '+f.error+'</span>'; }
-    else if (f.risks) {
-      f.risks.forEach(function(r) {
-        var color = r.level === '高风险' ? '#dc2626' : '#f59e0b';
-        html += '<div style="margin:4px 0 4px 16px;font-size:13px">'
-          + '<span style="color:'+color+';font-weight:600">['+r.level+']</span> '
-          + escapeHtml(r.item)+' (score='+r.score+')'
-          + '<div style="color:var(--gray-500);font-size:11px">匹配词: '+escapeHtml(r.keyword)+' | '+escapeHtml(r.context||'')+'</div>'
-          + '</div>';
-      });
-    }
-    html += '</div>';
-  });
+  // 详细发现
+  html += '<div style="margin:16px 0"><b style="font-size:15px">🔍 详细风险发现（按风险程度排序）</b></div>';
+
+  if (rpt.all_findings && rpt.all_findings.length > 0) {
+    rpt.all_findings.forEach(function(f, i) {
+      var color = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#6b7280');
+      var bg = f.level === '高风险' ? '#fef2f2' : (f.level === '中风险' ? '#fffbeb' : '#f9fafb');
+      var border = f.level === '高风险' ? '#fecaca' : (f.level === '中风险' ? '#fde68a' : '#e5e7eb');
+      html += '<div style="margin-bottom:8px;padding:12px;background:' + bg + ';border-left:3px solid ' + border + ';border-radius:4px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+        + '<span style="font-weight:700;font-size:13px">#' + (i+1) + '</span>'
+        + '<span style="display:inline-block;padding:1px 8px;background:' + color + ';color:#fff;border-radius:3px;font-size:11px;font-weight:600">' + f.level + '</span>'
+        + '<span style="font-size:11px;color:var(--gray-400)">规则ID:' + (f.rule_id || '-') + ' | 分数:' + (f.score || '-') + '</span>'
+        + '<span style="font-size:11px;color:var(--gray-400)">类别:' + escapeHtml(f.category || '') + '</span>'
+        + '</div>'
+        + '<div style="font-weight:600;font-size:14px;margin-bottom:4px">' + escapeHtml(f.item || '') + '</div>'
+        + '<div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">' + escapeHtml((f.detail || '').substring(0, 150)) + '</div>'
+        + '<div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">💡 ' + escapeHtml((f.suggestion || '').substring(0, 120)) + '</div>'
+        + '<div style="font-size:11px;color:var(--gray-400);margin-top:4px">'
+        + '关键词: ' + (f.keywords || []).join('、')
+        + (f.source_files && f.source_files.length > 0 ? ' | 来源: ' + f.source_files.join('、') : '')
+        + '</div>'
+        + '</div>';
+    });
+  } else {
+    html += '<p style="color:var(--gray-400);text-align:center;padding:20px">未发现涉税风险线索</p>';
+  }
 
   html += '</div>';
   reportDiv.innerHTML = html;
