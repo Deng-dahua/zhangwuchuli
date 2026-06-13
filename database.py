@@ -3436,10 +3436,11 @@ def _match_ss_payment_journals(db: Session, company_id: int):
             continue
 
         # 检查是否已被「银行流水」自动凭证生成过（避免重复）
+        # 最准确的方式：同一笔银行流水(ref_id)已生成过凭证
         existing_bank = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.source == "银行流水",
-            func.abs(JournalEntry.debit_amount - payment_amount) < 0.01,
+            JournalEntry.ref_id == tx.id,
             JournalEntry.account_code == "1002",
         ).first()
         if existing_bank:
@@ -3922,10 +3923,11 @@ def _match_hf_payment_journals(db: Session, company_id: int):
             continue
 
         # 检查是否已被「银行流水」自动凭证生成过（避免重复）
+        # 最准确的方式：同一笔银行流水(ref_id)已生成过凭证
         existing_bank = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.source == "银行流水",
-            func.abs(JournalEntry.debit_amount - payment_amount) < 0.01,
+            JournalEntry.ref_id == tx.id,
             JournalEntry.account_code == "1002",
         ).first()
         if existing_bank:
