@@ -10,3 +10,5 @@ server_error.log
 tax_risk_rules_default.json
 *.log
 *.err
+server.log
+static/uploads/
