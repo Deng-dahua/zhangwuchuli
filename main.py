@@ -275,22 +275,12 @@ def list_departments(
             Department.name.contains(keyword)
         ))
     depts = q.order_by(Department.code).offset(skip).limit(limit).all()
-    # 部门被序时账引用判定：code或name出现在序时账的department字段
-    used_dept_names = set()
-    entries = db.query(JournalEntry.department).filter(
-        JournalEntry.company_id == company_id,
-        JournalEntry.department.isnot(None),
-        JournalEntry.department != ""
-    ).distinct().all()
-    for (dn,) in entries:
-        if dn:
-            used_dept_names.add(dn.strip())
     return [
         {
             "id": d.id, "code": d.code, "name": d.name,
             "parent_code": d.parent_code, "manager": d.manager,
             "description": d.description, "is_active": d.is_active,
-            "has_journal": d.name in used_dept_names if d.name else False
+            "has_journal": False
         } for d in depts
     ]
 
@@ -299,12 +289,7 @@ def list_departments(
 def _check_archive_lock(db, company_id, archive_type, archive_id) -> bool:
     """检查档案是否被序时账引用。返回 True=已锁定"""
     if archive_type == "department":
-        dept = db.query(Department).filter(Department.company_id == company_id, Department.id == archive_id).first()
-        if dept and dept.name:
-            return db.query(JournalEntry).filter(
-                JournalEntry.company_id == company_id,
-                JournalEntry.department == dept.name
-            ).first() is not None
+        return False
     elif archive_type == "employee":
         emp = db.query(Employee).filter(Employee.company_id == company_id, Employee.id == archive_id).first()
         if emp and emp.name:
