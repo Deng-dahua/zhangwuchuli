@@ -6500,7 +6500,13 @@ def input_vat_auto_voucher(company_id: int = Query(...), db=Depends(get_db)):
     if not unprocessed:
         return {"message": "无待生成凭证的进项抵扣", "generated": 0}
     
-    periods = set(d.deduction_period for d in unprocessed if d.deduction_period)
+    periods = set()
+    for d in unprocessed:
+        p = d.deduction_period
+        if not p and d.invoice_date:
+            p = str(d.invoice_date)[:7]  # 从发票日期推导
+        if p:
+            periods.add(p)
     total = 0
     for period in periods:
         total += auto_generate_input_vat_for_period(db, company_id, period)
