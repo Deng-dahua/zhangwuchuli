@@ -431,11 +431,39 @@ function renderDocsReport(rpt) {
         + '</span></div>';
       dr.findings.forEach(function(f) {
         var cfColor = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#059669');
-        html += '<div style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:12px">'
-          + '<span style="display:inline-block;padding:1px 6px;background:' + cfColor + ';color:#fff;border-radius:3px;font-size:10px;margin-right:6px">' + f.level + '</span>'
-          + '<b>' + escapeHtml(f.type || '') + '</b>'
-          + '<div style="color:var(--gray-600);margin-top:2px">' + escapeHtml(f.detail || '') + '</div>'
-          + '</div>';
+        var cfBg = f.level === '高风险' ? '#fef2f2' : (f.level === '中风险' ? '#fffbeb' : '#ecfdf5');
+        html += '<div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;line-height:1.7">'
+          + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+          + '<span style="display:inline-block;padding:2px 10px;background:' + cfColor + ';color:#fff;border-radius:4px;font-size:11px;font-weight:600">' + f.level + '</span>'
+          + '<b style="font-size:14px">' + escapeHtml(f.type || '') + '</b>'
+          + '<span style="font-size:11px;color:var(--gray-400)">风险分值：' + (f.score || '-') + '分</span>'
+          + '</div>'
+          + '<div style="color:var(--gray-600);margin-bottom:8px">' + escapeHtml(f.detail || '') + '</div>';
+        // 详细解释
+        if (f.description) {
+          html += '<div style="background:' + cfBg + ';border-radius:6px;padding:10px 14px;margin-bottom:6px">'
+            + '<div style="font-weight:600;font-size:12px;color:' + cfColor + ';margin-bottom:4px">📋 风险解释</div>'
+            + '<div style="font-size:12px;color:var(--gray-700)">' + escapeHtml(f.description) + '</div></div>';
+        }
+        // 税务影响
+        if (f.tax_impact) {
+          html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 14px;margin-bottom:6px">'
+            + '<div style="font-weight:600;font-size:12px;color:#ea580c;margin-bottom:4px">⚠️ 税务影响</div>'
+            + '<div style="font-size:12px;color:var(--gray-700)">' + escapeHtml(f.tax_impact) + '</div></div>';
+        }
+        // 政策依据
+        if (f.policy_ref) {
+          html += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 14px;margin-bottom:6px">'
+            + '<div style="font-weight:600;font-size:12px;color:#0369a1;margin-bottom:4px">📜 政策依据</div>'
+            + '<div style="font-size:11px;color:var(--gray-600)">' + escapeHtml(f.policy_ref) + '</div></div>';
+        }
+        // 整改建议
+        if (f.suggestion) {
+          html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px 14px;margin-bottom:6px">'
+            + '<div style="font-weight:600;font-size:12px;color:#059669;margin-bottom:4px">✅ 整改建议</div>'
+            + '<div style="font-size:12px;color:var(--gray-700)">' + escapeHtml(f.suggestion) + '</div></div>';
+        }
+        html += '</div>';
       });
       html += '</div>';
     });
@@ -459,16 +487,30 @@ function renderDocsReport(rpt) {
       var color = f.level === '高风险' ? '#dc2626' : (f.level === '中风险' ? '#f59e0b' : '#6b7280');
       var bg = f.level === '高风险' ? '#fef2f2' : (f.level === '中风险' ? '#fffbeb' : '#f9fafb');
       var border = f.level === '高风险' ? '#fecaca' : (f.level === '中风险' ? '#fde68a' : '#e5e7eb');
-      html += '<div style="margin-bottom:8px;padding:12px;background:' + bg + ';border-left:3px solid ' + border + ';border-radius:4px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      html += '<div style="margin-bottom:12px;padding:16px;background:' + bg + ';border-left:4px solid ' + border + ';border-radius:6px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
         + '<span style="font-weight:700">#' + (i+1) + '</span>'
-        + '<span style="display:inline-block;padding:1px 8px;background:' + color + ';color:#fff;border-radius:3px;font-size:11px">' + f.level + '</span>'
-        + '<span style="font-size:11px;color:var(--gray-400)">规则ID:' + (f.rule_id || '-') + ' | 分:' + (f.score || '-') + '</span>'
+        + '<span style="display:inline-block;padding:2px 10px;background:' + color + ';color:#fff;border-radius:4px;font-size:11px;font-weight:600">' + (f.level || '?') + '</span>'
+        + '<span style="font-weight:600;font-size:14px">' + escapeHtml(f.type || f.rule_name || '') + '</span>'
+        + '<span style="font-size:11px;color:var(--gray-400)">分值:' + (f.score || '-') + '</span>'
         + '</div>'
-        + '<div style="font-weight:600;font-size:14px;margin-bottom:4px">' + escapeHtml(f.item || '') + '</div>'
-        + '<div style="font-size:12px;color:var(--gray-500)">' + escapeHtml((f.detail || '').substring(0,150)) + '</div>'
-        + '<div style="font-size:11px;color:var(--gray-400);margin-top:4px">关键词: ' + (f.keywords || []).join(' / ') + '</div>'
-        + '</div>';
+        + '<div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">' + escapeHtml(f.detail || f.description || '') + '</div>';
+      if (f.description && f.description !== f.detail) {
+        html += '<div style="background:#fff;border-radius:6px;padding:10px 14px;margin-bottom:6px;font-size:12px;color:var(--gray-700);line-height:1.7">'
+          + '<div style="font-weight:600;color:var(--gray-500);margin-bottom:4px">📋 详细说明</div>'
+          + escapeHtml(f.description) + '</div>';
+      }
+      if (f.tax_impact) {
+        html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 14px;margin-bottom:6px;font-size:12px;line-height:1.7">'
+          + '<div style="font-weight:600;color:#ea580c;margin-bottom:2px">⚠️ 税务影响</div>'
+          + escapeHtml(f.tax_impact) + '</div>';
+      }
+      if (f.suggestion) {
+        html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 14px;font-size:12px;line-height:1.7">'
+          + '<div style="font-weight:600;color:#059669;margin-bottom:2px">✅ 建议措施</div>'
+          + escapeHtml(f.suggestion) + '</div>';
+      }
+      html += '</div>';
     });
   } else {
     html += '<p style="color:var(--gray-400);text-align:center;padding:20px">未发现涉税风险线索</p>';
