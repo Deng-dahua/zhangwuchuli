@@ -9393,38 +9393,68 @@ def _read_file_text(filepath, original_name):
 
 
 def _analyze_doc_against_rules(text):
-    """根据涉税风险规则匹配文本中的风险线索"""
+    """加载全部涉税风险规则，对文本进行全量匹配分析"""
     risks = []
+    if not text or len(text.strip()) < 20:
+        return risks
+
     text_lower = text.lower()
 
-    RULE_PATTERNS = [
-        (["虚开发票", "虚假发票", "购买发票", "无真实交易", "资金回流", "空壳"], "发票虚开嫌疑", "高风险", 9),
-        (["隐匿收入", "未开票", "不开发票", "账外", "体外循环", "私户收款", "个人账户收款"], "隐匿收入嫌疑", "高风险", 9),
-        (["骗取退税", "虚增进项", "虚假抵扣", "骗取留抵"], "骗取退税嫌疑", "高风险", 10),
-        (["偷税", "逃税", "偷逃税款", "少缴税款", "漏税"], "偷逃税款嫌疑", "高风险", 9),
-        (["关联交易", "转让定价", "利润转移", "避税安排"], "关联交易避税嫌疑", "中风险", 7),
-        (["虚列成本", "多列支出", "虚增费用", "费用造假", "假发票入账"], "虚列成本嫌疑", "高风险", 8),
-        (["未代扣", "未扣缴", "个税未缴", "未申报个税", "未履行扣缴义务"], "个税扣缴义务缺失", "中风险", 7),
-        (["长期亏损", "长亏不倒", "持续亏损但持续经营"], "长亏不倒异常", "中风险", 6),
-        (["发票异常", "发票数据异常", "进销不匹配", "开票数据异常"], "发票数据异常", "中风险", 5),
-        (["社保未缴", "未缴社保", "未参加社保", "社保缴纳异常", "未办理社会保险"], "社保缴纳异常", "中风险", 7),
-        (["欠税", "拖欠税款", "税款未缴", "税金未交"], "欠税风险", "高风险", 8),
-        (["注销", "非正常户", "经营异常", "吊销"], "经营状态异常", "高风险", 9),
-    ]
+    # 加载全部217条规则
+    rules = _load_tax_risk_rules()
+    if not rules:
+        return risks
 
-    for keywords, item, level, score in RULE_PATTERNS:
-        matches = [kw for kw in keywords if kw in text_lower]
-        if matches:
-            # 在原文中定位匹配点
-            for kw in matches[:2]:
-                idx = text_lower.find(kw)
-                context = text[max(0, idx-30):idx+len(kw)+30] if idx >= 0 else kw
-                risks.append({
-                    "item": f"资料中发现「{item}」",
-                    "level": level, "score": score,
-                    "keyword": kw, "context": f"...{context}..."
-                })
-    return risks[:15]  # 最多15条
+    for rule in rules:
+        # 从规则的 item + detail 中提取关键匹配词
+        rule_text = (rule.get("item", "") + " " + rule.get("detail", "")).lower()
+        # 提取中文关键词（2字以上，排除通用虚词）
+        import re
+        words = set(re.findall(r'[\u4e00-\u9fff]{2,}', rule_text))
+        # 过滤通用虚词
+        STOP_WORDS = {"进行","存在","可能","相关","是否","需要","应当","已经","目前","本企业",
+                      "该企业","以下","以上","包括","符合","属于","涉及","超过","发现","达到",
+                      "不能","没有","不会","用于","使用","可以","并且","以及","或者"}
+        keywords = [w for w in words if w not in STOP_WORDS and len(w) >= 2]
+
+        if not keywords:
+            continue
+
+        # 匹配：至少2个关键词命中才认为相关
+        matched_kw = [kw for kw in keywords if kw in text_lower]
+        if len(matched_kw) < 2:
+            continue
+
+        # 取最多3个匹配词显示
+        display_kw = matched_kw[:3]
+        # 定位第一个匹配词在原文中的上下文
+        idx = text_lower.find(matched_kw[0])
+        context = text[max(0, idx-30):idx+len(matched_kw[0])+50] if idx >= 0 else matched_kw[0]
+
+        risks.append({
+            "item": rule.get("item", ""),
+            "level": rule.get("level", "中风险"),
+            "score": rule.get("score", 5),
+            "keyword": "、".join(display_kw),
+            "context": f"...{context}...",
+            "rule_id": rule.get("id"),
+            "suggestion": rule.get("suggestion", "")[:100]
+        })
+
+    # 按分数降序，取前20条
+    risks.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return risks[:20]
+
+
+def _load_tax_risk_rules():
+    """加载涉税风险规则JSON"""
+    import json
+    rules_path = os.path.join(os.path.dirname(__file__), "static", "tax_risk_rules_local_export.json")
+    try:
+        with open(rules_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
 
 
 if __name__ == "__main__":
