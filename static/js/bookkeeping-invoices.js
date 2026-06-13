@@ -3,6 +3,16 @@
 let biTab = 'all'; // all / zpt / ppt
 let biFilter = { category: '', keyword: '', dateFrom: '', dateTo: '' };
 
+function onBIPeriodQuery(clear) {
+  if (clear) { biFilter.dateFrom = ''; biFilter.dateTo = ''; }
+  else {
+    var p = getModulePeriod('bi');
+    if (!p) { biFilter.dateFrom = ''; biFilter.dateTo = ''; }
+    else { var r = periodToDateRange(p); biFilter.dateFrom = r.from; biFilter.dateTo = r.to; }
+  }
+  renderBookkeepingInvoices();
+}
+
 async function renderBookkeepingInvoices(container) {
   let el = container || document.getElementById('page-' + currentPage) || document.getElementById('content-area');
   if (!el || !el.isConnected) {
@@ -27,8 +37,10 @@ async function renderBookkeepingInvoices(container) {
     html += '</div>';
 
     html += '<div class="toolbar" style="flex-wrap:wrap;">';
-    html += '<div class="toolbar-left" style="flex:1 1 100%;">';
-    html += '<button class="btn-toolbar" onclick="showUploadModal(\'bookkeeping-invoice\')">导入文件</button>';
+    html += '<div class="toolbar-left" style="flex:1 1 100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+    var biPeriod = biFilter.dateFrom ? biFilter.dateFrom.slice(0,7) : currentPeriod;
+    var biParts = biPeriod ? biPeriod.split('-') : [];
+    html += buildPeriodSelectorHtml('bi', biParts[0] || '', biParts[1] || '', 'onBIPeriodQuery');
     html += '<button class="btn-toolbar-danger" id="biBatchDelBtn" onclick="batchDeleteBookkeepingInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const biTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票']];

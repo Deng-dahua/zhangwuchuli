@@ -34,7 +34,6 @@ async function renderUnbookkeptInvoices(container) {
     var ubiPeriod = ubiFilter.dateFrom ? ubiFilter.dateFrom.slice(0,7) : currentPeriod;
     var ubiParts = ubiPeriod ? ubiPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('ubi', ubiParts[0] || '', ubiParts[1] || '', 'onUBIPeriodQuery');
-    html += '<button class="btn-toolbar" onclick="showUploadModal(\'bookkeeping-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="ubiBatchGenBtn" onclick="batchGenerateUBIVouchers()">生成凭证</button>';
     html += '<button class="btn-toolbar-danger" id="ubiBatchDelBtn" onclick="batchDeleteUnbookkeptInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
