@@ -35,7 +35,6 @@ async function renderUnbookkeptInvoices(container) {
     var ubiParts = ubiPeriod ? ubiPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('ubi', ubiParts[0] || '', ubiParts[1] || '', 'onUBIPeriodQuery');
     html += '<button class="btn-toolbar" id="ubiBatchGenBtn" onclick="batchGenerateUBIVouchers()">生成凭证</button>';
-    html += '<button class="btn-toolbar-danger" id="ubiBatchDelBtn" onclick="batchDeleteUnbookkeptInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const ubiTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票']];
     ubiTabs.forEach(([t, label]) => {
@@ -191,11 +190,6 @@ function getCheckedUbiIds() {
 function updateUbiBatchBtn() {
   const checked = document.querySelectorAll('.ubi-check:checked');
   const count = checked.length;
-  const delBtn = document.getElementById('ubiBatchDelBtn');
-  if (delBtn) {
-    delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
-    delBtn.disabled = count === 0;
-  }
   const selectAll = document.getElementById('ubiSelectAll');
   if (selectAll) {
     const boxes = document.querySelectorAll('.ubi-check');
