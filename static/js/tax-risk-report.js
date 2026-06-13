@@ -8,17 +8,95 @@ function renderTaxRiskReport(container) {
   container.innerHTML = ''
     + '<div class="risk-report-container">'
     + '<div class="risk-report-header">'
-    + '<h2>🛡️ 涉税风险分析报告</h2>'
+    + '<h2>涉税风险分析报告</h2>'
     + '<p class="risk-report-subtitle">基于账务数据、发票合规、税负水平、成本结构、政策执行等维度综合分析</p>'
-    + '<div class="risk-report-actions">'
-    + '<button class="btn btn-primary" onclick="loadTaxRiskReport()" id="risk-refresh-btn">'
-    + '<span id="risk-refresh-icon">🔄</span> 生成/刷新报告</button>'
-    + '<span id="risk-last-update" style="margin-left:12px;color:var(--gray-400);font-size:12px"></span>'
-    + '</div>'
+    + '<div id="tr-period-bar" style="display:flex;align-items:center;gap:4px;margin-top:12px"></div>'
     + '</div>'
     + '<div id="risk-summary-cards" class="risk-summary-cards"></div>'
     + '<div id="risk-report-body" class="risk-report-body"></div>'
     + '</div>';
+
+  // 构建标准期间栏 + 按钮：清除 → 生成/刷新 → 下载 → 删除
+  setTimeout(function() {
+    _buildStandardPeriodBar('tr-', {
+      onQuery: loadTaxRiskReport,
+      onClear: function() {
+        taxRiskReportData = null;
+        document.getElementById('risk-report-body').innerHTML = '';
+        document.getElementById('risk-summary-cards').innerHTML = '';
+      }
+    });
+    var trBar = document.getElementById('tr-period-bar');
+    if (!trBar) return;
+    var clearBtn = trBar.querySelector('.std-clear-btn');
+    if (!clearBtn) return;
+
+    // 生成/刷新按钮
+    var refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn-toolbar';
+    refreshBtn.id = 'risk-refresh-btn';
+    refreshBtn.textContent = '生成/刷新报告';
+    refreshBtn.addEventListener('click', loadTaxRiskReport);
+    clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
+
+    // 下载按钮
+    var downloadWrap = document.createElement('span');
+    downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
+      + '<button class="btn-toolbar" id="risk-download-btn" style="display:none">下载报告</button>'
+      + '<div class="download-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;min-width:120px">'
+      + '<div data-fmt="pdf" style="padding:8px 16px;cursor:pointer" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">PDF 下载</div>'
+      + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">Word 下载</div>'
+      + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">PPT 下载</div>'
+      + '</div></div>';
+    clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
+
+    // 删除按钮
+    var deleteWrap = document.createElement('span');
+    deleteWrap.id = 'risk-delete-btn-wrap';
+    deleteWrap.style.display = 'none';
+    deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>';
+    clearBtn.parentNode.insertBefore(deleteWrap, downloadWrap.nextSibling);
+
+    // 最后更新时间
+    var spacer = document.createElement('span');
+    spacer.style.marginLeft = '8px';
+    spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>';
+    trBar.appendChild(spacer);
+
+    // 下载按钮下拉菜单
+    var downloadBtn = document.getElementById('risk-download-btn');
+    var downloadMenu = trBar.querySelector('.download-menu');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (downloadMenu) downloadMenu.style.display = downloadMenu.style.display === 'block' ? 'none' : 'block';
+      });
+    }
+    if (downloadMenu) {
+      downloadMenu.querySelectorAll('[data-fmt]').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          downloadMenu.style.display = 'none';
+          downloadTaxRiskReport(item.getAttribute('data-fmt'));
+        });
+      });
+    }
+    document.addEventListener('click', function() { if (downloadMenu) downloadMenu.style.display = 'none'; });
+
+    // 删除按钮事件
+    var delBtn = document.getElementById('risk-delete-btn');
+    if (delBtn) {
+      delBtn.addEventListener('click', function() {
+        if (!confirm('确定要删除当前报告吗？')) return;
+        taxRiskReportData = null;
+        document.getElementById('risk-report-body').innerHTML = '';
+        document.getElementById('risk-summary-cards').innerHTML = '';
+        document.getElementById('risk-delete-btn-wrap').style.display = 'none';
+        if (downloadBtn) downloadBtn.style.display = 'none';
+        toast('报告已删除', 'success');
+      });
+    }
+  }, 100);
 
   // 自动加载
   if (!taxRiskReportData) {
@@ -37,13 +115,21 @@ async function loadTaxRiskReport() {
   if (icon) { icon.className = 'spin'; icon.textContent = '⏳'; }
 
   try {
-    var url = '/api/tax-risk/report';
-    // 如果全局期间变量存在，附加期间参数
-    if (typeof window.globalPeriod !== 'undefined' && window.globalPeriod) {
-      url += '?period=' + window.globalPeriod;
-    }
+    // 从期间选择器获取值
+    var fy = document.getElementById('tr-from-y');
+    var fm = document.getElementById('tr-from-m');
+    var ty = document.getElementById('tr-to-y');
+    var tm = document.getElementById('tr-to-m');
+    var from = ((fy && fy.value) || '2025') + '-' + ((fm && fm.value) || '01');
+    var to = ((ty && ty.value) || '2025') + '-' + ((tm && tm.value) || '12');
+    var url = '/api/tax-risk/report?company_id=' + (typeof currentCompanyId !== 'undefined' ? currentCompanyId : 1) + '&period_from=' + from + '&period_to=' + to;
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
+    // 报告生成后显示下载和删除按钮
+    var dw = document.getElementById('risk-delete-btn-wrap');
+    if (dw) dw.style.display = '';
+    var db = document.getElementById('risk-download-btn');
+    if (db) db.style.display = '';
     var now = new Date();
     var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0')
       + '-' + String(now.getDate()).padStart(2,'0') + ' '
@@ -183,4 +269,17 @@ function renderRiskItem(r, idx) {
 function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function downloadTaxRiskReport(format) {
+  if (!taxRiskReportData) { toast('请先生成报告', 'error'); return; }
+  var cid = typeof currentCompanyId !== 'undefined' ? currentCompanyId : 1;
+  var url = '/api/tax-risk/download-report?company_id=' + cid + '&format=' + format;
+  // 使用 hidden iframe 触发下载
+  var iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = url;
+  document.body.appendChild(iframe);
+  setTimeout(function() { document.body.removeChild(iframe); }, 5000);
+  toast('报告下载中...', 'success');
 }
