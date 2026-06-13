@@ -1,16 +1,16 @@
-// ==================== 涉税风险分析报告 V5 ====================
-// 61 个分析维度：账务数据 / 发票合规 / 发票深度 / 成本结构 / 财税票比对 /
-// 配比弹性 / 隐匿虚增 / 税负水平 / 城建税 / 房产税 / 个人所得税 / 印花税 /
-// 纳税调整 / 收入时点 / 政策执行 / 资金往来 / 薪酬合规 /
-// 客户穿透 / 供应商穿透 / 财务健康 / 企业信用 / 行业专项 / 良好实践 /
-// 经营实质(18项) / 增值税专项(5项) / 发票异常(3项) / 费用匹配(3项) /
-// 企业所得税(4项) / 薪酬福利(3项) / 其他风险(2项)
+﻿// ==================== 娑夌◣椋庨櫓鍒嗘瀽鎶ュ憡 V5 ====================
+// 61 涓垎鏋愮淮搴︼細璐﹀姟鏁版嵁 / 鍙戠エ鍚堣 / 鍙戠エ娣卞害 / 鎴愭湰缁撴瀯 / 璐㈢◣绁ㄦ瘮瀵?/
+// 閰嶆瘮寮规€?/ 闅愬尶铏氬 / 绋庤礋姘村钩 / 鍩庡缓绋?/ 鎴夸骇绋?/ 涓汉鎵€寰楃◣ / 鍗拌姳绋?/
+// 绾崇◣璋冩暣 / 鏀跺叆鏃剁偣 / 鏀跨瓥鎵ц / 璧勯噾寰€鏉?/ 钖叕鍚堣 /
+// 瀹㈡埛绌块€?/ 渚涘簲鍟嗙┛閫?/ 璐㈠姟鍋ュ悍 / 浼佷笟淇＄敤 / 琛屼笟涓撻」 / 鑹ソ瀹炶返 /
+// 缁忚惀瀹炶川(18椤? / 澧炲€肩◣涓撻」(5椤? / 鍙戠エ寮傚父(3椤? / 璐圭敤鍖归厤(3椤? /
+// 浼佷笟鎵€寰楃◣(4椤? / 钖叕绂忓埄(3椤? / 鍏朵粬椋庨櫓(2椤?
 
 var taxRiskReportData = null;
 var taxRiskLoading = false;
 
 function renderTaxRiskReport(container) {
-  window.currentModule = '涉税风险分析报告';
+  window.currentModule = '娑夌◣椋庨櫓鍒嗘瀽鎶ュ憡';
 
   container.innerHTML = ''
     + '<div class="risk-report-container">'
@@ -23,38 +23,38 @@ function renderTaxRiskReport(container) {
 
   _buildStandardPeriodBar('tr-', { onQuery: loadTaxRiskReport, onClear: function() { loadTaxRiskReport(); } });
 
-  // 按钮顺序：清除 → 生成/刷新报告 → 下载报告
+  // 鎸夐挳椤哄簭锛氭竻闄?鈫?鐢熸垚/鍒锋柊鎶ュ憡 鈫?涓嬭浇鎶ュ憡
   var trBar = document.getElementById('tr-period-bar');
   if (trBar) {
     var queryBtn = trBar.querySelector('.std-query-btn');
     if (queryBtn) queryBtn.remove();
     var clearBtn = trBar.querySelector('.std-clear-btn');
-    // 所有按钮间距由父容器 tr-period-bar 的 flex gap 统一控制
-    // 清除 → 生成/刷新报告 → 下载报告 → 删除报告
+    // 鍦ㄦ竻闄ゆ寜閽悗鎻掑叆鐢熸垚/鍒锋柊鎶ュ憡鎸夐挳
     if (clearBtn) {
       var refreshBtn = document.createElement('button');
       refreshBtn.className = 'btn-toolbar';
       refreshBtn.id = 'risk-refresh-btn';
-      refreshBtn.textContent = '生成/刷新报告';
+      refreshBtn.textContent = '鐢熸垚/鍒锋柊鎶ュ憡';
       refreshBtn.addEventListener('click', loadTaxRiskReport);
       clearBtn.parentNode.insertBefore(refreshBtn, clearBtn.nextSibling);
     }
-    // 下载按钮
-    var downloadWrap = document.createElement('span');
+    // 涓嬭浇鎶ュ憡鎸夐挳锛堝湪鐢熸垚/鍒锋柊鎸夐挳鍚庨潰锛?    var downloadWrap = document.createElement('span');
+    downloadWrap.style.marginRight = '8px';
     downloadWrap.innerHTML = '<div class="download-dropdown" style="display:inline-block;position:relative">'
-      + '<button class="btn-toolbar" id="risk-download-btn" style="display:none">下载报告</button>'
+      + '<button class="btn-toolbar" id="risk-download-btn" style="display:none">涓嬭浇鎶ュ憡</button>'
       + '<div class="download-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;min-width:120px">'
-      + '<div data-fmt="pdf" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📄 PDF 下载</div>'
-      + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📝 Word 下载</div>'
-      + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">📊 PPT 下载</div>'
+      + '<div data-fmt="pdf" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">馃搫 PDF 涓嬭浇</div>'
+      + '<div data-fmt="docx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">馃摑 Word 涓嬭浇</div>'
+      + '<div data-fmt="pptx" style="padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-700)" onmouseover="this.style.background=\'var(--gray-50)\'" onmouseout="this.style.background=\'\'">馃搳 PPT 涓嬭浇</div>'
       + '</div></div>';
     clearBtn.parentNode.insertBefore(downloadWrap, refreshBtn.nextSibling);
 
-    // 删除按钮
+    // 鍒犻櫎鎶ュ憡鎸夐挳锛堜笅杞芥寜閽悗闈級
     var deleteWrap = document.createElement('span');
     deleteWrap.id = 'risk-delete-btn-wrap';
+    deleteWrap.style.marginLeft = '16px';
     deleteWrap.style.display = 'none';
-    deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">删除报告</button>';
+    deleteWrap.innerHTML = '<button class="btn-toolbar" id="risk-delete-btn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2">鍒犻櫎鎶ュ憡</button>';
     clearBtn.parentNode.insertBefore(deleteWrap, downloadWrap.nextSibling);
 
     var spacer = document.createElement('span');
@@ -62,7 +62,7 @@ function renderTaxRiskReport(container) {
     spacer.innerHTML = '<span id="risk-last-update" style="color:var(--gray-400);font-size:12px"></span>';
     trBar.appendChild(spacer);
 
-    // 下载菜单交互
+    // 涓嬭浇鑿滃崟浜や簰
     setTimeout(function() {
       var downloadBtn = document.getElementById('risk-download-btn');
       var downloadMenu = document.querySelector('.download-menu');
@@ -83,7 +83,7 @@ function renderTaxRiskReport(container) {
     }, 100);
   }
 
-  // 每次进入模块都重新加载，避免切换公司后显示旧数据缓存
+  // 姣忔杩涘叆妯″潡閮介噸鏂板姞杞斤紝閬垮厤鍒囨崲鍏徃鍚庢樉绀烘棫鏁版嵁缂撳瓨
   taxRiskReportData = null;
   loadTaxRiskReport();
 }
@@ -92,25 +92,23 @@ async function loadTaxRiskReport() {
   if (taxRiskLoading) return;
   taxRiskLoading = true;
   var btn = document.getElementById('risk-refresh-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 分析中...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '鈴?鍒嗘瀽涓?..'; }
 
   try {
     var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
-    // 使用 _getPeriodRange 获取标准格式 YYYY-MM-DD（当月第一天/最后一天）
+    // 浣跨敤 _getPeriodRange 鑾峰彇鏍囧噯鏍煎紡 YYYY-MM-DD锛堝綋鏈堢涓€澶?鏈€鍚庝竴澶╋級
     var range = (typeof _getPeriodRange === 'function') ? _getPeriodRange('tr-') : null;
     var from = range ? range.from : ((typeof _readPeriod === 'function') ? _readPeriod('tr-from') : '');
     var to = range ? range.to : ((typeof _readPeriod === 'function') ? _readPeriod('tr-to') : '');
 
-    // 【关键】先确保规则已同步到服务器
-    await syncRulesToServer();
+    // 銆愬叧閿€戝厛纭繚瑙勫垯宸插悓姝ュ埌鏈嶅姟鍣?    await syncRulesToServer();
 
     var url = '/api/tax-risk/report?company_id=' + cid;
     if (from) url += '&period_from=' + from;
     if (to) url += '&period_to=' + to;
     taxRiskReportData = await api(url);
     renderTaxRiskReportData(taxRiskReportData);
-    // 报告生成后显示「删除报告」和「下载报告」按钮
-    var delWrap = document.getElementById('risk-delete-btn-wrap');
+    // 鎶ュ憡鐢熸垚鍚庢樉绀恒€屽垹闄ゆ姤鍛娿€嶅拰銆屼笅杞芥姤鍛娿€嶆寜閽?    var delWrap = document.getElementById('risk-delete-btn-wrap');
     if (delWrap) delWrap.style.display = '';
     var downloadBtn = document.getElementById('risk-download-btn');
     if (downloadBtn) downloadBtn.style.display = '';
@@ -118,7 +116,7 @@ async function loadTaxRiskReport() {
     if (delBtn && !delBtn._bound) {
       delBtn._bound = true;
       delBtn.addEventListener('click', function() {
-        if (!confirm('确定要删除当前报告吗？')) return;
+        if (!confirm('纭畾瑕佸垹闄ゅ綋鍓嶆姤鍛婂悧锛?)) return;
         taxRiskReportData = null;
         document.getElementById('risk-report-body').innerHTML = '';
         document.getElementById('risk-summary-cards').innerHTML = '';
@@ -126,7 +124,7 @@ async function loadTaxRiskReport() {
         if (d) d.style.display = 'none';
         var db = document.getElementById('risk-download-btn');
         if (db) db.style.display = 'none';
-        toast('报告已删除', 'success');
+        toast('鎶ュ憡宸插垹闄?, 'success');
       });
     }
     var now = new Date();
@@ -134,20 +132,20 @@ async function loadTaxRiskReport() {
       + '-' + String(now.getDate()).padStart(2,'0') + ' '
       + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
     var el = document.getElementById('risk-last-update');
-    if (el) el.textContent = '最近更新: ' + ts;
+    if (el) el.textContent = '鏈€杩戞洿鏂? ' + ts;
   } catch (err) {
-    toast('风险报告加载失败: ' + (err.message || err), 'error');
+    toast('椋庨櫓鎶ュ憡鍔犺浇澶辫触: ' + (err.message || err), 'error');
   } finally {
     taxRiskLoading = false;
-    if (btn) { btn.disabled = false; btn.textContent = '生成/刷新报告'; }
+    if (btn) { btn.disabled = false; btn.textContent = '鐢熸垚/鍒锋柊鎶ュ憡'; }
   }
 }
 
-// 将本地规则同步到服务器（供后端分析使用）
+// 灏嗘湰鍦拌鍒欏悓姝ュ埌鏈嶅姟鍣紙渚涘悗绔垎鏋愪娇鐢級
 async function syncRulesToServer() {
   try {
     var rules = null;
-    // 从 localStorage 获取规则
+    // 浠?localStorage 鑾峰彇瑙勫垯
     if (typeof taxRiskRulesData !== 'undefined' && taxRiskRulesData && taxRiskRulesData.length > 0) {
       rules = taxRiskRulesData;
     } else {
@@ -162,54 +160,53 @@ async function syncRulesToServer() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(rules)
       });
-      console.log('[报告] 规则已同步到服务器，共 ' + rules.length + ' 条');
+      console.log('[鎶ュ憡] 瑙勫垯宸插悓姝ュ埌鏈嶅姟鍣紝鍏?' + rules.length + ' 鏉?);
     }
   } catch(e) {
-    console.warn('[报告] 规则同步失败（后端可能未就绪）:', e.message);
+    console.warn('[鎶ュ憡] 瑙勫垯鍚屾澶辫触锛堝悗绔彲鑳芥湭灏辩华锛?', e.message);
   }
 }
 
 function renderTaxRiskReportData(data) {
   if (!data || !data.results) {
     document.getElementById('risk-report-body').innerHTML
-      = '<div class="risk-empty">暂无风险分析数据，请点击「生成报告」</div>';
+      = '<div class="risk-empty">鏆傛棤椋庨櫓鍒嗘瀽鏁版嵁锛岃鐐瑰嚮銆岀敓鎴愭姤鍛娿€?/div>';
     return;
   }
 
-  // 汇总卡片 + 财务指标
+  // 姹囨€诲崱鐗?+ 璐㈠姟鎸囨爣
   renderSummaryCards(data.summary, data.period_start, data.period_end, data.metrics, data.rules_applied, data.rules_count);
 
-  // 佐证材料汇总（如有）
-  if (data.required_evidence_summary && data.required_evidence_summary.length > 0) {
+  // 浣愯瘉鏉愭枡姹囨€伙紙濡傛湁锛?  if (data.required_evidence_summary && data.required_evidence_summary.length > 0) {
     renderEvidenceSummary(data.required_evidence_summary);
   }
 
-  // 分类渲染
+  // 鍒嗙被娓叉煋
   var body = document.getElementById('risk-report-body');
   var categories = {};
   for (var i = 0; i < data.results.length; i++) {
     var r = data.results[i];
-    var cat = r.category || '其他';
+    var cat = r.category || '鍏朵粬';
     if (!categories[cat]) categories[cat] = [];
     categories[cat].push(r);
   }
 
-  // 完整54个分类排序（经营实质稽查级+增值税专项排最前）
+  // 瀹屾暣54涓垎绫绘帓搴忥紙缁忚惀瀹炶川绋芥煡绾?澧炲€肩◣涓撻」鎺掓渶鍓嶏級
   var catOrder = [
-    '经营实质',
-    '增值税专项',
-    '合同风险',
-    '发票异常',
-    '费用匹配',
-    '企业所得税',
-    '薪酬福利',
-    '良好实践',
-    '财税票比对', '配比弹性', '隐匿虚增', '纳税调整', '收入时点',
-    '账务数据', '发票合规', '发票深度', '成本结构',
-    '税负水平', '城建税', '房产税', '个人所得税', '印花税',
-    '政策执行', '资金往来', '薪酬合规',
-    '客户穿透', '供应商穿透', '财务健康', '企业信用', '行业专项',
-    '其他风险'
+    '缁忚惀瀹炶川',
+    '澧炲€肩◣涓撻」',
+    '鍚堝悓椋庨櫓',
+    '鍙戠エ寮傚父',
+    '璐圭敤鍖归厤',
+    '浼佷笟鎵€寰楃◣',
+    '钖叕绂忓埄',
+    '鑹ソ瀹炶返',
+    '璐㈢◣绁ㄦ瘮瀵?, '閰嶆瘮寮规€?, '闅愬尶铏氬', '绾崇◣璋冩暣', '鏀跺叆鏃剁偣',
+    '璐﹀姟鏁版嵁', '鍙戠エ鍚堣', '鍙戠エ娣卞害', '鎴愭湰缁撴瀯',
+    '绋庤礋姘村钩', '鍩庡缓绋?, '鎴夸骇绋?, '涓汉鎵€寰楃◣', '鍗拌姳绋?,
+    '鏀跨瓥鎵ц', '璧勯噾寰€鏉?, '钖叕鍚堣',
+    '瀹㈡埛绌块€?, '渚涘簲鍟嗙┛閫?, '璐㈠姟鍋ュ悍', '浼佷笟淇＄敤', '琛屼笟涓撻」',
+    '鍏朵粬椋庨櫓'
   ];
   var html = '';
 
@@ -221,12 +218,11 @@ function renderTaxRiskReportData(data) {
     html += renderCategorySection(catName, items);
   }
 
-  // 未在 catOrder 中的分类放最后
-  for (var cat in categories) {
+  // 鏈湪 catOrder 涓殑鍒嗙被鏀炬渶鍚?  for (var cat in categories) {
     html += renderCategorySection(cat, categories[cat]);
   }
 
-  body.innerHTML = html || '<div class="risk-empty">未发现明显风险事项</div>';
+  body.innerHTML = html || '<div class="risk-empty">鏈彂鐜版槑鏄鹃闄╀簨椤?/div>';
 }
 
 function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) {
@@ -234,67 +230,67 @@ function renderSummaryCards(summary, ps, pe, metrics, rulesApplied, rulesCount) 
   if (!el || !summary) return;
 
   var levelColor = {
-    '高风险': '#dc2626', '中风险': '#f59e0b',
-    '低风险': '#3b82f6', '良好': '#10b981'
+    '楂橀闄?: '#dc2626', '涓闄?: '#f59e0b',
+    '浣庨闄?: '#3b82f6', '鑹ソ': '#10b981'
   };
   var levelBg = {
-    '高风险': '#fef2f2', '中风险': '#fffbeb',
-    '低风险': '#eff6ff', '良好': '#ecfdf5'
+    '楂橀闄?: '#fef2f2', '涓闄?: '#fffbeb',
+    '浣庨闄?: '#eff6ff', '鑹ソ': '#ecfdf5'
   };
-  // overall_risk_level 为 null/undefined 时表示无数据，不默认显示"良好"
+  // overall_risk_level 涓?null/undefined 鏃惰〃绀烘棤鏁版嵁锛屼笉榛樿鏄剧ず"鑹ソ"
   var overall = summary.overall_risk_level || null;
-  var overallLabel = overall || '暂无数据';
+  var overallLabel = overall || '鏆傛棤鏁版嵁';
   var overallColor = overall ? (levelColor[overall] || '#10b981') : '#9ca3af';
   var overallBg   = overall ? (levelBg[overall]   || '#ecfdf5') : '#f3f4f6';
 
   var rulesBadge = '';
   if (rulesApplied && rulesCount > 0) {
-    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#eef2ff;color:#6366f1;border-radius:4px;font-size:11px;font-weight:500;">基于 ' + rulesCount + ' 条规则</span>';
+    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#eef2ff;color:#6366f1;border-radius:4px;font-size:11px;font-weight:500;">鍩轰簬 ' + rulesCount + ' 鏉¤鍒?/span>';
   } else {
-    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;">未加载规则</span>';
+    rulesBadge = '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;">鏈姞杞借鍒?/span>';
   }
 
   el.innerHTML = ''
     + '<div class="risk-card overall" style="border-color:' + overallColor + ';background:' + overallBg + '">'
-    + '<div class="risk-card-label">综合风险等级' + rulesBadge + '</div>'
+    + '<div class="risk-card-label">缁煎悎椋庨櫓绛夌骇' + rulesBadge + '</div>'
     + '<div class="risk-card-value" style="color:' + overallColor + '">' + overallLabel + '</div>'
-    + '<div class="risk-card-sub">分析期间：' + escapeHtml(ps || '-') + ' ~ ' + escapeHtml(pe || '-') + '</div>'
+    + '<div class="risk-card-sub">鍒嗘瀽鏈熼棿锛? + escapeHtml(ps || '-') + ' ~ ' + escapeHtml(pe || '-') + '</div>'
     + '</div>'
     + '<div class="risk-card high" style="border-color:#dc2626">'
-    + '<div class="risk-card-label">高风险</div>'
+    + '<div class="risk-card-label">楂橀闄?/div>'
     + '<div class="risk-card-value" style="color:#dc2626">' + (summary.high_risk_count || 0) + '</div>'
-    + '<div class="risk-card-sub">项</div></div>'
+    + '<div class="risk-card-sub">椤?/div></div>'
     + '<div class="risk-card mid" style="border-color:#f59e0b">'
-    + '<div class="risk-card-label">中风险</div>'
+    + '<div class="risk-card-label">涓闄?/div>'
     + '<div class="risk-card-value" style="color:#f59e0b">' + (summary.mid_risk_count || 0) + '</div>'
-    + '<div class="risk-card-sub">项</div></div>'
+    + '<div class="risk-card-sub">椤?/div></div>'
     + '<div class="risk-card low" style="border-color:#3b82f6">'
-    + '<div class="risk-card-label">低风险</div>'
+    + '<div class="risk-card-label">浣庨闄?/div>'
     + '<div class="risk-card-value" style="color:#3b82f6">' + (summary.low_risk_count || 0) + '</div>'
-    + '<div class="risk-card-sub">项</div></div>'
+    + '<div class="risk-card-sub">椤?/div></div>'
     + '<div class="risk-card good" style="border-color:#10b981">'
-    + '<div class="risk-card-label">良好事项</div>'
+    + '<div class="risk-card-label">鑹ソ浜嬮」</div>'
     + '<div class="risk-card-value" style="color:#10b981">' + (summary.good_count || 0) + '</div>'
-    + '<div class="risk-card-sub">项</div></div>'
+    + '<div class="risk-card-sub">椤?/div></div>'
     + '<div class="risk-card total" style="border-color:#6b7280">'
-    + '<div class="risk-card-label">总计检查项</div>'
+    + '<div class="risk-card-label">鎬昏妫€鏌ラ」</div>'
     + '<div class="risk-card-value" style="color:#6b7280">' + (summary.total_items || 0) + '</div>'
-    + '<div class="risk-card-sub">项</div></div>';
+    + '<div class="risk-card-sub">椤?/div></div>';
 
-  // （财务指标栏已移除）
+  // 锛堣储鍔℃寚鏍囨爮宸茬Щ闄わ級
 }
 
 function formatNum(n) {
   if (!n) return '0';
-  if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '亿';
-  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(2) + '万';
+  if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '浜?;
+  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(2) + '涓?;
   return n.toFixed(2);
 }
 
 function renderCategorySection(catName, items) {
-  var icon = items[0] ? (items[0].category_icon || '📋') : '📋';
+  var icon = items[0] ? (items[0].category_icon || '馃搵') : '馃搵';
   var h = '<div class="risk-category">';
-  h += '<div class="risk-category-header"><span class="risk-cat-icon">' + icon + '</span> ' + escapeHtml(catName) + ' <span class="risk-cat-count">' + items.length + '项</span></div>';
+  h += '<div class="risk-category-header"><span class="risk-cat-icon">' + icon + '</span> ' + escapeHtml(catName) + ' <span class="risk-cat-count">' + items.length + '椤?/span></div>';
   for (var i = 0; i < items.length; i++) {
     h += renderRiskItem(items[i], i);
   }
@@ -304,53 +300,50 @@ function renderCategorySection(catName, items) {
 
 function renderRiskItem(r, idx) {
   var urgencyBadge = '';
-  if (r.urgency === '紧急') {
-    urgencyBadge = '<span class="urgency-badge urgent">紧急</span>';
-  } else if (r.urgency === '提醒') {
-    urgencyBadge = '<span class="urgency-badge warning">提醒</span>';
-  } else if (r.urgency === '建议') {
-    urgencyBadge = '<span class="urgency-badge suggest">建议</span>';
+  if (r.urgency === '绱ф€?) {
+    urgencyBadge = '<span class="urgency-badge urgent">绱ф€?/span>';
+  } else if (r.urgency === '鎻愰啋') {
+    urgencyBadge = '<span class="urgency-badge warning">鎻愰啋</span>';
+  } else if (r.urgency === '寤鸿') {
+    urgencyBadge = '<span class="urgency-badge suggest">寤鸿</span>';
   }
 
   var levelClass = '';
-  if (r.risk_level === '高风险') levelClass = 'item-high';
-  else if (r.risk_level === '中风险') levelClass = 'item-mid';
-  else if (r.risk_level === '低风险') levelClass = 'item-low';
-  else if (r.risk_level === '良好') levelClass = 'item-good';
+  if (r.risk_level === '楂橀闄?) levelClass = 'item-high';
+  else if (r.risk_level === '涓闄?) levelClass = 'item-mid';
+  else if (r.risk_level === '浣庨闄?) levelClass = 'item-low';
+  else if (r.risk_level === '鑹ソ') levelClass = 'item-good';
 
-  // 冲突已解决标签
-  var conflictBadge = '';
+  // 鍐茬獊宸茶В鍐虫爣绛?  var conflictBadge = '';
   if (r._conflict_resolved) {
-    conflictBadge = '<span class="conflict-resolved-badge" title="已确认冲突场景" style="display:inline-block;margin-left:6px;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:10px;font-size:11px">已评估</span>';
+    conflictBadge = '<span class="conflict-resolved-badge" title="宸茬‘璁ゅ啿绐佸満鏅? style="display:inline-block;margin-left:6px;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:10px;font-size:11px">宸茶瘎浼?/span>';
   }
 
-  // 冲突场景UI
+  // 鍐茬獊鍦烘櫙UI
   var conflictHtml = '';
   if (r.conflict_scenarios && r.conflict_scenarios.length > 0) {
     conflictHtml = '<div class="conflict-scenarios-section">'
-      + '<div class="conflict-title">⚠️ 存在可能的降级/排除场景，请确认：</div>';
+      + '<div class="conflict-title">鈿狅笍 瀛樺湪鍙兘鐨勯檷绾?鎺掗櫎鍦烘櫙锛岃纭锛?/div>';
     for (var s = 0; s < r.conflict_scenarios.length; s++) {
       var sc = r.conflict_scenarios[s];
       var scId = sc.id || '';
       var isResolved = r._conflict_resolved && r._saved_answers && r._saved_answers[scId];
       var isEliminate = sc.effect === 'eliminate';
-      var effectLabel = isEliminate ? '完全排除风险' : '风险降级';
+      var effectLabel = isEliminate ? '瀹屽叏鎺掗櫎椋庨櫓' : '椋庨櫓闄嶇骇';
       var effectColor = isEliminate ? '#10b981' : '#f59e0b';
 
       conflictHtml += '<div class="conflict-scenario-item" style="margin-top:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">';
       conflictHtml += '<div class="conflict-question" style="font-size:13px;color:#92400e;margin-bottom:8px;line-height:1.6">' + escapeHtml(sc.question) + '</div>';
 
       if (isResolved) {
-        // 已解决状态
-        var answer = r._saved_answers[scId];
-        conflictHtml += '<div style="font-size:12px;color:#0369a1;margin-top:4px">✓ 已确认' + (answer.note ? '：' + escapeHtml(answer.note) : '') + '</div>';
+        // 宸茶В鍐崇姸鎬?        var answer = r._saved_answers[scId];
+        conflictHtml += '<div style="font-size:12px;color:#0369a1;margin-top:4px">鉁?宸茬‘璁? + (answer.note ? '锛? + escapeHtml(answer.note) : '') + '</div>';
         conflictHtml += '<button class="conflict-reset-btn" onclick="resetConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\')" '
-          + 'style="margin-top:6px;padding:2px 10px;font-size:11px;background:none;border:1px solid #cbd5e1;border-radius:4px;color:var(--gray-500);cursor:pointer">撤销</button>';
+          + 'style="margin-top:6px;padding:2px 10px;font-size:11px;background:none;border:1px solid #cbd5e1;border-radius:4px;color:var(--gray-500);cursor:pointer">鎾ら攢</button>';
       } else {
-        // 未解决状态
-        conflictHtml += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+        // 鏈В鍐崇姸鎬?        conflictHtml += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
         conflictHtml += '<button class="conflict-confirm-btn" onclick="resolveConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\',false)" '
-          + 'style="padding:4px 14px;font-size:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;color:#dc2626;cursor:pointer">确认风险</button>';
+          + 'style="padding:4px 14px;font-size:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;color:#dc2626;cursor:pointer">纭椋庨櫓</button>';
         conflictHtml += '<button class="conflict-eliminate-btn" onclick="resolveConflict(\'' + escapeAttr(r.item) + '\',\'' + escapeAttr(scId) + '\',true)" '
           + 'style="padding:4px 14px;font-size:12px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:4px;color:#059669;cursor:pointer">' + effectLabel + '</button>';
         conflictHtml += '</div>';
@@ -369,7 +362,7 @@ function renderRiskItem(r, idx) {
     + '</div>'
     + '<div class="risk-item-detail">' + escapeHtml(r.detail) + '</div>'
     + '<div class="risk-item-suggestion">'
-    + '<span class="suggestion-label">💡 建议：</span>' + escapeHtml(r.suggestion)
+    + '<span class="suggestion-label">馃挕 寤鸿锛?/span>' + escapeHtml(r.suggestion)
     + '</div>'
     + (r.required_evidence && r.required_evidence.length > 0 ? renderEvidenceList(r.required_evidence, r.risk_level) : '')
     + conflictHtml
@@ -383,11 +376,11 @@ function escapeAttr(str) {
 
 function renderEvidenceList(evidence, level) {
   var cls = '';
-  if (level === '高风险') cls = 'evidence-urgent';
-  else if (level === '中风险') cls = 'evidence-warn';
+  if (level === '楂橀闄?) cls = 'evidence-urgent';
+  else if (level === '涓闄?) cls = 'evidence-warn';
   else cls = 'evidence-info';
   var html = '<div class="evidence-box ' + cls + '">'
-    + '<div class="evidence-title">📋 需提供的佐证材料（税务稽查应对）：</div>'
+    + '<div class="evidence-title">馃搵 闇€鎻愪緵鐨勪綈璇佹潗鏂欙紙绋庡姟绋芥煡搴斿锛夛細</div>'
     + '<ol class="evidence-list">';
   for (var i = 0; i < evidence.length; i++) {
     html += '<li>' + escapeHtml(evidence[i]) + '</li>';
@@ -400,16 +393,16 @@ function renderEvidenceSummary(summaryItems) {
   var body = document.getElementById('risk-report-body');
   var html = '<div class="risk-category evidence-summary-category">'
     + '<div class="risk-category-header">'
-    + '<span class="risk-cat-icon">📋</span> 佐证材料清单汇总'
-    + ' <span class="risk-cat-count">' + summaryItems.length + '项</span>'
-    + '<span style="font-size:11px;color:#f59e0b;margin-left:8px">（税务稽查应对必备）</span>'
+    + '<span class="risk-cat-icon">馃搵</span> 浣愯瘉鏉愭枡娓呭崟姹囨€?
+    + ' <span class="risk-cat-count">' + summaryItems.length + '椤?/span>'
+    + '<span style="font-size:11px;color:#f59e0b;margin-left:8px">锛堢◣鍔＄ń鏌ュ簲瀵瑰繀澶囷級</span>'
     + '</div>'
     + '<div class="evidence-summary-list">';
   for (var i = 0; i < summaryItems.length; i++) {
     var item = summaryItems[i];
     var levelClass = '';
-    if (item.risk_level === '高风险') levelClass = 'evidence-urgent-tag';
-    else if (item.risk_level === '中风险') levelClass = 'evidence-warn-tag';
+    if (item.risk_level === '楂橀闄?) levelClass = 'evidence-urgent-tag';
+    else if (item.risk_level === '涓闄?) levelClass = 'evidence-warn-tag';
     else levelClass = 'evidence-info-tag';
     html += '<div class="evidence-summary-item">'
       + '<span class="evidence-seq">' + (i + 1) + '</span>'
@@ -422,7 +415,7 @@ function renderEvidenceSummary(summaryItems) {
 }
 
 function downloadReport(format) {
-  if (!taxRiskReportData) { toast('请先生成报告', 'error'); return; }
+  if (!taxRiskReportData) { toast('璇峰厛鐢熸垚鎶ュ憡', 'error'); return; }
   var cid = (typeof currentCompanyId !== 'undefined') ? currentCompanyId : 1;
   var range = (typeof _getPeriodRange === 'function') ? _getPeriodRange('tr-') : null;
   var from = range ? range.from : '';
@@ -436,7 +429,7 @@ function downloadReport(format) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  toast('报告下载中...', 'success');
+  toast('鎶ュ憡涓嬭浇涓?..', 'success');
 }
 
 function resolveConflict(riskItem, conflictId, confirmed) {
@@ -448,12 +441,11 @@ function resolveConflict(riskItem, conflictId, confirmed) {
   }).then(function(r) { return r.json(); })
   .then(function(data) {
     if (data.status === 'ok') {
-      toast(confirmed ? '风险已降级/排除' : '风险已确认', 'success');
-      // 刷新当前风险项显示
-      loadTaxRiskReport();
+      toast(confirmed ? '椋庨櫓宸查檷绾?鎺掗櫎' : '椋庨櫓宸茬‘璁?, 'success');
+      // 鍒锋柊褰撳墠椋庨櫓椤规樉绀?      loadTaxRiskReport();
     }
   }).catch(function(err) {
-    toast('操作失败: ' + (err.message || err), 'error');
+    toast('鎿嶄綔澶辫触: ' + (err.message || err), 'error');
   });
 }
 
@@ -466,3 +458,15 @@ function resetConflict(riskItem, conflictId) {
   }).then(function(r) { return r.json(); })
   .then(function(data) {
     if (data.status === 'ok') {
+      toast('鍐茬獊绛旀宸查噸缃?, 'success');
+      loadTaxRiskReport();
+    }
+  }).catch(function(err) {
+    toast('閲嶇疆澶辫触: ' + (err.message || err), 'error');
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
