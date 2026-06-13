@@ -161,7 +161,7 @@ async function deleteUnbookkeptInvoice(id) {
   } catch (e) {
     toast(e.message, 'error');
   }
-  navigateTo('未记账凭证');
+  navigateTo('未记账发票');
 }
 
 function toggleUbiSelectAll() {
@@ -209,7 +209,7 @@ async function batchDeleteUnbookkeptInvoices() {
   } catch (e) {
     toast(e.message, 'error');
   }
-  navigateTo('未记账凭证');
+  navigateTo('未记账发票');
 }
 
 async function showUnbookkeptDetail(id) {
@@ -440,7 +440,7 @@ async function saveUnbookkeptInvoice(id) {
     }
     toast(result.message || '保存成功', 'success');
     closeModal();
-    navigateTo('未记账凭证');
+    navigateTo('未记账发票');
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -458,7 +458,7 @@ async function generateUBIVoucher(id) {
     });
     toast(result.message || '生成凭证成功', 'success');
   } catch (e) { toast(e.message, 'error'); }
-  navigateTo('未记账凭证');
+  navigateTo('未记账发票');
 }
 
 async function generateUBIVoucherGroup(allIds) {
@@ -474,7 +474,7 @@ async function generateUBIVoucherGroup(allIds) {
       body: JSON.stringify(ids)
     });
     toast(result.message || '生成凭证成功', 'success');
-    navigateTo('未记账凭证');
+    navigateTo('未记账发票');
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -491,7 +491,7 @@ async function batchGenerateUBIVouchers() {
       body: JSON.stringify(ids)
     });
     toast(result.message || '生成凭证成功', 'success');
-    navigateTo('未记账凭证');
+    navigateTo('未记账发票');
   } catch (e) {
     toast(e.message, 'error');
   }
