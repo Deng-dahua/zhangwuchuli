@@ -3769,7 +3769,7 @@ def list_purchase_invoices(
         inv_ids = [inv.id for inv in invoices]
         entries = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
-            JournalEntry.source == "取得发票",
+            JournalEntry.source == "未记账发票",
             JournalEntry.ref_id.in_(inv_ids)
         ).all()
         for je in entries:
