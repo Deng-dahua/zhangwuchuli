@@ -9305,17 +9305,32 @@ def _read_file_text(filepath, original_name):
         except ImportError:
             return None
     elif ext in (".xlsx", ".xls"):
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
-            rows = []
-            for sheet in wb.worksheets[:3]:
-                for row in sheet.iter_rows(values_only=True):
-                    rows.append(" ".join(str(c) for c in row if c is not None))
-                if len(rows) > 2000: break
-            return "\n".join(rows)
-        except ImportError:
-            return None
+        if ext == ".xls":
+            # 旧版 .xls 用 xlrd 读取
+            try:
+                import xlrd
+                wb = xlrd.open_workbook(filepath)
+                rows = []
+                for sheet in wb.sheets():
+                    for row_idx in range(sheet.nrows):
+                        rows.append(" ".join(str(sheet.cell_value(row_idx, c)) for c in range(sheet.ncols) if sheet.cell_value(row_idx, c)))
+                        if len(rows) > 2000: break
+                    if len(rows) > 2000: break
+                return "\n".join(rows)
+            except ImportError:
+                return None
+        else:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+                rows = []
+                for sheet in wb.worksheets[:3]:
+                    for row in sheet.iter_rows(values_only=True):
+                        rows.append(" ".join(str(c) for c in row if c is not None))
+                    if len(rows) > 2000: break
+                return "\n".join(rows)
+            except ImportError:
+                return None
     elif ext in (".docx",):
         try:
             import docx
