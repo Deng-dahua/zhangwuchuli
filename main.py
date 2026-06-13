@@ -10863,7 +10863,7 @@ async def _run_analyze(company_id, db):
         if risk_data:
             engine_results = risk_data.get("results", [])
             all_findings.extend(engine_results)
-            pipeline_log.append(f"217规则引擎 → 发现{len(engine_results)}条风险")
+            pipeline_log.append(f"290规则引擎 → 发现{len(engine_results)}条风险")
 
         # 清理临时数据
         if temp_ids["bk"]:
@@ -10892,7 +10892,7 @@ async def _run_analyze(company_id, db):
 
     return {"ok": True, "report": {
         "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": total-high-mid,
-        "files_count": len(docs), "rules_used": 217, "pipeline_log": pipeline_log, "file_results": file_results,
+        "files_count": len(docs), "rules_used": 290, "pipeline_log": pipeline_log, "file_results": file_results,
         "stats": stats, "domain_summary": domain_summary,
         "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"16域全面分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。涵盖13专题+完备度+多源交叉+扩展规则。"
     }}
