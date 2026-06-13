@@ -539,6 +539,8 @@ async function renderPurchaseInvoices(container) {
     var piParts = piPeriod ? piPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('pi', piParts[0] || '', piParts[1] || '', 'onPIPeriodQuery');
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
+    html += '<button class="btn-toolbar" id="piTransferBookkeepingBtn" onclick="transferPIToBookkeeping()" style="background:#059669;color:#fff;" disabled>转入记账发票</button>';
+    html += '<button class="btn-toolbar" id="piTransferUnbookkeptBtn" onclick="transferPIToUnbookkept()" style="background:#d97706;color:#fff;" disabled>转入未记账</button>';
     html += '<button class="btn-toolbar" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">生成凭证</button>';
     html += '<button class="btn-toolbar-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
@@ -719,6 +721,16 @@ function updatePiBatchBtn() {
   if (genBtn) {
     genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
     genBtn.disabled = count === 0;
+  }
+  const tbkBtn = document.getElementById('piTransferBookkeepingBtn');
+  if (tbkBtn) {
+    tbkBtn.textContent = count > 0 ? '转入记账发票（' + count + '）' : '转入记账发票';
+    tbkBtn.disabled = count === 0;
+  }
+  const tubBtn = document.getElementById('piTransferUnbookkeptBtn');
+  if (tubBtn) {
+    tubBtn.textContent = count > 0 ? '转入未记账（' + count + '）' : '转入未记账';
+    tubBtn.disabled = count === 0;
   }
   // 同步全选框状态
   const selectAll = document.getElementById('piSelectAll');
@@ -1064,5 +1076,35 @@ function fitInvoiceStatFonts() {
       el.style.fontSize = fontSize + 'px';
     }
   });
+}
+
+// ==================== 取得发票 → 转入操作 ====================
+
+async function transferPIToBookkeeping() {
+  const ids = getCheckedPiIds();
+  if (ids.length === 0) return;
+  if (!confirm('确认将选中的 ' + ids.length + ' 条发票转入「记账发票」并自动生成凭证？\n\n转入后将自动：\n1. 生成序时账分录\n2. 标记已记账\n3. 从取得发票中移除')) return;
+  try {
+    const result = await api('/api/purchase-invoices/transfer-to-bookkeeping', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  navigateTo('purchase-invoices');
+}
+
+async function transferPIToUnbookkept() {
+  const ids = getCheckedPiIds();
+  if (ids.length === 0) return;
+  if (!confirm('确认将选中的 ' + ids.length + ' 条发票转入「未记账发票」？\n\n转入后将从取得发票中移除，暂不生成凭证，后续可在未记账发票中统一处理。')) return;
+  try {
+    const result = await api('/api/purchase-invoices/transfer-to-unbookkept', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids)
+    });
+    toast(result.message, 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  navigateTo('purchase-invoices');
 }
 

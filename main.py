@@ -3674,6 +3674,101 @@ def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(...),
     return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
 
+@app.post("/api/purchase-invoices/transfer-to-bookkeeping")
+def transfer_purchase_to_bookkeeping(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    """取得发票 → 转入记账发票（同时生成凭证入账）"""
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).all()
+    if not invoices:
+        raise HTTPException(400, "未找到匹配的发票")
+    period_groups = {}
+    for inv in invoices:
+        if not inv.invoice_date: continue
+        p = str(inv.invoice_date)[:7]
+        period_groups.setdefault(p, []).append(inv)
+    if not period_groups:
+        raise HTTPException(400, "所选发票均无开票日期")
+    transferred = 0
+    for period, invs in period_groups.items():
+        vno = _next_voucher_no(db, company_id, period, "记")
+        for inv in invs:
+            bi = BookkeepingInvoice(
+                company_id=company_id,
+                invoice_code=inv.invoice_code, invoice_no=inv.invoice_no,
+                digital_invoice_no=inv.digital_invoice_no,
+                seller_tax_no=inv.seller_tax_no, seller_name=inv.seller_name,
+                buyer_tax_no=inv.buyer_tax_no, buyer_name=inv.buyer_name,
+                invoice_date=inv.invoice_date,
+                tax_category_code=inv.tax_category_code,
+                specific_business_type=inv.specific_business_type,
+                goods_name=inv.goods_name, spec=inv.spec, unit=inv.unit,
+                quantity=inv.quantity, unit_price=inv.unit_price,
+                amount=inv.amount, tax_rate=inv.tax_rate, tax_amount=inv.tax_amount,
+                total_amount=inv.total_amount,
+                invoice_source=inv.invoice_source, invoice_category=inv.invoice_category,
+                status=inv.status, is_positive=inv.is_positive,
+                invoice_risk_level=inv.invoice_risk_level,
+                issuer=inv.issuer, remark=inv.remark,
+                voucher_no=f"记-{vno}"
+            )
+            db.add(bi); db.flush()
+            debit_account, _ = _classify_purchase_debit(db, company_id, inv)
+            amt = float(inv.amount or 0); tax = float(inv.tax_amount or 0)
+            is_special = inv.invoice_category and "专用发票" in str(inv.invoice_category)
+            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                account_code=debit_account, debit=amt, credit=0,
+                summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'} 入账"))
+            if is_special and tax > 0:
+                db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                    account_code="221001002", debit=tax, credit=0,
+                    summary=f"{inv.invoice_date} {inv.seller_name or ''} 进项税额"))
+            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
+                account_code="2202", debit=0, credit=amt + (tax if is_special else 0),
+                summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
+            transferred += 1
+        vno += 1
+    for inv in invoices: db.delete(inv)
+    db.commit()
+    return {"message": f"成功转入 {transferred} 条发票到记账发票并生成凭证", "transferred": transferred}
+
+
+@app.post("/api/purchase-invoices/transfer-to-unbookkept")
+def transfer_purchase_to_unbookkept(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    """取得发票 → 转入未记账发票（不生成凭证，voucher_no为空）"""
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).all()
+    if not invoices:
+        raise HTTPException(400, "未找到匹配的发票")
+    transferred = 0
+    for inv in invoices:
+        db.add(BookkeepingInvoice(
+            company_id=company_id,
+            invoice_code=inv.invoice_code, invoice_no=inv.invoice_no,
+            digital_invoice_no=inv.digital_invoice_no,
+            seller_tax_no=inv.seller_tax_no, seller_name=inv.seller_name,
+            buyer_tax_no=inv.buyer_tax_no, buyer_name=inv.buyer_name,
+            invoice_date=inv.invoice_date,
+            tax_category_code=inv.tax_category_code,
+            specific_business_type=inv.specific_business_type,
+            goods_name=inv.goods_name, spec=inv.spec, unit=inv.unit,
+            quantity=inv.quantity, unit_price=inv.unit_price,
+            amount=inv.amount, tax_rate=inv.tax_rate, tax_amount=inv.tax_amount,
+            total_amount=inv.total_amount,
+            invoice_source=inv.invoice_source, invoice_category=inv.invoice_category,
+            status=inv.status, is_positive=inv.is_positive,
+            invoice_risk_level=inv.invoice_risk_level,
+            issuer=inv.issuer, remark=inv.remark,
+        ))
+        db.delete(inv)
+        transferred += 1
+    db.commit()
+    return {"message": f"成功转入 {transferred} 条发票到未记账发票", "transferred": transferred}
+
+
 @app.post("/api/purchase-invoices/{invoice_id}/to-journal")
 def purchase_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db: Session = Depends(get_db)):
     """将单张取得发票生成进项抵扣记录并生成凭证"""
