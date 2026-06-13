@@ -4251,8 +4251,8 @@ def batch_delete_bookkeeping_invoices(ids: list[int], company_id: int = Query(..
 
 
 @app.post("/api/bookkeeping-invoices/batch-generate-voucher")
-def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
-    """批量生成记账发票凭证 → 标记已记账(voucher_no)并生成序时账分录"""
+def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(...), period: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """批量生成记账发票凭证。period指定记账期间（YYYY-MM），为空则按发票日期自动分组"""
     invoices = db.query(BookkeepingInvoice).filter(
         BookkeepingInvoice.company_id == company_id,
         BookkeepingInvoice.id.in_(ids)
@@ -4260,15 +4260,18 @@ def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(.
     if not invoices:
         raise HTTPException(400, "未找到匹配的发票")
     
-    # 生成凭证：按期分组
-    period_groups = {}
-    for inv in invoices:
-        if not inv.invoice_date:
-            continue
-        period = str(inv.invoice_date)[:7]
-        if period not in period_groups:
-            period_groups[period] = []
-        period_groups[period].append(inv)
+    # 确定记账期间
+    if period:
+        # 统一记入指定期间
+        period_groups = {period: invoices}
+    else:
+        # 按发票日期分组
+        period_groups = {}
+        for inv in invoices:
+            if not inv.invoice_date:
+                continue
+            p = str(inv.invoice_date)[:7]
+            period_groups.setdefault(p, []).append(inv)
     
     if not period_groups:
         raise HTTPException(400, "所选发票均无开票日期")

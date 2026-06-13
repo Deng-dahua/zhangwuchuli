@@ -427,9 +427,11 @@ async function saveUnbookkeptInvoice(id) {
 }
 
 async function generateUBIVoucher(id) {
-  if (!confirm('确认为该发票生成凭证？')) return;
+  if (!confirm('确认为该发票生成凭证？\n\n将记入当期（' + (currentPeriod || '当前') + '）序时账。')) return;
   try {
-    const result = await api('/api/bookkeeping-invoices/batch-generate-voucher', {
+    let url = '/api/bookkeeping-invoices/batch-generate-voucher';
+    if (currentPeriod) url += '?period=' + encodeURIComponent(currentPeriod);
+    const result = await api(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify([id])
@@ -444,8 +446,11 @@ async function batchGenerateUBIVouchers() {
   if (checked.length === 0) { toast('请先选择发票', 'warning'); return; }
   const ids = [];
   checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  if (!confirm('确认为选中的 ' + ids.length + ' 条发票生成凭证？\n\n将记入当期（' + (currentPeriod || '当前') + '）序时账。')) return;
   try {
-    const result = await api('/api/bookkeeping-invoices/batch-generate-voucher', {
+    let url = '/api/bookkeeping-invoices/batch-generate-voucher';
+    if (currentPeriod) url += '?period=' + encodeURIComponent(currentPeriod);
+    const result = await api(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)
