@@ -3771,25 +3771,28 @@ def transfer_purchase_to_unbookkept(ids: list[int], company_id: int = Query(...)
 
 @app.post("/api/purchase-invoices/sync-to-unbookkept")
 def sync_purchase_to_unbookkept(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """自动同步：取得发票 → 未记账发票（对每张PurchaseInvoice创建BookkeepingInvoice，不存在则创建）"""
+    """自动同步：取得发票 → 未记账发票（逐条创建BookkeepingInvoice后删除PurchaseInvoice）"""
     all_pi = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all()
     if not all_pi:
         return {"message": "无待同步发票", "synced": 0}
     
-    # 批量查询已有的 BookkeepingInvoice（按发票号码+销方名称匹配）
-    existing_pairs = set()
-    existing_bis = db.query(BookkeepingInvoice.invoice_no, BookkeepingInvoice.seller_name).filter(
-        BookkeepingInvoice.company_id == company_id
-    ).all()
-    for no, name in existing_bis:
-        if no:
-            existing_pairs.add((no, name or ""))
+    # 用更精确的指纹去重：发票号+发票代码+数电号+销方+日期+金额
+    existing_keys = set()
+    existing_bis = db.query(
+        BookkeepingInvoice.invoice_no, BookkeepingInvoice.invoice_code,
+        BookkeepingInvoice.digital_invoice_no, BookkeepingInvoice.seller_name,
+        BookkeepingInvoice.invoice_date, BookkeepingInvoice.amount
+    ).filter(BookkeepingInvoice.company_id == company_id).all()
+    for no, code, dino, name, dt, amt in existing_bis:
+        existing_keys.add((no or "", code or "", dino or "", name or "", str(dt) if dt else "", str(amt or 0)))
     
     synced = 0
     for inv in all_pi:
-        key = (inv.invoice_no or "", inv.seller_name or "")
-        if key in existing_pairs:
-            continue  # 已存在，跳过
+        key = (inv.invoice_no or "", inv.invoice_code or "", inv.digital_invoice_no or "",
+               inv.seller_name or "", str(inv.invoice_date) if inv.invoice_date else "", str(inv.amount or 0))
+        if key in existing_keys:
+            db.delete(inv)  # 已同步过，清理原记录
+            continue
         db.add(BookkeepingInvoice(
             company_id=company_id,
             invoice_code=inv.invoice_code, invoice_no=inv.invoice_no,
@@ -3808,7 +3811,8 @@ def sync_purchase_to_unbookkept(company_id: int = Query(...), db: Session = Depe
             invoice_risk_level=inv.invoice_risk_level,
             issuer=inv.issuer, remark=inv.remark,
         ))
-        existing_pairs.add(key)
+        existing_keys.add(key)
+        db.delete(inv)  # 同步后删除原记录
         synced += 1
     
     db.commit()
