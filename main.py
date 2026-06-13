@@ -3642,6 +3642,50 @@ def get_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: Sess
     }
 
 
+def _sync_pi_update_to_bi(db, company_id, pi):
+    """编辑取得发票后同步到未记账凭证（按三号匹配更新）"""
+    bis = db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.invoice_code == pi.invoice_code,
+        BookkeepingInvoice.invoice_no == pi.invoice_no,
+        BookkeepingInvoice.digital_invoice_no == pi.digital_invoice_no,
+    ).all()
+    for bi in bis:
+        bi.invoice_date = pi.invoice_date
+        bi.seller_tax_no = pi.seller_tax_no
+        bi.seller_name = pi.seller_name
+        bi.buyer_tax_no = pi.buyer_tax_no
+        bi.buyer_name = pi.buyer_name
+        bi.tax_category_code = pi.tax_category_code
+        bi.specific_business_type = pi.specific_business_type
+        bi.goods_name = pi.goods_name
+        bi.spec = pi.spec
+        bi.unit = pi.unit
+        bi.quantity = pi.quantity
+        bi.unit_price = pi.unit_price
+        bi.amount = pi.amount
+        bi.tax_rate = pi.tax_rate
+        bi.tax_amount = pi.tax_amount
+        bi.total_amount = pi.total_amount
+        bi.invoice_source = pi.invoice_source
+        bi.invoice_category = pi.invoice_category
+        bi.status = pi.status
+        bi.is_positive = pi.is_positive
+        bi.invoice_risk_level = pi.invoice_risk_level
+        bi.issuer = pi.issuer
+        bi.remark = pi.remark
+
+def _sync_pi_delete_to_bi(db, company_id, pi):
+    """删除取得发票后同步删除未记账凭证（按三号匹配，仅删未记账的）"""
+    db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.invoice_code == pi.invoice_code,
+        BookkeepingInvoice.invoice_no == pi.invoice_no,
+        BookkeepingInvoice.digital_invoice_no == pi.digital_invoice_no,
+        or_(BookkeepingInvoice.voucher_no == None, BookkeepingInvoice.voucher_no == "")
+    ).delete(synchronize_session=False)
+
+
 @app.put("/api/purchase-invoices/{invoice_id}")
 def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, company_id: int = Query(...), db: Session = Depends(get_db)):
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
@@ -3650,6 +3694,9 @@ def update_purchase_invoice(invoice_id: int, data: PurchaseInvoiceUpdate, compan
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(inv, k, v)
     inv.updated_at = datetime.now()
+    db.flush()
+    # 同步到未记账凭证（按三号匹配）
+    _sync_pi_update_to_bi(db, company_id, inv)
     db.commit()
     return {"message": "更新成功"}
 
@@ -3659,6 +3706,8 @@ def delete_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: S
     inv = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id, PurchaseInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, detail="发票不存在")
+    # 同步删除到未记账凭证
+    _sync_pi_delete_to_bi(db, company_id, inv)
     db.delete(inv)
     db.commit()
     return {"message": "删除成功"}
@@ -3666,6 +3715,14 @@ def delete_purchase_invoice(invoice_id: int, company_id: int = Query(...), db: S
 
 @app.post("/api/purchase-invoices/batch-delete")
 def batch_delete_purchase_invoices(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
+    invoices = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.id.in_(ids)
+    ).all()
+    # 同步删除到未记账凭证
+    for inv in invoices:
+        _sync_pi_delete_to_bi(db, company_id, inv)
+    db.flush()
     deleted = db.query(PurchaseInvoice).filter(
         PurchaseInvoice.company_id == company_id,
         PurchaseInvoice.id.in_(ids)
