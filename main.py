@@ -4378,6 +4378,16 @@ def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(.
                 posted_count += 1
             voucher_no += 1
     
+    # 记账后同步锁定取得发票（通过三号匹配，标记 skip_accounting）
+    for inv in invoices:
+        if inv.invoice_no or inv.invoice_code or inv.digital_invoice_no:
+            db.query(PurchaseInvoice).filter(
+                PurchaseInvoice.company_id == company_id,
+                PurchaseInvoice.invoice_code == inv.invoice_code,
+                PurchaseInvoice.invoice_no == inv.invoice_no,
+                PurchaseInvoice.digital_invoice_no == inv.digital_invoice_no,
+            ).update({"skip_accounting": True}, synchronize_session=False)
+    
     db.commit()
     return {"message": f"成功生成凭证，{posted_count} 条发票已记账", "posted": posted_count}
 

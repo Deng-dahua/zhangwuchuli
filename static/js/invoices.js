@@ -598,15 +598,14 @@ async function renderPurchaseInvoices(container) {
       piGroups.forEach(g => {
         const piAllIds = g.items.map(i => i.id).join(',');
         const piRowspan = g.items.length;
-        const piAllHasJv = g.items.every(i => i.journal_voucher_no);
+        const piAllLocked = g.items.every(i => i.skip_accounting);
         g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
-        const pjv = i.journal_voucher_no || '';
         html += '<tr>';
         // 三号相同的行 → 复选框 rowspan 合并为一个，data-ids 存该组全部ID
         if (idx === 0) {
-          html += '<td style="text-align:center" rowspan="' + piRowspan + '"><input type="checkbox" class="pi-check" data-ids="' + piAllIds + '" onchange="updatePiBatchBtn()"' + (piAllHasJv ? ' disabled title="已生成凭证，不可操作"' : '') + '></td>';
+          html += '<td style="text-align:center" rowspan="' + piRowspan + '"><input type="checkbox" class="pi-check" data-ids="' + piAllIds + '" onchange="updatePiBatchBtn()"' + (piAllLocked ? ' disabled title="已记账，不可操作"' : '') + '></td>';
         }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showPurchaseDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
@@ -636,7 +635,7 @@ async function renderPurchaseInvoices(container) {
         html += '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(i.remark || '') + '">' + escapeHtml(i.remark || '-') + '</td>';
         // 操作
         html += '<td style="white-space:nowrap">';
-        if (pjv) {
+        if (i.skip_accounting) {
           html += '<button class="btn btn-sm btn-secondary" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>编辑</button>';
           html += '<button class="btn btn-sm btn-danger" style="background:#e5e7eb;color:#9ca3af;cursor:not-allowed" disabled>删除</button>';
         } else {
