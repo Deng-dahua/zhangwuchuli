@@ -2124,7 +2124,24 @@ def auto_generate_purchase_journal(db, company_id, invoice_id=None):
 
         db.flush()
         if group_generated:
+            voucher_str = f"记-{voucher_no}"
             total += 1  # 一组（一个复选框）= 一张凭证
+            # 同步更新未记账发票的 voucher_no → 转入记账发票
+            for inv in unprocessed:
+                digital_no = inv.digital_invoice_no or ""
+                inv_code = inv.invoice_code or ""
+                inv_num = inv.invoice_no or ""
+                bks = db.query(BookkeepingInvoice).filter(
+                    BookkeepingInvoice.company_id == company_id,
+                    BookkeepingInvoice.voucher_no.is_(None),
+                    or_(
+                        and_(BookkeepingInvoice.digital_invoice_no == digital_no, digital_no != ""),
+                        and_(BookkeepingInvoice.invoice_code == inv_code, BookkeepingInvoice.invoice_no == inv_num, inv_code != ""),
+                    )
+                ).all() if (digital_no or inv_code) else []
+                for bk in bks:
+                    bk.voucher_no = voucher_str
+            db.flush()
 
     return total
 
