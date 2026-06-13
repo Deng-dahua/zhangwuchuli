@@ -541,7 +541,6 @@ async function renderPurchaseInvoices(container) {
     html += '<button class="btn-toolbar" onclick="showUploadModal(\'purchase-invoice\')">导入文件</button>';
     html += '<button class="btn-toolbar" id="piTransferBookkeepingBtn" onclick="transferPIToBookkeeping()" style="background:#059669;color:#fff;" disabled>转入记账发票</button>';
     html += '<button class="btn-toolbar" id="piTransferUnbookkeptBtn" onclick="transferPIToUnbookkept()" style="background:#d97706;color:#fff;" disabled>转入未记账</button>';
-    html += '<button class="btn-toolbar" id="piBatchGenBtn" onclick="batchGeneratePurchaseVouchers()">生成凭证</button>';
     html += '<button class="btn-toolbar-danger" id="piBatchDelBtn" onclick="batchDeletePurchaseInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const piTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票'], ['tlp', '铁路票']];
@@ -717,11 +716,6 @@ function updatePiBatchBtn() {
     delBtn.textContent = count > 0 ? '批量删除（' + count + '）' : '批量删除';
     delBtn.disabled = count === 0;
   }
-  const genBtn = document.getElementById('piBatchGenBtn');
-  if (genBtn) {
-    genBtn.textContent = count > 0 ? '生成凭证（' + count + '）' : '生成凭证';
-    genBtn.disabled = count === 0;
-  }
   const tbkBtn = document.getElementById('piTransferBookkeepingBtn');
   if (tbkBtn) {
     tbkBtn.textContent = count > 0 ? '转入记账发票（' + count + '）' : '转入记账发票';
@@ -757,31 +751,6 @@ async function batchDeletePurchaseInvoices() {
     toast(e.message, 'error');
   }
   navigateTo('purchase-invoices');
-}
-
-// 一键生成取得发票的进项抵扣凭证
-async function batchGeneratePurchaseVouchers() {
-  let ids = getCheckedPiIds();
-  if (ids.length === 0) { toast('请先勾选要生成凭证的发票', 'warning'); return; }
-  if (!confirm('确认为选中的 ' + ids.length + ' 张发票生成进项抵扣凭证？')) return;
-  let btn = document.getElementById('piBatchGenBtn');
-  if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '⏳ 生成中...'; }
-  try {
-    let res = await api('/api/purchase-invoices/batch-to-journal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: ids })
-    });
-    toast(res.message, 'success');
-    navigateTo('purchase-invoices');
-    // 重置序时账缓存
-    let jel = document.getElementById('page-journal');
-    if (jel) delete jel.dataset.rendered;
-  } catch (e) {
-    handleError(e, '批量生成凭证');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = origText; }
-  }
 }
 
 async function showPurchaseDetail(id) {
