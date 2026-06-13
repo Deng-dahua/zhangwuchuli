@@ -83,11 +83,27 @@ async function renderBookkeepingInvoices(container) {
     if (items.length === 0) {
       html += '<tr><td colspan="28" style="text-align:center;color:#9ca3af;padding:40px">暂无记账发票记录</td></tr>';
     } else {
+      // 按发票三号分组（同取得发票）
+      const biGroups = [];
+      let biCur = null;
       items.forEach(i => {
+        const biKey = (i.invoice_code||'') + '|' + (i.invoice_no||'') + '|' + (i.digital_invoice_no||'');
+        if (!biCur || biCur.key !== biKey) {
+          biCur = { key: biKey, items: [] };
+          biGroups.push(biCur);
+        }
+        biCur.items.push(i);
+      });
+      biGroups.forEach(g => {
+        const biAllIds = g.items.map(i => i.id).join(',');
+        const biRowspan = g.items.length;
+        g.items.forEach((i, idx) => {
         const stCls = i.status === STATUS.NORMAL ? 'badge-green' : 'badge-gray';
         const posText = i.is_positive === true ? '是' : i.is_positive === false ? '否' : '-';
         html += '<tr>';
-        html += '<td style="text-align:center"><input type="checkbox" class="bi-check" data-id="' + i.id + '" onchange="updateBiBatchBtn()"></td>';
+        if (idx === 0) {
+          html += '<td style="text-align:center" rowspan="' + biRowspan + '"><input type="checkbox" class="bi-check" data-ids="' + biAllIds + '" onchange="updateBiBatchBtn()"></td>';
+        }
         html += '<td>' + (i.invoice_code || '-') + '</td>';
         html += '<td><a href="javascript:void(0)" style="color:#1d4ed8;font-weight:500;text-decoration:none" onclick="showBookkeepingDetail(' + i.id + ')">' + (i.invoice_no || '-') + '</a></td>';
         html += '<td>' + (i.digital_invoice_no || '-') + '</td>';
@@ -121,6 +137,7 @@ async function renderBookkeepingInvoices(container) {
         html += '</td>';
         html += '</tr>';
       });
+    });
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
@@ -152,6 +169,19 @@ function toggleBiSelectAll() {
   updateBiBatchBtn();
 }
 
+// 从已勾选的.bi-check中收集全部发票ID（兼容 data-ids 合并行）
+function getCheckedBiIds() {
+  const ids = [];
+  document.querySelectorAll('.bi-check:checked').forEach(cb => {
+    if (cb.dataset.ids) {
+      cb.dataset.ids.split(',').forEach(id => { const n = parseInt(id); if (n) ids.push(n); });
+    } else if (cb.dataset.id) {
+      const n = parseInt(cb.dataset.id); if (n) ids.push(n);
+    }
+  });
+  return ids;
+}
+
 function updateBiBatchBtn() {
   const checked = document.querySelectorAll('.bi-check:checked');
   const count = checked.length;
@@ -170,10 +200,8 @@ function updateBiBatchBtn() {
 }
 
 async function batchDeleteBookkeepingInvoices() {
-  const checked = document.querySelectorAll('.bi-check:checked');
-  if (checked.length === 0) return;
-  const ids = [];
-  checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
+  const ids = getCheckedBiIds();
+  if (ids.length === 0) return;
   if (!confirm('确认删除选中的 ' + ids.length + ' 条记账发票？此操作不可恢复。')) return;
   try {
     const result = await api('/api/bookkeeping-invoices/batch-delete', {
