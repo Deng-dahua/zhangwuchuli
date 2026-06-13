@@ -953,6 +953,81 @@ def _extract_company_names(text: str) -> set:
     return names
 
 
+def _close_archive_gap(db: Session, company_id: int) -> dict:
+    """档案缺失自动补齐：序时账往来科目中有contact_project但档案中不存在的实体 → 自动建档
+    修复范围：1122应收账款 → 客户 / 2202应付账款 → 供应商 / 1123预付账款 → 供应商
+    这是确定性修复——有明细账就必需有档案，不允许gap存在。
+    """
+    from database import _normalize_customer_name
+    created_cust = 0
+    created_supp = 0
+
+    # 现有档案归一化集合
+    cust_norms = set()
+    for c in db.query(Customer).filter(Customer.company_id == company_id).all():
+        fp = c._fingerprint or _normalize_customer_name(c.name or "")
+        if fp:
+            cust_norms.add(fp)
+    supp_norms = set()
+    for s in db.query(Supplier).filter(Supplier.company_id == company_id).all():
+        fp = s._fingerprint or _normalize_customer_name(s.name or "")
+        if fp:
+            supp_norms.add(fp)
+
+    # 扫描序时账往来科目：1122→客户, 2202/1123→供应商
+    for code, entity_type in [("1122", "customer"), ("2202", "supplier"), ("1123", "supplier")]:
+        entries = db.query(JournalEntry.contact_project).filter(
+            JournalEntry.company_id == company_id,
+            JournalEntry.account_code == code,
+            JournalEntry.contact_project.isnot(None),
+            JournalEntry.contact_project != "",
+        ).distinct().all()
+
+        for (cp,) in entries:
+            name = cp.strip()
+            if not name or len(name) < 4:
+                continue
+            norm = _normalize_customer_name(name)
+
+            # 排除内部人员（1221的才是人员，1122/2202是企业往来）
+            # 排除明显非企业名称
+            _NON_ENTITY = ("手续费", "金库", "公积金", "待处理", "出售凭证", "业务收入",
+                          "国家金库", "税务", "国库", "工资", "社保", "个税")
+            if any(kw in name for kw in _NON_ENTITY):
+                continue
+            # 排除个人名（3字以下纯中文名）
+            if len(name) <= 3 and all('\u4e00' <= c <= '\u9fff' for c in name):
+                continue
+
+            if entity_type == "customer":
+                if norm in cust_norms:
+                    continue
+                max_c = db.query(Customer.code).filter(
+                    Customer.company_id == company_id, Customer.code.like('KH%')
+                ).order_by(Customer.code.desc()).first()
+                num = int(max_c[0][2:]) + 1 if max_c and max_c[0] and max_c[0].startswith('KH') else 1
+                db.add(Customer(company_id=company_id, code=f"KH{num:03d}", name=name,
+                               _fingerprint=norm, is_active=True))
+                db.flush()
+                cust_norms.add(norm)
+                created_cust += 1
+
+            elif entity_type == "supplier":
+                if norm in supp_norms:
+                    continue
+                max_s = db.query(Supplier.code).filter(
+                    Supplier.company_id == company_id, Supplier.code.like('GYS%')
+                ).order_by(Supplier.code.desc()).first()
+                num = int(max_s[0][3:]) + 1 if max_s and max_s[0] and max_s[0].startswith('GYS') else 1
+                db.add(Supplier(company_id=company_id, code=f"GYS{num:03d}", name=name,
+                               _fingerprint=norm, is_active=True))
+                db.flush()
+                supp_norms.add(norm)
+                created_supp += 1
+
+    return {"customer_created": created_cust, "supplier_created": created_supp}
+
+
 def _do_auto_create_suppliers(db: Session, company_id: int) -> dict:
     """供应商智能建档核心逻辑（可被API和导入流程复用）"""
     created = 0
@@ -7033,15 +7108,25 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
 @app.post("/api/bank-transactions/auto-voucher")
 def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
     """导入银行流水后自动全链路处理：
+    0. 档案缺失补齐（序时账有往来科目但档案缺失 → 自动建档，零容忍gap）
     1. 双源供应商智能建档（发票∩银行流水 → 供应商档案）
     2. 常规银行流水凭证生成（_classify_bank_tx 11级分类）
     3. 社保缴纳匹配
     4. 国家金库税费组合缴纳匹配（含单税兜底）
     5. 公积金缴纳匹配
     """
-    result = {"generated": 0, "suppliers_created": 0, "infos": []}
+    result = {"generated": 0, "suppliers_created": 0, "customers_fixed": 0, "suppliers_fixed": 0, "infos": []}
 
-    # 第0步：双源供应商智能建档（必须先建档，后续凭证生成才能正确匹配往来科目）
+    # 第0步：档案缺失补齐（序时账有往来但档案缺失 → 自动建档）
+    # 这是确定性规则：有明细账就必需有档案，零容忍gap
+    try:
+        gap_result = _close_archive_gap(db, company_id)
+        result["customers_fixed"] = gap_result.get("customer_created", 0)
+        result["suppliers_fixed"] = gap_result.get("supplier_created", 0)
+    except Exception:
+        pass
+
+    # 第1步：双源供应商智能建档（发票∩银行 → 正式供应商）
     try:
         supp_result = _do_auto_create_suppliers(db, company_id)
         result["suppliers_created"] = supp_result.get("created", 0)
