@@ -1000,6 +1000,11 @@ def get_tax_risk_report(
     _analyze_prepaid_card_risk(db, company_id, period_start, period_end, results)
     # ── V12 新增 — 餐饮住宿类发票群集性虚开嫌疑 ──
     _analyze_suspicious_invoice_cluster(db, company_id, period_start, period_end, results)
+    # ── V13 新增(4项) — 收款无发票 + 名称模式同质化 + 费用结构倒挂 + 期间集中度 ──
+    _analyze_uninvoiced_receipts(db, company_id, period_start, period_end, results)
+    _analyze_supplier_naming_pattern(db, company_id, period_start, period_end, results)
+    _analyze_expense_structure_mismatch(db, company_id, period_start, period_end, results)
+    _analyze_invoice_time_concentration(db, company_id, period_start, period_end, results)
 
     # ── 【核心】加载用户规则并应用覆盖 ──
     rules = _load_saved_rules()
@@ -10367,5 +10372,339 @@ def _analyze_isolated_suspicious_invoice(db, company_id, all_invs, cluster_group
                 "付款凭证（银行/微信/支付宝转账记录）",
                 "业务招待申请单",
                 "供应商工商登记信息"
+            ]
+        })
+
+
+# ── V13 新增：银行流水收入无对应销项发票 ──
+def _analyze_uninvoiced_receipts(db, company_id, ps, pe, results):
+    """检测银行流水中收到大额款项但无对应销项发票的情况（ID 214）"""
+    from database import BankTransaction
+
+    # 收集销项发票购方名称集合（用于快速查找）
+    si_buyers = set()
+    for si in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.buyer_name.isnot(None)
+    ).all():
+        si_buyers.add((si.buyer_name or "").strip())
+
+    # 查找期间内大额收款（≥10,000元）
+    txs = db.query(BankTransaction).filter(
+        BankTransaction.company_id == company_id,
+        BankTransaction.transaction_date >= ps + "-01",
+        BankTransaction.transaction_date <= pe + "-31",
+        BankTransaction.credit_amount > 0,
+        BankTransaction.amount >= 10000,
+    ).all()
+
+    for tx in txs:
+        name = (tx.counterparty_name or "").strip()
+        if not name or len(name) < 4:
+            continue
+
+        # 排除税费/工资/内部转账
+        _SKIP_KW = ("国家金库", "税务", "社保", "公积金", "工资", "内部", "退税")
+        if any(kw in name for kw in _SKIP_KW):
+            continue
+
+        # 检查是否有对应销项发票
+        has_si = name in si_buyers
+        # 模糊匹配
+        if not has_si:
+            for buyer in si_buyers:
+                if name[:4] in buyer or buyer[:4] in name:
+                    has_si = True
+                    break
+
+        if has_si:
+            continue
+
+        amount = tx.credit_amount or 0
+        tx_date = str(tx.transaction_date) if tx.transaction_date else ""
+
+        detail = (
+            f"【收款无发票】{tx_date}，银行流水#{tx.id}收到{name}汇入{amount:,.2f}元，"
+            f"但销项发票中未找到该购方对应记录。"
+            f"可能涉及未开票收入未申报、隐匿收入或体外循环。"
+        )
+
+        suggestion = (
+            f"①核查{name}汇入{amount:,.2f}元的业务背景，确认是否为应税收入；"
+            f"②若为已完成业务，需补开增值税发票并申报纳税；"
+            f"③若为预收款，确认合同履约进度；"
+            f"④若为往来款（借款/还款），需有借款协议或对账单佐证。"
+        )
+
+        score = 9 if amount >= 50000 else 7
+        results.append({
+            "category": "申报合规",
+            "category_icon": "📋",
+            "risk_score": score,
+            "risk_level": "高风险" if score >= 8 else "中风险",
+            "risk_color": "#dc2626" if score >= 8 else "#f59e0b",
+            "urgency": "紧急" if score >= 8 else "警示",
+            "item": "银行流水收入无对应销项发票",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                "收款银行回单",
+                f"{name}对应业务合同/订单",
+                "合同履约进度确认文件",
+                "借款协议（若为往来款）",
+            ]
+        })
+
+
+# ── V13 新增：同城同行业供应商名称模式高度相似 ──
+def _analyze_supplier_naming_pattern(db, company_id, ps, pe, results):
+    """检测同一城市+同一行业+命名模板相似的供应商群（ID 215）"""
+    import re
+
+    pis = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps + "-01",
+        PurchaseInvoice.invoice_date <= pe + "-31",
+    ).all() if ps and pe else db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id
+    ).all()
+
+    # 提取供应商名称模式
+    patterns = {}  # key: (城市, 行业), value: [seller_name, ...]
+    for inv in pis:
+        seller = (inv.seller_name or "").strip()
+        m = re.search(r'(广州|深圳|北京|上海|杭州|成都|武汉|南京|天津|重庆|苏州|东莞|佛山)' +
+                      r'(.{1,8}?)(餐饮|酒店|广告|信息技术|设计|咨询|贸易)(.*?)有限公司', seller)
+        if m:
+            city = m.group(1)
+            biz = m.group(3)
+            key = (city, biz)
+            if key not in patterns:
+                patterns[key] = set()
+            patterns[key].add(seller)
+
+    for (city, biz), sellers in patterns.items():
+        if len(sellers) < 3:
+            continue  # 不足3家不形成模式
+
+        seller_list = "、".join(list(sellers)[:8])
+        if len(sellers) > 8:
+            seller_list += f"等{len(sellers)}家"
+
+        # 计算总金额
+        total = sum(
+            _safe_float(inv.amount) + _safe_float(inv.tax_amount)
+            for inv in pis
+            if (inv.seller_name or "").strip() in sellers
+        )
+
+        detail = (
+            f"【名称模式同质化】{city}地区「{biz}」行业共{len(sellers)}家供应商，"
+            f"命名模板完全一致：{seller_list}。"
+            f"发票价税合计{total:,.2f}元。"
+            f"高度疑似同一控制人批量注册空壳公司分散开票。"
+        )
+
+        suggestion = (
+            f"①对{city}地区{len(sellers)}家{biz}类供应商批量查询工商信息；"
+            f"②比对法定代表人、股东、注册地址，确认是否为关联方；"
+            f"③同一控制人名下多家供应商无实际经营→涉嫌虚开发票团伙；"
+            f"④暂停与同模式供应商交易，已入账费用做纳税调增。"
+        )
+
+        results.append({
+            "category": "发票合规",
+            "category_icon": "🧾",
+            "risk_score": 8,
+            "risk_level": "高风险",
+            "risk_color": "#dc2626",
+            "urgency": "紧急",
+            "item": "同城同行业供应商名称模式高度相似（同一控制人嫌疑）",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                "同模式供应商工商登记信息批量查询",
+                "法定代表人/股东关联图谱",
+                "注册地址对比",
+                "税务登记状态查询",
+            ]
+        })
+
+
+# ── V13 新增：费用结构与企业主营业务不匹配 ──
+def _analyze_expense_structure_mismatch(db, company_id, ps, pe, results):
+    """检测费用结构中餐饮住宿类占比异常偏高（ID 216）"""
+    import re
+
+    # 1. 确定主营业务
+    main_biz = set()
+    for si in db.query(SalesInvoice).filter(
+        SalesInvoice.company_id == company_id,
+        SalesInvoice.goods_name.isnot(None)
+    ).all():
+        m = re.match(r'\*([^*]+)\*', (si.goods_name or ""))
+        if m:
+            main_biz.add(m.group(1))
+
+    # 如果销项为广告/设计/信息技术/现代服务等行业
+    SERVICE_BIZ = {"广告服务", "设计服务", "信息技术服务", "现代服务", "咨询服务", "文化创意服务"}
+    is_service_company = bool(main_biz & SERVICE_BIZ)
+    if not is_service_company:
+        return  # 非服务类企业不适用此规则
+
+    # 2. 统计进项费用结构
+    cost_by_cat = {}
+    total_cost = 0
+    for inv in db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.goods_name.isnot(None)
+    ).all():
+        m = re.match(r'\*([^*]+)\*', (inv.goods_name or ""))
+        cat = m.group(1) if m else "其他"
+        amt = _safe_float(inv.amount) + _safe_float(inv.tax_amount)
+        cost_by_cat[cat] = cost_by_cat.get(cat, 0) + amt
+        total_cost += amt
+
+    if total_cost <= 0:
+        return
+
+    # 3. 计算餐饮+住宿占比
+    HOSPITALITY_CATS = {"餐饮服务", "住宿服务", "餐饮费", "住宿费"}
+    hospitality_total = sum(
+        cost_by_cat.get(c, 0) for c in HOSPITALITY_CATS
+    )
+    hospitality_pct = hospitality_total / total_cost * 100
+
+    if hospitality_pct < 30:
+        return  # 不过阈值
+
+    main_biz_str = "、".join(main_biz) if main_biz else "未知"
+
+    detail = (
+        f"【费用结构倒挂】企业主营业务为{main_biz_str}类，"
+        f"但取得发票中餐饮住宿类费用占比高达{hospitality_pct:.1f}%（¥{hospitality_total:,.2f} / ¥{total_cost:,.2f}），"
+        f"远超服务型企业的正常水平（通常<10%）。"
+        f"餐饮住宿费并非广告/设计/信息技术企业的核心成本构成，占比异常指向虚列支出或发票套取。"
+    )
+
+    suggestion = (
+        f"①全面核查餐饮住宿类发票对应的业务招待记录和审批流程；"
+        f"②对缺乏真实业务背景的餐饮/住宿发票，在企业所得税汇算时做纳税调增；"
+        f"③建立费用报销制度，餐饮住宿类单笔≥2,000元须附消费明细和招待审批；"
+        f"④按月监控费用结构变化，异常波动及时预警。"
+    )
+
+    score = 8 if hospitality_pct >= 40 else 6
+    results.append({
+        "category": "财务指标",
+        "category_icon": "📊",
+        "risk_score": score,
+        "risk_level": "高风险" if score >= 7 else "中风险",
+        "risk_color": "#dc2626" if score >= 7 else "#f59e0b",
+        "urgency": "紧急" if score >= 7 else "警示",
+        "item": "费用结构与企业主营业务严重不匹配",
+        "detail": detail,
+        "suggestion": suggestion,
+        "required_evidence": [
+            "费用结构分析表（按分类汇总）",
+            "餐饮住宿类发票明细清单",
+            "业务招待审批记录",
+        ]
+    })
+
+
+# ── V13 新增：发票期间极端集中 ──
+def _analyze_invoice_time_concentration(db, company_id, ps, pe, results):
+    """检测同类型供应商在极短时间内密集开票（ID 217）"""
+    from collections import defaultdict
+    import datetime as dt
+
+    pis = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id,
+        PurchaseInvoice.invoice_date >= ps + "-01",
+        PurchaseInvoice.invoice_date <= pe + "-31",
+    ).all() if ps and pe else db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.company_id == company_id
+    ).all()
+
+    # 按供应商分组，统计最早和最晚日期
+    seller_inv_count = defaultdict(list)
+    for inv in pis:
+        if not inv.invoice_date:
+            continue
+        seller_inv_count[inv.seller_name].append(inv)
+
+    HOSPITALITY_KW = ("餐饮服务", "住宿服务", "餐饮费", "住宿费", "餐饮管理", "酒店管理")
+    results_found = []
+
+    for seller, invs in seller_inv_count.items():
+        if len(invs) < 3:
+            continue
+
+        # 仅关注餐饮住宿类供应商
+        goods_text = " ".join(str(inv.goods_name or "") for inv in invs)
+        seller_text = str(seller)
+        is_hospitality = any(kw in goods_text or kw in seller_text for kw in HOSPITALITY_KW)
+        if not is_hospitality:
+            continue
+
+        dates = sorted(set(str(inv.invoice_date) for inv in invs))
+        if len(dates) < 2:
+            continue
+
+        try:
+            d1 = dt.datetime.strptime(dates[0], "%Y-%m-%d")
+            d2 = dt.datetime.strptime(dates[-1], "%Y-%m-%d")
+            span = (d2 - d1).days
+        except ValueError:
+            continue
+
+        if span > 10:
+            continue  # 超过10天的窗口，不算集中
+
+        density = len(invs) / max(span, 1)
+        if density < 0.3:  # 至少平均每3天1张
+            continue
+
+        total = sum(_safe_float(inv.amount) + _safe_float(inv.tax_amount) for inv in invs)
+        results_found.append((seller, len(invs), span, total, density, dates))
+
+    if not results_found:
+        return
+
+    # 只报告最显著的（按张数排序，最多3条）
+    results_found.sort(key=lambda x: -x[1])
+    for seller, cnt, span, total, density, dates in results_found[:3]:
+        date_range = f"{dates[0]}~{dates[-1]}"
+
+        detail = (
+            f"【期间集中度高】{seller}在{span}天内开具{cnt}张发票（{date_range}），"
+            f"日均密度{density:.1f}张，价税合计{total:,.2f}元。"
+            f"极短时间内密集开票是虚开团伙的典型操作模式——"
+            f"在最短窗口内完成开票后快速走逃。"
+        )
+
+        suggestion = (
+            f"①对{seller}在{date_range}期间的开票逐笔核实交易真实性；"
+            f"②核查对应期间企业的实际经营活动记录；"
+            f"③关注供应商工商状态是否仍正常存续；"
+            f"④结合银行付款记录验证资金流真实性。"
+        )
+
+        results.append({
+            "category": "发票合规",
+            "category_icon": "🧾",
+            "risk_score": 5,
+            "risk_level": "中风险",
+            "risk_color": "#f59e0b",
+            "urgency": "警示",
+            "item": "发票期间极端集中（短时间密集开票）",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                "集中开票期间发票明细",
+                "同期业务活动记录（出差/招待/采购）",
+                "供应商工商状态查询",
+                "银行付款时间线对比",
             ]
         })
