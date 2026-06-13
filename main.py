@@ -9337,10 +9337,14 @@ async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depe
             "suggestion": "与公司现有供应商/客户档案中的税号比对，确认一致性。"
         })
 
-    # ── 第四步：全文规则匹配 ──
+    # ── 第四步：深度数据分析 ──
+    depth_findings = _deep_analyze(entities, amounts, tax_ids, invoice_nos, found_entities,
+                                   existing_entities, suppliers, customers, all_text)
+
+    # ── 第五步：全文规则匹配 ──
     rules = _load_tax_risk_rules()
     rule_findings = _match_all_rules(all_text, {}, rules)
-    all_findings = cross_findings + rule_findings
+    all_findings = cross_findings + depth_findings + rule_findings
 
     # ── 第五步：综合评分与摘要 ──
     high = sum(1 for f in all_findings if f["level"] == "高风险")
@@ -9484,6 +9488,105 @@ def _match_all_rules(all_text, file_texts, rules):
             "keywords": matched[:5],
             "context": context[:150],
             "source_files": source_files[:3]
+        })
+
+    return findings
+
+
+def _deep_analyze(entities, amounts, tax_ids, invoice_nos, found_entities,
+                  existing_entities, suppliers, customers, all_text):
+    """深度分析：实体画像+金额统计+税号校验+匹配率"""
+    findings = []
+    import statistics, re
+
+    # ── 1. 逐实体风险画像 ──
+    if entities:
+        entity_summary = "<div style='margin:8px 0'>"
+        for e in entities[:10]:
+            name = e["name"]
+            in_archive = name in existing_entities
+            status = "✅ 已在档案" if in_archive else "❌ 不在档案"
+            color = "#059669" if in_archive else "#dc2626"
+            entity_summary += f"<div style='font-size:12px;padding:3px 0'>• <b>{name}</b> <span style='color:{color}'>{status}</span></div>"
+        entity_summary += "</div>"
+
+        new_cnt = len(found_entities - existing_entities)
+        findings.append({
+            "type": "逐实体风险画像", "level": "中风险" if new_cnt > 0 else "低风险",
+            "score": min(8, 3 + new_cnt),
+            "detail": f"资料中共提取到{len(entities)}个实体名称。其中{len(found_entities - existing_entities)}个不在现有档案中，{len(found_entities & existing_entities)}个已登记。" + entity_summary,
+            "suggestion": "不在档案的实体需要补充尽职调查，核实工商注册信息及纳税资质。",
+            "category": "交叉比对"
+        })
+
+    # ── 2. 金额分布分析 ──
+    if amounts:
+        vals = sorted([a["value"] for a in amounts])
+        total_all = sum(vals)
+        avg = total_all / len(vals) if vals else 0
+        median = vals[len(vals)//2] if vals else 0
+        max_val = max(vals) if vals else 0
+        min_val = min(vals) if vals else 0
+        over_10k = len([v for v in vals if v >= 10000])
+        over_100k = len([v for v in vals if v >= 100000])
+
+        stats = (f"总金额: ¥{total_all:,.2f} | 笔数: {len(vals)} | 均值: ¥{avg:,.0f} | "
+                 f"中位数: ¥{median:,.0f} | 最大值: ¥{max_val:,.0f} | 最小值: ¥{min_val:,.0f} | "
+                 f"≥1万元: {over_10k}笔 | ≥10万元: {over_100k}笔")
+
+        # 金额集中度
+        if len(vals) >= 3:
+            top3 = sum(sorted(vals, reverse=True)[:3])
+            concentration = top3 / total_all * 100 if total_all > 0 else 0
+            stats += f" | 前3大金额占比: {concentration:.1f}%"
+
+        score = 8 if over_100k >= 3 else (7 if over_100k >= 1 else (5 if over_10k >= 5 else 3))
+        findings.append({
+            "type": "金额分布分析", "level": "高风险" if over_100k >= 3 else ("中风险" if over_10k >= 5 else "低风险"),
+            "score": score,
+            "detail": stats,
+            "suggestion": "关注大额交易背后的合同和发票，大额现金交易高度可疑。" if over_100k >= 1 else "金额分布正常。",
+            "category": "数据统计"
+        })
+
+    # ── 3. 税号校验 ──
+    if tax_ids:
+        valid = 0; invalid = 0
+        for t in tax_ids:
+            code = t["value"].strip().upper()
+            if len(code) == 18 and re.match(r'^[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}$', code):
+                valid += 1
+            elif len(code) == 15:
+                valid += 1
+            else:
+                invalid += 1
+        findings.append({
+            "type": "税号/信用代码校验", "level": "中风险" if invalid > 0 else "低风险",
+            "score": 5 if invalid > 0 else 2,
+            "detail": f"提取到{len(tax_ids)}个税号/信用代码，有效{valid}个，格式异常{invalid}个。",
+            "suggestion": "格式异常的税号可能是录入错误或虚假号码，需逐一核实。" if invalid > 0 else "税号格式均合规。",
+            "category": "数据统计"
+        })
+
+    # ── 4. 档案覆盖率 ──
+    archive_rate = len(found_entities & existing_entities) / max(len(found_entities), 1) * 100
+    findings.append({
+        "type": "档案覆盖率", "level": "高风险" if archive_rate < 30 else ("中风险" if archive_rate < 60 else "低风险"),
+        "score": 8 if archive_rate < 30 else (5 if archive_rate < 60 else 2),
+        "detail": f"资料中{len(found_entities)}个实体的档案覆盖率仅{archive_rate:.0f}%（{len(found_entities & existing_entities)}/{len(found_entities)}）。"
+                 f"供应商覆盖{len([e for e in found_entities if e in suppliers])}个，客户覆盖{len([e for e in found_entities if e in customers])}个。",
+        "suggestion": "覆盖率低说明大量交易对手未经供应商准入审核，存在虚开发票和商业贿赂风险。" if archive_rate < 60 else "档案覆盖率良好。",
+        "category": "交叉比对"
+    })
+
+    # ── 5. 发票号检测 ──
+    if invoice_nos:
+        unique_invs = len(set(i["value"] for i in invoice_nos))
+        findings.append({
+            "type": "发票号统计", "level": "低风险", "score": 2,
+            "detail": f"资料中检测到{len(invoice_nos)}个发票号，去重后{unique_invs}个。",
+            "suggestion": "建议与公司取得发票/开具发票模块中的数据交叉比对。",
+            "category": "数据统计"
         })
 
     return findings
