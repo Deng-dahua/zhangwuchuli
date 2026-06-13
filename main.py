@@ -4278,42 +4278,48 @@ def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(.
     
     posted_count = 0
     for period, invs in period_groups.items():
-        voucher_no = _next_voucher_no(db, company_id, period, "记")
+        # 在期间内按发票三号分组，每组一个凭证号
+        key_groups = {}
         for inv in invs:
-            # 借方：费用科目（根据品名智能分类）
-            debit_account, debit_account_name = _classify_purchase_debit(db, company_id, inv)
-            amount = float(inv.amount or 0)
-            tax_amount = float(inv.tax_amount or 0)
-            
-            # 费用分录（借方）
-            db.add(JournalEntry(
-                company_id=company_id, entry_date=inv.invoice_date, period=period,
-                voucher_word="记", voucher_no=voucher_no,
-                account_code=debit_account,
-                debit_amount=amount, credit_amount=0,
-                summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'} 入账"
-            ))
-            # 进项税额（专票才有）
-            if inv.invoice_category and "专用发票" in inv.invoice_category and tax_amount > 0:
+            key = (inv.invoice_code or "") + "|" + (inv.invoice_no or "") + "|" + (inv.digital_invoice_no or "")
+            key_groups.setdefault(key, []).append(inv)
+        voucher_no = _next_voucher_no(db, company_id, period, "记")
+        for key, group in key_groups.items():
+            for inv in group:
+                # 借方：费用科目（根据品名智能分类）
+                debit_account, debit_account_name = _classify_purchase_debit(db, company_id, inv)
+                amount = float(inv.amount or 0)
+                tax_amount = float(inv.tax_amount or 0)
+                
+                # 费用分录（借方）
                 db.add(JournalEntry(
                     company_id=company_id, entry_date=inv.invoice_date, period=period,
                     voucher_word="记", voucher_no=voucher_no,
-                    account_code="221001002",
-                    debit_amount=tax_amount, credit_amount=0,
-                    summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} 进项税额"
+                    account_code=debit_account,
+                    debit_amount=amount, credit_amount=0,
+                    summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'} 入账"
                 ))
-            # 应付账款（贷方）
-            db.add(JournalEntry(
-                company_id=company_id, entry_date=inv.invoice_date, period=period,
-                voucher_word="记", voucher_no=voucher_no,
-                account_code="2202",
-                debit_amount=0, credit_amount=amount + (tax_amount if (inv.invoice_category and "专用发票" in inv.invoice_category) else 0),
-                summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'}"
-            ))
-            # 标记已记账
-            inv.voucher_no = f"记-{voucher_no}"
-            posted_count += 1
-        voucher_no += 1
+                # 进项税额（专票才有）
+                if inv.invoice_category and "专用发票" in inv.invoice_category and tax_amount > 0:
+                    db.add(JournalEntry(
+                        company_id=company_id, entry_date=inv.invoice_date, period=period,
+                        voucher_word="记", voucher_no=voucher_no,
+                        account_code="221001002",
+                        debit_amount=tax_amount, credit_amount=0,
+                        summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} 进项税额"
+                    ))
+                # 应付账款（贷方）
+                db.add(JournalEntry(
+                    company_id=company_id, entry_date=inv.invoice_date, period=period,
+                    voucher_word="记", voucher_no=voucher_no,
+                    account_code="2202",
+                    debit_amount=0, credit_amount=amount + (tax_amount if (inv.invoice_category and "专用发票" in inv.invoice_category) else 0),
+                    summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'}"
+                ))
+                # 标记已记账
+                inv.voucher_no = f"记-{voucher_no}"
+                posted_count += 1
+            voucher_no += 1
     
     db.commit()
     return {"message": f"成功生成凭证，{posted_count} 条发票已记账", "posted": posted_count}
