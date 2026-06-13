@@ -11001,13 +11001,15 @@ async def _run_analyze(company_id, db):
     for dr in domain_results:
         for f in dr["findings"]: all_findings.append({**f, "domain": dr["domain"]})
 
-    # ═══════ 阶段14: 217规则引擎 — 临时导入数据跑真实引擎 ═══════
-    temp_ids = {"bk": [], "bt": []}  # 记录临时导入的ID，分析后清理
+    # ═══════ 290规则引擎: 将17文件数据完整导入空DB，跑全量规则后彻底清理 ═══════
+    engine_results = []
     try:
-        from datetime import date
-        from database import BookkeepingInvoice, BankTransaction
-        # 将提取的发票临时导入 BookkeepingInvoice
-        for inv in invoices[:500]:
+        from datetime import date as date_cls
+        from database import BookkeepingInvoice, BankTransaction, SalaryRecord as SR
+        
+        # 发票 → BookkeepingInvoice
+        bk_ids = []
+        for inv in invoices[:1000]:
             try:
                 bk = BookkeepingInvoice(company_id=company_id,
                     digital_invoice_no=str(inv.get("inv_no", ""))[:50],
@@ -11018,42 +11020,52 @@ async def _run_analyze(company_id, db):
                     amount=float(inv.get("amount", 0) or 0),
                     tax_amount=float(inv.get("tax", 0) or 0),
                     invoice_date=datetime.now().date())
-                db.add(bk); db.flush()
-                temp_ids["bk"].append(bk.id)
+                db.add(bk); db.flush(); bk_ids.append(bk.id)
             except: pass
-        # 将提取的银行流水临时导入 BankTransaction
+        
+        # 银行流水 → BankTransaction
+        bt_ids = []
         for tx in bank_txs[:500]:
             try:
-                d_str = tx["date"]  # 格式: 20260101
-                tx_date = date(int(d_str[:4]), int(d_str[4:6]), int(d_str[6:8]))
+                d_str = tx["date"]
                 bt = BankTransaction(company_id=company_id,
-                    transaction_date=tx_date,
+                    transaction_date=date_cls(int(d_str[:4]), int(d_str[4:6]), int(d_str[6:8])),
                     counterparty_name=str(tx.get("counterparty", ""))[:100],
                     debit_amount=float(tx.get("debit", 0)), credit_amount=float(tx.get("credit", 0)),
                     amount=abs(float(tx.get("amount", 0))), summary=str(tx.get("summary", ""))[:200])
-                db.add(bt); db.flush()
-                temp_ids["bt"].append(bt.id)
+                db.add(bt); db.flush(); bt_ids.append(bt.id)
             except: pass
+        
+        # 工资 → SalaryRecord
+        sr_ids = []
+        for s in salaries[:100]:
+            try:
+                sr = SR(company_id=company_id,
+                    name=str(s.get("name", ""))[:50],
+                    salary=float(s.get("salary", 0) or 0))
+                db.add(sr); db.flush(); sr_ids.append(sr.id)
+            except: pass
+        
         db.commit()
-        pipeline_log.append(f"临时导入{len(temp_ids['bk'])}张发票+{len(temp_ids['bt'])}条流水供217规则分析")
+        pipeline_log.append(f"数据导入DB: {len(bk_ids)}发票+{len(bt_ids)}流水+{len(sr_ids)}工资")
 
-        # 跑真实引擎
+        # 跑290规则引擎
         from tax_risk import get_tax_risk_report
         risk_data = get_tax_risk_report(company_id=company_id, period_from="2025-01", period_to=datetime.now().strftime("%Y-%m"), db=db)
         if risk_data:
             engine_results = risk_data.get("results", [])
-            all_findings.extend(engine_results)
-            pipeline_log.append(f"290规则引擎 → 发现{len(engine_results)}条风险")
+            pipeline_log.append(f"290规则引擎: 发现{len(engine_results)}条风险")
 
-        # 清理临时数据
-        if temp_ids["bk"]:
-            db.query(BookkeepingInvoice).filter(BookkeepingInvoice.id.in_(temp_ids["bk"])).delete(synchronize_session=False)
-        if temp_ids["bt"]:
-            db.query(BankTransaction).filter(BankTransaction.id.in_(temp_ids["bt"])).delete(synchronize_session=False)
+        # 彻底清理所有临时导入数据
+        if bk_ids: db.query(BookkeepingInvoice).filter(BookkeepingInvoice.id.in_(bk_ids)).delete(synchronize_session=False)
+        if bt_ids: db.query(BankTransaction).filter(BankTransaction.id.in_(bt_ids)).delete(synchronize_session=False)
+        if sr_ids: db.query(SR).filter(SR.id.in_(sr_ids)).delete(synchronize_session=False)
         db.commit()
-        pipeline_log.append("已清理临时导入数据")
+        pipeline_log.append("已清理全部临时数据，DB恢复初始状态")
     except Exception as e:
-        pipeline_log.append(f"217规则引擎: {e}")
+        pipeline_log.append(f"290规则引擎异常: {e}")
+    
+    all_findings.extend(engine_results)
 
     high = sum(1 for f in all_findings if f.get("level") in ("高风险",) or "高" in str(f.get("risk_level", "")))
     mid = sum(1 for f in all_findings if f.get("level") in ("中风险",) or "中" in str(f.get("risk_level", "")))
