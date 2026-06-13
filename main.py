@@ -9793,6 +9793,7 @@ def _parse_inventory_sheet(sheet):
 # ═══════════ PDF 银行流水解析 ═══════════
 
 def _parse_pdf_bank_statement(filepath):
+    """解析招行银行流水PDF：合并多行记录，提取日期/对方/金额"""
     import re
     try:
         import PyPDF2
@@ -9800,24 +9801,80 @@ def _parse_pdf_bank_statement(filepath):
             reader = PyPDF2.PdfReader(f)
         text = ""
         for page in reader.pages[:5]:
-            t = page.extract_text()
-            if t: text += t + "\n"
+            t = page.extract_text() or ""
+            text += t + "\n"
     except: return []
+
+    # 合并被换行打断的银行名（"招商银行股份有限公司北京" + "大兴支行"）
+    lines = text.split("\n")
+    merged = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line: i += 1; continue
+        # 如果行以数字开头且长度<50，可能是银行名第一行
+        if re.match(r'^\d+\s', line) and len(line) < 50:
+            combined = line
+            i += 1
+            while i < len(lines) and lines[i].strip() and not re.match(r'^\d+\s', lines[i].strip()):
+                combined += lines[i].strip()
+                i += 1
+            merged.append(combined)
+        else:
+            merged.append(line)
+            i += 1
+
+    # 从合并行中提取交易记录
     txs = []
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line or len(line) < 30: continue
-        m = re.search(r'(\d{8})', line)
-        if not m: continue
-        date_str = m.group(1)
-        amounts = re.findall(r'(\d{1,3}(?:,\d{3})*\.\d{2})', line)
-        if len(amounts) < 2: continue
-        try:
-            a1 = float(amounts[0].replace(",",""))
-            a2 = float(amounts[1].replace(",",""))
-            debit, credit = (a1, a2) if a1 < a2 else (a2, a1)
-            txs.append({"date": date_str, "debit": debit, "credit": credit, "amount": credit - debit, "raw": line[:150]})
-        except: pass
+    party_cache = ""  # 缓存上一行的对方名称
+    for line in merged:
+        # 尝试匹配完整的一行交易：日期+金额
+        date_m = re.search(r'(\d{8})', line)
+        if not date_m: continue
+
+        date_str = date_m.group(1)
+        # 提取所有金额（支持逗号分隔）
+        amounts = re.findall(r'([\d,]+\.\d{2})', line)
+        if not amounts: continue
+
+        vals = [float(a.replace(",", "")) for a in amounts]
+        if len(vals) >= 2:
+            debit, credit = vals[0], vals[1]
+        elif "收费" in line or "#收费" in line:
+            debit, credit = max(vals), 0
+        else:
+            # 只有一笔金额：尝试判断借贷方
+            # 如果摘要中包含"营收"→贷方(收入)
+            if "营收" in line or "入账" in line:
+                credit, debit = max(vals), 0
+            elif "税务" in line or "缴" in line or "收费" in line:
+                debit, credit = max(vals), 0
+            else:
+                # 判断：之前看到的是对方，对方不是支付宝/税务→可能是付款
+                credit, debit = max(vals), 0
+
+        # 提取对方名称
+        counterparty = ""
+        # 招行文本格式：大兴支行{对方名} {账号} {日期}
+        m = re.search(r'大兴支行(.+?)\s*(\d{6,}|[A-Z0-9]{6,})?\s*' + date_str, line)
+        if m:
+            counterparty = m.group(1).strip()
+            # 去掉账号部分
+            counterparty = re.sub(r'\s*\d{6,}\s*$', '', counterparty).strip()
+
+        summary = line[:200]
+        # 提取摘要关键词
+        for kw in ['个人所得税','增值税','企业所得税','营收款','货款','快递费','包装','收费',
+                    '银联TOK','移动支付','网联','商户结算','入账交易','失业保险费','社保']:
+            if kw in line:
+                summary = kw
+                break
+
+        txs.append({
+            "date": date_str, "debit": round(debit, 2), "credit": round(credit, 2),
+            "amount": round(credit - debit, 2),
+            "counterparty": counterparty[:50], "summary": summary, "raw": line[:200]
+        })
     return txs
 
 # ═══════════ 13域分析函数 ═══════════
@@ -10087,11 +10144,56 @@ async def _run_analyze(company_id, db):
     for dr in domain_results:
         for f in dr["findings"]: all_findings.append({**f, "domain": dr["domain"]})
 
+    # ═══════ 阶段14: 217规则引擎 — 临时导入数据跑真实引擎 ═══════
+    temp_ids = {"bk": [], "bt": []}  # 记录临时导入的ID，分析后清理
     try:
+        from database import BookkeepingInvoice, BankTransaction
+        # 将提取的发票临时导入 BookkeepingInvoice
+        for inv in invoices[:500]:
+            try:
+                bk = BookkeepingInvoice(company_id=company_id,
+                    digital_invoice_no=str(inv.get("inv_no", ""))[:50],
+                    seller_name=str(inv.get("seller", ""))[:100],
+                    buyer_name=str(inv.get("buyer", ""))[:100],
+                    goods_name=str(inv.get("goods", ""))[:200],
+                    total_amount=float(inv.get("total", 0) or 0),
+                    amount=float(inv.get("amount", 0) or 0),
+                    tax_amount=float(inv.get("tax", 0) or 0),
+                    invoice_date=datetime.now().date())
+                db.add(bk); db.flush()
+                temp_ids["bk"].append(bk.id)
+            except: pass
+        # 将提取的银行流水临时导入 BankTransaction
+        for tx in bank_txs[:500]:
+            try:
+                bt = BankTransaction(company_id=company_id,
+                    transaction_date=tx["date"][:4] + "-" + tx["date"][4:6] + "-" + tx["date"][6:8],
+                    counterparty_name=tx["counterparty"][:100],
+                    debit_amount=tx["debit"], credit_amount=tx["credit"],
+                    amount=abs(tx["amount"]), summary=tx.get("summary", "")[:200])
+                db.add(bt); db.flush()
+                temp_ids["bt"].append(bt.id)
+            except: pass
+        db.commit()
+        pipeline_log.append(f"临时导入{len(temp_ids['bk'])}张发票+{len(temp_ids['bt'])}条流水供217规则分析")
+
+        # 跑真实引擎
         from tax_risk import get_tax_risk_report
-        risk_data = get_tax_risk_report(db, company_id, datetime.now().strftime("%Y-01"), datetime.now().strftime("%Y-%m"))
-        if risk_data: all_findings.extend(risk_data.get("results", []))
-    except: pass
+        risk_data = get_tax_risk_report(db, company_id, "2025-01", datetime.now().strftime("%Y-%m"))
+        if risk_data:
+            engine_results = risk_data.get("results", [])
+            all_findings.extend(engine_results)
+            pipeline_log.append(f"217规则引擎 → 发现{len(engine_results)}条风险")
+
+        # 清理临时数据
+        if temp_ids["bk"]:
+            db.query(BookkeepingInvoice).filter(BookkeepingInvoice.id.in_(temp_ids["bk"])).delete(synchronize_session=False)
+        if temp_ids["bt"]:
+            db.query(BankTransaction).filter(BankTransaction.id.in_(temp_ids["bt"])).delete(synchronize_session=False)
+        db.commit()
+        pipeline_log.append("已清理临时导入数据")
+    except Exception as e:
+        pipeline_log.append(f"217规则引擎: {e}")
 
     high = sum(1 for f in all_findings if f.get("level") in ("高风险",) or "高" in str(f.get("risk_level", "")))
     mid = sum(1 for f in all_findings if f.get("level") in ("中风险",) or "中" in str(f.get("risk_level", "")))
