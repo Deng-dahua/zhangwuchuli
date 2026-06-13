@@ -41,7 +41,7 @@ from database import (
     _normalize_customer_name, _match_customer, _generate_bank_journals, _classify_bank_tx, _build_entity_index, _ensure_account,
     _generate_salary_journals, _generate_hf_accrual_journals, _match_hf_payment_journals,
     _match_ss_payment_journals, _match_tax_payment_journals,
-    auto_generate_purchase_journal, _next_voucher_no,
+    auto_generate_purchase_journal, _next_voucher_no, _classify_purchase_debit,
 )
 
 from vat import router as vat_router
@@ -3717,15 +3717,15 @@ def transfer_purchase_to_bookkeeping(ids: list[int], company_id: int = Query(...
             debit_account, _ = _classify_purchase_debit(db, company_id, inv)
             amt = float(inv.amount or 0); tax = float(inv.tax_amount or 0)
             is_special = inv.invoice_category and "专用发票" in str(inv.invoice_category)
-            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                account_code=debit_account, debit=amt, credit=0,
+            db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                account_code=debit_account, debit_amount=amt, credit_amount=0,
                 summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'} 入账"))
             if is_special and tax > 0:
-                db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                    account_code="221001002", debit=tax, credit=0,
+                db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                    account_code="221001002", debit_amount=tax, credit_amount=0,
                     summary=f"{inv.invoice_date} {inv.seller_name or ''} 进项税额"))
-            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                account_code="2202", debit=0, credit=amt + (tax if is_special else 0),
+            db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                account_code="2202", debit_amount=0, credit_amount=amt + (tax if is_special else 0),
                 summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
             transferred += 1
         vno += 1
@@ -3769,6 +3769,52 @@ def transfer_purchase_to_unbookkept(ids: list[int], company_id: int = Query(...)
     return {"message": f"成功转入 {transferred} 条发票到未记账发票", "transferred": transferred}
 
 
+@app.post("/api/purchase-invoices/sync-to-unbookkept")
+def sync_purchase_to_unbookkept(company_id: int = Query(...), db: Session = Depends(get_db)):
+    """自动同步：取得发票 → 未记账发票（对每张PurchaseInvoice创建BookkeepingInvoice，不存在则创建）"""
+    all_pi = db.query(PurchaseInvoice).filter(PurchaseInvoice.company_id == company_id).all()
+    if not all_pi:
+        return {"message": "无待同步发票", "synced": 0}
+    
+    # 批量查询已有的 BookkeepingInvoice（按发票号码+销方名称匹配）
+    existing_pairs = set()
+    existing_bis = db.query(BookkeepingInvoice.invoice_no, BookkeepingInvoice.seller_name).filter(
+        BookkeepingInvoice.company_id == company_id
+    ).all()
+    for no, name in existing_bis:
+        if no:
+            existing_pairs.add((no, name or ""))
+    
+    synced = 0
+    for inv in all_pi:
+        key = (inv.invoice_no or "", inv.seller_name or "")
+        if key in existing_pairs:
+            continue  # 已存在，跳过
+        db.add(BookkeepingInvoice(
+            company_id=company_id,
+            invoice_code=inv.invoice_code, invoice_no=inv.invoice_no,
+            digital_invoice_no=inv.digital_invoice_no,
+            seller_tax_no=inv.seller_tax_no, seller_name=inv.seller_name,
+            buyer_tax_no=inv.buyer_tax_no, buyer_name=inv.buyer_name,
+            invoice_date=inv.invoice_date,
+            tax_category_code=inv.tax_category_code,
+            specific_business_type=inv.specific_business_type,
+            goods_name=inv.goods_name, spec=inv.spec, unit=inv.unit,
+            quantity=inv.quantity, unit_price=inv.unit_price,
+            amount=inv.amount, tax_rate=inv.tax_rate, tax_amount=inv.tax_amount,
+            total_amount=inv.total_amount,
+            invoice_source=inv.invoice_source, invoice_category=inv.invoice_category,
+            status=inv.status, is_positive=inv.is_positive,
+            invoice_risk_level=inv.invoice_risk_level,
+            issuer=inv.issuer, remark=inv.remark,
+        ))
+        existing_pairs.add(key)
+        synced += 1
+    
+    db.commit()
+    return {"message": f"成功同步 {synced} 条发票到未记账发票", "synced": synced}
+
+
 @app.post("/api/purchase-invoices/generate-voucher-only")
 def purchase_invoice_generate_voucher_only(body: dict, company_id: int = Query(...), db: Session = Depends(get_db)):
     """取得发票 → 仅生成序时账凭证（不入进项认证模块）"""
@@ -3799,17 +3845,17 @@ def purchase_invoice_generate_voucher_only(body: dict, company_id: int = Query(.
             amt = float(inv.amount or 0); tax = float(inv.tax_amount or 0)
             is_special = inv.invoice_category and "专用发票" in str(inv.invoice_category)
             # 费用/成本（借方）
-            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                account_code=debit_account, debit=amt, credit=0,
+            db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                account_code=debit_account, debit_amount=amt, credit_amount=0,
                 summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
             # 进项税额（专票）
             if is_special and tax > 0:
-                db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                    account_code="221001002", debit=tax, credit=0,
+                db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                    account_code="221001002", debit_amount=tax, credit_amount=0,
                     summary=f"{inv.invoice_date} {inv.seller_name or ''} 进项税额"))
             # 应付账款（贷方）
-            db.add(JournalEntry(company_id=company_id, period=period, voucher_word="记", voucher_no=vno,
-                account_code="2202", debit=0, credit=amt + (tax if is_special else 0),
+            db.add(JournalEntry(company_id=company_id, entry_date=inv.invoice_date, period=period, voucher_word="记", voucher_no=vno,
+                account_code="2202", debit_amount=0, credit_amount=amt + (tax if is_special else 0),
                 summary=f"{inv.invoice_date} {inv.seller_name or ''} {inv.goods_name or '发票'}"))
             count += 1
         vno += 1
@@ -4247,27 +4293,27 @@ def batch_generate_bookkeeping_voucher(ids: list[int], company_id: int = Query(.
             
             # 费用分录（借方）
             db.add(JournalEntry(
-                company_id=company_id, period=period,
+                company_id=company_id, entry_date=inv.invoice_date, period=period,
                 voucher_word="记", voucher_no=voucher_no,
                 account_code=debit_account,
-                debit=amount, credit=0,
+                debit_amount=amount, credit_amount=0,
                 summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'} 入账"
             ))
             # 进项税额（专票才有）
             if inv.invoice_category and "专用发票" in inv.invoice_category and tax_amount > 0:
                 db.add(JournalEntry(
-                    company_id=company_id, period=period,
+                    company_id=company_id, entry_date=inv.invoice_date, period=period,
                     voucher_word="记", voucher_no=voucher_no,
                     account_code="221001002",
-                    debit=tax_amount, credit=0,
+                    debit_amount=tax_amount, credit_amount=0,
                     summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} 进项税额"
                 ))
             # 应付账款（贷方）
             db.add(JournalEntry(
-                company_id=company_id, period=period,
+                company_id=company_id, entry_date=inv.invoice_date, period=period,
                 voucher_word="记", voucher_no=voucher_no,
                 account_code="2202",
-                debit=0, credit=amount + (tax_amount if (inv.invoice_category and "专用发票" in inv.invoice_category) else 0),
+                debit_amount=0, credit_amount=amount + (tax_amount if (inv.invoice_category and "专用发票" in inv.invoice_category) else 0),
                 summary=f"{inv.invoice_date} {inv.seller_name or '供应商'} {inv.goods_name or '发票'}"
             ))
             # 标记已记账
