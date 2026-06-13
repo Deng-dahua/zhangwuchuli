@@ -9254,138 +9254,184 @@ def delete_tax_risk_doc(doc_id: int, company_id: int = Query(...)):
 
 @app.post("/api/tax-risk-docs/analyze")
 async def analyze_tax_risk_docs(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """深度分析：提取结构化数据 + 运行真实涉税风险引擎 + 交叉比对"""
-    from database import Supplier, Customer, SalesInvoice, PurchaseInvoice, BankTransaction, JournalEntry
-    import re
+    """四阶段深度分析：数据提取 → 统计分析 → 交叉关联 → 规则匹配"""
+    from database import Supplier, Customer
+    import re, statistics
+    from collections import Counter, defaultdict
 
     docs = [d for d in _tax_risk_docs if d["company_id"] == company_id]
     if not docs:
         return {"ok": False, "message": "暂无上传资料"}
 
-    # ── 第一步：读取并提取结构化数据 ──
-    all_text = ""
-    extracted = []
+    # ═══════ 阶段一：全量数据提取 ═══════
+    all_entities = []    # [{name, context, source_file}]
+    all_amounts = []     # [{value, context, source_file}]
+    all_tax_ids = []     # [{value, source_file}]
+    all_invoices = []    # [{value, source_file}]
+    all_banks = []       # [{value, source_file}]
+    all_dates = []       # [{value, source_file}]
+    file_texts = {}      # {filename: full_text}
+
     for doc in docs:
         try:
             text = _read_file_text(doc["path"], doc["original_name"])
-            if text and len(text.strip()) > 20:
-                all_text += "\n" + text
-                data = _extract_structured_data(text, doc["original_name"])
-                if data:
-                    extracted.append(data)
+            if not text or len(text.strip()) < 20:
+                continue
+            fname = doc["original_name"]
+            file_texts[fname] = text
+            data = _extract_structured_data(text, fname)
+            if data:
+                for e in data.get("entities", []): all_entities.append({**e, "source_file": fname})
+                for a in data.get("amounts", []): all_amounts.append({**a, "source_file": fname})
+                for t in data.get("tax_ids", []): all_tax_ids.append({**t, "source_file": fname})
+                for inv in data.get("invoice_nos", []): all_invoices.append({**inv, "source_file": fname})
+                for b in data.get("bank_accounts", []): all_banks.append({**b, "source_file": fname})
         except: pass
 
-    if not all_text.strip():
+    if not file_texts:
         return {"ok": False, "message": "无法读取文件内容"}
+    all_text = "\n".join(file_texts.values())
 
-    # ── 第二步：汇总提取的数据 ──
-    entities = []       # 发现的实体名称
-    amounts = []        # 发现的金额
-    tax_ids = []        # 税号/信用代码
-    invoice_nos = []    # 发票号
-    bank_accounts = []  # 银行账号
-    for d in extracted:
-        entities.extend(d.get("entities", []))
-        amounts.extend(d.get("amounts", []))
-        tax_ids.extend(d.get("tax_ids", []))
-        invoice_nos.extend(d.get("invoice_nos", []))
-        bank_accounts.extend(d.get("bank_accounts", []))
-
-    # ── 第三步：与公司现有数据交叉比对 ──
-    cross_findings = []
-
-    # 现有供应商/客户档案
+    # 现有档案
     suppliers = {s.name: s for s in db.query(Supplier).filter(Supplier.company_id == company_id).all()}
     customers = {c.name: c for c in db.query(Customer).filter(Customer.company_id == company_id).all()}
-    existing_entities = set(suppliers.keys()) | set(customers.keys())
+    existing = set(suppliers.keys()) | set(customers.keys())
+    entity_names = set(e["name"] for e in all_entities)
 
-    # 检测：资料中出现的实体是否已在档案中
-    found_entities = set(e["name"] for e in entities[:20])
-    new_entities = found_entities - existing_entities
-    known_entities = found_entities & existing_entities
+    # ═══════ 阶段二：统计分析 ═══════
+    stats = {}
+    # 实体
+    entity_counts = Counter(e["name"] for e in all_entities)
+    stats["实体总数"] = len(entity_names)
+    stats["已知实体"] = len(entity_names & existing)
+    stats["新实体"] = len(entity_names - existing)
+    stats["档案覆盖率"] = f"{stats['已知实体']/max(len(entity_names),1)*100:.0f}%"
 
-    if new_entities:
-        cross_findings.append({
-            "type": "新实体发现", "level": "中风险", "score": 6,
-            "detail": f"资料中发现{len(new_entities)}个未在档案中登记的企业/个人：{'、'.join(list(new_entities)[:8])}",
-            "suggestion": "建议核实这些实体的业务关系，必要时补建档案并核查交易真实性。"
-        })
-    if known_entities:
-        # 检查这些实体是否有对应的发票/流水
-        cross_findings.append({
-            "type": "已知实体关联", "level": "低风险", "score": 2,
-            "detail": f"资料中{len(known_entities)}个实体已在档案中：{'、'.join(list(known_entities)[:8])}",
-            "suggestion": "请结合序时账和银行流水进一步核实交易金额与资料是否一致。"
-        })
+    # 金额
+    vals = sorted([a["value"] for a in all_amounts if a["value"] > 0])
+    if vals:
+        stats["金额总笔数"] = len(vals)
+        stats["金额总额"] = f"¥{sum(vals):,.2f}"
+        stats["金额均值"] = f"¥{statistics.mean(vals):,.0f}"
+        stats["金额中位数"] = f"¥{statistics.median(vals):,.0f}"
+        stats["金额最大值"] = f"¥{max(vals):,.0f}"
+        stats["金额最小值"] = f"¥{min(vals):,.0f}"
+        stats["万元以下"] = len([v for v in vals if v < 10000])
+        stats["1-10万元"] = len([v for v in vals if 10000 <= v < 100000])
+        stats["10-100万元"] = len([v for v in vals if 100000 <= v < 1000000])
+        stats["百万以上"] = len([v for v in vals if v >= 1000000])
+        if len(vals) >= 3:
+            stats["前3大金额占比"] = f"{sum(sorted(vals, reverse=True)[:3])/sum(vals)*100:.1f}%"
 
-    # 检测：大额金额
-    big_amounts = [a for a in amounts if a["value"] >= 10000]
-    if big_amounts:
-        items = [f"{a['value']:,.0f}元({a.get('context','')[:20]})" for a in big_amounts[:8]]
-        cross_findings.append({
-            "type": "大额交易", "level": "高风险" if any(a["value"] >= 100000 for a in big_amounts) else "中风险",
-            "score": 8 if any(a["value"] >= 100000 for a in big_amounts) else 6,
-            "detail": f"资料中发现{len(big_amounts)}笔大额交易（≥1万元）：{'；'.join(items)}",
-            "suggestion": "逐笔核查大额交易对应的合同、发票和银行流水，确保三流一致。"
-        })
+    # 税号
+    if all_tax_ids:
+        valid = [t for t in all_tax_ids if len(t["value"].strip()) in (15, 17, 18)]
+        stats["税号总数"] = len(all_tax_ids)
+        stats["有效税号"] = len(valid)
+        stats["税号有效率"] = f"{len(valid)/max(len(all_tax_ids),1)*100:.0f}%"
+        stats["唯一税号"] = len(set(t["value"].strip() for t in all_tax_ids))
 
-    # 检测：税号/信用代码
-    if tax_ids:
-        cross_findings.append({
-            "type": "税务标识", "level": "低风险", "score": 3,
-            "detail": f"资料中提取到{len(tax_ids)}个纳税人识别号/信用代码：{'、'.join(t['value'][:18] for t in tax_ids[:5])}",
-            "suggestion": "与公司现有供应商/客户档案中的税号比对，确认一致性。"
-        })
+    # 发票
+    if all_invoices:
+        stats["发票号数量"] = len(all_invoices)
+        stats["唯一发票号"] = len(set(i["value"] for i in all_invoices))
 
-    # ── 第四步：深度数据分析 ──
-    depth_findings = _deep_analyze(entities, amounts, tax_ids, invoice_nos, found_entities,
-                                   existing_entities, suppliers, customers, all_text)
+    # ═══════ 阶段三：交叉关联分析 ═══════
+    cross = []
+    # 实体-金额关联
+    entity_amounts = defaultdict(list)
+    for e in all_entities:
+        related = [a for a in all_amounts
+                   if a.get("source_file") == e.get("source_file")
+                   and abs(a.get("pos", 0) - e.get("pos", 999999)) < 500]
+        if related: entity_amounts[e["name"]].extend(related)
 
-    # ── 第五步：全文规则匹配 ──
+    # 按实体汇总金额
+    entity_totals = {}
+    for name, amts in entity_amounts.items():
+        entity_totals[name] = sum(a["value"] for a in amts)
+
+    top_entities = sorted(entity_totals.items(), key=lambda x: -x[1])[:8]
+    if top_entities:
+        items = [f"{name}(¥{total:,.0f})" for name, total in top_entities]
+        cross.append({"type": "实体-金额关联", "level": "中风险", "score": 6,
+                      "detail": f"按金额排序前8实体：{'、'.join(items)}",
+                      "suggestion": "金额最大的实体应作为重点审计对象，核查交易真实性。", "category": "交叉关联"})
+
+    # 新实体风险
+    new_ents = entity_names - existing
+    if new_ents:
+        new_with_amounts = [n for n in new_ents if n in entity_totals]
+        new_total = sum(entity_totals.get(n, 0) for n in new_ents)
+        total_all = sum(entity_totals.values()) if entity_totals else 1
+        cross.append({"type": "新实体风险", "level": "高风险" if new_total/total_all > 0.3 else "中风险",
+                      "score": 9 if new_total/total_all > 0.5 else (7 if new_total/total_all > 0.3 else 5),
+                      "detail": f"{len(new_ents)}个新实体涉及金额¥{new_total:,.2f}（占总量{new_total/total_all*100:.1f}%）："
+                                f"{'、'.join(list(new_ents)[:6])}",
+                      "suggestion": "新实体占比过高表明缺乏供应商准入管理，存在虚开发票和商业贿赂风险。", "category": "交叉关联"})
+
+    # 实体跨文件出现
+    entity_files = defaultdict(set)
+    for e in all_entities:
+        entity_files[e["name"]].add(e.get("source_file", ""))
+    cross_file = [(n, fs) for n, fs in entity_files.items() if len(fs) >= 2]
+    if cross_file:
+        items = [f"{n}({len(fs)}个文件)" for n, fs in cross_file[:5]]
+        cross.append({"type": "跨文件实体关联", "level": "低风险", "score": 3,
+                      "detail": f"{len(cross_file)}个实体在多个文件中出现：{'、'.join(items)}",
+                      "suggestion": "跨文件出现的实体是核心交易对手，优先核实其档案完整性和交易一致性。", "category": "交叉关联"})
+
+    # 大额交易集中度
+    big = [a for a in all_amounts if a["value"] >= 100000]
+    if big:
+        big_total = sum(a["value"] for a in big)
+        cross.append({"type": "大额交易集中度", "level": "高风险" if len(big) >= 3 else "中风险",
+                      "score": 9 if len(big) >= 5 else (7 if len(big) >= 3 else 5),
+                      "detail": f"≥10万元交易{len(big)}笔，合计¥{big_total:,.2f}。" +
+                               "、".join([f"¥{a['value']:,.0f}({a.get('source_file','')[:10]})" for a in big[:5]]),
+                      "suggestion": "逐笔核查大额交易的合同、发票和银行流水，确保三流一致。", "category": "交叉关联"})
+
+    # ═══════ 阶段四：涉税风险规则匹配 ═══════
     rules = _load_tax_risk_rules()
-    rule_findings = _match_all_rules(all_text, {}, rules)
-    all_findings = cross_findings + depth_findings + rule_findings
+    rule_findings = _match_all_rules(all_text, file_texts, rules)
 
-    # ── 第五步：综合评分与摘要 ──
+    # ═══════ 综合报告 ═══════
+    all_findings = cross + rule_findings
     high = sum(1 for f in all_findings if f["level"] == "高风险")
     mid = sum(1 for f in all_findings if f["level"] == "中风险")
     total = len(all_findings)
-    low = total - high - mid
     overall = "高风险" if high >= 3 else ("中风险" if high + mid >= 5 else "低风险")
 
-    # 提取统计
-    extract_summary = f"共提取{len(found_entities)}个实体名称、{len(amounts)}个金额数据、{len(tax_ids)}个税号、{len(invoice_nos)}个发票号。"
-    if new_entities:
-        extract_summary += f"其中{len(new_entities)}个实体不在现有档案中。"
-    if big_amounts:
-        total_big = sum(a["value"] for a in big_amounts)
-        extract_summary += f"大额交易合计{total_big:,.2f}元。"
+    # 生成摘要
+    summary_parts = [
+        f"本次分析基于{len(rules) if isinstance(rules,list) else 217}条涉税风险规则，对{len(docs)}份资料进行了四阶段深度分析。",
+        f"第一阶段提取{len(entity_names)}个实体、{len(all_amounts)}个金额、{len(all_tax_ids)}个税号。",
+        f"第二阶段统计发现：{stats.get('1-10万元','0')}笔1-10万交易、{stats.get('10-100万元','0')}笔10-100万交易。",
+        f"第三阶段交叉分析发现{len(cross)}个关联风险点。",
+        f"第四阶段规则匹配发现{len(rule_findings)}个规则风险。",
+        f"综合风险等级：{overall}，共{total}项风险（高{high}/中{mid}/低{total-high-mid}）。",
+    ]
+    summary = " ".join(summary_parts)
 
-    summary = f"本次分析基于{rules.__len__() if isinstance(rules, list) else 217}条涉税风险规则，对{len(docs)}份资料进行了结构化深度分析。"
-    summary += extract_summary
-    summary += f"综合风险等级：{overall}。共识别{total}项风险点（高风险{high}项、中风险{mid}项）。"
-    if high: summary += "建议立即处理高风险项。"
-
+    # 分类
     categories = {}
     for f in all_findings:
         cat = f.get("category", f.get("type", "其他"))
-        categories.setdefault(cat, {"name": cat, "icon": f.get("icon", ""), "risks": [], "count": 0, "high": 0, "mid": 0})
+        categories.setdefault(cat, {"name": cat, "icon": f.get("icon",""), "risks": [], "count": 0, "high": 0, "mid": 0})
         categories[cat]["count"] += 1
-        categories[cat]["risks"].append(f)
         if f["level"] == "高风险": categories[cat]["high"] += 1
         elif f["level"] == "中风险": categories[cat]["mid"] += 1
 
     report = {
-        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": low,
-        "files_count": len(docs), "rules_used": len(rules) if isinstance(rules, list) else 217,
-        "extract_stats": {"entities": len(found_entities), "amounts": len(amounts),
-                          "tax_ids": len(tax_ids), "new_entities": len(new_entities)},
+        "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid,
+        "low_risk": total - high - mid, "files_count": len(docs),
+        "rules_used": len(rules) if isinstance(rules, list) else 217,
+        "stats": stats, "cross_findings": cross,
         "categories": sorted(categories.values(), key=lambda x: -x["high"] * 100 - x["mid"] * 10 - x["count"]),
-        "all_findings": sorted(all_findings, key=lambda x: -x.get("score", 0))[:30],
-        "cross_findings": cross_findings,
-        "summary_text": summary
+        "all_findings": sorted(all_findings, key=lambda x: -x.get("score",0))[:30],
+        "summary_text": summary,
+        "entity_totals": {k: v for k, v in sorted(entity_totals.items(), key=lambda x: -x[1])[:10]}
     }
-
     return {"ok": True, "report": report}
 
 

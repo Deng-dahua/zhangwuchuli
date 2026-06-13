@@ -584,7 +584,35 @@ function renderDocsReport(data, reportDiv) {
     + '<p style="margin:8px 0 0 0;font-size:13px;color:var(--gray-600);line-height:1.6">' + escapeHtml(rpt.summary_text || '') + '</p>'
     + '</div>'
 
-    // 统计卡片
+    // 统计表格
+    if (rpt.stats && Object.keys(rpt.stats).length > 0) {
+      html += '<div style="margin:16px 0"><b style="font-size:15px">📊 第二阶段 — 数据统计分析</b></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px">';
+      Object.keys(rpt.stats).forEach(function(k) {
+        html += '<div style="background:#f8fafc;border-radius:6px;padding:8px 12px;text-align:center">'
+          + '<div style="font-size:11px;color:var(--gray-500)">' + escapeHtml(k) + '</div>'
+          + '<div style="font-size:16px;font-weight:700;color:var(--gray-800)">' + escapeHtml(String(rpt.stats[k])) + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    }
+
+    // 实体金额排行
+    if (rpt.entity_totals && Object.keys(rpt.entity_totals).length > 0) {
+      html += '<div style="margin:16px 0"><b style="font-size:15px">🏢 第三阶段 — 实体金额排行</b></div>';
+      var rank = 1;
+      Object.keys(rpt.entity_totals).forEach(function(name) {
+        var total = rpt.entity_totals[name];
+        var barW = Math.min(100, (total / (total || 1)) * 100);
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">'
+          + '<span style="width:20px;color:var(--gray-400)">' + (rank++) + '</span>'
+          + '<span style="width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</span>'
+          + '<div style="flex:1;background:#f1f5f9;border-radius:4px;height:18px;position:relative">'
+          + '<div style="position:absolute;left:0;top:0;height:100%;background:#3b82f6;border-radius:4px;width:' + barW + '%"></div>'
+          + '<span style="position:absolute;right:4px;top:0;font-size:10px;line-height:18px;color:var(--gray-600)">¥' + total.toLocaleString() + '</span>'
+          + '</div></div>';
+      });
+    }
     + '<div style="display:flex;gap:12px;margin-bottom:16px">'
     + '<div style="flex:1;background:#fef2f2;border-radius:6px;padding:12px;text-align:center">'
     + '<div style="font-size:24px;font-weight:700;color:#dc2626">' + rpt.high_risk + '</div><div style="font-size:12px;color:#991b1b">高风险</div></div>'
