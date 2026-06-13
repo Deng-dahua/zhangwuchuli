@@ -6281,6 +6281,12 @@ def _clear_source_voucher_no(db, company_id, entry):
         InputVATDeduction.voucher_no == voucher_str
     ).update({"voucher_no": None}, synchronize_session=False)
 
+    # ── 记账发票（删除凭证后回退到未记账状态）──
+    db.query(BookkeepingInvoice).filter(
+        BookkeepingInvoice.company_id == company_id,
+        BookkeepingInvoice.voucher_no == voucher_str
+    ).update({"voucher_no": None}, synchronize_session=False)
+
     # 取得发票 / 销项发票 / 工资 / 社保 / 公积金 — 这些表没有 voucher_no 字段，无需清除
 
 
