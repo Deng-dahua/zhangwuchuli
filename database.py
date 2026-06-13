@@ -3482,10 +3482,14 @@ def _match_tax_payment_journals(db: Session, company_id: int):
             if not tax_items:
                 continue
 
-            # 尝试任意子集精确组合匹配（位掩码枚举，n≤6 → 64种组合）
+            # 尝试任意子集精确组合匹配（位掩码枚举）
+            # 第一条：优先匹配多税种组合（cnt≥2），更准确
+            # 第二条：若无多税种组合匹配，再尝试单一税种匹配（如单独缴纳个税）
             n = len(tax_items)
             best_mask = None
             best_count = 0
+
+            # 第一轮：多税种组合（cnt≥2）
             for mask in range(1, 1 << n):
                 subset_sum = 0
                 cnt = 0
@@ -3493,10 +3497,24 @@ def _match_tax_payment_journals(db: Session, company_id: int):
                     if mask & (1 << i):
                         subset_sum += tax_items[i][2]
                         cnt += 1
-                if abs(subset_sum - payment_amount) < 0.01 and cnt >= 2:
+                if cnt >= 2 and abs(subset_sum - payment_amount) < 0.01:
                     if cnt > best_count:
                         best_mask = mask
                         best_count = cnt
+
+            # 第二轮：单一税种兜底（如单独缴纳个税/印花税）
+            if not best_mask:
+                for mask in range(1, 1 << n):
+                    subset_sum = 0
+                    cnt = 0
+                    for i in range(n):
+                        if mask & (1 << i):
+                            subset_sum += tax_items[i][2]
+                            cnt += 1
+                    if cnt == 1 and abs(subset_sum - payment_amount) < 0.01:
+                        best_mask = mask
+                        best_count = 1
+                        break
 
             if best_mask:
                 matched_items = [tax_items[i] for i in range(n) if best_mask & (1 << i)]

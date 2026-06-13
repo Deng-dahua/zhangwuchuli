@@ -7032,10 +7032,36 @@ def bank_transactions_batch_to_journal(ids: Optional[List[int]] = Body(None), co
 
 @app.post("/api/bank-transactions/auto-voucher")
 def bank_transactions_auto_voucher(company_id: int = Query(...), db: Session = Depends(get_db)):
-    """导入银行流水后自动生成全部未处理凭证"""
+    """导入银行流水后自动生成全部未处理凭证（含国家金库/社保/公积金专项匹配）"""
     result = _generate_bank_journals(db, company_id, None)
+
+    # 社保缴纳匹配（对方户名含"社保/税务"且金额匹配）
+    try:
+        ss_result = _match_ss_payment_journals(db, company_id)
+        result["generated"] += ss_result.get("generated", 0)
+    except Exception:
+        pass
+
+    # 国家金库税费组合缴纳匹配（含单一税种兜底：个税/印花税等）
+    try:
+        tax_result = _match_tax_payment_journals(db, company_id)
+        result["generated"] += tax_result.get("generated", 0)
+    except Exception:
+        pass
+
+    # 公积金缴纳匹配
+    try:
+        hf_result = _match_hf_payment_journals(db, company_id)
+        result["generated"] += hf_result.get("generated", 0)
+    except Exception:
+        pass
+
     db.commit()
-    return {"message": f"自动生成 {result['generated']} 条银行流水凭证", "generated": result["generated"]}
+    return {
+        "message": f"自动生成 {result['generated']} 条银行流水凭证",
+        "generated": result["generated"],
+        "detail": result
+    }
 
 
 @app.post("/api/bank-transactions/classify")
