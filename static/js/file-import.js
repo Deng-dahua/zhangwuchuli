@@ -384,7 +384,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
   }
   else if (module === 'purchase-invoice') renderPurchaseInvoices();
   else if (module === 'bookkeeping-invoice') renderBookkeepingInvoices();
-  else if (module === 'input-vat-deduction') renderInputVATDeductions();
+  else if (module === 'input-vat-deduction') {
+    renderInputVATDeductions();
+    // 导入后自动生成序时账凭证
+    api('/api/input-vat-deductions/auto-voucher', { method: 'POST' }).then(function(r) {
+      if (r.generated > 0) toast('已自动生成 ' + r.generated + ' 条进项抵扣凭证', 'success');
+    }).catch(function(){});
+  }
   else if (module === 'employee') { const c = document.getElementById('page-employees'); if (c) renderEmployees(c); else renderEmployees(); }
   else if (module === 'customer') { const c = document.getElementById('page-customers'); if (c) renderCustomers(c); else renderCustomers(); }
   else if (module === 'supplier') { const c = document.getElementById('page-suppliers'); if (c) renderSuppliers(c); else renderSuppliers(); }

@@ -6457,6 +6457,26 @@ def sales_invoice_auto_voucher(company_id: int = Query(...), db=Depends(get_db))
     return {"message": msg, "generated": generated, "errors": errors}
 
 
+@app.post("/api/input-vat-deductions/auto-voucher")
+def input_vat_auto_voucher(company_id: int = Query(...), db=Depends(get_db)):
+    """导入进项抵扣后自动生成序时账凭证"""
+    # 查找所有未生成凭证的进项抵扣记录，按期分组
+    unprocessed = db.query(InputVATDeduction).filter(
+        InputVATDeduction.company_id == company_id,
+        or_(InputVATDeduction.voucher_no == None, InputVATDeduction.voucher_no == "")
+    ).all()
+    if not unprocessed:
+        return {"message": "无待生成凭证的进项抵扣", "generated": 0}
+    
+    periods = set(d.deduction_period for d in unprocessed if d.deduction_period)
+    total = 0
+    for period in periods:
+        total += auto_generate_input_vat_for_period(db, company_id, period)
+    
+    db.commit()
+    return {"message": f"自动生成 {total} 条进项抵扣凭证（共 {len(periods)} 个期间）", "generated": total}
+
+
 @app.post("/api/sales-invoices/{invoice_id}/to-journal")
 def sales_invoice_to_journal(invoice_id: int, company_id: int = Query(...), db=Depends(get_db)):
     """将单张销项发票生成记账凭证（分录）到序时账（允许重新生成，先删旧凭证）"""
