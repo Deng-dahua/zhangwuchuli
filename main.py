@@ -9457,16 +9457,20 @@ def _extract_structured_data(text, filename):
     amount_patterns = [
         r'([\d,]+\.?\d*)\s*[元圆]',
         r'(?:金额|合计|总计|收入|支出|付款|汇款|转账|金额)[：:\s]*([\d,]+\.?\d*)',
-        r'\b(\d{3,}(?:,\d{3})*(?:\.\d{2})?)\b',
     ]
     for pat in amount_patterns:
         for m in re.finditer(pat, text):
             try:
                 val_str = m.group(1).replace(',', '').replace('，', '')
+                # 排除明显非金额的数字：手机号(11位1开头)、身份证片段(>15位)、序号(>10位)
+                if len(val_str.replace('.', '')) > 10:
+                    continue
+                if len(val_str.replace('.', '')) == 11 and val_str.startswith('1'):
+                    continue
                 val = float(val_str)
-                if 100 <= val <= 99999999:  # 合理范围
+                if 100 <= val <= 99999999:
                     ctx = text[max(0,m.start()-20):m.end()+20]
-                    data["amounts"].append({"value": val, "context": ctx})
+                    data["amounts"].append({"value": val, "context": ctx, "pos": m.start()})
             except: pass
 
     # 提取税号/统一社会信用代码（18位/15位/17位）
