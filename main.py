@@ -9805,75 +9805,85 @@ def _parse_pdf_bank_statement(filepath):
             text += t + "\n"
     except: return []
 
-    # 合并被换行打断的银行名（"招商银行股份有限公司北京" + "大兴支行"）
+    # 合并被换行打断的银行名和交易记录
     lines = text.split("\n")
     merged = []
     i = 0
     while i < len(lines):
         line = lines[i].strip()
         if not line: i += 1; continue
-        # 如果行以数字开头且长度<50，可能是银行名第一行
-        if re.match(r'^\d+\s', line) and len(line) < 50:
+        # 以数字序号开头的行：合并后续行直到遇到下一个序号或空行
+        if re.match(r'^\d+\s', line) and len(line) < 60:
             combined = line
             i += 1
-            while i < len(lines) and lines[i].strip() and not re.match(r'^\d+\s', lines[i].strip()):
-                combined += lines[i].strip()
+            # 继续合并，直到遇到下一个序号行或空行
+            while i < len(lines) and lines[i].strip():
+                nxt = lines[i].strip()
+                # 如果下一行以序号开头→停止
+                if re.match(r'^\d+\s', nxt) and len(nxt) < 60: break
+                combined += nxt
                 i += 1
             merged.append(combined)
         else:
             merged.append(line)
             i += 1
 
+    # 处理仍未合并的行：上一行有日期无金额，下一行有金额
+    final = []
+    for j, line in enumerate(merged):
+        has_date = bool(re.search(r'20[2-3]\d\d[01]\d[0-3]\d', line))
+        has_amount = bool(re.search(r'[\d,]+\.\d{2}', line))
+        if has_date and not has_amount and j + 1 < len(merged):
+            nxt = merged[j+1]
+            if re.search(r'[\d,]+\.\d{2}', nxt) and not re.search(r'20[2-3]\d\d[01]\d[0-3]\d', nxt):
+                merged[j+1] = line + nxt
+                continue
+        if has_date:
+            final.append(line)
+
     # 从合并行中提取交易记录
     txs = []
-    party_cache = ""  # 缓存上一行的对方名称
-    for line in merged:
-        # 尝试匹配完整的一行交易：日期+金额
-        date_m = re.search(r'(\d{8})', line)
+    for line in final:
+        # 日期：202xMMDD格式
+        date_m = re.search(r'(20[2-3]\d)([01]\d)([0-3]\d)', line)
         if not date_m: continue
+        date_str = date_m.group(0)
 
-        date_str = date_m.group(1)
-        # 提取所有金额（支持逗号分隔）
+        # 提取所有金额
         amounts = re.findall(r'([\d,]+\.\d{2})', line)
         if not amounts: continue
 
         vals = [float(a.replace(",", "")) for a in amounts]
         if len(vals) >= 2:
             debit, credit = vals[0], vals[1]
-        elif "收费" in line or "#收费" in line:
+        elif "营收" in line or "入账" in line or "结算" in line:
+            credit, debit = max(vals), 0
+        elif "税务" in line or "缴" in line or "收费" in line or "所得税" in line or "社保" in line or "失业" in line:
+            debit, credit = max(vals), 0
+        elif "货款" in line or "快递" in line or "包装" in line or "动物医院" in line:
             debit, credit = max(vals), 0
         else:
-            # 只有一笔金额：尝试判断借贷方
-            # 如果摘要中包含"营收"→贷方(收入)
-            if "营收" in line or "入账" in line:
-                credit, debit = max(vals), 0
-            elif "税务" in line or "缴" in line or "收费" in line:
-                debit, credit = max(vals), 0
-            else:
-                # 判断：之前看到的是对方，对方不是支付宝/税务→可能是付款
-                credit, debit = max(vals), 0
+            credit, debit = max(vals), 0
 
-        # 提取对方名称
+        # 提取对方名称：大兴支行{名称} 日期
         counterparty = ""
-        # 招行文本格式：大兴支行{对方名} {账号} {日期}
-        m = re.search(r'大兴支行(.+?)\s*(\d{6,}|[A-Z0-9]{6,})?\s*' + date_str, line)
-        if m:
-            counterparty = m.group(1).strip()
-            # 去掉账号部分
-            counterparty = re.sub(r'\s*\d{6,}\s*$', '', counterparty).strip()
+        # 招商银行大兴支行后的内容就是交易对手
+        bank_end = line.find("大兴支行")
+        if bank_end >= 0:
+            rest = line[bank_end+4:]  # "大兴支行"之后
+            # 取日期之前的部分作为对方名称
+            date_pos = rest.find(date_str)
+            if date_pos > 0:
+                counterparty = rest[:date_pos].strip()
+                # 清理尾部的账号数字
+                counterparty = re.sub(r'\s*\d{6,}\s*$', '', counterparty).strip()
 
         summary = line[:200]
-        # 提取摘要关键词
-        for kw in ['个人所得税','增值税','企业所得税','营收款','货款','快递费','包装','收费',
-                    '银联TOK','移动支付','网联','商户结算','入账交易','失业保险费','社保']:
-            if kw in line:
-                summary = kw
-                break
 
         txs.append({
             "date": date_str, "debit": round(debit, 2), "credit": round(credit, 2),
             "amount": round(credit - debit, 2),
-            "counterparty": counterparty[:50], "summary": summary, "raw": line[:200]
+            "counterparty": counterparty[:60], "summary": summary, "raw": line[:200]
         })
     return txs
 
