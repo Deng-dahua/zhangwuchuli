@@ -179,7 +179,7 @@ async function batchDeleteUnbookkeptInvoices() {
   checked.forEach(cb => { const n = parseInt(cb.dataset.id); if (n) ids.push(n); });
   if (!confirm('确认删除选中的 ' + ids.length + ' 条未记账发票？此操作不可恢复。')) return;
   try {
-    const result = await api('/api/bookkeeping-invoices/batch-delete', {
+    const result = await api('/api/bookkeeping-invoices/batch-delete?only_unposted=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ids)

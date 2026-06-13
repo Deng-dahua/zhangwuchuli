@@ -4237,11 +4237,15 @@ def delete_bookkeeping_invoice(invoice_id: int, company_id: int = Query(...), db
 
 
 @app.post("/api/bookkeeping-invoices/batch-delete")
-def batch_delete_bookkeeping_invoices(ids: list[int], company_id: int = Query(...), db: Session = Depends(get_db)):
-    deleted = db.query(BookkeepingInvoice).filter(
+def batch_delete_bookkeeping_invoices(ids: list[int], company_id: int = Query(...), only_unposted: bool = Query(False), db: Session = Depends(get_db)):
+    """批量删除记账发票。only_unposted=True时仅删除未记账的（voucher_no为空）"""
+    q = db.query(BookkeepingInvoice).filter(
         BookkeepingInvoice.company_id == company_id,
         BookkeepingInvoice.id.in_(ids)
-    ).delete(synchronize_session=False)
+    )
+    if only_unposted:
+        q = q.filter(or_(BookkeepingInvoice.voucher_no == None, BookkeepingInvoice.voucher_no == ""))
+    deleted = q.delete(synchronize_session=False)
     db.commit()
     return {"message": f"成功删除 {deleted} 条记录", "deleted": deleted}
 
