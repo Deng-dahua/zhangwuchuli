@@ -2,9 +2,21 @@
 
 var _bankConfigs = [];
 var _currentBankId = null;
+var btPeriod = '';
+
+function onBTPeriodChange(val) {
+  btPeriod = val || '';
+  renderBankTransactions();
+}
 
 // ==================== 进项抵扣 ====================
 var ivdFilter = { checkStatus: '', keyword: '', dateFrom: '', dateTo: '' };
+
+function onIVDPeriodChange(val) {
+  if (!val) { ivdFilter.dateFrom = ''; ivdFilter.dateTo = ''; }
+  else { const r = periodToDateRange(val); ivdFilter.dateFrom = r.from; ivdFilter.dateTo = r.to; }
+  renderInputVATDeductions();
+}
 
 async function loadBankConfigs() {
   const data = await api('/api/bank-configs');
@@ -45,8 +57,9 @@ async function renderBankTransactions(container) {
 
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;">';
-  html += '<div class="toolbar-left" style="display:flex;align-items:center;">';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
   html += bankSelectHtml;
+  html += '<input type="month" id="btPeriodPicker" value="' + (typeof btPeriod !== 'undefined' && btPeriod ? btPeriod : currentPeriod) + '" onchange="onBTPeriodChange(this.value)" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:150px;" title="选择期间">';
   html += '<button class="btn-toolbar" onclick="showUploadModal(\'bank-transaction\')">导入文件</button>';
   html += '<button class="btn-toolbar" id="btBatchGenBtn" onclick="batchGenerateBankVouchers()">生成凭证</button>';
   html += '<button class="btn-toolbar-danger" id="btBatchDelBtn" onclick="batchDeleteBankTx()">批量删除</button>';
@@ -70,6 +83,11 @@ async function loadBankTxList() {
   const params = new URLSearchParams();
   if (_currentBankId) params.set('bank_config_id', _currentBankId);
   if (type) params.set('transaction_type', type);
+  if (btPeriod) {
+    const r = periodToDateRange(btPeriod);
+    params.set('date_from', r.from);
+    params.set('date_to', r.to);
+  }
   const qs = params.toString();
   const data = await api('/api/bank-transactions' + (qs ? '?' + qs : ''));
 
@@ -365,7 +383,8 @@ async function renderInputVATDeductions(container) {
 
   // 工具栏
   html += '<div class="toolbar" style="flex-wrap:wrap;">';
-  html += '<div class="toolbar-left" style="display:flex;align-items:center;">';
+  html += '<div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  html += '<input type="month" id="ivdPeriodPicker" value="' + (ivdFilter.dateFrom ? ivdFilter.dateFrom.slice(0,7) : currentPeriod) + '" onchange="onIVDPeriodChange(this.value)" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:150px;" title="选择期间">';
   html += '<button class="btn-toolbar" onclick="showUploadModal(\'input-vat-deduction\')">导入文件</button>';
   html += '<button class="btn-toolbar" id="ivdBatchGenBtn" onclick="batchGenerateIVDVouchers()">生成凭证</button>';
   html += '<button class="btn-toolbar-danger" id="ivdBatchDelBtn" onclick="batchDeleteIVD()">批量删除</button>';
