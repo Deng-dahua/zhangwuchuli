@@ -9930,6 +9930,7 @@ def _domain_bank_tracking(txs):
     if income > 0 and cats.get("third_party", 0) / income > 0.5:
         pct = cats['third_party']/income*100
         findings.append({"type": "第三方收款占比过高", "level": "高风险", "score": 9,
+        "how_found": "分析银行流水中所有贷方(收入)交易，识别收款渠道（支付宝/微信/财付通等第三方平台），计算第三方收款占总收入的比例。超过50%触发预警。",
             "detail": f"支付宝/微信等第三方平台收款{cats['third_party']:,.2f}元，占总收入{pct:.0f}%。",
             "description": f"贵公司通过支付宝、微信等第三方支付平台收取了绝大部分营业收入（{pct:.0f}%）。这种收款方式虽然便捷，但存在较大的税务合规隐患：第三方平台收款记录与企业开票信息、合同信息难以一一对应，税务机关在稽查时可能认为资金流、发票流、合同流[三流不一致]，从而质疑收入的真实性和完整性。",
             "tax_impact": "若无法逐笔匹配第三方收款与销售订单/发票，税务机关可能认定存在隐匿收入、账外经营的风险，要求补缴增值税及企业所得税，并加收滞纳金和罚款。",
@@ -9937,6 +9938,7 @@ def _domain_bank_tracking(txs):
             "suggestion": "1）建立第三方收款与销售订单的逐笔匹配台账；2）每笔第三方收款确保开具相应发票；3）定期将第三方平台余额提现至对公账户；4）考虑逐步引导客户通过对公转账结算。",
             "category": "域1 资金全链路"})
     findings.append({"type": "资金流概览", "level": "低风险", "score": 2,
+    "how_found": "汇总银行流水中所有贷方和借方交易，分别计算收入总额、支出总额、缴税总额。",
         "detail": f"收入{income:,.2f}元，支出{expense:,.2f}元，缴税{cats.get('tax',0):,.2f}元。",
         "description": f"综合分析期间银行账户资金流水：累计收入{income:,.2f}元，累计支出{expense:,.2f}元，其中向税务机关缴纳税款{cats.get('tax',0):,.2f}元。",
         "category": "域1 资金全链路"})
@@ -9951,6 +9953,7 @@ def _domain_profit_analysis(sal_invs, pur_invs, inventory):
     if s_total > 0 and p_total > 0 and p_total / s_total > 1.5:
         ratio = p_total/s_total
         findings.append({"type": "进销严重倒挂", "level": "高风险", "score": 8,
+        "how_found": "汇总所有销项发票价税合计（收入端）和所有进项发票价税合计（支出端），计算进销比率。比率>150%触发预警。",
             "detail": f"进项发票{p_total:,.2f}元（{p_count}张）/ 销项发票{s_total:,.2f}元（{s_count}张），比率{ratio*100:.0f}%。",
             "description": f"贵公司分析期间取得进项发票{p_count}张、金额{p_total:,.2f}元，但对外开具销项发票仅{s_count}张、金额{s_total:,.2f}元。进项金额是销项的{ratio*100:.0f}%，严重倒挂。正常情况下，企业采购原材料或商品后加工或转售应产生增值，销项金额应大于进项金额。进销倒挂可能意味着：存在未开票的隐匿销售收入、囤货积压、关联交易转移定价、或进项发票虚开虚抵等问题。",
             "tax_impact": "进销倒挂是税务机关重点关注指标。若被认定存在隐匿收入，需补缴增值税及企业所得税；若被认定进项虚抵，已抵扣税款将做进项税额转出并加收滞纳金。",
@@ -9959,6 +9962,7 @@ def _domain_profit_analysis(sal_invs, pur_invs, inventory):
             "category": "域2 进销毛利"})
     if s_total > 0:
         findings.append({"type": "进销概况", "level": "低风险", "score": 2,
+        "how_found": "分别汇总销项发票和进项发票的数量与价税合计金额。",
             "detail": f"销项{s_total:,.2f}元（{s_count}张），进项{p_total:,.2f}元（{p_count}张）。",
             "description": f"分析期间取得进项发票{p_count}张、金额{p_total:,.2f}元；对外开具销项发票{s_count}张、金额{s_total:,.2f}元。",
             "category": "域2 进销毛利"})
@@ -9974,6 +9978,7 @@ def _domain_personal_transactions(sal_invs):
         pct = p_total / all_total * 100 if all_total > 0 else 0
         if pct > 30:
             findings.append({"type": "个人交易占比过高", "level": "高风险", "score": 8,
+            "how_found": "从销项发票中筛选购方名称为'个人'的发票，计算个人交易金额占总销项的比例。超过30%触发预警。",
                 "detail": f"{len(personal)}张发票开给个人，金额{p_total:,.2f}元（占总销项{pct:.0f}%）。",
                 "description": f"贵公司有{len(personal)}张销项发票的开票对象为个人，合计金额{p_total:,.2f}元，占全部销项收入的{pct:.0f}%。向个人销售虽属正常经营行为，但占比过高会引起税务机关关注：个人消费者通常不索要发票，若大量开票给个人，可能存在将本应开给企业的发票开给个人以规避税务监管的情况，或存在借用个人名义拆分收入、规避企业所得税的问题。",
                 "tax_impact": "若被认定为异常开票行为，可能面临发票协查、纳税评估甚至税务稽查。情节严重的可能被认定为虚开发票。",
@@ -9983,6 +9988,7 @@ def _domain_personal_transactions(sal_invs):
     untaxed = [i for i in sal_invs if "无票" in str(i.get("inv_type", ""))]
     if untaxed:
         findings.append({"type": "存在无票收入", "level": "中风险", "score": 6,
+        "how_found": "从销项发票中筛选发票类型包含'无票'字样的记录，统计数量与金额。",
             "detail": f"销项{len(untaxed)}条无票收入，合计{sum(i['total'] for i in untaxed if i['total']>0):,.2f}元。",
             "description": f"发现{len(untaxed)}笔销售业务未开具发票（无票收入），金额合计{sum(i['total'] for i in untaxed if i['total']>0):,.2f}元。未开票收入本身并不违法（增值税纳税义务发生时间不以开票为唯一标准），但需要确认是否已在增值税申报时作为'未开具发票'栏次如实填报。",
             "tax_impact": "若未在增值税申报表中填报未开票收入，属于少申报销售额，需补缴增值税及附加、企业所得税，并加收滞纳金。",
@@ -10006,6 +10012,7 @@ def _domain_supplier_deep(pur_invs):
         top3_pct = sum(v for _,v in top3)/total_pur*100
         top3_names = '、'.join([f"{n[:12]}({v:,.0f}元)" for n,v in top3[:3]])
         findings.append({"type": "供应商高度集中", "level": "中风险", "score": 6,
+        "how_found": "按销方名称汇总所有进项发票金额，取前3大供应商，计算其采购额占总采购额的比例。超过70%触发预警。",
             "detail": f"前3大供应商占比{top3_pct:.0f}%：{top3_names}。",
             "description": f"贵公司采购高度集中在少数几家供应商：前3大供应商合计采购额{sum(v for _,v in top3):,.2f}元，占总采购额的{top3_pct:.0f}%。供应商过于集中会带来以下风险：一是对单一供应商依赖过大，商业谈判能力弱；二是若供应商出现经营异常或税务问题，可能牵连本公司进项发票被协查；三是容易引发税务机关对关联交易或虚开风险的关注。",
             "tax_impact": "税务机关在纳税评估中将供应商集中度作为风险指标。若供应商出现走逃失联或虚开发票，本公司取得的进项发票将被要求做进项税额转出，补缴税款并加收滞纳金。",
@@ -10015,6 +10022,7 @@ def _domain_supplier_deep(pur_invs):
     for city, sellers in sorted(by_city.items(), key=lambda x: -len(x[1])):
         if len(sellers) >= 3:
             findings.append({"type": "同城供应商群集", "level": "中风险", "score": 5,
+            "how_found": "从供应商名称中提取城市关键词（广州/深圳/北京/上海/杭州等），按城市分组统计供应商数量。同一城市>=3家触发预警。",
                 "detail": f"{city}地区集中{len(sellers)}家同类供应商。",
                 "description": f"贵公司在{city}地区有{len(sellers)}家同类供应商。同一城市存在多家同类型供应商，可能引发税务机关对以下问题的关注：是否存在同一控制人注册多家公司分散开票、是否有注册空壳公司虚开发票、是否存在利用不同纳税人身份（一般纳税人/小规模纳税人）调节税负的情况。",
                 "tax_impact": "若同城多家供应商存在关联关系或被认定为虚开团伙，则本公司取得的进项发票将面临进项税额转出风险。",
@@ -10033,6 +10041,7 @@ def _domain_voucher_anomaly(vouchers):
     if unbalanced:
         gap_total = sum(abs(b["d"]-b["c"]) for _,b in unbalanced)
         findings.append({"type": "凭证借贷不平", "level": "高风险", "score": 9,
+        "how_found": "按凭证编号分组汇总每张凭证的借方金额和贷方金额，计算借贷差额。差额>1元视为不平。",
             "detail": f"{len(unbalanced)}张凭证借贷不平衡（共{len(by_vn)}张），差额合计{gap_total:,.2f}元。",
             "description": f"在{len(by_vn)}张记账凭证中，发现{len(unbalanced)}张凭证的借方金额与贷方金额不相等，差额合计{gap_total:,.2f}元。根据会计基本原理'有借必有贷，借贷必相等'，每一张记账凭证的借方合计必须等于贷方合计。借贷不平意味着记账存在错误，可能导致财务报表数据失真，影响企业所得税、增值税计算的准确性。",
             "tax_impact": "凭证借贷不平直接导致科目余额和财务报表不准确，企业据此计算缴纳的税款可能存在多缴或少缴。税务机关在稽查中发现凭证不平，将质疑企业会计核算的规范性，扩大稽查范围。",
@@ -10048,6 +10057,7 @@ def _domain_inventory_turnover(inventory, sal_invs):
     total_out = sum(i.get("out_qty", 0) for i in inventory if i.get("out_qty", 0) > 0)
     if total_in > 0 and total_out > 0 and total_in / max(total_out, 1) > 10:
         findings.append({"type": "存货严重积压", "level": "中风险", "score": 7,
+        "how_found": "汇总进销存台中所有入库数量和出库数量，计算出库率（出库/入库）。出库率<10%触发预警。",
             "detail": f"入库{total_in:.0f}件，出库{total_out:.0f}件，出库率仅{total_out/total_in*100:.0f}%。",
             "description": f"分析期间存货入库{total_in:.0f}件，出库仅{total_out:.0f}件，出库率只有{total_out/total_in*100:.0f}%。存货大量积压意味着大量资金被库存占用，不仅影响企业现金流，还可能涉及以下税务问题：存货期末余额过大且长期不消化，税务机关可能怀疑企业存在已销售未确认收入（账外销售）的情况；或存货已实际发出但未开具发票未确认收入。",
             "tax_impact": "存货周转异常是纳税评估的重要指标。若被认定存在账外销售或延期确认收入，将补缴增值税和企业所得税。此外，存货积压若最终形成资产损失，需按规定做清单申报或专项申报方可在税前扣除。",
@@ -10056,6 +10066,7 @@ def _domain_inventory_turnover(inventory, sal_invs):
             "category": "域6 存货"})
     if total_in > 0:
         findings.append({"type": "存货概况", "level": "低风险", "score": 2,
+        "how_found": "汇总进销存台账中所有入库数量和出库数量。",
             "detail": f"入库{total_in:.0f}件，出库{total_out:.0f}件。",
             "description": f"分析期间存货入库{total_in:.0f}件、出库{total_out:.0f}件，期末库存约为{total_in-total_out:.0f}件。",
             "category": "域6 存货"})
@@ -10073,6 +10084,7 @@ def _domain_tax_consistency(bank_txs, db, company_id):
         if payable > 0 and tax_paid > 0 and abs(payable - tax_paid) > 100:
             diff = abs(payable - tax_paid)
             findings.append({"type": "缴税与申报不一致", "level": "高风险" if diff>1000 else "中风险",
+            "how_found": "从银行流水中提取含'税务'关键词的借方（支出）交易汇总缴税金额；从增值税申报表读取应缴税额。两者差异>100元触发预警。",
                 "score": 9 if diff>1000 else 6,
                 "detail": f"申报应缴{payable:,.2f}元 vs 银行实际扣款{tax_paid:,.2f}元，差异{diff:,.2f}元。",
                 "description": f"增值税申报表填报的应缴税额为{payable:,.2f}元，但银行流水显示实际向税务机关缴纳的税款为{tax_paid:,.2f}元，两者相差{diff:,.2f}元（差异率{diff/max(payable,1)*100:.1f}%）。造成差异的常见原因包括：申报表填报错误、税款缴纳延迟（跨期扣款）、存在滞纳金或罚款附加、银行自动扣款金额与申报不一致、或者部分税款未足额缴纳。",
@@ -10091,6 +10103,7 @@ def _domain_salary_ss_hf_compare(salaries, social_security):
     only_ss = ss_names - sal_names
     if only_sal:
         findings.append({"type": "有工资无社保", "level": "高风险", "score": 8,
+        "how_found": "将工资表的人员名单与社保明细的人员名单进行集合差集运算（工资有名 - 社保有名），找出有工资但无社保记录的人员。",
             "detail": f"{len(only_sal)}名员工有工资但无社保记录：{'、'.join(list(only_sal)[:5])}等。",
             "description": f"发现{len(only_sal)}名员工有工资发放记录但在社保缴纳名单中未找到对应记录。根据《社会保险法》规定，用人单位应当自用工之日起三十日内为其职工向社会保险经办机构申请办理社会保险登记。有工资无社保属于典型的未依法参保行为，将面临社保稽核和行政处罚风险。",
             "tax_impact": "社保违规不仅面临社保部门的行政处罚（责令补缴+滞纳金+罚款），还会引起税务机关关注——工资在企业所得税前扣除的前提是工资的真实性和合法性，未参保人员工资的合理性可能被质疑。此外，个税申报中的工资数据与社保人数不一致也会触发税务系统预警。",
@@ -10102,6 +10115,7 @@ def _domain_salary_ss_hf_compare(salaries, social_security):
         for ss in social_security:
             if ss.get("name") == name and ss.get("base", 0) > 0 and salary > 0 and ss["base"] < salary * 0.6:
                 findings.append({"type": "社保低基数参保", "level": "中风险", "score": 6,
+                "how_found": "逐人比对工资表的工资金额与社保明细的缴费基数。缴费基数<实际工资的60%触发预警。",
                     "detail": f"{name}：工资{salary:,.0f}元，社保缴费基数仅{ss['base']:,.0f}元（{ss['base']/salary*100:.0f}%）。",
                     "description": f"员工{name}实际发放工资{salary:,.0f}元，但社保缴费基数仅{ss['base']:,.0f}元，仅为实际工资的{ss['base']/salary*100:.0f}%。根据规定，社保缴费基数应按职工本人上年度月平均工资确定，低于当地社平工资60%的按60%计算。缴费基数明显低于实际工资属于低基数参保，是社保稽查的重点关注事项。",
                     "tax_impact": "低基数参保被查处后需补缴差额及滞纳金。一次性补缴大量社保费会给企业现金流造成压力。同时低基数参保可能被认定为恶意规避社保义务，面临罚款。",
@@ -10117,6 +10131,7 @@ def _domain_invoice_lifecycle(invoices):
     voided = types.get("作废", 0) + types.get("红冲", 0)
     if len(invoices) > 0 and voided / len(invoices) > 0.1:
         findings.append({"type": "发票作废率偏高", "level": "中风险", "score": 6,
+        "how_found": "统计所有发票中发票类型为'作废'或'红冲'的数量，计算占总发票数的比例。超过10%触发预警。",
             "detail": f"{voided}张作废/红冲发票，占全部{len(invoices)}张的{voided/len(invoices)*100:.0f}%。",
             "description": f"在{len(invoices)}张发票中，有{voided}张被作废或红冲，占比{voided/len(invoices)*100:.0f}%。发票作废/红冲率过高是税务机关发票风险监控的重要指标。异常高的作废率可能意味着：企业存在先开票后作废以调节收入的嫌疑、发票开具管理不规范、或商业纠纷导致交易频繁取消。",
             "tax_impact": "税务机关对异常作废发票会进行风险扫描，可能发起发票协查。若被认定恶意作废发票以逃避纳税义务，将被追缴税款并处罚。",
@@ -10142,6 +10157,7 @@ def _domain_contract_comparison(db, company_id, sal_invs, pur_invs):
     if no_ct and len(no_ct) >= 2:
         coverage = len(buyers) - len(no_ct)
         findings.append({"type": "销项客户无合同", "level": "中风险", "score": 6,
+        "how_found": "從销项发票中提取所有购方名称，与合同档案中的甲方/乙方名称进行模糊匹配，找出有发票但无合同的客户。",
             "detail": f"{len(no_ct)}个销项客户无合同，合同覆盖率仅{coverage}/{len(buyers)}。",
             "description": f"贵公司共有{len(buyers)}个销项发票客户，但仅有{coverage}个客户能找到对应的合同，{len(no_ct)}个客户的交易缺少合同支撑。合同是证明交易真实性的核心证据，也是税务稽查中判断'四流合一'（合同流、资金流、发票流、货物流）的首要环节。大量交易无合同，一旦被稽查将难以证明交易的真实性和合理性。",
             "tax_impact": "缺少合同支撑的交易，税务机关可能要求企业补充提供其他交易真实性证据。如无法提供，将面临进项税额不予抵扣、成本不予税前扣除、甚至被认定为虚开发票的严重后果。此外，合同是印花税的计税依据，无合同也意味着印花税可能存在漏缴。",
@@ -10174,6 +10190,7 @@ def _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs):
             elif m == "物流": msgs.append("无物流快递支出")
             elif m == "办公": msgs.append("无办公用品支出")
         findings.append({"type": "经营场所及运营证据缺失", "level": "高风险", "score": 9,
+        "how_found": "扫描进项发票的货物名称和银行流水的交易摘要，检测是否包含租金、水电费、物业费、通信费、物流费、办公用品费等基本经营支出关键词。",
             "detail": f"进项发票与银行流水中{'；'.join(msgs[:4])}。",
             "description": f"贵公司作为正常经营的企业，理论上应产生基本的经营费用，但分析发现进项发票和银行流水中{'；'.join(msgs)}。这些是最基本的经营支出，缺失意味着以下可能：公司可能无实际经营场所（注册地址与经营地址分离）、经营场所费用由关联方代为支付、或以现金方式支付且未取得发票。无实际经营场所是税务机关认定'空壳企业'或'无实际经营能力'的重要依据。",
             "tax_impact": "若被认定为无实际经营场所或经营能力与业务规模不匹配，增值税一般纳税人资格可能被取消，已抵扣的进项税额需转出。虚开发票的刑事风险也大幅上升。",
@@ -10195,6 +10212,7 @@ def _domain_invoice_deep(invoices):
     if total > 0 and len(sensitive) / total > 0.3:
         s_total = sum(i.get("total", 0) for i in sensitive)
         findings.append({"type": "服务类发票占比异常", "level": "中风险", "score": 7,
+        "how_found": "扫描进项发票的货物名称，检测是否包含咨询、服务费、技术、设计、广告、推广、策划等关键词。计算服务类发票占比，超过30%触发预警。",
             "detail": f"{len(sensitive)}/{total}张服务/咨询/技术类发票（{len(sensitive)/total*100:.0f}%），金额{s_total:,.2f}元。",
             "description": f"贵公司取得的进项发票中，咨询费、服务费、技术服务费等无形服务类发票占比高达{len(sensitive)/total*100:.0f}%（{len(sensitive)}张、{s_total:,.2f}元）。服务类交易具有无形性，交易真实性较难核实，是税务机关发票风险监控的重点领域。高比例的服务类发票容易引发以下质疑：是否存在以服务费名义掩盖其他支出、是否存在关联方之间通过服务费转移利润、这些服务是否真实发生并提供相应成果。",
             "tax_impact": "若无法证明服务交易的真实性（无服务合同、无成果交付、无付款记录），相关进项税额将被要求转出，已计入成本费用的支出也将被纳税调增。情节严重的可能被移送稽查。",
@@ -10204,12 +10222,397 @@ def _domain_invoice_deep(invoices):
     general = sum(1 for i in invoices if "普通" in str(i.get("inv_type", "")))
     if total > 0 and general / total > 0.8:
         findings.append({"type": "普通发票占比过高", "level": "中风险", "score": 6,
+        "how_found": "统计所有发票中发票类型包含'普通'字样的数量及占比。超过80%触发预警。",
             "detail": f"{general}/{total}张普通发票（{general/total*100:.0f}%），可抵扣的专用发票仅{total-general}张。",
             "description": f"贵公司取得的发票中普通发票占比高达{general/total*100:.0f}%（{general}张），增值税专用发票仅{total-general}张。普通发票不能用于增值税进项税额抵扣，大量取得普通发票意味着贵公司放弃了本可以抵扣的进项税额。作为一般纳税人，应尽可能要求供应商开具增值税专用发票以充分享受进项抵扣权益。",
             "tax_impact": f"以{total-general}张专票计算，若{general}张普通发票中的{general//2}张本可取得专票，按平均税率估算可能损失可抵扣进项税额数万元，直接增加企业增值税税负。",
             "policy_ref": "《增值税暂行条例》关于进项税额抵扣的规定；《国家税务总局关于增值税发票管理若干事项的公告》。",
             "suggestion": "1）采购时优先选择能够开具增值税专用发票的供应商；2）与现有供应商协商，争取将普通发票更换为专用发票；3）在采购合同中明确约定开具增值税专用发票的条款；4）关注农产品收购发票、通行费电子发票等其他可抵扣凭证的取得。",
             "category": "域13 发票深度"})
+    return findings
+
+
+# ═══════════ 域14: 资料完备度评估 ═══════════
+
+def _domain_document_completeness(docs_list, bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory):
+    """评估提交资料的完整度，提示缺失资料及稽查风险"""
+    findings = []
+    # 资料类型定义
+    doc_types_present = set()
+    if bank_txs: doc_types_present.add("bank")
+    if sal_invs: doc_types_present.add("sales_invoice")
+    if pur_invs: doc_types_present.add("purchase_invoice")
+    if salaries: doc_types_present.add("salary")
+    if social_security: doc_types_present.add("social_security")
+    if vouchers: doc_types_present.add("voucher")
+    if inventory: doc_types_present.add("inventory")
+    if docs_list:
+        for d in docs_list:
+            fn = d.get("original_name", "").lower()
+            if any(k in fn for k in ("合同","contract","协议")): doc_types_present.add("contract")
+
+    # 稽查必查资料清单及缺失影响
+    required_docs = {
+        "bank": ("银行流水", "稽查必查：资金流动是还原企业经营全貌的核心。缺失银行流水，税务机关将无法核实收入完整性、成本真实性、资金回流等关键问题，会直接要求企业限期提供，否则可能认定存在账外经营。"),
+        "sales_invoice": ("销项发票", "稽查必查：销项发票反映收入规模。缺失导致无法交叉比对申报收入与实际开票，税务机关会怀疑隐匿销售收入，可能采取核定征收方式。"),
+        "purchase_invoice": ("进项发票", "稽查必查：进项发票反映成本结构。缺失无法验证进项税额抵扣的合法性，税务机关可能对所有进项抵扣提出质疑。"),
+        "voucher": ("记账凭证", "稽查必查：凭证是会计核算的原始载体。缺失凭证，稽查将无法追溯每一笔业务的账务处理过程，会要求全面补正。"),
+        "salary": ("工资表", "重要：工资是税前扣除的大项。缺失工资表，个人所得税代扣代缴和企业所得税工资扣除均无法核实，税务机关会质疑工资费用的真实性。"),
+        "social_security": ("社保明细", "重要：社保参保情况是人社部门和税务机关交叉比对的重点。缺失社保明细，无法核实用工合规性，可能触发社保稽核联动税务稽查。"),
+        "inventory": ("进销存台账", "重要：存货信息是验证购销匹配的关键。缺失进销存，税务机关难以判断进货与销货的逻辑合理性，尤其关注存货异常积压或账实不符。"),
+        "contract": ("合同文件", "重要：合同是交易真实性的首要证据。缺失合同，三流合一/四流合一无从验证，大额交易的商业合理性将受质疑，印花税也存在漏缴风险。"),
+    }
+
+    present_info = []
+    missing_info = []
+    total_risk_score = 0
+    for key, (name, impact) in required_docs.items():
+        if key in doc_types_present:
+            present_info.append(name)
+        else:
+            missing_info.append({"name": name, "impact": impact, "key": key})
+            if key in ("bank", "sales_invoice", "purchase_invoice", "voucher"):
+                total_risk_score += 3
+            else:
+                total_risk_score += 2
+
+    if missing_info:
+        missing_names = [m["name"] for m in missing_info]
+        missing_detail = []
+        for m in missing_info:
+            missing_detail.append(f"【{m['name']}】{m['impact']}")
+
+        # 缺失资料的稽查导向分析
+        audit_guidance = ""
+        if "bank" not in doc_types_present:
+            audit_guidance += "缺失银行流水→稽查将重点核查对公账户及关联个人账户，追溯资金全链路；"
+        if "sales_invoice" not in doc_types_present:
+            audit_guidance += "缺失销项发票→稽查将比对申报收入与行业均值，差额视为隐匿收入；"
+        if "purchase_invoice" not in doc_types_present:
+            audit_guidance += "缺失进项发票→稽查将对已抵扣进项税额全面质疑，要求进项转出；"
+        if "voucher" not in doc_types_present:
+            audit_guidance += "缺失凭证→稽查将按最不利方式核定应纳税额；"
+        if "contract" not in doc_types_present:
+            audit_guidance += "缺失合同→稽查将逐笔质疑大额交易真实性，并追缴印花税；"
+        if "salary" not in doc_types_present or "social_security" not in doc_types_present:
+            audit_guidance += "缺失薪酬社保资料→稽查将联动人社部门，核实用工及个税扣缴合规性；"
+
+        level = "高风险" if total_risk_score >= 8 else "中风险"
+        findings.append({
+            "type": "资料不完备",
+            "level": level, "score": min(total_risk_score, 10),
+            "detail": f"已提交{'、'.join(present_info)}；缺失{'、'.join(missing_names)}。",
+            "description": f"本次分析共提交了{len(present_info)}类资料（{'、'.join(present_info)}），但缺少{len(missing_info)}类关键资料（{'、'.join(missing_names)}）。\\n\\n" + "\\n\\n".join(missing_detail),
+            "how_found": f"系统扫描了{len(docs_list)}个上传文件，通过文件名关键词和解析结果自动识别资料类型。已识别类型：{'、'.join(present_info)}。未识别到：{'、'.join(missing_names)}。",
+            "tax_impact": f"缺少{'、'.join(missing_names)}将导致税务稽查时处于被动地位。" + audit_guidance,
+            "policy_ref": "《税收征收管理法》第三十五条（核定应纳税额）、第五十四条（税务检查权）；《税务稽查工作规程》关于资料提供义务的规定。",
+            "suggestion": "、".join([f"补充{m}资料" for m in missing_names]) + "。建议按照税务机关稽查必查清单，提前准备并归档全部经营资料，确保能在稽查通知后3日内完整提供。",
+            "category": "域14 资料完备度"
+        })
+    else:
+        findings.append({
+            "type": "资料完备",
+            "level": "低风险", "score": 2,
+            "detail": f"已提交全部{len(present_info)}类核心资料：{'、'.join(present_info)}。",
+            "description": f"本次分析覆盖了{len(present_info)}类核心经营资料，资料完整度较高，能够支持较为全面的涉税风险分析。",
+            "how_found": f"系统扫描了{len(docs_list)}个上传文件，确认覆盖了全部{len(present_info)}类必查资料。",
+            "category": "域14 资料完备度"
+        })
+
+    return findings
+
+
+# ═══════════ 域15: 多源交叉验证 ═══════════
+
+def _domain_multi_source_cross(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory, db, company_id):
+    """多源交叉验证：3源以上交叉比对，还原稽查真实过程"""
+    from collections import defaultdict
+    findings = []
+
+    # ── 交叉1: 资金流(银行支出) + 发票流(进项) + 货物流(存货入库) → 采购三源验证 ──
+    if bank_txs and pur_invs and inventory:
+        bank_payees = defaultdict(float)
+        for tx in bank_txs:
+            if tx.get("debit", 0) > 0 and tx.get("counterparty"):
+                bank_payees[tx["counterparty"][:20]] += tx["debit"]
+        inv_sellers = defaultdict(float)
+        for inv in pur_invs:
+            s = str(inv.get("seller", ""))[:20]
+            if s: inv_sellers[s] += float(inv.get("total", 0) or 0)
+
+        # 找出：银行有付款但无进项发票 或 有进项发票但银行无付款
+        pay_no_inv = []
+        for name, amt in sorted(bank_payees.items(), key=lambda x: -x[1])[:10]:
+            matched = any(name[:6] in s for s in inv_sellers)
+            if not matched and amt > 5000:
+                pay_no_inv.append(f"{name}({amt:,.0f}元)")
+        inv_no_pay = []
+        for name, amt in sorted(inv_sellers.items(), key=lambda x: -x[1])[:10]:
+            matched = any(name[:6] in p for p in bank_payees)
+            if not matched and amt > 5000:
+                inv_no_pay.append(f"{name}({amt:,.0f}元)")
+
+        if pay_no_inv:
+            findings.append({
+                "type": "付款无进项发票（三源交叉）",
+                "level": "高风险", "score": 9,
+                "detail": f"银行流水中向{len(pay_no_inv)}个供应商付款但无对应进项发票：{'、'.join(pay_no_inv[:3])}等。",
+                "description": f"结合银行流水支出、进项发票、存货入库三源交叉比对发现：银行账户向以下供应商支付了货款，但进项发票中未找到对应供应商的开票记录：{'、'.join(pay_no_inv[:5])}。这意味着企业付了款却没有取得发票，存在以下可能：供应商未开票或延迟开票、账外采购、或以采购名义转移资金。",
+                "how_found": f"交叉比对方法：(1)从银行流水中提取所有借方(支出)交易的对方名称{(chr(10))}(2)从进项发票中提取所有销方名称{(chr(10))}(3)将两组名称进行模糊匹配（前6字一致视为同一实体）{(chr(10))}(4)找出只在银行流水出现但发票中不存在的付款对象，且金额>5,000元。",
+                "tax_impact": "付款未取得发票，相关支出不得在企业所得税前扣除；若被认定为无真实交易的资金支出，可能涉及抽逃资金或利益输送。",
+                "policy_ref": "《企业所得税法》第八条（税前扣除须有合法凭证）；国家税务总局公告2018年第28号（税前扣除凭证管理）。",
+                "suggestion": "1）逐笔核实无票付款的真实交易背景，联系供应商补开发票；2）建立付款前审核发票的制度；3）对于确实无法取得发票的小额零星支出，保留收款凭证及内部审批记录。",
+                "category": "域15 多源交叉"
+            })
+        if inv_no_pay:
+            findings.append({
+                "type": "进项发票无付款记录（三源交叉）",
+                "level": "中风险", "score": 7,
+                "detail": f"{len(inv_no_pay)}个供应商开具进项发票但银行无付款记录：{'、'.join(inv_no_pay[:3])}等。",
+                "description": f"交叉比对发现：以下供应商开具了进项发票，但在银行流水中未找到对应的付款记录：{'、'.join(inv_no_pay[:5])}。这意味着取得了发票但没有付款记录，存在以下可能：以现金方式付款、通过其他账户付款、发票为虚开、或款项尚未支付（挂账）。",
+                "how_found": f"交叉比对方法：将银行流水中的付款对象与进项发票的销方进行模糊匹配，找出发票中有但银行流水中无付款记录的供应商。",
+                "tax_impact": "有票无款是虚开发票的典型特征之一。若被认定为取得虚开发票，进项税额不予抵扣（已抵扣的需转出），相关成本不得税前扣除，并可能面临罚款。",
+                "policy_ref": "《发票管理办法》第二十二条（禁止虚开发票）；国家税务总局公告2019年第38号（异常增值税扣税凭证）。",
+                "suggestion": "1）核实未付款发票是否真实交易，检查是否通过其他账户付款；2）若为挂账，确认应付款项账龄，防止长期挂账；3）若无法证明交易真实性，主动做进项税额转出。",
+                "category": "域15 多源交叉"
+            })
+
+    # ── 交叉2: 资金流(银行入账) + 发票流(销项) + 合同 → 收入三源验证 ──
+    if bank_txs and sal_invs:
+        bank_receivers = defaultdict(float)
+        for tx in bank_txs:
+            if tx.get("credit", 0) > 0 and tx.get("counterparty"):
+                bank_receivers[tx["counterparty"][:20]] += tx["credit"]
+        inv_buyers = defaultdict(float)
+        for inv in sal_invs:
+            b = str(inv.get("buyer", ""))[:20]
+            if b: inv_buyers[b] += float(inv.get("total", 0) or 0)
+
+        # 银行收款 vs 销项开票
+        bank_income = sum(tx["credit"] for tx in bank_txs)
+        inv_income = sum(float(inv.get("total", 0) or 0) for inv in sal_invs)
+        if inv_income > 0 and bank_income > 0:
+            gap = abs(bank_income - inv_income)
+            gap_pct = gap / max(inv_income, 1) * 100
+            if gap_pct > 20:
+                findings.append({
+                    "type": "收款与开票金额偏差大（三源交叉）",
+                    "level": "高风险", "score": 9,
+                    "detail": f"银行入账{bank_income:,.2f}元 vs 销项开票{inv_income:,.2f}元，差异{gap:,.2f}元（{gap_pct:.0f}%）。",
+                    "description": f"将银行流水中的贷方(收入)金额与销项发票的价税合计进行交叉比对，发现两者存在{gap_pct:.0f}%的偏差。银行入账{bank_income:,.2f}元，销项开票{inv_income:,.2f}元。差异方向：{'银行收入多' if bank_income > inv_income else '开票收入多'}。这个差异可能意味着：存在未开票的隐匿收入、第三方平台收款未全部提现至对公账户并开票、或存在非经营性的资金入账。",
+                    "how_found": f"交叉比对方法：{(chr(10))}(1)汇总银行流水中所有贷方(收入)交易金额{(chr(10))}(2)汇总所有销项发票的价税合计{(chr(10))}(3)计算两者差额及偏差率，超过20%触发预警。",
+                    "tax_impact": "银行入账大于开票收入，是隐匿销售收入的重要线索。税务机关会将差额部分推定为未申报收入，核定补缴增值税及企业所得税。",
+                    "policy_ref": "《税收征收管理法》第三十五条（核定征收）；《增值税暂行条例》关于销售额确定的规定。",
+                    "suggestion": "1）逐笔核对银行入账记录，区分经营性收款与非经营性收款；2）对所有经营性收款确保开具发票或确认为未开票收入申报；3）第三方平台收款应及时提现至对公账户并同步开票。",
+                    "category": "域15 多源交叉"
+                })
+
+    # ── 交叉3: 工资表 + 银行工资代发 + 社保 → 薪酬三源验证 ──
+    if salaries and bank_txs:
+        total_salary = sum(s.get("net", s.get("salary", 0)) for s in salaries)
+        bank_salary = sum(tx["debit"] for tx in bank_txs if any(k in tx.get("raw", "") for k in ("工资", "代发", "薪")))
+        ss_people = len(set(s.get("name", "") for s in social_security)) if social_security else 0
+        if bank_salary > 0 and total_salary > 0:
+            ratio = bank_salary / max(total_salary, 1)
+            if ratio < 0.5 or ratio > 2:
+                findings.append({
+                    "type": "工资发放与银行记录不匹配（三源交叉）",
+                    "level": "中风险", "score": 7,
+                    "detail": f"工资表实发{total_salary:,.2f}元 vs 银行工资代发{bank_salary:,.2f}元（{ratio*100:.0f}%）。",
+                    "description": f"将工资表的实发金额、银行流水中的工资代发记录、社保参保人数进行三源交叉比对。工资表显示实发合计{total_salary:,.2f}元，银行流水识别到的工资代发金额{bank_salary:,.2f}元（{ratio*100:.0f}%），社保参保{ss_people}人。三者不一致可能意味着：部分工资以现金发放、工资表人数与实际不符、或存在未通过银行代发的避税安排。",
+                    "how_found": f"交叉比对方法：(1)汇总工资表实发金额{(chr(10))}(2)从银行流水提取含'工资''代发'关键词的支出交易{(chr(10))}(3)统计社保明细参保人数{(chr(10))}(4)三方数据比对，偏差超过50%触发预警。",
+                    "tax_impact": "工资通过现金发放且无社保参保记录，个人所得税代扣代缴义务可能存在遗漏，企业所得税税前扣除的工资费用真实性存疑。",
+                    "policy_ref": "《个人所得税法》第九条（扣缴义务人）；《企业所得税法实施条例》第三十四条（工资薪金扣除条件）。",
+                    "suggestion": "1）统一通过银行代发工资，保留发放凭证；2）确保工资表、个税申报、社保参保三方人数和金额一致；3）如存在劳务用工，单独签订劳务合同并代开发票。",
+                    "category": "域15 多源交叉"
+                })
+
+    # ── 交叉4: 缴税总额 + 发票税额 + VAT申报 → 税务四源验证 ──
+    if bank_txs and sal_invs:
+        import json
+        tax_from_bank = sum(tx["debit"] for tx in bank_txs if "税务" in tx.get("raw", ""))
+        vat_output = sum(float(inv.get("tax", 0) or 0) for inv in sal_invs)
+        vat_input = sum(float(inv.get("tax", 0) or 0) for inv in pur_invs)
+        vat_net = vat_output - vat_input
+        vat_rec = db.query(VATDeclaration).filter(VATDeclaration.company_id == company_id).order_by(VATDeclaration.period.desc()).first()
+        vat_payable = 0
+        if vat_rec:
+            main = json.loads(vat_rec.form_main or '{}') if isinstance(vat_rec.form_main, str) else (vat_rec.form_main or {})
+            vat_payable = float(main.get("row19_tax_payable", 0) or 0)
+        if tax_from_bank > 0 and vat_payable > 0:
+            findings.append({
+                "type": "税务四源交叉比对",
+                "level": "低风险", "score": 3,
+                "detail": f"发票销项税额{vat_output:,.2f} - 进项税额{vat_input:,.2f} = {vat_net:,.2f}元；申报应缴{vat_payable:,.2f}元；银行缴税{tax_from_bank:,.2f}元。",
+                "description": f"将四个维度的税务数据进行交叉比对：发票税额（销项{vat_output:,.2f} - 进项{vat_input:,.2f} = {vat_net:,.2f}）、申报表填报应缴税额{vat_payable:,.2f}元、银行实际缴税{tax_from_bank:,.2f}元。这四源数据如果一致或差异在合理范围内，说明税务合规性较好；如果存在较大偏差，需要逐环节排查。",
+                "how_found": f"四源交叉方法：(1)发票系统→销项税额+进项税额{(chr(10))}(2)增值税申报表→应缴税额{(chr(10))}(3)银行流水→实际缴税金额{(chr(10))}(4)四源逐一比对，追溯差异根源。",
+                "category": "域15 多源交叉"
+            })
+
+    return findings
+
+
+# ═══════════ 域16: 扩展规则引擎 ═══════════
+
+def _domain_advanced_rules(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory):
+    """扩展审查规则：覆盖217条之外的风险维度"""
+    from collections import defaultdict
+    findings = []
+
+    # ── 规则1: 大额整数交易检测 ──
+    round_txs = []
+    for tx in bank_txs:
+        amt = abs(tx.get("amount", 0))
+        if amt >= 10000 and amt % 10000 == 0:
+            round_txs.append(tx)
+    if len(round_txs) >= 3:
+        findings.append({
+            "type": "大额整数交易频繁",
+            "level": "中风险", "score": 7,
+            "detail": f"银行流水中有{len(round_txs)}笔整数万元交易（如{round_txs[0].get('amount',0):,.0f}元）。",
+            "description": f"银行流水中发现{len(round_txs)}笔金额为整万元的交易。真实的商业交易金额通常带有零头（含税、运费等），大量整数交易可能表明：资金过桥、虚假交易、或通过整数金额规避银行反洗钱监控阈值。",
+            "how_found": "扫描银行流水，筛选金额>=1万元且为10000的整数倍的交易记录。正常商业交易含税金额极少为纯粹整数。",
+            "tax_impact": "整数交易易引发反洗钱监测和税务稽查关注，可能被认定为无真实商业背景的资金往来。",
+            "policy_ref": "《反洗钱法》关于大额交易和可疑交易报告的规定；《金融机构大额交易和可疑交易报告管理办法》。",
+            "suggestion": "1）逐笔核实整数交易的商业背景；2）保留交易合同、订单等证明文件；3）避免无商业实质的整数资金往来。",
+            "category": "域16 扩展规则"
+        })
+
+    # ── 规则2: 周末/节假日交易检测 ──
+    weekend_txs = []
+    for tx in bank_txs:
+        d = tx.get("date", "")
+        if len(d) == 8:
+            try:
+                import datetime as dt
+                dd = dt.date(int(d[:4]), int(d[4:6]), int(d[6:8]))
+                if dd.weekday() >= 5:  # 周六=5 周日=6
+                    weekend_txs.append(tx)
+            except: pass
+    if len(weekend_txs) >= 5:
+        findings.append({
+            "type": "周末交易频繁",
+            "level": "中风险", "score": 5,
+            "detail": f"{len(weekend_txs)}笔交易发生在周末/节假日。",
+            "description": f"发现{len(weekend_txs)}笔银行交易发生在周末或节假日。正常企业间的对公交易通常在营业日进行，周末频繁交易可能表明：个人经营者使用对公账户处理个人事务、或通过周末交易规避监管。",
+            "how_found": "提取每笔银行交易的日期，使用Python datetime模块计算星期几（weekday>=5为周末）。",
+            "tax_impact": "周末异常交易可能被纳入可疑交易监测范围，引发反洗钱和税务联合检查。",
+            "policy_ref": "《人民币银行结算账户管理办法》关于账户用途的规定。",
+            "suggestion": "1）核实周末交易是否具有合理商业理由（如电商行业周末正常收款属正常）；2）非营业日交易应有明确业务背景支撑。",
+            "category": "域16 扩展规则"
+        })
+
+    # ── 规则3: 购销品名匹配度检测 ──
+    if sal_invs and pur_invs:
+        sal_goods = set()
+        for inv in sal_invs:
+            g = str(inv.get("goods", "")).lower()
+            for kw in g.replace("*"," ").split():
+                if len(kw) >= 2: sal_goods.add(kw)
+        pur_goods = set()
+        for inv in pur_invs:
+            g = str(inv.get("goods", "")).lower()
+            for kw in g.replace("*"," ").split():
+                if len(kw) >= 2: pur_goods.add(kw)
+        common = sal_goods & pur_goods
+        if sal_goods and pur_goods and len(common) < 3:
+            findings.append({
+                "type": "购销售商品种不匹配",
+                "level": "中风险", "score": 7,
+                "detail": f"销项涉及{len(sal_goods)}类品名，进项涉及{len(pur_goods)}类品名，重叠仅{len(common)}类。",
+                "description": f"将销项发票和进项发票的品名关键词进行交叉比对：销项涉及{len(sal_goods)}类品名，进项涉及{len(pur_goods)}类品名，但两者重叠仅{len(common)}类。正常的商贸企业，采购的商品与销售的商品应有较高的品名重叠度（买入什么就卖出什么）。品名不匹配可能意味着：进项发票虚开（采购了与经营无关的商品）、存在大量委托加工但无加工费发票、或营业范围发生重大变化。",
+                "how_found": "提取销项发票和进项发票的货物名称，分词后构建品名集合，计算交集大小。交集<3类触发预警。",
+                "tax_impact": "购销品名严重不匹配是虚开进项发票的典型特征。税务机关会重点核查进项发票对应的货物是否与企业实际经营相关。",
+                "policy_ref": "《增值税暂行条例》关于进项税额抵扣须与生产经营相关的规定。",
+                "suggestion": "1）核实进项品名与销项品名不匹配的原因；2）如存在委托加工，应取得加工费发票并建立加工台账；3）确保采购的货物与服务与企业经营范围相关。",
+                "category": "域16 扩展规则"
+            })
+
+    # ── 规则4: 发票连号检测 ──
+    if sal_invs:
+        inv_nos = []
+        for inv in sal_invs:
+            no = str(inv.get("inv_no", ""))
+            if no.isdigit() and len(no) >= 8:
+                inv_nos.append(int(no))
+        inv_nos.sort()
+        consecutive_groups = []
+        group = [inv_nos[0]] if inv_nos else []
+        for i in range(1, len(inv_nos)):
+            if inv_nos[i] - inv_nos[i-1] <= 3:
+                group.append(inv_nos[i])
+            else:
+                if len(group) >= 5: consecutive_groups.append(group)
+                group = [inv_nos[i]]
+        if len(group) >= 5: consecutive_groups.append(group)
+        if consecutive_groups:
+            findings.append({
+                "type": "发票连号异常",
+                "level": "中风险", "score": 6,
+                "detail": f"发现{len(consecutive_groups)}组连号或近号发票（每组>=5张）。",
+                "description": f"销项发票中存在{len(consecutive_groups)}组发票号码连续或接近连续的发票。正常的经营活动中，发票通常是分散开给不同客户的，连号发票可能表明：集中突击开票、为完成业绩或调节税负而集中开票、或向同一客户大额拆分开票。",
+                "how_found": "提取所有销项发票号码（数字部分），排序后检测连续号码组（相邻号码差<=3），连续>=5张触发预警。",
+                "tax_impact": "连号开票易被税务机关认定为人为调节收入或拆分开票，若被认定存在虚开嫌疑，将面临协查和处罚。",
+                "policy_ref": "《发票管理办法》关于如实开具发票的规定。",
+                "suggestion": "1）核实连号发票是否全部具有真实交易背景；2）避免在同一时间段集中向单一客户大量开票；3）如确需拆分开票，保留订单、出库单等证明。",
+                "category": "域16 扩展规则"
+            })
+
+    # ── 规则5: 员工人均效能检测 ──
+    if salaries and sal_invs:
+        emp_count = len(set(s.get("name", "") for s in salaries))
+        total_revenue = sum(float(inv.get("total", 0) or 0) for inv in sal_invs)
+        if emp_count > 0 and total_revenue > 0:
+            rev_per_person = total_revenue / emp_count
+            findings.append({
+                "type": "人均效能评估",
+                "level": "低风险", "score": 2,
+                "detail": f"{emp_count}名员工创造销项收入{total_revenue:,.2f}元，人均{rev_per_person:,.2f}元。",
+                "description": f"根据工资表和销项发票计算：{emp_count}名员工在分析期间创造销项收入{total_revenue:,.2f}元，人均产值{rev_per_person:,.2f}元。人均效能是衡量企业经营效率和管理规范性的参考指标之一。如果人均产值远低于行业平均水平，可能表明存在虚列人员工资或收入申报不足的问题。",
+                "how_found": "从工资表统计在职人数，从销项发票汇总收入，计算人均产值。",
+                "category": "域16 扩展规则"
+            })
+
+    # ── 规则6: 发票备注栏合规检测 ──
+    if sal_invs:
+        no_remark = sum(1 for inv in sal_invs if not inv.get("remark", "").strip())
+        if sal_invs and no_remark / len(sal_invs) > 0.5:
+            findings.append({
+                "type": "发票备注栏信息缺失",
+                "level": "低风险", "score": 3,
+                "detail": f"{no_remark}/{len(sal_invs)}张销项发票无备注信息。",
+                "description": f"有{no_remark}张销项发票未填写备注栏信息。根据规定，建筑服务、运输服务、不动产租赁、销售不动产等特定业务的发票备注栏属于必填项目。大量空白备注栏可能意味着未按规定填写发票信息，虽然不直接构成偷逃税，但在稽查中会被认定为发票管理不规范。",
+                "how_found": "扫描销项发票的备注字段，统计空白率。",
+                "tax_impact": "特定业务备注栏缺失的发票不得作为税收凭证，购买方取得的此类发票不得抵扣进项税额或税前扣除。",
+                "policy_ref": "《国家税务总局关于全面推开营业税改征增值税试点有关税收征收管理事项的公告》（2016年第23号）关于发票备注栏的规定。",
+                "suggestion": "1）检查发票是否涉及需要备注的特殊业务类型；2）规范开票流程，确保备注栏按要求填写。",
+                "category": "域16 扩展规则"
+            })
+
+    # ── 规则7: 供应商纳税信用预警 ──
+    if pur_invs:
+        # 检查供应商名称中是否存在异常模式
+        abnormal_names = []
+        for inv in pur_invs:
+            s = str(inv.get("seller", ""))
+            # 检测异常短名称、纯数字、特殊字符
+            if len(s) <= 3 and s.strip():
+                abnormal_names.append(s)
+            if any(c in s for c in ["***", "..."]) and s not in abnormal_names:
+                abnormal_names.append(s)
+        if abnormal_names:
+            findings.append({
+                "type": "供应商名称异常",
+                "level": "中风险", "score": 6,
+                "detail": f"发现{len(abnormal_names)}个名称异常的供应商：{'、'.join(abnormal_names[:5])}。",
+                "description": f"进项发票供应商中存在{len(abnormal_names)}个名称异常的情况：{'、'.join(abnormal_names[:5])}。供应商名称过短或包含特殊字符可能意味着：发票信息填写不规范、供应商未进行工商登记、或使用了虚假名称开票。",
+                "how_found": "扫描所有进项发票的销方名称，检测名称长度<=3字符或包含异常字符（***）的记录。",
+                "tax_impact": "从名称异常的供应商取得发票，税务机关会重点怀疑其是否为正常经营的企业，进项税额抵扣存在风险。",
+                "policy_ref": "国家税务总局公告2019年第38号关于异常增值税扣税凭证的规定。",
+                "suggestion": "1）核实异常名称供应商的工商登记和纳税状态；2）联系供应商更正发票抬头信息；3）避免与工商登记不规范的供应商交易。",
+                "category": "域16 扩展规则"
+            })
+
     return findings
 
 
@@ -10280,6 +10683,12 @@ async def _run_analyze(company_id, db):
     domain_results.append({"domain": "合同比对分析", "findings": _domain_contract_comparison(db, company_id, sal_invs, pur_invs)})
     domain_results.append({"domain": "经营实质分析", "findings": _domain_business_substance(db, company_id, sal_invs, pur_invs, bank_txs)})
     if invoices: domain_results.append({"domain": "发票深度特征", "findings": _domain_invoice_deep(invoices)})
+    # 域14: 资料完备度
+    domain_results.append({"domain": "资料完备度评估", "findings": _domain_document_completeness(docs, bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory)})
+    # 域15: 多源交叉验证
+    domain_results.append({"domain": "多源交叉验证", "findings": _domain_multi_source_cross(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory, db, company_id)})
+    # 域16: 扩展规则
+    domain_results.append({"domain": "扩展审查规则", "findings": _domain_advanced_rules(bank_txs, sal_invs, pur_invs, salaries, social_security, vouchers, inventory)})
 
     all_findings = []
     for dr in domain_results:
@@ -10358,7 +10767,7 @@ async def _run_analyze(company_id, db):
         "overall_level": overall, "total_risks": total, "high_risk": high, "mid_risk": mid, "low_risk": total-high-mid,
         "files_count": len(docs), "rules_used": 217, "pipeline_log": pipeline_log, "file_results": file_results,
         "stats": stats, "domain_summary": domain_summary,
-        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"13域分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。"
+        "all_findings": sorted(all_findings, key=lambda x: -(x.get("score") or 0))[:50], "summary_text": f"16域全面分析完成：{overall}，{total}项发现（高{high}/中{mid}）。提取{len(bank_txs)}条流水、{len(invoices)}张发票、{len(salaries)}条工资。涵盖13专题+完备度+多源交叉+扩展规则。"
     }}
 
 

@@ -445,6 +445,12 @@ function renderDocsReport(rpt) {
             + '<div style="font-weight:600;font-size:12px;color:' + cfColor + ';margin-bottom:4px">📋 风险解释</div>'
             + '<div style="font-size:12px;color:var(--gray-700)">' + escapeHtml(f.description) + '</div></div>';
         }
+        // 如何得出
+        if (f.how_found) {
+          html += '<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:10px 14px;margin-bottom:6px">'
+            + '<div style="font-weight:600;font-size:12px;color:#7c3aed;margin-bottom:4px">🔍 如何得出</div>'
+            + '<div style="font-size:11px;color:var(--gray-600);white-space:pre-line">' + escapeHtml(f.how_found) + '</div></div>';
+        }
         // 税务影响
         if (f.tax_impact) {
           html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 14px;margin-bottom:6px">'
@@ -499,6 +505,11 @@ function renderDocsReport(rpt) {
         html += '<div style="background:#fff;border-radius:6px;padding:10px 14px;margin-bottom:6px;font-size:12px;color:var(--gray-700);line-height:1.7">'
           + '<div style="font-weight:600;color:var(--gray-500);margin-bottom:4px">📋 详细说明</div>'
           + escapeHtml(f.description) + '</div>';
+      }
+      if (f.how_found) {
+        html += '<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:8px 14px;margin-bottom:6px;font-size:11px;color:var(--gray-600);line-height:1.7;white-space:pre-line">'
+          + '<div style="font-weight:600;color:#7c3aed;margin-bottom:2px">🔍 如何得出</div>'
+          + escapeHtml(f.how_found) + '</div>';
       }
       if (f.tax_impact) {
         html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 14px;margin-bottom:6px;font-size:12px;line-height:1.7">'
