@@ -373,8 +373,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
     renderBankTransactions();
     // 导入后自动生成银行流水凭证
     api('/api/bank-transactions/auto-voucher', { method: 'POST' }).then(function(r) {
-      if (r.generated > 0) {
-        toast('已自动生成 ' + r.generated + ' 条银行流水凭证', 'success');
+      var msgs = [];
+      if (r.generated > 0) msgs.push(r.generated + ' 条银行流水凭证');
+      if (r.suppliers_created > 0) msgs.push(r.suppliers_created + ' 个供应商');
+      if (r.customers_fixed > 0) msgs.push(r.customers_fixed + ' 个客户档案');
+      if (r.suppliers_fixed > 0) msgs.push(r.suppliers_fixed + ' 个供应商档案（补缺）');
+      if (msgs.length > 0) {
+        toast('导入完成：' + msgs.join('、'), 'success');
         renderBankTransactions();
       }
     }).catch(function(){});

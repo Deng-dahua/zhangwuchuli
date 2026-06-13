@@ -1297,6 +1297,14 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
     import logging
     log = logging.getLogger("process-all")
 
+    # ── 第零步：档案缺失补齐（有明细账但档案缺失 → 自动建档，零容忍）──
+    gap_result = {"customer_created": 0, "supplier_created": 0}
+    try:
+        gap_result = _close_archive_gap(db, company_id)
+        db.commit()
+    except Exception:
+        pass
+
     # ── 第一步：确定供应商档案 ──
     supp_result = _do_auto_create_suppliers(db, company_id)
     db.commit()
@@ -1348,7 +1356,16 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
     except Exception:
         pass
 
+    # ── 第六步：公积金缴纳匹配 ──
+    hf_result = {"generated": 0}
+    try:
+        hf_result = _match_hf_payment_journals(db, company_id)
+        db.commit()
+    except Exception:
+        pass
+
     return {
+        "step0_archive_gap": gap_result,
         "step1_suppliers": supp_result,
         "step2_purchase_invoices": {
             "total": len(pi_invoices),
@@ -1359,6 +1376,7 @@ def process_all(company_id: int = Query(...), db: Session = Depends(get_db)):
         "step3_bank_transactions": bank_result,
         "step4_social_security": ss_result,
         "step5_tax_payment": tax_result,
+        "step6_housing_fund": hf_result,
     }
 
 
