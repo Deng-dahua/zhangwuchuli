@@ -388,7 +388,13 @@ async function doImportWithMapping(module, fileName, bankConfigId) {
       if (el) delete el.dataset.rendered;
     });
   }
-  else if (module === 'purchase-invoice') renderPurchaseInvoices();
+  else if (module === 'purchase-invoice') {
+    renderPurchaseInvoices();
+    // 导入后自动同步到未记账发票
+    api('/api/purchase-invoices/sync-to-unbookkept', { method: 'POST' }).then(function(r) {
+      if (r.synced > 0) toast('已自动同步 ' + r.synced + ' 条到未记账发票', 'success');
+    }).catch(function(){});
+  }
   else if (module === 'bookkeeping-invoice') renderBookkeepingInvoices();
   else if (module === 'input-vat-deduction') {
     renderInputVATDeductions();
