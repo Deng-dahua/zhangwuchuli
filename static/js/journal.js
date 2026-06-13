@@ -238,7 +238,7 @@ async function generateFromBankTx(id) {
   try {
     const res = await api('/api/bank-transactions/' + id + '/to-journal', { method: 'POST' });
     toast(res.message, 'success');
-    loadBankTxList();
+    renderBankTransactions();
   } catch (e) {
     handleError(e, '生成');
   }

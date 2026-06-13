@@ -10037,3 +10037,335 @@ def _analyze_suspicious_invoice_cluster(db, company_id, ps, pe, results):
                 "供应商尽职调查报告"
             ]
         })
+
+    # ── V12 新增：跨行业混合群集（酒店+餐饮混合） ──
+    _analyze_cross_industry_cluster(db, company_id, all_invs, cluster_groups, results)
+
+    # ── V12 新增：不同供应商金额完全一致 ──
+    _analyze_same_amount_pattern(all_invs, cluster_groups, results)
+
+    # ── V12 新增：孤立发票匹配群集特征（如仅有1家酒店但特征完全匹配）──
+    _analyze_isolated_suspicious_invoice(db, company_id, all_invs, cluster_groups, results)
+
+
+def _analyze_cross_industry_cluster(db, company_id, all_invs, cluster_groups, results):
+    """跨行业混合群集检测（酒店管理+餐饮管理混合）。
+    
+    虚开发票集团常注册不同经营范围的空壳公司以规避单一行业检测。
+    例如：同时注册「酒店管理有限公司」和「餐饮管理有限公司」，
+    虽然行业代码不同，但呈现完全相同的虚开特征。
+    """
+    # 收集所有酒店+餐饮类的发票
+    hospitality_invs = []
+    for inv in all_invs:
+        goods = (inv.goods_name or "").strip()
+        seller = (inv.seller_name or "").strip()
+        if any(kw in seller for kw in ["餐饮管理", "酒店管理", "餐饮", "酒店", "住宿"]) and \
+           any(kw in goods for kw in ["餐饮服务", "住宿服务", "餐饮费", "住宿费"]):
+            parsed = _name_pattern_match(seller)
+            if parsed:
+                hospitality_invs.append(inv)
+
+    if len(hospitality_invs) < 3:
+        return
+
+    # 跨行业混合统计
+    total_cnt = len(hospitality_invs)
+    total_with_tax = sum(_safe_float(inv.amount) + _safe_float(inv.tax_amount) for inv in hospitality_invs)
+
+    # 各行业供应商数
+    industries = {}
+    unique_sellers = set()
+    for inv in hospitality_invs:
+        parsed = _name_pattern_match((inv.seller_name or "").strip())
+        if parsed:
+            ind = parsed["industry"]
+            industries[ind] = industries.get(ind, 0) + 1
+            unique_sellers.add((inv.seller_name or "").strip())
+
+    # 只有当存在≥2个行业时才触发混合群集
+    if len(industries) < 2:
+        return
+
+    # 红旗指标
+    red_flags = []
+    score = 0
+
+    # 跨行业群集特征
+    industry_desc = "、".join(f"{ind}({cnt}家)" for ind, cnt in sorted(industries.items()))
+    score += 3
+    red_flags.append(f"跨行业混合群集：{industry_desc}，共{len(unique_sellers)}家不同供应商")
+
+    # 金额整额化
+    round_cnt = sum(1 for inv in hospitality_invs if _is_round_amount(
+        _safe_float(inv.amount) + _safe_float(inv.tax_amount)))
+    round_ratio = round_cnt / total_cnt * 100 if total_cnt > 0 else 0
+    if round_ratio >= 60:
+        score += 2
+        red_flags.append(f"{round_cnt}/{total_cnt}张（{round_ratio:.0f}%）发票价税合计为整额")
+
+    # 税率异常
+    rate_1pct = sum(1 for inv in hospitality_invs if _safe_float(inv.tax_rate) == 1.0)
+    if rate_1pct >= total_cnt * 0.8:
+        score += 2
+        red_flags.append(f"{rate_1pct}/{total_cnt}张发票为1%税率（正常应为6%一般纳税人）")
+
+    # 全部普票
+    general_cnt = sum(1 for inv in hospitality_invs if "普通" in (inv.invoice_category or ""))
+    if general_cnt >= total_cnt * 0.8:
+        score += 1
+        red_flags.append("全部/绝大部分为普通发票，不可抵扣进项税额")
+
+    # 供应商不在档案
+    not_in_registry = 0
+    for s_name in unique_sellers:
+        sup = db.query(Supplier).filter(
+            Supplier.company_id == company_id,
+            Supplier.name == s_name
+        ).first()
+        if not sup:
+            not_in_registry += 1
+    if not_in_registry >= 2:
+        score += 2
+        red_flags.append(f"{not_in_registry}/{len(unique_sellers)}家供应商不在档案中")
+
+    if score < 5:
+        return
+
+    # 日期范围
+    dates = sorted(set(str(inv.invoice_date) for inv in hospitality_invs if inv.invoice_date))
+    date_range = f"{dates[0]}~{dates[-1]}" if len(dates) >= 2 else (dates[0] if dates else "")
+
+    seller_list = "、".join(list(unique_sellers)[:8])
+    if len(unique_sellers) > 8:
+        seller_list += f"等{len(unique_sellers)}家"
+
+    detail = (
+        f"【跨行业混合群集】{date_range}，涉及{industry_desc}，"
+        f"共{total_cnt}张发票，价税合计{total_with_tax:,.2f}元。"
+        f"红旗指标：{'；'.join(red_flags)}。"
+        f"跨行业的群集模式比单一行业群集更危险——虚开发票集团通过注册不同行业的空壳公司规避检测。"
+    )
+
+    suggestion = (
+        f"①跨行业群集是高度危险的信号，建议立即对{seller_list}进行穿透式尽职调查；"
+        f"②查工商登记信息、社保缴纳记录、实际经营地址——空壳公司通常无员工无实际经营；"
+        f"③向税务机关举报可疑开票方；"
+        f"④立即暂停与上述供应商的交易，已入账费用做纳税调增处理。"
+    )
+
+    results.append({
+        "category": "发票合规",
+        "category_icon": "🧾",
+        "risk_score": score,
+        "risk_level": "高风险" if score >= 8 else "中风险",
+        "risk_color": "#dc2626" if score >= 8 else "#f59e0b",
+        "urgency": "紧急" if score >= 8 else "警示",
+        "item": "跨行业同城供应商群集性虚开（酒店+餐饮混合群集）",
+        "detail": detail,
+        "suggestion": suggestion,
+        "required_evidence": [
+            "跨行业供应商工商登记信息查询",
+            "供应商实际经营地址核查记录",
+            "各供应商发票明细清单",
+            "银行付款记录",
+            "供应商社保缴纳记录"
+        ]
+    })
+
+
+def _analyze_same_amount_pattern(all_invs, cluster_groups, results):
+    """不同供应商金额完全一致检测。
+    
+    真实的餐饮/住宿消费金额应当呈现自然的数值分布（大小不一），
+    不同供应商不可能独立开出金额完全相同的发票。
+    """
+    # 收集所有已被群集覆盖的发票（避免重复报告）
+    clustered_ids = set()
+    for group_invs in cluster_groups.values():
+        for inv in group_invs:
+            clustered_ids.add(inv.id)
+
+    # 按价税合计分组
+    amount_groups = {}  # key: total_amount, value: [(seller_name, inv)]
+    for inv in all_invs:
+        goods = (inv.goods_name or "").strip()
+        seller = (inv.seller_name or "").strip()
+        # 仅关注餐饮住宿类
+        if not (any(kw in goods for kw in ["餐饮服务", "住宿服务", "餐饮费", "住宿费"]) and
+                any(kw in seller for kw in ["餐饮管理", "酒店管理", "餐饮", "酒店", "住宿"])):
+            continue
+
+        total = _safe_float(inv.amount) + _safe_float(inv.tax_amount)
+        if total <= 0:
+            continue
+        # 仅关注整额
+        if not _is_round_amount(total):
+            continue
+        key = round(total, 2)
+        amount_groups.setdefault(key, []).append((seller, inv))
+
+    # 筛选：同一金额有≥2家不同供应商
+    for amt, items in amount_groups.items():
+        unique_sellers_at_amt = set(s[0] for s in items)
+        if len(unique_sellers_at_amt) < 2:
+            continue
+
+        invs_at_amt = [s[1] for s in items]
+        # 跳过所有都被群集覆盖的
+        if all(inv.id in clustered_ids for inv in invs_at_amt):
+            continue
+
+        seller_list = "、".join(list(unique_sellers_at_amt)[:8])
+        if len(unique_sellers_at_amt) > 8:
+            seller_list += f"等{len(unique_sellers_at_amt)}家"
+
+        dates = sorted(set(str(inv.invoice_date) for inv in invs_at_amt if inv.invoice_date))
+        date_range = f"{dates[0]}~{dates[-1]}" if len(dates) >= 2 else (dates[0] if dates else "")
+
+        score = 6
+        red_flags = [
+            f"{len(unique_sellers_at_amt)}家不同供应商开具的发票价税合计均为{amt:,.2f}元",
+            "真实消费场景下不同供应商不可能恰好消费金额相同"
+        ]
+
+        # 额外检查：税率是否全1%
+        all_1pct = all(_safe_float(inv.tax_rate) == 1.0 for inv in invs_at_amt)
+        if all_1pct and len(invs_at_amt) >= 2:
+            score += 1
+            red_flags.append("全部为1%小规模纳税人税率")
+
+        detail = (
+            f"【金额一致异常】{date_range}，{seller_list}，"
+            f"共{len(invs_at_amt)}张发票价税合计均为{amt:,.2f}元。"
+            f"{'；'.join(red_flags)}。"
+        )
+
+        suggestion = (
+            f"①逐笔核查金额一致的发票，确认是否为真实业务发生；"
+            f"②正常的餐饮/住宿消费金额应当呈现自然分布，{len(unique_sellers_at_amt)}家不同供应商金额完全相同极不正常；"
+            f"③索要消费明细清单，确认消费内容与金额匹配；"
+            f"④如无法提供消费明细，应认定为虚开发票做纳税调增。"
+        )
+
+        results.append({
+            "category": "发票合规",
+            "category_icon": "🧾",
+            "risk_score": score,
+            "risk_level": "高风险" if score >= 7 else "中风险",
+            "risk_color": "#dc2626" if score >= 7 else "#f59e0b",
+            "urgency": "紧急" if score >= 7 else "警示",
+            "item": "餐饮住宿类发票金额完全一致异常",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                "金额一致的发票明细清单",
+                "消费明细清单（菜品/房型/天数等）",
+                "业务招待申请单及审批记录",
+                "付款凭证"
+            ]
+        })
+
+
+def _analyze_isolated_suspicious_invoice(db, company_id, all_invs, cluster_groups, results):
+    """孤立发票匹配群集特征检测。
+    
+    当某个行业的供应商数量不足3家无法形成群集（如仅有1家酒店），
+    但该发票的特征与群集性虚开模式完全一致时，仍需单独报警。
+    例如：仅1家酒店管理公司开票，但金额整额化+1%税率+普票+不在档案。
+    """
+    # 收集已被群集覆盖的供应商名称
+    clustered_sellers = set()
+    for group_invs in cluster_groups.values():
+        for inv in group_invs:
+            clustered_sellers.add((inv.seller_name or "").strip())
+
+    # 按行业分组
+    for inv in all_invs:
+        goods = (inv.goods_name or "").strip()
+        seller = (inv.seller_name or "").strip()
+
+        # 仅关注餐饮住宿类
+        if not (any(kw in goods for kw in ["餐饮服务", "住宿服务", "餐饮费", "住宿费"]) and
+                any(kw in seller for kw in ["餐饮管理", "酒店管理", "餐饮", "酒店", "住宿"])):
+            continue
+
+        parsed = _name_pattern_match(seller)
+        if not parsed:
+            continue
+
+        # 如果该供应商已被群集覆盖，跳过
+        if seller in clustered_sellers:
+            continue
+
+        # 检查该供应商在行业组中是否孤立（<3家）
+        key = (parsed["city"], parsed["industry"])
+        group_size = len(cluster_groups.get(key, []))
+        if group_size >= 3:
+            continue  # 已被群集覆盖
+
+        # 检查是否匹配群集特征
+        total = _safe_float(inv.amount) + _safe_float(inv.tax_amount)
+        is_round = _is_round_amount(total)
+        is_1pct = _safe_float(inv.tax_rate) == 1.0
+        is_general = "普通" in (inv.invoice_category or "")
+
+        # 需同时满足三个特征
+        if not (is_round and is_1pct and is_general):
+            continue
+
+        # 检查供应商是否在档案中
+        sup = db.query(Supplier).filter(
+            Supplier.company_id == company_id,
+            Supplier.name == seller
+        ).first()
+        in_registry = sup is not None
+
+        # 至少有3个红旗特征
+        flags = []
+        if is_round:
+            flags.append(f"价税合计{total:,.2f}元为整额")
+        if is_1pct:
+            flags.append("1%小规模纳税人税率（正常应为6%）")
+        if is_general:
+            flags.append("普通发票不可抵扣")
+        if not in_registry:
+            flags.append("供应商不在档案中")
+
+        if len(flags) < 3:
+            continue
+
+        score = 5
+        inv_date = str(inv.invoice_date) if inv.invoice_date else ""
+
+        detail = (
+            f"【孤立发票匹配群集特征】{inv_date}，{seller}，"
+            f"发票价税合计{total:,.2f}元。"
+            f"该供应商在{parsed['industry']}行业中仅{group_size}家（不足群集阈值3家），"
+            f"但发票特征（{'；'.join(flags)}）与群集性虚开模式完全一致，单独来看也高度可疑。"
+        )
+
+        suggestion = (
+            f"①虽然{seller}无法形成群集，但其发票特征与虚开模式高度一致，仍须认真核查交易真实性；"
+            f"②索要消费明细/付款凭证/合同/审批单等佐证材料；"
+            f"③注意该供应商在其他期间是否也有开票（累计可构成群集）；"
+            f"④关注同一公司名下是否存在跨行业的多类供应商群集。"
+        )
+
+        results.append({
+            "category": "发票合规",
+            "category_icon": "🧾",
+            "risk_score": score,
+            "risk_level": "中风险",
+            "risk_color": "#f59e0b",
+            "urgency": "提醒",
+            "item": "餐饮住宿类个体发票匹配群集性虚开特征",
+            "detail": detail,
+            "suggestion": suggestion,
+            "required_evidence": [
+                "单张发票消费明细清单",
+                "付款凭证（银行/微信/支付宝转账记录）",
+                "业务招待申请单",
+                "供应商工商登记信息"
+            ]
+        })

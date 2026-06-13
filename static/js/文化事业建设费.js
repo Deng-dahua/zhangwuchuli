@@ -86,7 +86,8 @@ async function stepCCFPeriod(type, delta) {
     mSel2.value = targetMonth;
   }
 
-  // 只更新下拉框，不自动查询——用户需点击"查询"按钮
+  // 步进后立即触发期间查询，确保页面内容（含"创建申报表"按钮日期）与工具栏同步
+  onCCFDetailPeriodChange();
 }
 
 function onCCFDetailPeriodChange() {
