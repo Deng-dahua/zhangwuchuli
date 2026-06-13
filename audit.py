@@ -141,22 +141,42 @@ def _check_same_key_split(db, company_id):
 
 
 def _check_bk_voucher_consistency(db, company_id):
-    """检查 BookkeepingInvoice.voucher_no 与实际 JournalEntry 是否一致"""
+    """检查 BookkeepingInvoice.voucher_no 是否与序时账一致（通过三号匹配PI→JE）"""
     errors = []
+    from database import PurchaseInvoice
+
     bks = db.query(BookkeepingInvoice).filter(
         BookkeepingInvoice.company_id == company_id,
         BookkeepingInvoice.voucher_no.isnot(None)
     ).all()
 
     for bk in bks:
-        has_je = db.query(JournalEntry).filter(
+        # 通过三号找到对应PI，再通过PI.id找到JE
+        pi = db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.company_id == company_id,
+            PurchaseInvoice.invoice_code == bk.invoice_code,
+            PurchaseInvoice.invoice_no == bk.invoice_no,
+            PurchaseInvoice.digital_invoice_no == bk.digital_invoice_no,
+        ).first() if (bk.invoice_code or bk.invoice_no or bk.digital_invoice_no) else None
+
+        if not pi:
+            errors.append(f"[BK凭证不一致] BK#{bk.id} {bk.seller_name[:20]} 三号={bk.invoice_code}/{bk.invoice_no}/{bk.digital_invoice_no} 找不到对应PurchaseInvoice")
+            continue
+
+        je = db.query(JournalEntry).filter(
             JournalEntry.company_id == company_id,
             JournalEntry.source == "未记账发票",
-            JournalEntry.ref_id == bk.id
+            JournalEntry.ref_id == pi.id
         ).first()
-        if not has_je:
+
+        if not je:
+            errors.append(f"[BK凭证不一致] BK#{bk.id} {bk.seller_name[:20]} voucher={bk.voucher_no} PI#{pi.id}无对应凭证")
+            continue
+
+        expected = f"记-{je.voucher_no}"
+        if bk.voucher_no != expected:
             errors.append(
-                f"[BK凭证不一致] BK#{bk.id} {bk.seller_name[:20]} voucher={bk.voucher_no} 但无对应凭证"
+                f"[BK凭证不一致] BK#{bk.id} {bk.seller_name[:20]} voucher={bk.voucher_no} 应为{expected}"
             )
 
     return errors
