@@ -13,8 +13,8 @@ async function renderBookkeepingInvoices(container) {
   el.innerHTML = '<div style="padding:40px;text-align:center;color:#9ca3af">加载中…</div>';
   try {
     const [inv, stats] = await Promise.all([
-      api('/api/bookkeeping-invoices'),
-      api('/api/bookkeeping-invoices/stats' + (biTab !== 'all' ? '?tab=' + biTab : ''))
+      api('/api/bookkeeping-invoices?is_posted=true'),
+      api('/api/bookkeeping-invoices/stats?is_posted=true' + (biTab !== 'all' ? '&tab=' + biTab : ''))
     ]);
     const fmt = n => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     let html = '';
