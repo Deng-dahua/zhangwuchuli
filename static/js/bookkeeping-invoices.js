@@ -41,7 +41,6 @@ async function renderBookkeepingInvoices(container) {
     var biPeriod = biFilter.dateFrom ? biFilter.dateFrom.slice(0,7) : currentPeriod;
     var biParts = biPeriod ? biPeriod.split('-') : [];
     html += buildPeriodSelectorHtml('bi', biParts[0] || '', biParts[1] || '', 'onBIPeriodQuery');
-    html += '<button class="btn-toolbar-danger" id="biBatchDelBtn" onclick="batchDeleteBookkeepingInvoices()">批量删除</button>';
     html += '<div class="tab-btn-group">';
     const biTabs = [['all', '全部'], ['zpt', '专票'], ['ppt', '普票']];
     biTabs.forEach(([t, label]) => {
